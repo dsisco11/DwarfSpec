@@ -72,34 +72,63 @@ describe('automation host ownership', function()
             seed=1,
             spec=nil,
             defer_frames=1,
+            lease_timeout_ms=10000,
+            lease_check_frames=1,
         }
     end
 
     it('rejects overlap and ignores a callback after abort', function()
-        local run = host.start('unused', options('owner'))
+        local run = host.start('.', options('owner'))
         assert.equals('starting', run.state)
         assert.has_error(function()
-            host.start('unused', options('overlap'))
+            host.start('.', options('overlap'))
         end, 'automation run owner is already starting')
 
+        local cleaned = false
+        run.cleanup_module.push(run.cleanup_registry, 'abort proof', function()
+            cleaned = true
+        end)
         local aborted = host.abort('owner')
         assert.equals('aborted', aborted.state)
         assert.is_nil(active_callbacks[1])
+        assert.is_nil(active_callbacks[2])
+        assert.is_true(cleaned)
+        assert.is_true(aborted.cleanup_confirmed)
         callbacks[1]()
+        callbacks[2]()
         assert.equals('aborted', aborted.state)
         assert.equals(aborted, host.find('owner'))
     end)
 
     it('retains an unobserved result until its owner acknowledges it', function()
         local aborted = host.abort(host.start(
-            'unused', options('retained')).run_id)
+            '.', options('retained')).run_id)
         assert.has_error(function()
-            host.start('unused', options('replacement'))
+            host.start('.', options('replacement'))
         end, 'automation run retained has an unobserved aborted result')
 
         aborted.terminal_observed = true
-        local replacement = host.start('unused', options('replacement'))
+        local replacement = host.start('.', options('replacement'))
         assert.equals('starting', replacement.state)
         host.abort(replacement.run_id)
+    end)
+
+    it('expires an unpolled lease and performs emergency cleanup', function()
+        local lease_options = options('lease-owner')
+        lease_options.lease_timeout_ms = 10
+        local run = host.start('.', lease_options)
+        local cleaned = false
+        run.cleanup_module.push(run.cleanup_registry, 'lease proof', function()
+            cleaned = true
+        end)
+
+        tick = 100
+        callbacks[2]()
+
+        assert.equals('aborted', run.state)
+        assert.is_true(cleaned)
+        assert.is_true(run.cleanup_confirmed)
+        assert.matches('status lease expired', run.output_lines[1], 1, true)
+        assert.is_nil(active_callbacks[1])
     end)
 end)

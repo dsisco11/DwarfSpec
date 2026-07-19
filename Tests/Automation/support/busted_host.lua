@@ -37,6 +37,32 @@ local function current_frame()
         df.global.world.frame_counter or nil
 end
 
+---Returns current focus and viewscreen context for operational wait errors.
+---@return table
+local function current_diagnostics()
+    local focus = '<unavailable>'
+    local screen = '<unavailable>'
+    if dfhack.gui and type(dfhack.gui.getCurFocus) == 'function' then
+        local ok, value = pcall(dfhack.gui.getCurFocus)
+        if ok and type(value) == 'table' then
+            focus = table.concat(value, ' > ')
+        elseif ok then
+            focus = value
+        end
+    end
+    if dfhack.gui and type(dfhack.gui.getCurViewscreen) == 'function' then
+        local ok, value = pcall(dfhack.gui.getCurViewscreen, true)
+        if ok then
+            if type(value) == 'userdata' and value._type then
+                screen = tostring(value._type)
+            else
+                screen = tostring(value)
+            end
+        end
+    end
+    return {focus=focus, screen=screen}
+end
+
 ---Returns whether a run has reached a terminal state.
 ---@param run table
 ---@return boolean
@@ -157,12 +183,16 @@ end
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
 ---@param repo_root string
 ---@param run table
-local function execute_suite(repo_root, run)
+---@param scheduler_module table
+---@param scheduler table
+local function execute_suite(repo_root, run, scheduler_module, scheduler)
     configure_dependencies(repo_root)
     local busted = require('busted.core')()
     require('busted')(busted)
-    local dy = assert(loadfile(join_path(repo_root,
+    local dy_factory = assert(loadfile(join_path(repo_root,
         'Tests/Automation/support/dy.lua')))()
+    local dy = dy_factory.new(scheduler_module, scheduler,
+        run.cleanup_module, run.cleanup_registry)
     busted.export('dy', dy)
 
     local output_factory = assert(loadfile(join_path(repo_root,
@@ -197,6 +227,57 @@ local function execute_suite(repo_root, run)
     busted.publish({'exit'})
 end
 
+
+---Cancels one run-owned timeout if it is still registered.
+---@param timeout_id any
+local function cancel_timeout(timeout_id)
+    if timeout_id ~= nil then dfhack.timeout_active(timeout_id, nil) end
+end
+
+---Records cleanup failures as host errors without hiding later failures.
+---@param run table
+---@param failures table[]
+local function record_cleanup_failures(run, failures)
+    for _, failure in ipairs(failures) do
+        local message = ('cleanup %s failed during %s: %s')
+            :format(failure.name, failure.reason, failure.message)
+        table.insert(run.output_lines, 'CLEANUP_ERROR ' .. message)
+        table.insert(run.failure_details, {
+            kind='error',
+            name='automation cleanup: ' .. failure.name,
+            message=message,
+            trace=failure.message,
+        })
+    end
+end
+
+---Cancels asynchronous work and drains all cleanup actions for a run.
+---@param run table
+---@param reason string
+---@return boolean
+local function clean_run(run, reason)
+    if run.scheduler then
+        run.scheduler_module.cancel(run.scheduler, reason)
+        run.scheduler.owner = nil
+        run.scheduler = nil
+    end
+    cancel_timeout(run.scheduled_timeout_id)
+    run.scheduled_timeout_id = nil
+    cancel_timeout(run.lease_timeout_id)
+    run.lease_timeout_id = nil
+    local ok, failures = run.cleanup_module.run(run.cleanup_registry, reason)
+    run.coroutine = nil
+    run.suspended = false
+    run.cleanup_confirmed = ok and
+        run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
+        run.outstanding_wait == nil and run.coroutine == nil and
+        run.scheduler == nil and run.scheduled_timeout_id == nil and
+        run.lease_timeout_id == nil
+    run.cleanup_reason = reason
+    if not ok then record_cleanup_failures(run, failures) end
+    return run.cleanup_confirmed
+end
+
 ---Finalizes a run from Busted counts or an uncaught host failure.
 ---@param registry table
 ---@param run table
@@ -214,15 +295,19 @@ local function finalize_run(registry, run, ok, host_error)
         run.totals.errors = run.totals.errors + 1
         table.insert(run.output_lines, 'HOST_ERROR ' .. run.host_error)
     end
+    local cleanup_ok = clean_run(run, 'suite completion')
+    if not cleanup_ok then
+        run.counts.errors = run.counts.errors + 1
+        run.totals.errors = run.totals.errors + 1
+    end
     run.finished_ms = dfhack.getTickCount()
     run.finished_frame = current_frame()
-    if ok and run.totals.failures == 0 and run.totals.errors == 0 then
+    if ok and cleanup_ok and run.totals.failures == 0 and
+            run.totals.errors == 0 then
         transition(run, 'cleaning', 'passed')
     else
         transition(run, 'cleaning', 'failed')
     end
-    run.coroutine = nil
-    run.scheduled_timeout_id = nil
     archive_run(registry, run)
 end
 
@@ -239,15 +324,89 @@ local function begin_queued_run(repo_root, registry, run)
     transition(run, 'starting', 'running')
     run.started_ms = dfhack.getTickCount()
     run.started_frame = current_frame()
+    local scheduler_module = assert(loadfile(join_path(repo_root,
+        'Tests/Automation/support/scheduler.lua')))()
+    local scheduler
+    scheduler = scheduler_module.new(run, {
+        is_current=function()
+            return registry.active_run == run and
+                registry.generation == run.generation and
+                run.state == 'running'
+        end,
+        schedule_timeout=function(delay, callback)
+            return dfhack.timeout(delay, 'frames', callback)
+        end,
+        cancel_timeout=cancel_timeout,
+        now_ms=dfhack.getTickCount,
+        diagnostics=current_diagnostics,
+        on_complete=function(ok, host_error)
+            finalize_run(registry, run, ok, host_error)
+        end,
+    })
+    run.scheduler_module = scheduler_module
+    run.scheduler = scheduler
     run.coroutine = coroutine.create(function()
-        execute_suite(repo_root, run)
+        execute_suite(repo_root, run, scheduler_module, scheduler)
     end)
-    local ok, host_error = coroutine.resume(run.coroutine)
+    scheduler_module.bind(scheduler, run.coroutine)
+    local ok, yielded = coroutine.resume(run.coroutine)
     if ok and coroutine.status(run.coroutine) ~= 'dead' then
+        if not scheduler_module.owns_yield(scheduler, yielded) then
+            finalize_run(registry, run, false,
+                'automation suite yielded outside the owned scheduler')
+            return
+        end
         run.suspended = true
         return
     end
-    finalize_run(registry, run, ok, host_error)
+    finalize_run(registry, run, ok, yielded)
+end
+
+
+---Aborts a run for a host-owned reason and performs emergency cleanup.
+---@param registry table
+---@param run table
+---@param reason string
+---@return table
+local function terminate_aborted(registry, run, reason)
+    registry.generation = registry.generation + 1
+    transition(run, {'starting', 'running'}, 'cleaning')
+    clean_run(run, reason)
+    run.finished_ms = dfhack.getTickCount()
+    run.finished_frame = current_frame()
+    table.insert(run.output_lines, 'ABORTED ' .. reason)
+    transition(run, 'cleaning', 'aborted')
+    archive_run(registry, run)
+    return run
+end
+
+---Schedules the next frame-based lease ownership check.
+---@param registry table
+---@param run table
+local function schedule_lease_check(registry, run)
+    local timeout_id
+    timeout_id = dfhack.timeout(run.lease_check_frames, 'frames', function()
+        if registry.active_run ~= run or
+                registry.generation ~= run.generation or
+                M.is_terminal(run) then
+            return
+        end
+        if run.lease_timeout_id ~= timeout_id then return end
+        run.lease_timeout_id = nil
+        local last_poll_ms = run.last_status_poll_ms or run.created_ms
+        run.lease_elapsed_ms = dfhack.getTickCount() - last_poll_ms
+        if run.lease_elapsed_ms >= run.lease_timeout_ms then
+            terminate_aborted(registry, run,
+                ('status lease expired after %d ms'):format(
+                    run.lease_elapsed_ms))
+            return
+        end
+        schedule_lease_check(registry, run)
+    end)
+    if timeout_id == nil then
+        error('DFHack rejected the automation lease timer')
+    end
+    run.lease_timeout_id = timeout_id
 end
 
 ---Starts one uniquely owned nonblocking automation run.
@@ -271,13 +430,16 @@ function M.start(repo_root, options)
     end
 
     registry.generation = registry.generation + 1
+    local cleanup_module = assert(loadfile(join_path(repo_root,
+        'Tests/Automation/support/cleanup.lua')))()
+    local created_ms = dfhack.getTickCount()
     local run = {
         protocol_version=M.protocol_version,
         run_id=options.run_id,
         generation=registry.generation,
         state='starting',
-        state_changed_ms=dfhack.getTickCount(),
-        created_ms=dfhack.getTickCount(),
+        state_changed_ms=created_ms,
+        created_ms=created_ms,
         created_frame=current_frame(),
         started_ms=nil,
         started_frame=nil,
@@ -294,11 +456,27 @@ function M.start(repo_root, options)
         discovered_files={},
         coroutine=nil,
         scheduled_timeout_id=nil,
+        lease_timeout_id=nil,
+        lease_timeout_ms=options.lease_timeout_ms or 5000,
+        lease_check_frames=options.lease_check_frames or 30,
+        lease_elapsed_ms=0,
         outstanding_wait=nil,
-        cleanup_registry={},
+        cleanup_module=cleanup_module,
+        cleanup_registry=nil,
+        cleanup_confirmed=false,
+        cleanup_reason=nil,
+        scheduler_module=nil,
+        scheduler=nil,
         suspended=false,
         terminal_observed=false,
     }
+    assert(type(run.lease_timeout_ms) == 'number' and
+        run.lease_timeout_ms >= 1,
+        'lease timeout must be positive')
+    assert(type(run.lease_check_frames) == 'number' and
+        run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0,
+        'lease check interval must be a positive integer')
+    run.cleanup_registry = cleanup_module.new(run)
     registry.active_run = run
     local timeout_id = dfhack.timeout(options.defer_frames, 'frames', function()
         begin_queued_run(repo_root, registry, run)
@@ -308,6 +486,13 @@ function M.start(repo_root, options)
         error('DFHack rejected the automation startup timer')
     end
     run.scheduled_timeout_id = timeout_id
+    local lease_ok, lease_error = pcall(schedule_lease_check, registry, run)
+    if not lease_ok then
+        cancel_timeout(run.scheduled_timeout_id)
+        run.scheduled_timeout_id = nil
+        registry.active_run = nil
+        error(lease_error)
+    end
     return run
 end
 
@@ -325,6 +510,18 @@ function M.find(run_id)
     return nil
 end
 
+---Records a status poll that renews an active run's frame-driven lease.
+---@param run_id string
+---@return table
+function M.poll(run_id)
+    local run = M.find(run_id)
+    if not run then error('automation run not found: ' .. run_id) end
+    run.last_status_poll_ms = dfhack.getTickCount()
+    run.last_status_poll_frame = current_frame()
+    if M.is_terminal(run) then run.terminal_observed = true end
+    return run
+end
+
 ---Aborts an owned queued or suspended run and invalidates its callbacks.
 ---@param run_id string
 ---@return table
@@ -336,20 +533,7 @@ function M.abort(run_id)
     end
     if M.is_terminal(run) then return run end
 
-    registry.generation = registry.generation + 1
-    if run.scheduled_timeout_id then
-        dfhack.timeout_active(run.scheduled_timeout_id, nil)
-        run.scheduled_timeout_id = nil
-    end
-    transition(run, {'starting', 'running'}, 'cleaning')
-    run.coroutine = nil
-    run.suspended = false
-    run.finished_ms = dfhack.getTickCount()
-    run.finished_frame = current_frame()
-    table.insert(run.output_lines, 'ABORTED by request')
-    transition(run, 'cleaning', 'aborted')
-    archive_run(registry, run)
-    return run
+    return terminate_aborted(registry, run, 'by request')
 end
 
 return M

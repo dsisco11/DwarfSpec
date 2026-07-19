@@ -37,6 +37,8 @@ local function parse_options(args)
         seed=1,
         spec=nil,
         defer_frames=1,
+        lease_timeout_ms=5000,
+        lease_check_frames=30,
     }
     for index = 2, #args do
         local argument = args[index]
@@ -58,6 +60,12 @@ local function parse_options(args)
             options.seed = positive_integer('--seed', value)
         elseif name == 'defer-frames' then
             options.defer_frames = positive_integer('--defer-frames', value)
+        elseif name == 'lease-timeout-ms' then
+            options.lease_timeout_ms = positive_integer(
+                '--lease-timeout-ms', value)
+        elseif name == 'lease-check-frames' then
+            options.lease_check_frames = positive_integer(
+                '--lease-check-frames', value)
         elseif name == 'spec' then
             if not value:match('^[%w_.-]+_live_spec%.lua$') then
                 error('--spec must name one *_live_spec.lua file without a path')
