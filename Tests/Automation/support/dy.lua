@@ -2,13 +2,108 @@
 
 local M = {}
 
+---Returns the test-owned fixture screen associated with one view.
+---@param screens table
+---@param view table
+---@return table|nil
+local function owner_screen(screens, view)
+    if screens[view] then return screens[view] end
+    local current = view
+    while current do
+        if screens[current] then return screens[current] end
+        current = current.parent_view
+    end
+    return nil
+end
+
+---Associates a fixture screen with its ordered native view descendants.
+---@param screens table
+---@param screen table
+---@param view table
+local function associate_screen(screens, screen, view)
+    screens[view] = screen
+    for _, child in ipairs(view.subviews or {}) do
+        associate_screen(screens, screen, child)
+    end
+end
+
+---Returns whether a live screen is still active.
+---@param screen table
+---@return boolean
+local function is_active(screen)
+    if type(screen.isActive) ~= 'function' then return false end
+    local ok, active = pcall(screen.isActive, screen)
+    return ok and not not active
+end
+
+---Returns the native DFHack viewscreen owned by a shown GUI screen.
+---@param screen table
+---@return userdata
+local function native_screen(screen)
+    assert(screen._native, 'input screen is not shown')
+    return screen._native
+end
+
+---Runs one action and retains fixture diagnostics if it fails operationally.
+---@param context table
+---@param operation string
+---@param view table|nil
+---@param action function
+---@return any
+local function run_action(context, operation, view, action)
+    local ok, first, second, third = xpcall(action, debug.traceback)
+    if ok then return first, second, third end
+    local screen = view and owner_screen(context.screens, view) or nil
+    local tree = nil
+    if screen then
+        local tree_ok, tree_value = pcall(
+            context.diagnostics.capture_view_tree, screen)
+        if tree_ok then tree = tree_value end
+    end
+    local capture_ok, capture_value = pcall(context.diagnostics.capture_screen,
+        {max_width=16, max_height=8})
+    local capture = capture_ok and capture_value or {width=0, height=0}
+    context.run.last_interaction_diagnostics = {
+        operation=operation,
+        tree=tree,
+        screen=capture,
+        scheduler=context.scheduler.run.scheduler_state,
+    }
+    local tree_summary = tree and context.diagnostics.summarize_tree(tree) or
+        '<none>'
+    error(('automation interaction failed: operation=%q cause=%s ' ..
+        'fixture_tree=%s screen_capture=%dx%d')
+        :format(operation, tostring(first), tree_summary,
+            capture.width, capture.height), 0)
+end
+
 ---Creates the run-scoped live interaction namespace.
+---@param repo_root string
 ---@param scheduler_module table
 ---@param scheduler table
 ---@param cleanup_module table
 ---@param cleanup_registry table
 ---@return table
-function M.new(scheduler_module, scheduler, cleanup_module, cleanup_registry)
+function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
+        cleanup_registry)
+    local fixture_loader = assert(loadfile(repo_root ..
+        '/Tests/Automation/support/fixture_loader.lua'))()
+    local diagnostics = assert(loadfile(repo_root ..
+        '/Tests/Automation/support/diagnostics.lua'))()
+    local pointer_adapter_module = assert(loadfile(repo_root ..
+        '/Tests/Automation/support/pointer_adapter.lua'))()
+    local context = {
+        repo_root=repo_root,
+        scheduler=scheduler,
+        scheduler_module=scheduler_module,
+        cleanup_module=cleanup_module,
+        cleanup_registry=cleanup_registry,
+        diagnostics=diagnostics,
+        pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry),
+        screens=setmetatable({}, {__mode='k'}),
+        screen_entries=setmetatable({}, {__mode='k'}),
+        run=scheduler.run,
+    }
     local dy = {
         protocol_version=1,
     }
@@ -42,6 +137,206 @@ function M.new(scheduler_module, scheduler, cleanup_module, cleanup_registry)
             error('automation cleanup failed: ' .. table.concat(messages, '; '),
                 2)
         end
+        scheduler_module.wait_frames(scheduler, 1, {
+            description='wait for automation cleanup',
+        })
+    end
+
+    ---Shows an approved test-owned fixture and waits for its first real render.
+    ---@param name string
+    ---@param options table|nil
+    ---@return table
+    function dy.show_fixture(name, options)
+        return run_action(context, 'show fixture ' .. tostring(name), nil,
+            function()
+                local fixture = fixture_loader.load(repo_root, name)
+                local pause_state = df.global.pause_state
+                local screen = fixture.new(options)
+                assert(type(screen.show) == 'function',
+                    'automation fixture did not create a screen')
+                cleanup_module.push(cleanup_registry,
+                    'restore fixture pause state', function()
+                        df.global.pause_state = pause_state
+                    end)
+                local entry = cleanup_module.push(cleanup_registry,
+                    'dismiss fixture ' .. name, function()
+                        if is_active(screen) then screen:dismiss() end
+                        context.screen_entries[screen] = nil
+                    end)
+                context.screen_entries[screen] = entry
+                associate_screen(context.screens, screen, screen)
+                screen:show()
+                dy.wait_for_render(screen)
+                return screen
+            end)
+    end
+
+    ---Dismisses one test-owned fixture screen and waits until it is inactive.
+    ---@param screen table
+    function dy.dismiss(screen)
+        return run_action(context, 'dismiss fixture', screen, function()
+            assert(context.screen_entries[screen],
+                'screen is not owned by this automation run')
+            if is_active(screen) then screen:dismiss() end
+            scheduler_module.wait_until(scheduler, 'fixture dismissal',
+                function() return not is_active(screen) end)
+            cleanup_module.release(cleanup_registry,
+                context.screen_entries[screen])
+            context.screen_entries[screen] = nil
+        end)
+    end
+
+    ---Finds one native propagated view id below a live fixture root.
+    ---@param root table
+    ---@param view_id string
+    ---@return table
+    function dy.get(root, view_id)
+        assert(type(view_id) == 'string' and view_id ~= '',
+            'view id must be a nonempty string')
+        local view = root.subviews and root.subviews[view_id]
+        assert(view and view.view_id == view_id,
+            'live view id was not found: ' .. view_id)
+        return view
+    end
+
+    ---Returns a stable read-only diagnostic table for one live view.
+    ---@param view table
+    ---@return table
+    function dy.inspect(view)
+        return diagnostics.inspect_view(view)
+    end
+
+    ---Captures and retains one live fixture tree under a caller-selected name.
+    ---@param root table
+    ---@param name string
+    ---@return table
+    function dy.capture_view_tree(root, name)
+        assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
+            'capture name must be a relative identifier')
+        context.run.captures = context.run.captures or {}
+        local tree = diagnostics.capture_view_tree(root)
+        context.run.captures[name] = tree
+        return tree
+    end
+
+    ---Installs a virtual interface pointer position for this automation run.
+    ---@param x integer
+    ---@param y integer
+    function dy.set_pointer(x, y)
+        pointer_adapter_module.set(context.pointer, x, y)
+    end
+
+    ---Moves the virtual pointer to an anchor inside one live view body.
+    ---@param view table
+    ---@param anchor string|nil
+    ---@return integer, integer
+    function dy.move_pointer_to(view, anchor)
+        local body = assert(view.frame_body, 'view has no live frame body')
+        anchor = anchor or 'center'
+        local x = math.floor((body.x1 + body.x2) / 2)
+        local y = math.floor((body.y1 + body.y2) / 2)
+        if anchor == 'top_left' then
+            x, y = body.x1, body.y1
+        elseif anchor == 'top_right' then
+            x, y = body.x2, body.y1
+        elseif anchor == 'bottom_left' then
+            x, y = body.x1, body.y2
+        elseif anchor == 'bottom_right' then
+            x, y = body.x2, body.y2
+        else
+            assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
+        end
+        dy.set_pointer(x, y)
+        return x, y
+    end
+
+    ---Restores the original physical-pointer query function.
+    function dy.clear_pointer()
+        pointer_adapter_module.clear(context.pointer)
+    end
+
+    ---Waits for a fixture's instrumented real render generation to advance.
+    ---@param view table
+    ---@param previous_generation integer|nil
+    ---@return integer
+    function dy.wait_for_render(view, previous_generation)
+        local screen = owner_screen(context.screens, view)
+        assert(screen and type(screen.render_generation) == 'number',
+            'view is not inside an instrumented automation fixture')
+        previous_generation = previous_generation or screen.render_generation
+        return scheduler_module.wait_until(scheduler, 'fixture render',
+            function()
+                return screen.render_generation > previous_generation and
+                    screen.render_generation or false
+            end)
+    end
+
+    ---Sends supported native keys and waits for the owning fixture to render.
+    ---@param keys string|table
+    ---@param screen table
+    ---@return integer
+    function dy.press(keys, screen)
+        return run_action(context, 'press keys', screen, function()
+            assert(screen and context.screen_entries[screen],
+                'input screen is not owned by this automation run')
+            local generation = screen.render_generation
+            require('gui').simulateInput(native_screen(screen), keys)
+            return dy.wait_for_render(screen, generation)
+        end)
+    end
+
+    ---Clicks a view with a supported native mouse button and waits for render.
+    ---@param view table
+    ---@param button string|nil
+    ---@return integer
+    function dy.click(view, button)
+        return run_action(context, 'click view', view, function()
+            local screen = assert(owner_screen(context.screens, view),
+                'view is not inside an automation fixture')
+            local key = ({left='_MOUSE_L', right='_MOUSE_R', middle='_MOUSE_M'})[
+                button or 'left']
+            assert(key, 'unsupported mouse button: ' .. tostring(button))
+            local x, y = dy.move_pointer_to(view)
+            local generation = screen.render_generation
+            pointer_adapter_module.with_interface_mouse(x, y, function()
+                require('gui').simulateInput(native_screen(screen), key)
+            end)
+            return dy.wait_for_render(screen, generation)
+        end)
+    end
+
+    ---Types ASCII text through DFHack's supported string keycodes.
+    ---@param text string
+    ---@param screen table
+    ---@return integer
+    function dy.type(text, screen)
+        return run_action(context, 'type text', screen, function()
+            assert(type(text) == 'string', 'text input must be a string')
+            assert(screen and context.screen_entries[screen],
+                'input screen is not owned by this automation run')
+            local generation = screen.render_generation
+            local gui = require('gui')
+            for index = 1, #text do
+                assert(text:byte(index) >= 1,
+                    'text input cannot contain NUL bytes')
+                gui.simulateInput(native_screen(screen),
+                    ('STRING_A%03d'):format(text:byte(index)))
+            end
+            return dy.wait_for_render(screen, generation)
+        end)
+    end
+
+    ---Captures and retains a bounded plain screen-cell buffer.
+    ---@param name string
+    ---@param options table|nil
+    ---@return table
+    function dy.capture_screen(name, options)
+        assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
+            'capture name must be a relative identifier')
+        context.run.captures = context.run.captures or {}
+        local capture = diagnostics.capture_screen(options)
+        context.run.captures[name] = capture
+        return capture
     end
 
     return dy

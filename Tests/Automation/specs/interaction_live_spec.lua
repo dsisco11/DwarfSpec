@@ -1,0 +1,58 @@
+-- Live contracts for generic fixture, inspection, pointer, input, and capture APIs.
+
+describe('automation live interactions', function()
+    local screen
+    local initial_pause_state
+
+    before_each(function()
+        dy.reset()
+        initial_pause_state = df.global.pause_state
+        screen = dy.show_fixture('interaction_screen')
+    end)
+
+    after_each(function()
+        dy.reset()
+    end)
+
+    it('shows, finds, inspects, hovers, clicks, types, captures, and dismisses',
+            function()
+        local target = dy.get(screen, 'tooltip_target')
+        local input = dy.get(screen, 'input_echo')
+        local initial_pointer_function = dfhack.screen.getMousePos
+
+        local inspection = dy.inspect(target)
+        local tree = dy.capture_view_tree(screen, 'interaction-tree')
+        assert.equals('tooltip_target', inspection.view_id)
+        assert.is_true(inspection.visible)
+        assert.is_truthy(inspection.body)
+        assert.equals('fixture_root', tree.children[1].view_id)
+        assert.equals(0, screen.click_count)
+
+        dy.move_pointer_to(target)
+        dy.wait_for_render(screen)
+        assert.matches('^Automation hover %d+,%d+$', target.tooltip)
+
+        dy.click(target)
+        assert.equals(1, screen.click_count)
+        dy.type('Hi', screen)
+        assert.equals('Hi', screen.typed_text)
+        assert.equals('Typed: Hi', input.text)
+        dy.press('CUSTOM_A', screen)
+        assert.equals('CUSTOM_A', screen.last_key)
+
+        local capture = dy.capture_screen('interaction-cells', {
+            max_width=8,
+            max_height=4,
+        })
+        assert.equals(8, capture.width)
+        assert.equals(4, capture.height)
+        assert.equals(4, #capture.cells)
+
+        dy.clear_pointer()
+        assert.equals(initial_pointer_function, dfhack.screen.getMousePos)
+        dy.dismiss(screen)
+        assert.is_false(screen:isActive())
+        dy.reset()
+        assert.equals(initial_pause_state, df.global.pause_state)
+    end)
+end)

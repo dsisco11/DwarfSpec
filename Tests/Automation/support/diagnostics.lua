@@ -1,0 +1,132 @@
+-- Stable read-only view and screen diagnostics for live automation failures.
+
+local M = {}
+
+---Returns a scalar value or the result of a lazy widget property.
+---@param value any
+---@return any
+local function get_value(value)
+    if type(value) ~= 'function' then return value end
+    local ok, result = pcall(value)
+    return ok and result or '<unavailable>'
+end
+
+---Returns a stable class label without retaining userdata text addresses.
+---@param view any
+---@return string
+local function class_name(view)
+    local type_value = view and view._type
+    if type(type_value) == 'string' then return type_value end
+    if type(type_value) == 'table' then
+        return type_value._name or type_value.name or '<view>'
+    end
+    return type(view)
+end
+
+---Copies one live rectangle into plain diagnostic coordinates.
+---@param rect table|nil
+---@return table|nil
+local function copy_rect(rect)
+    if not rect then return nil end
+    return {
+        x1=rect.x1,
+        y1=rect.y1,
+        x2=rect.x2,
+        y2=rect.y2,
+        clip_x1=rect.clip_x1,
+        clip_y1=rect.clip_y1,
+        clip_x2=rect.clip_x2,
+        clip_y2=rect.clip_y2,
+    }
+end
+
+---Returns a stable plain-text form of a widget text value.
+---@param text any
+---@return string|nil
+local function text_value(text)
+    if text == nil then return nil end
+    if type(text) == 'string' then return text end
+    if type(text) == 'number' or type(text) == 'boolean' then
+        return tostring(text)
+    end
+    return '<' .. type(text) .. '>'
+end
+
+---Inspects one live view without mutating it.
+---@param view table
+---@return table
+function M.inspect_view(view)
+    assert(view, 'cannot inspect a nil view')
+    local focused = false
+    if type(view.hasFocus) == 'function' then
+        local ok, value = pcall(view.hasFocus, view)
+        focused = ok and not not value
+    end
+    return {
+        class=class_name(view),
+        view_id=view.view_id,
+        visible=not not get_value(view.visible),
+        active=not not get_value(view.active),
+        focused=focused,
+        frame=copy_rect(view.frame_rect),
+        body=copy_rect(view.frame_body),
+        text=text_value(view.text),
+        tooltip=text_value(view.tooltip),
+    }
+end
+
+---Recursively captures a view tree through its ordered native child array.
+---@param view table
+---@return table
+function M.capture_view_tree(view)
+    local node = M.inspect_view(view)
+    node.children = {}
+    for _, child in ipairs(view.subviews or {}) do
+        table.insert(node.children, M.capture_view_tree(child))
+    end
+    return node
+end
+
+---Captures a bounded plain screen-cell buffer through DFHack's read API.
+---@param options table|nil
+---@return table
+function M.capture_screen(options)
+    options = options or {}
+    local width, height = dfhack.screen.getWindowSize()
+    local max_width = math.min(width, options.max_width or width)
+    local max_height = math.min(height, options.max_height or height)
+    assert(max_width >= 1 and max_height >= 1,
+        'screen capture dimensions must be positive')
+    local result = {width=max_width, height=max_height, cells={}}
+    for y = 0, max_height - 1 do
+        local row = {}
+        for x = 0, max_width - 1 do
+            local pen = dfhack.screen.readTile(x, y)
+            row[x + 1] = pen and {
+                ch=pen.ch,
+                fg=pen.fg,
+                bg=pen.bg,
+                bold=pen.bold,
+                tile=pen.tile,
+            } or nil
+        end
+        result.cells[y + 1] = row
+    end
+    return result
+end
+
+---Formats a compact fixture-tree summary for operational errors.
+---@param node table
+---@param depth integer|nil
+---@return string
+function M.summarize_tree(node, depth)
+    depth = depth or 0
+    local identifier = node.view_id and ('#' .. node.view_id) or ''
+    local summary = string.rep('>', depth) .. node.class .. identifier
+    for _, child in ipairs(node.children or {}) do
+        summary = summary .. ',' .. M.summarize_tree(child, depth + 1)
+    end
+    return summary
+end
+
+return M

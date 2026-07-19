@@ -191,7 +191,7 @@ local function execute_suite(repo_root, run, scheduler_module, scheduler)
     require('busted')(busted)
     local dy_factory = assert(loadfile(join_path(repo_root,
         'Tests/Automation/support/dy.lua')))()
-    local dy = dy_factory.new(scheduler_module, scheduler,
+    local dy = dy_factory.new(repo_root, scheduler_module, scheduler,
         run.cleanup_module, run.cleanup_registry)
     busted.export('dy', dy)
 
