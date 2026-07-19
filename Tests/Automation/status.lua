@@ -50,3 +50,4 @@ if host.is_terminal(run) then
         print('HOST_TRACE ' .. escape(run.host_trace or ''))
     end
 end
+print('DWARFUI_AUTOMATION_JSON ' .. host.encode_report(run))

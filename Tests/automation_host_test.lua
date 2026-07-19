@@ -131,4 +131,35 @@ describe('automation host ownership', function()
         assert.matches('status lease expired', run.output_lines[1], 1, true)
         assert.is_nil(active_callbacks[1])
     end)
+
+    it('builds a complete JSON-safe report for PowerShell consumption', function()
+        local report = host.report_data({
+            protocol_version=1,
+            run_id='json-run',
+            state='failed',
+            generation=7,
+            counts={successes=1, failures=1, errors=0, pending=0},
+            totals={successes=1, failures=1, errors=0, pending=0},
+            current_test='suite "quoted"',
+            output_lines={'one'},
+            cleanup_confirmed=true,
+            cleanup_reason='suite completion',
+            host_error=nil,
+            host_trace=nil,
+            failure_details={{
+                kind='failure',
+                name='suite "quoted"',
+                message='line one\nline two',
+                trace=nil,
+            }},
+        })
+
+        assert.equals(1, report.protocol)
+        assert.equals('json-run', report.run_id)
+        assert.is_true(report.terminal)
+        assert.equals('suite "quoted"', report.current_test)
+        assert.equals('line one\nline two', report.failures[1].message)
+        assert.equals('\0', report.failures[1].trace)
+        assert.is_true(report.cleanup_confirmed)
+    end)
 end)

@@ -17,3 +17,4 @@ local run = host.abort(run_id)
 run.terminal_observed = true
 print(('DWARFUI_AUTOMATION protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))
+print('DWARFUI_AUTOMATION_JSON ' .. host.encode_report(run))

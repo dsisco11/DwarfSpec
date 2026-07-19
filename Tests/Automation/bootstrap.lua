@@ -84,3 +84,4 @@ local host = assert(loadfile(root ..
 local run = host.start(root, parse_options(arguments))
 print(('DWARFUI_AUTOMATION protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))
+print('DWARFUI_AUTOMATION_JSON ' .. host.encode_report(run))

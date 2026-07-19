@@ -536,4 +536,47 @@ function M.abort(run_id)
     return terminate_aborted(registry, run, 'by request')
 end
 
+local JSON_NULL = '\0'
+
+---Builds one JSON-safe machine-readable live automation report.
+---@param run table
+---@return table
+function M.report_data(run)
+    local failures = {}
+    for _, detail in ipairs(run.failure_details) do
+        table.insert(failures, {
+            kind=detail.kind,
+            name=detail.name,
+            message=detail.message,
+            trace=detail.trace or JSON_NULL,
+        })
+    end
+    return {
+        protocol=run.protocol_version,
+        run_id=run.run_id,
+        state=run.state,
+        terminal=M.is_terminal(run),
+        generation=run.generation,
+        counts=run.counts,
+        totals=run.totals,
+        current_test=run.current_test or JSON_NULL,
+        output_count=#run.output_lines,
+        cleanup_confirmed=run.cleanup_confirmed,
+        cleanup_reason=run.cleanup_reason or JSON_NULL,
+        host_error=run.host_error or JSON_NULL,
+        host_trace=run.host_trace or JSON_NULL,
+        failures=failures,
+    }
+end
+
+---Encodes one complete machine-readable live automation report with DFHack JSON.
+---@param run table
+---@return string
+function M.encode_report(run)
+    return require('json').encode(M.report_data(run), {
+        pretty=false,
+        null=JSON_NULL,
+    })
+end
+
 return M
