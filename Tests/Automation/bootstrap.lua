@@ -1,0 +1,78 @@
+-- Starts an in-process Busted automation run and returns immediately.
+
+local arguments = {...}
+
+---Derives the repository root from this entry point's absolute source path.
+---@return string
+local function repository_root()
+    local source = debug.getinfo(1, 'S').source:gsub('^@', '')
+    local root = source:match('^(.*)[/\\]Tests[/\\]Automation[/\\]bootstrap%.lua$')
+    return assert(root, 'could not derive repository root from ' .. source)
+end
+
+---Parses one positive integer option.
+---@param name string
+---@param value string
+---@return integer
+local function positive_integer(name, value)
+    local number = tonumber(value)
+    if not number or number < 1 or number % 1 ~= 0 then
+        error(name .. ' must be a positive integer')
+    end
+    return number
+end
+
+---Parses the intentionally small bootstrap option surface.
+---@param args string[]
+---@return table
+local function parse_options(args)
+    local options = {
+        run_id=assert(args[1], 'run id argument is required'),
+        filters={},
+        filter_out={},
+        names={},
+        tags={},
+        exclude_tags={},
+        repeat_count=1,
+        seed=1,
+        spec=nil,
+        defer_frames=1,
+    }
+    for index = 2, #args do
+        local argument = args[index]
+        local name, value = argument:match('^%-%-([%w-]+)=(.*)$')
+        if not name then error('invalid automation option: ' .. argument) end
+        if name == 'filter' then
+            table.insert(options.filters, value)
+        elseif name == 'filter-out' then
+            table.insert(options.filter_out, value)
+        elseif name == 'name' then
+            table.insert(options.names, value)
+        elseif name == 'tag' then
+            table.insert(options.tags, value)
+        elseif name == 'exclude-tag' then
+            table.insert(options.exclude_tags, value)
+        elseif name == 'repeat' then
+            options.repeat_count = positive_integer('--repeat', value)
+        elseif name == 'seed' then
+            options.seed = positive_integer('--seed', value)
+        elseif name == 'defer-frames' then
+            options.defer_frames = positive_integer('--defer-frames', value)
+        elseif name == 'spec' then
+            if not value:match('^[%w_.-]+_live_spec%.lua$') then
+                error('--spec must name one *_live_spec.lua file without a path')
+            end
+            options.spec = value
+        else
+            error('unknown automation option: --' .. name)
+        end
+    end
+    return options
+end
+
+local root = repository_root()
+local host = assert(loadfile(root ..
+    '/Tests/Automation/support/busted_host.lua'))()
+local run = host.start(root, parse_options(arguments))
+print(('DWARFUI_AUTOMATION protocol=%d run_id=%s state=%s generation=%d')
+    :format(run.protocol_version, run.run_id, run.state, run.generation))
