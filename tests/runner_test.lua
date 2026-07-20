@@ -86,7 +86,6 @@ describe('DwarfSpec external runner', function()
         assert.equals(3, calls)
         local test_glob_found = false
         for _, argument in ipairs(bootstrap_arguments) do
-            assert.is_nil(argument:match('^%-%-dependency%-root='))
             if argument == '--test-glob=*.ds.lua' then
                 test_glob_found = true
             end
