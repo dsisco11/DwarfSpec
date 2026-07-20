@@ -6,7 +6,7 @@ local arguments = {...}
 ---@return string
 local function repository_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
-    local root = source:match('^(.*)[/\\]Tests[/\\]Automation[/\\]bootstrap%.lua$')
+    local root = source:match('^(.*)[/\\]Tests[/\\]automation[/\\]bootstrap%.lua$')
     return assert(root, 'could not derive repository root from ' .. source)
 end
 
@@ -80,7 +80,7 @@ end
 
 local root = repository_root()
 local host = assert(loadfile(root ..
-    '/Tests/Automation/support/busted_host.lua'))()
+    '/Tests/automation/support/busted_host.lua'))()
 local run = host.start(root, parse_options(arguments))
 print(('DWARFUI_AUTOMATION protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))

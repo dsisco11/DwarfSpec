@@ -1,7 +1,7 @@
 -- Unit contracts for single-owner live automation scheduling.
 
 local scheduler_module = assert(loadfile(
-    'Tests/Automation/support/scheduler.lua'))()
+    'Tests/automation/support/scheduler.lua'))()
 
 describe('automation scheduler', function()
     local now

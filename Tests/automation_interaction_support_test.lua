@@ -1,13 +1,13 @@
 -- Unit contracts for live interaction support utilities without DFHack state.
 
 local cleanup = assert(loadfile(
-    'Tests/Automation/support/cleanup.lua'))()
+    'Tests/automation/support/cleanup.lua'))()
 local diagnostics = assert(loadfile(
-    'Tests/Automation/support/diagnostics.lua'))()
+    'Tests/automation/support/diagnostics.lua'))()
 local fixture_loader = assert(loadfile(
-    'Tests/Automation/support/fixture_loader.lua'))()
+    'Tests/automation/support/fixture_loader.lua'))()
 local pointer_adapter = assert(loadfile(
-    'Tests/Automation/support/pointer_adapter.lua'))()
+    'Tests/automation/support/pointer_adapter.lua'))()
 
 describe('automation interaction support', function()
     local original_dfhack

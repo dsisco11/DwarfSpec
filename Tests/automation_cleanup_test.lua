@@ -1,7 +1,7 @@
 -- Unit contracts for the live automation cleanup registry.
 
 local cleanup = assert(loadfile(
-    'Tests/Automation/support/cleanup.lua'))()
+    'Tests/automation/support/cleanup.lua'))()
 
 describe('automation cleanup registry', function()
     it('runs actions once in strict LIFO order across repeated resets', function()

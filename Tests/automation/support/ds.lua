@@ -87,11 +87,11 @@ end
 function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
         cleanup_registry)
     local fixture_loader = assert(loadfile(repo_root ..
-        '/Tests/Automation/support/fixture_loader.lua'))()
+        '/Tests/automation/support/fixture_loader.lua'))()
     local diagnostics = assert(loadfile(repo_root ..
-        '/Tests/Automation/support/diagnostics.lua'))()
+        '/Tests/automation/support/diagnostics.lua'))()
     local pointer_adapter_module = assert(loadfile(repo_root ..
-        '/Tests/Automation/support/pointer_adapter.lua'))()
+        '/Tests/automation/support/pointer_adapter.lua'))()
     local context = {
         repo_root=repo_root,
         scheduler=scheduler,

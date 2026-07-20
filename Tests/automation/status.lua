@@ -7,7 +7,7 @@ assert(run_id, 'run id argument is required')
 ---@return string
 local function repository_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
-    local root = source:match('^(.*)[/\\]Tests[/\\]Automation[/\\]status%.lua$')
+    local root = source:match('^(.*)[/\\]Tests[/\\]automation[/\\]status%.lua$')
     return assert(root, 'could not derive repository root from ' .. source)
 end
 
@@ -21,7 +21,7 @@ end
 
 local root = repository_root()
 local host = assert(loadfile(root ..
-    '/Tests/Automation/support/busted_host.lua'))()
+    '/Tests/automation/support/busted_host.lua'))()
 local poll_ok, run = pcall(host.poll, run_id)
 if not poll_ok then qerror(run) end
 
