@@ -4,13 +4,13 @@ describe('automation scheduler and cleanup', function()
     ---Returns the cleanup registry owned by the active automation run.
     ---@return table, table
     local function active_cleanup()
-        local run = assert(dfhack.dwarfui.automation.active_run,
+        local run = assert(dfhack.dwarfspec.active_run,
             'automation run is not active')
         return run.cleanup_module, run.cleanup_registry
     end
 
     it('resumes after real raw-frame callbacks', function()
-        local run = assert(dfhack.dwarfui.automation.active_run)
+        local run = assert(dfhack.dwarfspec.active_run)
         local started_ms = dfhack.getTickCount()
 
         local elapsed_frames = ds.wait_frames(3)

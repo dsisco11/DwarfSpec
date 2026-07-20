@@ -81,8 +81,7 @@ end
 ---Returns the compatible process-wide automation registry.
 ---@return table
 local function get_registry()
-    dfhack.dwarfui = dfhack.dwarfui or {}
-    local registry = dfhack.dwarfui.automation
+    local registry = dfhack.dwarfspec
     if registry and registry.protocol_version ~= M.protocol_version then
         error(('incompatible automation host protocol: expected %d, found %s')
             :format(M.protocol_version, tostring(registry.protocol_version)))
@@ -94,7 +93,7 @@ local function get_registry()
             active_run=nil,
             last_completed=nil,
         }
-        dfhack.dwarfui.automation = registry
+        dfhack.dwarfspec = registry
     end
     return registry
 end

@@ -16,7 +16,6 @@ describe('automation host ownership', function()
         tick = 0
         rawset(_G, 'dfhack', {
             is_core_context=true,
-            dwarfui={},
         })
 
         ---Returns a deterministic monotonic unit-test tick.

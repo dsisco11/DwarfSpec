@@ -20,7 +20,7 @@ describe('automation status formatting', function()
         active_callbacks = {}
         lines = {}
         tick = 0
-        rawset(_G, 'dfhack', {is_core_context=true, dwarfui={}})
+        rawset(_G, 'dfhack', {is_core_context=true})
         rawset(_G, 'print', function(line)
             table.insert(lines, line)
         end)

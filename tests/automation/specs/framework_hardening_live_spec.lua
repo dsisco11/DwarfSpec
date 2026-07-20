@@ -12,7 +12,7 @@ end
 ---Returns the active run's cleanup module and registry.
 ---@return table, table
 local function active_cleanup()
-    local run = assert(dfhack.dwarfui.automation.active_run,
+    local run = assert(dfhack.dwarfspec.active_run,
         'automation run is not active')
     return run.cleanup_module, run.cleanup_registry
 end
@@ -35,7 +35,7 @@ describe('automation framework live resilience', function()
         local root = repository_root()
         local host = assert(loadfile(root ..
             '/tests/automation/support/busted_host.lua'))()
-        local active = assert(dfhack.dwarfui.automation.active_run)
+        local active = assert(dfhack.dwarfspec.active_run)
 
         local ok, message = pcall(host.start, root,
             competing_options('live-host-conflict'))
@@ -43,7 +43,7 @@ describe('automation framework live resilience', function()
         assert.is_false(ok)
         assert.matches('automation run ' .. active.run_id ..
             ' is already running', message, 1, true)
-        assert.equals(active, dfhack.dwarfui.automation.active_run)
+        assert.equals(active, dfhack.dwarfspec.active_run)
     end)
 
     it('rejects stale real-frame callbacks from a no-longer-current generation',
@@ -94,7 +94,7 @@ describe('automation framework live resilience', function()
     it('captures injected fixture failures and restores test-owned state',
             function()
         local ok, message = pcall(ds.show_fixture, 'failing_screen')
-        local run = assert(dfhack.dwarfui.automation.active_run)
+        local run = assert(dfhack.dwarfspec.active_run)
 
         assert.is_false(ok)
         assert.matches('operation="show fixture failing_screen"', message,
