@@ -57,6 +57,8 @@ package.path = prepend(package.path,
     root .. '/.luarocks/share/lua/5.4/?/init.lua')
 local native_suffix = package.config:sub(1, 1) == '\\' and 'dll' or 'so'
 package.cpath = prepend(package.cpath,
+    root .. '/lib/lua/' .. lua_version .. '/?.' .. native_suffix)
+package.cpath = prepend(package.cpath,
     root .. '/.luarocks/lib/lua/5.4/?' .. '.' .. native_suffix)
 
 local cli = require('dwarfspec.cli')
