@@ -166,6 +166,9 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
                 context.screen_entries[screen] = entry
                 associate_screen(context.screens, screen, screen)
                 screen:show()
+                if type(screen.on_automation_shown) == 'function' then
+                    screen:on_automation_shown()
+                end
                 dy.wait_for_render(screen)
                 return screen
             end)
@@ -282,6 +285,18 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
             local generation = screen.render_generation
             require('gui').simulateInput(native_screen(screen), keys)
             return dy.wait_for_render(screen, generation)
+        end)
+    end
+
+    ---Sends input to one currently shown live screen through DFHack's native path.
+    ---@param keys string|table
+    ---@param screen table
+    function dy.send_input(keys, screen)
+        return run_action(context, 'send input', screen, function()
+            assert(screen and is_active(screen),
+                'input screen is not currently active')
+            require('gui').simulateInput(native_screen(screen), keys)
+            return dy.wait_frames(1, {description='wait after live input'})
         end)
     end
 

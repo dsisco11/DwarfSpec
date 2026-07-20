@@ -3,7 +3,9 @@
 local M = {}
 
 local APPROVED_FIXTURES = {
+    cover_screen=true,
     interaction_screen=true,
+    tooltip_screen=true,
 }
 
 ---Joins a repository path with a portable relative path.
