@@ -19,6 +19,18 @@ local function join_path(root, relative_path)
     return root .. separator .. relative_path:gsub('[/\\]', separator)
 end
 
+---Loads an installed DwarfSpec module or its source-tree equivalent.
+---@param package_root string
+---@param module_name string
+---@param source_relative string
+---@return table
+local function load_automation_module(package_root, module_name,
+        source_relative)
+    local ok, module = pcall(require, module_name)
+    if ok then return module end
+    return assert(loadfile(join_path(package_root, source_relative)))()
+end
+
 ---Returns whether a semicolon-delimited Lua search path contains an entry.
 ---@param search_path string
 ---@param entry string
@@ -126,9 +138,11 @@ end
 
 ---Configures pinned pure-Lua dependencies and DFHack-native adapters.
 ---@param package_root string
-local function configure_dependencies(package_root)
+---@param dependency_lua_root string|nil
+local function configure_dependencies(package_root, dependency_lua_root)
     local separator = package.config:sub(1, 1)
-    local lua_root = join_path(package_root, '.luarocks/share/lua/5.4')
+    local lua_root = dependency_lua_root or join_path(package_root,
+        '.luarocks/share/lua/5.4')
     local source_entries = {
         lua_root .. separator .. '?.lua',
         lua_root .. separator .. '?' .. separator .. 'init.lua',
@@ -140,10 +154,12 @@ local function configure_dependencies(package_root)
         end
     end
 
-    local system_adapter = assert(loadfile(join_path(package_root,
-        'tests/automation/support/system_adapter.lua')))()
-    local lfs_adapter = assert(loadfile(join_path(package_root,
-        'tests/automation/support/lfs_adapter.lua')))()
+    local system_adapter = load_automation_module(package_root,
+        'dwarfspec.automation.system_adapter',
+        'tests/automation/support/system_adapter.lua')
+    local lfs_adapter = load_automation_module(package_root,
+        'dwarfspec.automation.lfs_adapter',
+        'tests/automation/support/lfs_adapter.lua')
     package.preload.system = function() return system_adapter end
     package.preload.lfs = function() return lfs_adapter end
     package.loaded.system = system_adapter
@@ -237,33 +253,37 @@ end
 ---@param scheduler table
 local function execute_suite(package_root, project_root, run, scheduler_module,
         scheduler)
-    configure_dependencies(package_root)
+    configure_dependencies(package_root, run.options.dependency_lua_root)
     local busted = require('busted.core')()
     require('busted')(busted)
-    local project_module = assert(loadfile(join_path(package_root,
-        'tests/automation/support/project.lua')))()
+    local project_module = load_automation_module(package_root,
+        'dwarfspec.automation.project',
+        'tests/automation/support/project.lua')
     local project = project_module.new(project_root, package_root,
         dfhack.filesystem)
-    local extensions_module = assert(loadfile(join_path(package_root,
-        'tests/automation/support/extensions.lua')))()
+    local extensions_module = load_automation_module(package_root,
+        'dwarfspec.automation.extensions',
+        'tests/automation/support/extensions.lua')
     local extensions = extensions_module.load(project)
-    local overlay_fixture = assert(loadfile(join_path(package_root,
-        'tests/automation/support/overlay_fixture.lua')))()
+    local overlay_fixture = load_automation_module(package_root,
+        'dwarfspec.automation.overlay_fixture',
+        'tests/automation/support/overlay_fixture.lua')
     run.staged_overlays = {}
     for _, import_path in ipairs(run.options.overlay_fixtures or {}) do
         table.insert(run.staged_overlays, overlay_fixture.stage(project,
             import_path, run.run_id, run.cleanup_module,
             run.suite_cleanup_registry))
     end
-    local ds_factory = assert(loadfile(join_path(package_root,
-        'tests/automation/support/ds.lua')))()
+    local ds_factory = load_automation_module(package_root, 'dwarfspec.ds',
+        'tests/automation/support/ds.lua')
     local ds = ds_factory.new(package_root, project, scheduler_module,
         scheduler, run.cleanup_module, run.cleanup_registry, extensions)
     busted.export('ds', ds)
     M.install_ds_lifecycle(busted, ds)
 
-    local output_factory = assert(loadfile(join_path(package_root,
-        'tests/automation/support/output_handler.lua')))()
+    local output_factory = load_automation_module(package_root,
+        'dwarfspec.automation.output_handler',
+        'tests/automation/support/output_handler.lua')
     output_factory.new(busted, run)
     require('busted.modules.filter_loader')()(busted,
         M.filter_options(run.options))
@@ -389,8 +409,9 @@ local function begin_queued_run(package_root, project_root, registry, run)
     transition(run, 'starting', 'running')
     run.started_ms = dfhack.getTickCount()
     run.started_frame = current_frame()
-    local scheduler_module = assert(loadfile(join_path(package_root,
-        'tests/automation/support/scheduler.lua')))()
+    local scheduler_module = load_automation_module(package_root,
+        'dwarfspec.automation.scheduler',
+        'tests/automation/support/scheduler.lua')
     local scheduler
     scheduler = scheduler_module.new(run, {
         is_current=function()
@@ -501,8 +522,9 @@ function M.start(package_root, project_root, options)
     end
 
     registry.generation = registry.generation + 1
-    local cleanup_module = assert(loadfile(join_path(package_root,
-        'tests/automation/support/cleanup.lua')))()
+    local cleanup_module = load_automation_module(package_root,
+        'dwarfspec.automation.cleanup',
+        'tests/automation/support/cleanup.lua')
     local created_ms = dfhack.getTickCount()
     local run = {
         protocol_version=M.protocol_version,

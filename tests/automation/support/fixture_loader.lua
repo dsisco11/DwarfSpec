@@ -9,8 +9,11 @@ local M = {}
 function M.resolve(project, import_path)
     assert(type(project) == 'table' and type(project.project_root) == 'string',
         'fixture loading requires a project descriptor')
-    local project_module = assert(loadfile(project.package_root ..
+local ok, project_module = pcall(require, 'dwarfspec.automation.project')
+if not ok then
+    project_module = assert(loadfile(project.package_root ..
         '/tests/automation/support/project.lua'))()
+end
     local relative_path = project_module.relative_path(import_path)
     assert(relative_path:match('%.lua$'),
         'fixture import must name one Lua module: ' .. relative_path)

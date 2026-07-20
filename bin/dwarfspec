@@ -55,4 +55,5 @@ package.cpath = prepend(package.cpath,
     root .. '/.luarocks/lib/lua/5.4/?' .. '.' .. native_suffix)
 
 local cli = require('dwarfspec.cli')
-os.exit(cli.main(arg, {package_root=root}), true)
+local layout = require('dwarfspec.layout').current()
+os.exit(cli.main(arg, layout), true)

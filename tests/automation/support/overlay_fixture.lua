@@ -15,8 +15,11 @@ end
 ---@param loader function|nil
 ---@return table
 function M.load(project, import_path, loader)
-    local project_module = assert(loadfile(project.package_root ..
+local ok, project_module = pcall(require, 'dwarfspec.automation.project')
+if not ok then
+    project_module = assert(loadfile(project.package_root ..
         '/tests/automation/support/project.lua'))()
+end
     local relative_path = project_module.relative_path(import_path)
     assert(relative_path:match('%.lua$'),
         'overlay fixture import must name one Lua module: ' .. relative_path)

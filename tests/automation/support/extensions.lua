@@ -118,8 +118,11 @@ function M.load(project, loader)
         'extension loading requires a project descriptor')
     loader = loader or loadfile
     local result = {settings={}, commands={}, diagnostics={}, modules={}}
-    local project_module = assert(loadfile(project.package_root ..
+local ok, project_module = pcall(require, 'dwarfspec.automation.project')
+if not ok then
+    project_module = assert(loadfile(project.package_root ..
         '/tests/automation/support/project.lua'))()
+end
     for _, relative_path in ipairs(
             project_module.discover_config_modules(project)) do
         local absolute_path = project_module.join(project.project_root,

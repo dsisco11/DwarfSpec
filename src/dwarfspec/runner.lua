@@ -55,18 +55,30 @@ local function is_file(path)
     return true
 end
 
----Validates source-tree dependencies required by the in-process host.
----@param package_root string
-local function validate_dependencies(package_root)
-    for _, relative_path in ipairs({
-            '.luarocks/share/lua/5.4/busted/core.lua',
-            '.luarocks/share/lua/5.4/busted/init.lua',
-            '.luarocks/share/lua/5.4/luassert/init.lua',
-            'tests/automation/bootstrap.lua',
-            'tests/automation/status.lua',
-            'tests/automation/abort.lua',
-            'tests/automation/probe.lua'}) do
-        local path = project.join(package_root, relative_path)
+---Returns one installed or source-tree host entry script path.
+---@param options table
+---@param name string
+---@return string
+local function host_script(options, name)
+    local scripts = options.host_scripts or {}
+    if scripts[name] then return scripts[name] end
+    return project.join(options.package_root, 'tests/automation/' .. name ..
+        '.lua')
+end
+
+---Validates pure-Lua dependencies required by the in-process host.
+---@param options table
+local function validate_dependencies(options)
+    local dependency_lua_root = options.dependency_lua_root or
+        project.join(options.package_root, '.luarocks/share/lua/5.4')
+    for _, path in ipairs({
+            project.join(dependency_lua_root, 'busted/core.lua'),
+            project.join(dependency_lua_root, 'busted/init.lua'),
+            project.join(dependency_lua_root, 'luassert/init.lua'),
+            host_script(options, 'bootstrap'),
+            host_script(options, 'status'),
+            host_script(options, 'abort'),
+            host_script(options, 'probe')}) do
         if not is_file(path) then
             fail('dependency', 'DwarfSpec dependency was not found: ' .. path)
         end
@@ -89,8 +101,7 @@ end
 ---@return string[]
 local function bootstrap_arguments(options, run_id)
     local arguments = {
-        'lua', '-f', project.join(options.package_root,
-            'tests/automation/bootstrap.lua'),
+        'lua', '-f', host_script(options, 'bootstrap'),
         run_id,
         '--project-root=' .. options.project_root,
         '--repeat=' .. tostring(options.repeat_count),
@@ -112,11 +123,11 @@ end
 
 ---Verifies a healthy DFHack core context before starting a run.
 ---@param runner string
----@param package_root string
+---@param options table
 ---@param invoke function
-local function verify_connection(runner, package_root, invoke)
+local function verify_connection(runner, options, invoke)
     local ok, result = pcall(invoke, runner, {
-        'lua', '-f', project.join(package_root, 'tests/automation/probe.lua'),
+        'lua', '-f', host_script(options, 'probe'),
     })
     if not ok then
         fail('connection', 'could not contact DFHack through ' .. runner ..
@@ -169,8 +180,7 @@ end
 ---@return table|nil, string|nil, string|nil
 local function recovery_abort(runner, options, run_id, invoke)
     local result = invoke(runner, {
-        'lua', '-f', project.join(options.package_root,
-            'tests/automation/abort.lua'), run_id,
+        'lua', '-f', host_script(options, 'abort'), run_id,
     })
     if result.exit_code ~= 0 then
         return nil, 'recovery abort exited with ' .. result.exit_code, nil
@@ -202,7 +212,7 @@ function M.run(options)
     local bootstrap_attempted = false
 
     local ok, caught = xpcall(function()
-        validate_dependencies(options.package_root)
+        validate_dependencies(options)
         local resolved, resolve_error
         resolved, runner = pcall(process.resolve_runner, options,
             options.environment)
@@ -212,7 +222,7 @@ function M.run(options)
             fail('dependency', clean_message(resolve_error))
         end
         if options.verbose then emit('DFHack runner: ' .. runner) end
-        verify_connection(runner, options.package_root, invoke)
+        verify_connection(runner, options, invoke)
 
         bootstrap_attempted = true
         local start = invoke(runner, bootstrap_arguments(options, run_id))
@@ -231,8 +241,7 @@ function M.run(options)
             end
             sleep(options.poll_interval_ms / 1000)
             local status = invoke(runner, {
-                'lua', '-f', project.join(options.package_root,
-                    'tests/automation/status.lua'),
+                'lua', '-f', host_script(options, 'status'),
                 run_id, tostring(output_offset),
             })
             if status.exit_code ~= 0 then
@@ -314,7 +323,7 @@ function M.abort(options, run_id)
         options.emit('DFHack runner: ' .. runner)
     end
     local connected, connection_error = pcall(verify_connection, runner,
-        options.package_root, invoke)
+        options, invoke)
     if not connected then
         local detail = type(connection_error) == 'table' and
             connection_error or
@@ -322,8 +331,7 @@ function M.abort(options, run_id)
         return {exit_code=detail.exit_code, error=detail}
     end
     local result = invoke(runner, {
-        'lua', '-f', project.join(options.package_root,
-            'tests/automation/abort.lua'), run_id,
+        'lua', '-f', host_script(options, 'abort'), run_id,
     })
     if result.exit_code ~= 0 then
         return {exit_code=EXIT.host,

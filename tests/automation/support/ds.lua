@@ -2,6 +2,18 @@
 
 local M = {}
 
+---Loads an installed DwarfSpec module or its source-tree equivalent.
+---@param package_root string
+---@param module_name string
+---@param source_relative string
+---@return table
+local function load_automation_module(package_root, module_name,
+        source_relative)
+    local ok, module = pcall(require, module_name)
+    if ok then return module end
+    return assert(loadfile(package_root .. source_relative))()
+end
+
 ---Returns the test-owned fixture screen associated with one view.
 ---@param screens table
 ---@param view table
@@ -88,14 +100,18 @@ end
 ---@return table
 function M.new(package_root, project, scheduler_module, scheduler,
         cleanup_module, cleanup_registry, extensions)
-    local fixture_loader = assert(loadfile(package_root ..
-        '/tests/automation/support/fixture_loader.lua'))()
-    local diagnostics = assert(loadfile(package_root ..
-        '/tests/automation/support/diagnostics.lua'))()
-    local pointer_adapter_module = assert(loadfile(package_root ..
-        '/tests/automation/support/pointer_adapter.lua'))()
-    local overlay_fixture = assert(loadfile(package_root ..
-        '/tests/automation/support/overlay_fixture.lua'))()
+local fixture_loader = load_automation_module(package_root,
+    'dwarfspec.automation.fixture_loader',
+    '/tests/automation/support/fixture_loader.lua')
+local diagnostics = load_automation_module(package_root,
+    'dwarfspec.automation.diagnostics',
+    '/tests/automation/support/diagnostics.lua')
+local pointer_adapter_module = load_automation_module(package_root,
+    'dwarfspec.automation.pointer_adapter',
+    '/tests/automation/support/pointer_adapter.lua')
+local overlay_fixture = load_automation_module(package_root,
+    'dwarfspec.automation.overlay_fixture',
+    '/tests/automation/support/overlay_fixture.lua')
     extensions = extensions or {settings={}, commands={}, diagnostics={}}
     local wait_settings = extensions.settings.wait or {}
     local context = {

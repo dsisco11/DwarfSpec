@@ -1,4 +1,5 @@
 /.luarocks/
+/.package-*/
 /.test-results/
 *.rock
 *.src.rock

@@ -2,12 +2,23 @@
 
 local arguments = {...}
 
----Derives the DwarfSpec package root from this entry point's source path.
----@return string
+---Configures pure-Lua module lookup and derives the DwarfSpec runtime roots.
+---@return string, string|nil
 local function package_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
+    local lua_root = source:match(
+        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]bootstrap%.lua$')
+    if lua_root then
+        local separator = package.config:sub(1, 1)
+        package.path = lua_root .. separator .. '?.lua;' .. lua_root ..
+            separator .. '?' .. separator .. 'init.lua;' .. package.path
+        return lua_root, lua_root
+    end
     local root = source:match('^(.*)[/\\]tests[/\\]automation[/\\]bootstrap%.lua$')
-    return assert(root, 'could not derive repository root from ' .. source)
+    root = assert(root, 'could not derive DwarfSpec root from ' .. source)
+    package.path = root .. '/src/?.lua;' .. root ..
+        '/src/?/init.lua;' .. package.path
+    return root
 end
 
 ---Parses one positive integer option.
@@ -91,10 +102,14 @@ local function parse_options(args)
     return options
 end
 
-local root = package_root()
+local root, lua_root = package_root()
 local options = parse_options(arguments)
-local host = assert(loadfile(root ..
-    '/tests/automation/support/busted_host.lua'))()
+options.dependency_lua_root = lua_root
+local host_ok, host = pcall(require, 'dwarfspec.automation.host')
+if not host_ok then
+    host = assert(loadfile(root ..
+        '/tests/automation/support/busted_host.lua'))()
+end
 local run = host.start(root, options.project_root, options)
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))

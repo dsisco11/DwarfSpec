@@ -39,6 +39,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for repository conventions and
 [docs/architecture.md](docs/architecture.md) for the package boundary. See
 [docs/configuration.md](docs/configuration.md) and
 [docs/writing-tests.md](docs/writing-tests.md) for the consumer contracts.
+See [docs/installation.md](docs/installation.md) for local, development-server,
+and public LuaRocks installs, and [docs/release-checklist.md](docs/release-checklist.md)
+for release validation.
 
 ## License
 
