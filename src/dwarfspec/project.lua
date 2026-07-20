@@ -1,6 +1,10 @@
 -- External command project-root and live-spec discovery services.
 
+local glob = require('dwarfspec.glob')
+
 local M = {}
+
+M.default_test_glob = '*.ds.lua'
 
 ---Returns the active platform path separator.
 ---@return string
@@ -81,11 +85,16 @@ end
 ---Discovers stable project-relative canonical live-spec identities.
 ---@param project_root string
 ---@param filesystem table
+---@param test_glob string|nil
 ---@return string[]
-function M.discover(project_root, filesystem)
+function M.discover(project_root, filesystem, test_glob)
     local tests_root = M.join(project_root, 'tests')
     assert(filesystem.isdir(tests_root),
         'project tests directory was not found: ' .. tests_root)
+    test_glob = test_glob or M.default_test_glob
+    local test_pattern = glob.compile(test_glob)
+    local match_canonical_identity = test_glob:find('/', 1, true) ~= nil or
+        test_glob:find('\\', 1, true) ~= nil
     local identities = {}
 
     ---Visits one test directory in stable lexical order.
@@ -100,9 +109,13 @@ function M.discover(project_root, filesystem)
             local path = M.join(directory, entry)
             if filesystem.isdir(path) then
                 visit(path, relative)
-            elseif filesystem.isfile(path) and
-                    entry:match('_spec%.ds%.lua$') then
-                table.insert(identities, 'tests/' .. relative)
+            elseif filesystem.isfile(path) then
+                local identity = 'tests/' .. relative
+                local candidate = match_canonical_identity and identity or
+                    entry
+                if candidate:match(test_pattern) then
+                    table.insert(identities, identity)
+                end
             end
         end
     end

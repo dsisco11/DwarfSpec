@@ -19,7 +19,7 @@ describe('DwarfSpec project resolution', function()
 
     before_each(function()
         files = {
-            ['project/tests/a_spec.ds.lua']=true,
+            ['project/tests/a.ds.lua']=true,
             ['project/tests/nested/z_spec.ds.lua']=true,
             ['project/tests/nested/helper.lua']=true,
             ['project/tests/dwarfspec/config.lua']=true,
@@ -27,17 +27,24 @@ describe('DwarfSpec project resolution', function()
         }
         directories = {
             project={'tests'},
-            ['project/tests']={'nested', 'a_spec.ds.lua', 'ordinary_test.lua',
+            ['project/tests']={'nested', 'a.ds.lua', 'ordinary_test.lua',
                 'dwarfspec'},
             ['project/tests/nested']={'z_spec.ds.lua', 'helper.lua'},
             ['project/tests/dwarfspec']={'commands.lua', 'config.lua'},
         }
     end)
 
-    it('discovers only deterministic nested .ds specs', function()
+    it('discovers every deterministic nested .ds.lua file', function()
         local descriptor = project.new('project', 'package', filesystem())
-        assert.same({'a_spec.ds.lua', 'nested/z_spec.ds.lua'},
+        assert.same({'a.ds.lua', 'nested/z_spec.ds.lua'},
             project.discover_specs(descriptor))
+    end)
+
+    it('applies custom canonical discovery globs at every depth', function()
+        files['project/tests/nested/helper.lua'] = true
+        local descriptor = project.new('project', 'package', filesystem())
+        assert.same({'nested/helper.lua'}, project.discover_specs(descriptor,
+            'tests/nested/helper.lua'))
     end)
 
     it('discovers optional configuration modules in stable order', function()

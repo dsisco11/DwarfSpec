@@ -39,7 +39,8 @@ local function options(run_id)
     return {
         package_root='.',
         project_root='tests/framework/minimal_project',
-        identities={'tests/live/minimal_spec.ds.lua'},
+        test_glob='*.ds.lua',
+        identities={'tests/live/minimal.ds.lua'},
         runner='bin/dwarfspec',
         filters={}, filter_out={}, names={}, tags={}, exclude_tags={},
         overlay_fixtures={},
@@ -60,6 +61,7 @@ describe('DwarfSpec external runner', function()
     it('streams progress and returns zero only after passing cleanup', function()
         local calls = 0
         local emitted = {}
+        local bootstrap_arguments
         local run_options = options('pass-run')
         run_options.emit = function(line) table.insert(emitted, line) end
         run_options.invoke = function(_, arguments)
@@ -68,6 +70,7 @@ describe('DwarfSpec external runner', function()
                 return {exit_code=0, lines={
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
+                bootstrap_arguments = arguments
                 return {exit_code=0,
                     lines=report_lines('pass-run', 'starting', false)}
             end
@@ -81,6 +84,14 @@ describe('DwarfSpec external runner', function()
         assert.equals('passed', outcome.report.state)
         assert.same({'progress line'}, emitted)
         assert.equals(3, calls)
+        local test_glob_found = false
+        for _, argument in ipairs(bootstrap_arguments) do
+            if argument == '--test-glob=*.ds.lua' then
+                test_glob_found = true
+                break
+            end
+        end
+        assert.is_true(test_glob_found)
     end)
 
     it('propagates Busted failures without issuing a recovery abort', function()

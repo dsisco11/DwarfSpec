@@ -30,8 +30,11 @@ cleanup, reporting, and the `ds` implementation. The project root owns live
 specs, configuration modules, custom commands, diagnostics, and fixtures.
 Neither root is inferred from the layout of the other.
 
-The host discovers only `tests/**/*_spec.ds.lua` beneath the project root in
-stable path order. Ordinary Busted unit specs do not match this suffix.
+The external command recursively discovers files whose basenames match
+`*.ds.lua` beneath the project test root in stable path order by default.
+Consumers can replace that discovery glob; the host receives the exact
+selected files and enforces path safety instead of reimposing a filename
+convention.
 
 Modules in `tests/dwarfspec/` execute in private environments that read process
 globals but retain their own global writes. Their commands are bound only onto

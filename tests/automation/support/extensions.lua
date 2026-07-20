@@ -42,7 +42,8 @@ local function validate_settings(value, source)
     if value == nil then return {} end
     assert(type(value) == 'table', source .. ': settings must be a table')
     for key in pairs(value) do
-        assert(key == 'wait', source .. ': unknown setting: ' .. tostring(key))
+        assert(key == 'wait' or key == 'discovery',
+            source .. ': unknown setting: ' .. tostring(key))
     end
     local wait = value.wait or {}
     assert(type(wait) == 'table', source .. ': settings.wait must be a table')
@@ -54,11 +55,23 @@ local function validate_settings(value, source)
         source .. ': settings.wait.frame_budget')
     optional_positive_integer(wait.timeout_ms,
         source .. ': settings.wait.timeout_ms')
+    local discovery = value.discovery or {}
+    assert(type(discovery) == 'table', source ..
+        ': settings.discovery must be a table')
+    for key in pairs(discovery) do
+        assert(key == 'test_glob', source ..
+            ': unknown discovery setting: ' .. tostring(key))
+    end
+    assert(discovery.test_glob == nil or
+        type(discovery.test_glob) == 'string' and
+        discovery.test_glob ~= '', source ..
+        ': settings.discovery.test_glob must be a nonempty string')
     return {
         wait={
             frame_budget=wait.frame_budget,
             timeout_ms=wait.timeout_ms,
         },
+        discovery={test_glob=discovery.test_glob},
     }
 end
 

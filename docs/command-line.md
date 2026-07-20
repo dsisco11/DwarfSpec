@@ -6,13 +6,21 @@ Lua code.
 
 ## Canonical identities and globs
 
-`dwarfspec list` discovers only `tests/**/*_spec.ds.lua`. Each displayed test
-identity is the case-sensitive project-relative path with `/` separators, for
-example `tests/tooltip/hover_spec.ds.lua`. Identities refer to spec files, not
-individual Busted examples, so listing never has to execute a test body or
-hook.
+`dwarfspec list` recursively discovers basenames matching `*.ds.lua` beneath
+`tests/` by default. Each displayed test identity is the case-sensitive
+project-relative path with `/` separators, for example
+`tests/tooltip/hover.ds.lua`. Identities refer to spec files, not individual
+Busted examples, so listing never has to execute a test body or hook.
 
-Both `list <glob>` and `run <glob>` use exactly the same matcher:
+`settings.discovery.test_glob` in `tests/dwarfspec/config.lua` sets the project
+discovery glob. `DWARFSPEC_TEST_GLOB` overrides the project setting, and
+`--test-glob GLOB` overrides both for one `list` or `run` command. Discovery
+globs use the same syntax as selection globs. A pattern without a path
+separator is matched against each recursively visited basename; a pattern with
+a separator is matched against the complete canonical identity.
+
+The optional positional glob is a second-stage selection over the discovered
+identities. Both `list <glob>` and `run <glob>` use exactly the same matcher:
 
 - `*` matches zero or more characters within one path segment;
 - `**` matches zero or more characters across path separators;
@@ -28,17 +36,18 @@ diagnostics. Multiple matches retain the deterministic order printed by
 ## Commands
 
 ```text
-dwarfspec list [glob] [--project-root PATH]
+dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
 dwarfspec run [glob] [options]
 dwarfspec abort RUN_ID [--runner PATH]
 dwarfspec help [command]
 dwarfspec version
 ```
 
-`run` supports project-root selection, Busted filters and tags, repeat count,
-external timeout and polling controls, lease controls, explicit overlay
-fixture definitions, result-directory selection, explicit run ids, and verbose
-runner diagnostics. `dwarfspec help run` prints the complete option list.
+`run` supports project-root and discovery-glob configuration, Busted filters
+and tags, repeat count, external timeout and polling controls, lease controls,
+explicit overlay fixture definitions, result-directory selection, explicit
+run ids, and verbose runner diagnostics. `dwarfspec help run` prints the
+complete option list.
 
 The runner lookup order is an explicit `--runner`, `DFHACK_RUNNER`,
 `DFHACK_ROOT/hack/dfhack-run`, and finally `PATH`.

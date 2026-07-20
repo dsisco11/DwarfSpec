@@ -108,6 +108,7 @@ local function bootstrap_arguments(options, run_id)
         '--defer-frames=' .. tostring(options.startup_delay_frames),
         '--lease-timeout-ms=' .. tostring(options.lease_timeout_ms),
         '--lease-check-frames=' .. tostring(options.lease_check_frames),
+        '--test-glob=' .. tostring(options.test_glob or '*.ds.lua'),
     }
     append_values(arguments, 'filter', options.filters)
     append_values(arguments, 'filter-out', options.filter_out)

@@ -1,5 +1,10 @@
 -- Resolves consumer-project test assets without product-specific assumptions.
 
+local glob_ok, glob = pcall(require, 'dwarfspec.glob')
+if not glob_ok then
+    glob = assert(loadfile('src/dwarfspec/glob.lua'))()
+end
+
 local M = {}
 
 ---Joins portable path segments with the active platform separator.
@@ -54,10 +59,15 @@ end
 
 ---Returns sorted project-relative live spec paths beneath the tests directory.
 ---@param project table
+---@param test_glob string|nil
 ---@return string[]
-function M.discover_specs(project)
+function M.discover_specs(project, test_glob)
     assert(project.filesystem.isdir(project.tests_root),
         'project tests directory was not found: ' .. project.tests_root)
+    test_glob = test_glob or '*.ds.lua'
+    local test_pattern = glob.compile(test_glob)
+    local match_canonical_identity = test_glob:find('/', 1, true) ~= nil or
+        test_glob:find('\\', 1, true) ~= nil
     local specs = {}
     local function visit(directory, relative_directory)
         local entries = project.filesystem.listdir(directory)
@@ -68,9 +78,12 @@ function M.discover_specs(project)
             local path = M.join(directory, entry)
             if project.filesystem.isdir(path) then
                 visit(path, relative)
-            elseif project.filesystem.isfile(path) and
-                    entry:match('_spec%.ds%.lua$') then
-                table.insert(specs, relative)
+            elseif project.filesystem.isfile(path) then
+                local candidate = match_canonical_identity and
+                    'tests/' .. relative or entry
+                if candidate:match(test_pattern) then
+                    table.insert(specs, relative)
+                end
             end
         end
     end

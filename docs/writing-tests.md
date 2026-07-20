@@ -1,8 +1,11 @@
 # Writing live tests
 
-DwarfSpec discovers only files matching `tests/**/*_spec.ds.lua`. This keeps
-live tests separate from ordinary Busted unit specs while preserving normal
-Busted `describe`, `it`, hooks, and Luassert assertions.
+DwarfSpec recursively discovers files whose basenames match `*.ds.lua` beneath
+`tests/` by default. This keeps live tests separate from ordinary Busted unit
+specs while preserving normal Busted `describe`, `it`, hooks, and Luassert
+assertions. Consumers can set `settings.discovery.test_glob` in
+`tests/dwarfspec/config.lua`, use `DWARFSPEC_TEST_GLOB`, or pass `--test-glob`
+when another naming convention is more appropriate.
 
 Fixtures are explicit project-relative imports:
 

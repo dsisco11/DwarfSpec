@@ -1,6 +1,7 @@
 -- Command-line parsing and dispatch for the DwarfSpec executable.
 
 local glob = require('dwarfspec.glob')
+local config = require('dwarfspec.config')
 local project = require('dwarfspec.project')
 local runner = require('dwarfspec.runner')
 
@@ -13,7 +14,7 @@ DwarfSpec 0.1.0 - live DFHack automation with in-process Busted
 
 Usage:
   dwarfspec
-  dwarfspec list [glob] [--project-root PATH]
+  dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
   dwarfspec run [glob] [options]
   dwarfspec abort RUN_ID [--runner PATH]
   dwarfspec help [command]
@@ -30,11 +31,13 @@ Run `dwarfspec help run` for options and selection syntax.
 ]]
 
 local LIST_HELP = [[
-Usage: dwarfspec list [glob] [--project-root PATH]
+Usage: dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
 
 Lists canonical project-relative identities in deterministic lexical order.
-Only tests/**/*_spec.ds.lua files are listed. Test files and Busted hooks are
-not loaded or executed. A valid glob with no matches returns a nonzero status.
+By default, *.ds.lua files at every depth beneath tests/ are listed. Configure
+settings.discovery.test_glob in tests/dwarfspec/config.lua, set
+DWARFSPEC_TEST_GLOB, or use --test-glob. Test files and Busted hooks are not
+loaded or executed. A valid selection glob with no matches returns nonzero.
 ]]
 
 local RUN_HELP = [[
@@ -48,6 +51,7 @@ Selection:
 
 Options:
   --project-root PATH          Consumer project root (default: current dir)
+  --test-glob GLOB             Discovery glob (default: *.ds.lua)
   --runner PATH                Explicit dfhack-run executable
   --filter TEXT                Include Busted names matching TEXT (repeatable)
   --filter-out TEXT            Exclude Busted names matching TEXT (repeatable)
@@ -78,10 +82,11 @@ Aborts an active DwarfSpec run through dfhack-run. Success requires an aborted
 native report with cleanup_confirmed=true.
 ]]
 
-local LIST_OPTIONS = {['project-root']=true}
+local LIST_OPTIONS = {['project-root']=true, ['test-glob']=true}
 local ABORT_OPTIONS = {runner=true, verbose=true}
 local RUN_OPTIONS = {
     ['project-root']=true,
+    ['test-glob']=true,
     runner=true,
     filter=true,
     ['filter-out']=true,
@@ -147,6 +152,7 @@ local function defaults(package_root)
         host_scripts=nil,
         dependency_lua_root=nil,
         project_root=nil,
+        test_glob=nil,
         runner=nil,
         filters={},
         filter_out={},
@@ -215,6 +221,9 @@ local function parse_options(argv, start_index, package_root, allowed)
                 value, index = option_value(argv, index, inline_value, name)
                 if name == 'project-root' then
                     options.project_root = value
+                elseif name == 'test-glob' then
+                    glob.compile(value)
+                    options.test_glob = value
                 elseif name == 'runner' then
                     options.runner = value
                 elseif name == 'filter' then
@@ -287,7 +296,13 @@ local function select_identities(options, expression, context)
     options.filesystem = filesystem
     options.project_root = project.resolve_root(options.project_root,
         context.current_directory or filesystem.currentdir(), filesystem)
-    local identities = project.discover(options.project_root, filesystem)
+    local environment = context.environment or {getenv=os.getenv}
+    options.test_glob = options.test_glob or
+        environment.getenv('DWARFSPEC_TEST_GLOB') or
+        config.load_test_glob(options.project_root, filesystem,
+            context.loadfile)
+    local identities = project.discover(options.project_root, filesystem,
+        options.test_glob)
     local selected = glob.select(identities, expression)
     assert(#selected > 0, expression and
         ('glob matched no DwarfSpec tests: ' .. expression) or

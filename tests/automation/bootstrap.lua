@@ -99,10 +99,17 @@ local function parse_options(args)
         elseif name == 'lease-check-frames' then
             options.lease_check_frames = positive_integer(
                 '--lease-check-frames', value)
+        elseif name == 'test-glob' then
+            if value == '' then error('--test-glob must not be empty') end
+            options.test_glob = value
         elseif name == 'spec' then
-            if not value:match('^[%w_./-]+_spec%.ds%.lua$') or
-                    value:match('^[/\\]') or value:match('%.%.[/\\]') then
-                error('--spec must name one project-relative *_spec.ds.lua path')
+            if value == '' or not value:match('%.lua$') or
+                    value:match('^[/\\]') or
+                    value:match('^[A-Za-z]:[/\\]') or value == '..' or
+                    value:match('^%.%.[/\\]') or
+                    value:match('[/\\]%.%.[/\\]') or
+                    value:match('[/\\]%.%.$') then
+                error('--spec must name one safe project-relative Lua path')
             end
             table.insert(options.specs, value)
         elseif name == 'overlay-fixture' then

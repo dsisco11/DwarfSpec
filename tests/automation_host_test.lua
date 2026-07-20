@@ -165,7 +165,7 @@ describe('automation host ownership', function()
         assert.is_true(report.cleanup_confirmed)
     end)
 
-    it('normalizes Busted filters and discovers only approved live specs',
+    it('normalizes filters and loads exact safe externally selected specs',
             function()
         local filters = host.filter_options({
             tags='fast',
@@ -182,23 +182,27 @@ describe('automation host ownership', function()
                 received_roots = roots
                 received_patterns = patterns
                 received_options = options
-                return {'tooltip_spec.ds.lua'}
-            end, {'tooltip_spec.ds.lua'})
+                return {'tooltip check.ds.lua'}
+            end, {'tooltip check.ds.lua'})
 
         assert.same({'fast'}, filters.tags)
         assert.same({'slow'}, filters.excludeTags)
         assert.same({'tooltip'}, filters.filter)
         assert.same({'one'}, filters.name)
         assert.same({'legacy'}, filters.filterOut)
-        assert.same({'tooltip_spec.ds.lua'}, discovered)
-        assert.matches('repository[/\\]tests[/\\]tooltip_spec%.ds%.lua$',
+        assert.same({'tooltip check.ds.lua'}, discovered)
+        assert.matches('repository[/\\]tests[/\\]tooltip check%.ds%.lua$',
             received_roots[1])
-        assert.same({'_spec%.ds%.lua$'}, received_patterns)
+        assert.same({'%.lua$'}, received_patterns)
         assert.is_true(received_options.recursive)
         assert.has_error(function()
             host.discover_tests('repository', function() end,
-                {'../outside_spec.ds.lua'})
-        end, 'live spec must name one project-relative *_spec.ds.lua path')
+                {'../outside.lua'})
+        end, 'live spec must name one safe project-relative Lua path')
+
+        assert.has_error(function()
+            host.discover_tests('repository', function() return {} end)
+        end, 'no live specs were selected')
     end)
 
     it('rejects unsafe host run identifiers before scheduling work', function()

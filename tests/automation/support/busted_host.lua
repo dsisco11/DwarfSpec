@@ -228,22 +228,22 @@ function M.discover_tests(project_root, loader, specs)
         'project root must be a nonempty string')
     assert(type(loader) == 'function', 'live spec discovery requires a loader')
     specs = specs or {}
+    assert(#specs > 0, 'no live specs were selected')
     for _, spec in ipairs(specs) do
         assert(type(spec) == 'string' and
-            spec:match('^[%w_./-]+_spec%.ds%.lua$') and
-            not spec:match('^[/\\]') and not spec:match('%.%.[/\\]'),
-            'live spec must name one project-relative *_spec.ds.lua path')
+            spec ~= '' and spec:match('%.lua$') and
+            not spec:match('^[/\\]') and
+            not spec:match('^[A-Za-z]:[/\\]') and spec ~= '..' and
+            not spec:match('^%.%.[/\\]') and
+            not spec:match('[/\\]%.%.[/\\]') and
+            not spec:match('[/\\]%.%.$'),
+            'live spec must name one safe project-relative Lua path')
     end
-    local roots
-    if #specs > 0 then
-        roots = {}
-        for _, spec in ipairs(specs) do
-            table.insert(roots, join_path(project_root, 'tests/' .. spec))
-        end
-    else
-        roots = {join_path(project_root, 'tests')}
+    local roots = {}
+    for _, spec in ipairs(specs) do
+        table.insert(roots, join_path(project_root, 'tests/' .. spec))
     end
-    return loader(roots, {'_spec%.ds%.lua$'}, {
+    return loader(roots, {'%.lua$'}, {
         excludes={},
         recursive=true,
         verbose=false,
@@ -288,6 +288,13 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
         'dwarfspec.automation.extensions',
         'tests/automation/support/extensions.lua')
     local extensions = extensions_module.load(project)
+    local specs = run.options.specs or {}
+    if #specs == 0 then
+        local discovery = extensions.settings.discovery or {}
+        local configured_glob = run.options.test_glob or
+            discovery.test_glob
+        specs = project_module.discover_specs(project, configured_glob)
+    end
     local overlay_fixture = load_automation_module(package_root,
         'dwarfspec.automation.overlay_fixture',
         'tests/automation/support/overlay_fixture.lua')
@@ -313,8 +320,7 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
 
     local loader = require('busted.modules.test_file_loader')(
         busted, {'lua'})
-    run.discovered_files = M.discover_tests(project_root, loader,
-        run.options.specs)
+    run.discovered_files = M.discover_tests(project_root, loader, specs)
 
     busted.randomize = false
     busted.sort = true

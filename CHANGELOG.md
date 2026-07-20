@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Renamed the unpublished public condition wait from `ds.wait_until(...)` to
   `ds.await(...)`; the diagnostic description remains required.
+- Relaxed default live-spec discovery to recursive `*.ds.lua` basename
+  matching, added project, environment, and command-line configuration, and
+  removed the host's duplicate filename-suffix restriction.
 
 ## [0.1.0] - 2026-07-20
 

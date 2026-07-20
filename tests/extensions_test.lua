@@ -41,7 +41,10 @@ describe('DwarfSpec consumer extensions', function()
 
     it('loads config first and registers commands and diagnostics', function()
         modules['consumer/tests/dwarfspec/config.lua'] = {
-            settings={wait={frame_budget=42, timeout_ms=900}},
+            settings={
+                wait={frame_budget=42, timeout_ms=900},
+                discovery={test_glob='tests/live/*.lua'},
+            },
             diagnostics={tooltip=function() return 'tooltip' end},
         }
         modules['consumer/tests/dwarfspec/commands.lua'] = {
@@ -55,6 +58,8 @@ describe('DwarfSpec consumer extensions', function()
             'tests/dwarfspec/commands.lua',
             'tests/dwarfspec/duplicate.lua'}, loaded.modules)
         assert.equals(42, loaded.settings.wait.frame_budget)
+        assert.equals('tests/live/*.lua',
+            loaded.settings.discovery.test_glob)
         assert.equals('action', loaded.commands.consumer_action.callback())
         assert.equals('tooltip', loaded.diagnostics.tooltip.callback())
     end)
@@ -83,6 +88,13 @@ describe('DwarfSpec consumer extensions', function()
         assert.has_error(function() extensions.load(descriptor, loader) end,
             'tests/dwarfspec/config.lua: settings.wait.timeout_ms must be a ' ..
             'positive integer')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            settings={discovery={test_glob=''}},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: ' ..
+            'settings.discovery.test_glob must be a nonempty string')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={click=function() end},

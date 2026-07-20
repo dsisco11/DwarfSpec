@@ -5,9 +5,10 @@ interfaces. It lets a Busted test yield across real game frames, interact with
 test-owned screens, and receive deterministic results and cleanup diagnostics.
 
 The host resolves its own package files independently from the consumer
-project. Consumer live specs are discovered only as
-`tests/**/*_spec.ds.lua`, and the public `ds` object exists only inside each
-isolated Busted spec environment.
+project. Consumer live specs default to recursively discovered `*.ds.lua`
+files beneath `tests/`; the discovery glob is configurable without changing
+the optional second-stage selection glob. The public `ds` object exists only
+inside each isolated Busted spec environment.
 
 Consumer-wide settings and extensions are optional. Put them in
 `tests/dwarfspec/*.lua`; `config.lua` is loaded first, followed by the other
