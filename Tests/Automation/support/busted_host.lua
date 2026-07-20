@@ -207,6 +207,25 @@ function M.discover_tests(repo_root, loader, spec)
     })
 end
 
+---Installs run-scoped cleanup around every discovered Busted example.
+---@param busted table
+---@param dy table
+function M.install_dy_lifecycle(busted, dy)
+    assert(type(busted) == 'table' and type(busted.api) == 'table',
+        'Busted root API is required for automation lifecycle hooks')
+    assert(type(busted.api.before_each) == 'function' and
+        type(busted.api.after_each) == 'function',
+        'Busted before_each and after_each APIs are required')
+    assert(type(dy) == 'table' and type(dy.reset) == 'function',
+        'automation dy.reset is required for lifecycle hooks')
+    busted.api.before_each(function()
+        dy.reset()
+    end)
+    busted.api.after_each(function()
+        dy.reset()
+    end)
+end
+
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
 ---@param repo_root string
 ---@param run table
@@ -221,6 +240,7 @@ local function execute_suite(repo_root, run, scheduler_module, scheduler)
     local dy = dy_factory.new(repo_root, scheduler_module, scheduler,
         run.cleanup_module, run.cleanup_registry)
     busted.export('dy', dy)
+    M.install_dy_lifecycle(busted, dy)
 
     local output_factory = assert(loadfile(join_path(repo_root,
         'Tests/Automation/support/output_handler.lua')))()

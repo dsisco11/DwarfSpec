@@ -205,4 +205,29 @@ describe('automation host ownership', function()
         end, 'run id must contain only letters, digits, dot, underscore, or dash')
         assert.equals(0, #callbacks)
     end)
+
+    it('installs dy reset hooks around every Busted example', function()
+        local hooks = {}
+        local reset_count = 0
+        local busted = {
+            api={
+                before_each=function(callback)
+                    hooks.before_each = callback
+                end,
+                after_each=function(callback)
+                    hooks.after_each = callback
+                end,
+            },
+        }
+
+        host.install_dy_lifecycle(busted, {
+            reset=function()
+                reset_count = reset_count + 1
+            end,
+        })
+        hooks.before_each()
+        hooks.after_each()
+
+        assert.equals(2, reset_count)
+    end)
 end)

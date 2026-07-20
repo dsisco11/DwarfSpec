@@ -5,13 +5,8 @@ describe('automation live interactions', function()
     local initial_pause_state
 
     before_each(function()
-        dy.reset()
         initial_pause_state = df.global.pause_state
         screen = dy.show_fixture('interaction_screen')
-    end)
-
-    after_each(function()
-        dy.reset()
     end)
 
     it('shows, finds, inspects, hovers, clicks, types, captures, and dismisses',

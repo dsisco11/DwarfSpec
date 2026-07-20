@@ -30,14 +30,6 @@ local function competing_options(run_id)
 end
 
 describe('automation framework live resilience', function()
-    before_each(function()
-        dy.reset()
-    end)
-
-    after_each(function()
-        dy.reset()
-    end)
-
     it('rejects a competing host run without changing the active owner',
             function()
         local root = repository_root()

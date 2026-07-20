@@ -9,14 +9,6 @@ describe('automation scheduler and cleanup', function()
         return run.cleanup_module, run.cleanup_registry
     end
 
-    before_each(function()
-        dy.reset()
-    end)
-
-    after_each(function()
-        dy.reset()
-    end)
-
     it('resumes after real raw-frame callbacks', function()
         local run = assert(dfhack.dwarfui.automation.active_run)
         local started_ms = dfhack.getTickCount()
