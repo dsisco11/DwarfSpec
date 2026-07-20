@@ -74,7 +74,8 @@ describe('DwarfSpec overlay fixtures', function()
                 'tests/support/probe.definition.lua', 'run-1', cleanup,
                 cleanup.new({}), services)
         end, 'refusing to overwrite an existing overlay fixture: ' ..
-            'game/hack/scripts/gui\\dwarfspec_run-1_probe.lua')
+            'game/hack/scripts/gui' .. package.config:sub(1, 1) ..
+            'dwarfspec_run-1_probe.lua')
     end)
 
     it('removes a partial stage when the initial rescan fails', function()

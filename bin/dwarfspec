@@ -1,0 +1,58 @@
+#!/usr/bin/env lua
+
+---Returns the current directory without requiring an external Lua module.
+---@return string
+local function current_directory()
+    local configured = os.getenv('PWD') or os.getenv('CD')
+    if configured and configured ~= '' then return configured end
+    local command = package.config:sub(1, 1) == '\\' and 'cd' or 'pwd'
+    local pipe = assert(io.popen(command, 'r'))
+    local value = assert(pipe:read('*l'))
+    pipe:close()
+    return value
+end
+
+---Returns whether one path is absolute on the active platform.
+---@param path string
+---@return boolean
+local function is_absolute(path)
+    return path:match('^[/\\]') ~= nil or
+        path:match('^[A-Za-z]:[/\\]') ~= nil
+end
+
+---Derives the source package root from this executable's location.
+---@return string
+local function package_root()
+    local source = debug.getinfo(1, 'S').source:gsub('^@', '')
+    local script_directory = source:match('^(.*)[/\\][^/\\]+$') or '.'
+    if not is_absolute(script_directory) then
+        script_directory = current_directory() .. '/' .. script_directory
+    end
+    script_directory = script_directory:gsub('\\', '/')
+        :gsub('/%./', '/'):gsub('/+$', '')
+    return script_directory:gsub('/bin$', '')
+end
+
+---Prepends one path entry when it is not already present.
+---@param current string
+---@param entry string
+---@return string
+local function prepend(current, entry)
+    for candidate in current:gmatch('[^;]+') do
+        if candidate == entry then return current end
+    end
+    return entry .. ';' .. current
+end
+
+local root = package_root()
+package.path = prepend(package.path, root .. '/src/?.lua')
+package.path = prepend(package.path, root .. '/src/?/init.lua')
+package.path = prepend(package.path, root .. '/.luarocks/share/lua/5.4/?.lua')
+package.path = prepend(package.path,
+    root .. '/.luarocks/share/lua/5.4/?/init.lua')
+local native_suffix = package.config:sub(1, 1) == '\\' and 'dll' or 'so'
+package.cpath = prepend(package.cpath,
+    root .. '/.luarocks/lib/lua/5.4/?' .. '.' .. native_suffix)
+
+local cli = require('dwarfspec.cli')
+os.exit(cli.main(arg, {package_root=root}), true)

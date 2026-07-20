@@ -35,7 +35,8 @@ local function parse_options(args)
         exclude_tags={},
         repeat_count=1,
         seed=1,
-        spec=nil,
+        specs={},
+        overlay_fixtures={},
         project_root=dfhack.filesystem.getcwd(),
         defer_frames=1,
         lease_timeout_ms=5000,
@@ -72,7 +73,14 @@ local function parse_options(args)
                     value:match('^[/\\]') or value:match('%.%.[/\\]') then
                 error('--spec must name one project-relative *_spec.ds.lua path')
             end
-            options.spec = value
+            table.insert(options.specs, value)
+        elseif name == 'overlay-fixture' then
+            if not value:match('^[%w_./-]+%.lua$') or
+                    value:match('^[/\\]') or value:match('%.%.[/\\]') then
+                error('--overlay-fixture must name one project-relative Lua ' ..
+                    'definition')
+            end
+            table.insert(options.overlay_fixtures, value)
         elseif name == 'project-root' then
             if value == '' then error('--project-root must not be empty') end
             options.project_root = value

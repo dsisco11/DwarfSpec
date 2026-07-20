@@ -69,7 +69,8 @@ describe('automation host ownership', function()
             exclude_tags={},
             repeat_count=1,
             seed=1,
-            spec=nil,
+            specs={},
+            overlay_fixtures={},
             defer_frames=1,
             lease_timeout_ms=10000,
             lease_check_frames=1,
@@ -154,6 +155,7 @@ describe('automation host ownership', function()
             }},
         })
 
+        assert.equals('dwarfspec.run.v1', report.schema)
         assert.equals(1, report.protocol)
         assert.equals('json-run', report.run_id)
         assert.is_true(report.terminal)
@@ -181,7 +183,7 @@ describe('automation host ownership', function()
                 received_patterns = patterns
                 received_options = options
                 return {'tooltip_spec.ds.lua'}
-            end, 'tooltip_spec.ds.lua')
+            end, {'tooltip_spec.ds.lua'})
 
         assert.same({'fast'}, filters.tags)
         assert.same({'slow'}, filters.excludeTags)
@@ -195,7 +197,7 @@ describe('automation host ownership', function()
         assert.is_true(received_options.recursive)
         assert.has_error(function()
             host.discover_tests('repository', function() end,
-                '../outside_spec.ds.lua')
+                {'../outside_spec.ds.lua'})
         end, 'live spec must name one project-relative *_spec.ds.lua path')
     end)
 

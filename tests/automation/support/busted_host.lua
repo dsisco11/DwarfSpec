@@ -182,21 +182,25 @@ end
 ---Discovers only DwarfSpec live-spec files from the selected project root.
 ---@param project_root string
 ---@param loader function
----@param spec string|nil
+---@param specs string[]|nil
 ---@return table
-function M.discover_tests(project_root, loader, spec)
+function M.discover_tests(project_root, loader, specs)
     assert(type(project_root) == 'string' and project_root ~= '',
         'project root must be a nonempty string')
     assert(type(loader) == 'function', 'live spec discovery requires a loader')
-    if spec then
+    specs = specs or {}
+    for _, spec in ipairs(specs) do
         assert(type(spec) == 'string' and
             spec:match('^[%w_./-]+_spec%.ds%.lua$') and
             not spec:match('^[/\\]') and not spec:match('%.%.[/\\]'),
             'live spec must name one project-relative *_spec.ds.lua path')
     end
     local roots
-    if spec then
-        roots = {join_path(project_root, 'tests/' .. spec)}
+    if #specs > 0 then
+        roots = {}
+        for _, spec in ipairs(specs) do
+            table.insert(roots, join_path(project_root, 'tests/' .. spec))
+        end
     else
         roots = {join_path(project_root, 'tests')}
     end
@@ -243,6 +247,14 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local extensions_module = assert(loadfile(join_path(package_root,
         'tests/automation/support/extensions.lua')))()
     local extensions = extensions_module.load(project)
+    local overlay_fixture = assert(loadfile(join_path(package_root,
+        'tests/automation/support/overlay_fixture.lua')))()
+    run.staged_overlays = {}
+    for _, import_path in ipairs(run.options.overlay_fixtures or {}) do
+        table.insert(run.staged_overlays, overlay_fixture.stage(project,
+            import_path, run.run_id, run.cleanup_module,
+            run.suite_cleanup_registry))
+    end
     local ds_factory = assert(loadfile(join_path(package_root,
         'tests/automation/support/ds.lua')))()
     local ds = ds_factory.new(package_root, project, scheduler_module,
@@ -259,7 +271,7 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local loader = require('busted.modules.test_file_loader')(
         busted, {'lua'})
     run.discovered_files = M.discover_tests(project_root, loader,
-        run.options.spec)
+        run.options.specs)
 
     busted.randomize = false
     busted.sort = true
@@ -311,10 +323,17 @@ local function clean_run(run, reason)
     cancel_timeout(run.lease_timeout_id)
     run.lease_timeout_id = nil
     local ok, failures = run.cleanup_module.run(run.cleanup_registry, reason)
+    local suite_ok, suite_failures = run.cleanup_module.run(
+        run.suite_cleanup_registry, reason)
+    for _, suite_failure in ipairs(suite_failures) do
+        table.insert(failures, suite_failure)
+    end
+    ok = ok and suite_ok
     run.coroutine = nil
     run.suspended = false
     run.cleanup_confirmed = ok and
         run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
+        run.cleanup_module.pending_count(run.suite_cleanup_registry) == 0 and
         run.outstanding_wait == nil and run.coroutine == nil and
         run.scheduler == nil and run.scheduled_timeout_id == nil and
         run.lease_timeout_id == nil
@@ -515,6 +534,7 @@ function M.start(package_root, project_root, options)
         outstanding_wait=nil,
         cleanup_module=cleanup_module,
         cleanup_registry=nil,
+        suite_cleanup_registry=nil,
         cleanup_confirmed=false,
         cleanup_reason=nil,
         scheduler_module=nil,
@@ -529,6 +549,7 @@ function M.start(package_root, project_root, options)
         run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0,
         'lease check interval must be a positive integer')
     run.cleanup_registry = cleanup_module.new(run)
+    run.suite_cleanup_registry = cleanup_module.new(run)
     registry.active_run = run
     local timeout_id = dfhack.timeout(options.defer_frames, 'frames', function()
         begin_queued_run(package_root, project_root, registry, run)
@@ -604,6 +625,7 @@ function M.report_data(run)
         })
     end
     return {
+        schema='dwarfspec.run.v1',
         protocol=run.protocol_version,
         run_id=run.run_id,
         state=run.state,
