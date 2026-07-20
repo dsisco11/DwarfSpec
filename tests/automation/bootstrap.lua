@@ -21,6 +21,26 @@ local function package_root()
     return root
 end
 
+---Loads the host from this installed package without reusing an older cache.
+---@param root string
+---@param lua_root string|nil
+---@return table
+local function load_host(root, lua_root)
+    if lua_root then
+        for name in pairs(package.loaded) do
+            if name == 'dwarfspec.ds' or
+                    name:match('^dwarfspec%.automation%.') then
+                package.loaded[name] = nil
+            end
+        end
+        local separator = package.config:sub(1, 1)
+        return assert(loadfile(root .. separator .. 'dwarfspec' .. separator ..
+            'automation' .. separator .. 'host.lua'))()
+    end
+    return assert(loadfile(root ..
+        '/tests/automation/support/busted_host.lua'))()
+end
+
 ---Parses one positive integer option.
 ---@param name string
 ---@param value string
@@ -105,11 +125,7 @@ end
 local root, lua_root = package_root()
 local options = parse_options(arguments)
 options.dependency_lua_root = lua_root
-local host_ok, host = pcall(require, 'dwarfspec.automation.host')
-if not host_ok then
-    host = assert(loadfile(root ..
-        '/tests/automation/support/busted_host.lua'))()
-end
+local host = load_host(root, lua_root)
 local run = host.start(root, options.project_root, options)
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))
