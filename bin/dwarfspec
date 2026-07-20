@@ -45,21 +45,23 @@ local function prepend(current, entry)
 end
 
 local root = package_root()
-assert(_VERSION == 'Lua 5.3',
-    'DwarfSpec requires Lua 5.3; found ' .. tostring(_VERSION))
+local lua_version = assert(_VERSION:match('Lua (%d+%.%d+)'),
+    'could not determine the active Lua version from ' .. tostring(_VERSION))
 package.path = prepend(package.path, root .. '/src/?.lua')
 package.path = prepend(package.path, root .. '/src/?/init.lua')
-package.path = prepend(package.path, root .. '/share/lua/5.3/?.lua')
 package.path = prepend(package.path,
-    root .. '/share/lua/5.3/?/init.lua')
-package.path = prepend(package.path, root .. '/.luarocks/share/lua/5.3/?.lua')
+    root .. '/share/lua/' .. lua_version .. '/?.lua')
 package.path = prepend(package.path,
-    root .. '/.luarocks/share/lua/5.3/?/init.lua')
+    root .. '/share/lua/' .. lua_version .. '/?/init.lua')
+package.path = prepend(package.path,
+    root .. '/.luarocks/share/lua/' .. lua_version .. '/?.lua')
+package.path = prepend(package.path,
+    root .. '/.luarocks/share/lua/' .. lua_version .. '/?/init.lua')
 local native_suffix = package.config:sub(1, 1) == '\\' and 'dll' or 'so'
 package.cpath = prepend(package.cpath,
-    root .. '/lib/lua/5.3/?.' .. native_suffix)
+    root .. '/lib/lua/' .. lua_version .. '/?.' .. native_suffix)
 package.cpath = prepend(package.cpath,
-    root .. '/.luarocks/lib/lua/5.3/?' .. '.' .. native_suffix)
+    root .. '/.luarocks/lib/lua/' .. lua_version .. '/?.' .. native_suffix)
 
 local cli = require('dwarfspec.cli')
 local layout = require('dwarfspec.layout').current()

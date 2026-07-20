@@ -20,13 +20,15 @@ if (-not (Get-Command luarocks -ErrorAction SilentlyContinue)) {
 }
 
 $luaCommand = Get-Command lua
-$luaVersion = & $luaCommand.Source -e "io.write(_VERSION)"
-if ($LASTEXITCODE -ne 0 -or $luaVersion -ne 'Lua 5.3') {
-    throw "DwarfSpec tests require Lua 5.3; found '$luaVersion'."
+$luaVersionText = & $luaCommand.Source -e "io.write(_VERSION)"
+$luaVersionMatch = [regex]::Match($luaVersionText, '^Lua ([0-9]+\.[0-9]+)$')
+if ($LASTEXITCODE -ne 0 -or -not $luaVersionMatch.Success) {
+    throw "Could not determine the Lua version; found '$luaVersionText'."
 }
+$luaVersion = $luaVersionMatch.Groups[1].Value
 $rockLuaVersion = & luarocks config lua_version
-if ($LASTEXITCODE -ne 0 -or $rockLuaVersion -ne '5.3') {
-    throw "DwarfSpec tests require LuaRocks for Lua 5.3; found '$rockLuaVersion'."
+if ($LASTEXITCODE -ne 0 -or $rockLuaVersion.Trim() -ne $luaVersion) {
+    throw "LuaRocks targets Lua '$rockLuaVersion', but the active interpreter is Lua $luaVersion."
 }
 
 & luarocks show luasystem $luaSystemVersion --tree $rockTree *> $null
@@ -61,13 +63,13 @@ $oldLuaPath = [Environment]::GetEnvironmentVariable('LUA_PATH', 'Process')
 $oldLuaCPath = [Environment]::GetEnvironmentVariable('LUA_CPATH', 'Process')
 try {
     $luaPath = @(
-        (Join-Path $rockTree 'share\lua\5.3\?.lua'),
-        (Join-Path $rockTree 'share\lua\5.3\?\init.lua')
+        (Join-Path $rockTree "share\lua\$luaVersion\?.lua"),
+        (Join-Path $rockTree "share\lua\$luaVersion\?\init.lua")
     ) -join ';'
     if ($null -ne $oldLuaPath) { $luaPath += ";$oldLuaPath" }
     Set-Item -LiteralPath Env:LUA_PATH -Value $luaPath
 
-    $luaCPath = Join-Path $rockTree 'lib\lua\5.3\?.dll'
+    $luaCPath = Join-Path $rockTree "lib\lua\$luaVersion\?.dll"
     if ($null -ne $oldLuaCPath) { $luaCPath += ";$oldLuaCPath" }
     Set-Item -LiteralPath Env:LUA_CPATH -Value $luaCPath
 

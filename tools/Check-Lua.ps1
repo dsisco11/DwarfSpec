@@ -5,14 +5,16 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command luac -ErrorAction SilentlyContinue)) {
-    throw 'Lua 5.3 compiler was not found on PATH.'
+    throw 'Lua compiler was not found on PATH.'
 }
 
 $compiler = Get-Command luac
 $version = (& $compiler.Source -v 2>&1 | Out-String)
-if ($LASTEXITCODE -ne 0 -or $version -notmatch '^Lua 5\.3') {
-    throw "DwarfSpec requires Lua 5.3; found '$version'."
+$versionMatch = [regex]::Match($version, 'Lua ([0-9]+(?:\.[0-9]+)+)')
+if ($LASTEXITCODE -ne 0 -or -not $versionMatch.Success) {
+    throw "Could not determine the Lua compiler version; found '$version'."
 }
+$compilerVersion = $versionMatch.Groups[1].Value
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $luaFiles = @(
@@ -31,7 +33,7 @@ if ($luaFiles.Count -eq 0) {
 foreach ($file in $luaFiles) {
     & $compiler.Source -p $file.FullName
     if ($LASTEXITCODE -ne 0) {
-        throw "Lua 5.3 syntax check failed: $($file.FullName)"
+        throw "Lua syntax check failed: $($file.FullName)"
     }
 
     $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
@@ -51,4 +53,4 @@ foreach ($file in $luaFiles) {
     }
 }
 
-Write-Host "Lua 5.3 syntax and formatting checks passed for $($luaFiles.Count) files."
+Write-Host "Lua $compilerVersion syntax and formatting checks passed for $($luaFiles.Count) files."

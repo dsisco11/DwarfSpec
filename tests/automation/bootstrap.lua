@@ -72,6 +72,7 @@ local function parse_options(args)
         defer_frames=1,
         lease_timeout_ms=5000,
         lease_check_frames=30,
+        dependency_root=nil,
     }
     for index = 2, #args do
         local argument = args[index]
@@ -122,6 +123,9 @@ local function parse_options(args)
         elseif name == 'project-root' then
             if value == '' then error('--project-root must not be empty') end
             options.project_root = value
+        elseif name == 'dependency-root' then
+            if value == '' then error('--dependency-root must not be empty') end
+            options.dependency_root = value
         else
             error('unknown automation option: --' .. name)
         end
