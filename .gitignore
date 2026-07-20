@@ -1,0 +1,4 @@
+/.luarocks/
+/.test-results/
+*.rock
+*.src.rock
