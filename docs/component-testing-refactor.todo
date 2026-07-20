@@ -232,28 +232,64 @@ Phase 2 evidence (2026-07-20):
 
 ## Phase 3: Own render instrumentation
 
-- [ ] Add a private render tracker that can wait for a generation greater than
+- [x] Add a private render tracker that can wait for a generation greater than
   a captured generation without requiring a component field.
-- [ ] Instrument the DwarfSpec host screen's completed render path for mounted
+- [x] Instrument the DwarfSpec host screen's completed render path for mounted
   widgets and overlay widgets.
-- [ ] Instrument a mounted complete screen's effective `onRender` path without
+- [x] Instrument a mounted complete screen's effective `onRender` path without
   requiring the screen class to cooperate.
-- [ ] Preserve the original complete-screen render behavior and restore any
+- [x] Preserve the original complete-screen render behavior and restore any
   instance interception during cleanup.
-- [ ] Increment generations only after successful completed renders.
-- [ ] Route mount, click, hover, input, type, resize, and other mutating
+- [x] Increment generations only after successful completed renders.
+- [x] Route mount, click, hover, input, type, resize, and other mutating
   operations through the private render tracker.
-- [ ] Capture bounded screen and component-tree diagnostics when mounting or
+- [x] Capture bounded screen and component-tree diagnostics when mounting or
   rendering fails.
-- [ ] Remove the `render_generation` requirement from the public fixture and
+- [x] Remove the `render_generation` requirement from the public fixture and
   interaction contracts.
 
 Exit evidence:
 
-- [ ] Live tests prove automatic generation changes for a plain widget, an
+- [x] Live tests prove automatic generation changes for a plain widget, an
   overlay widget, and a complete screen whose source contains no DwarfSpec
   instrumentation.
-- [ ] A render failure retains the original error plus mount diagnostics.
+- [x] A render failure retains the original error plus mount diagnostics.
+
+Evidence (2026-07-20): `src/dwarfspec/render_tracker.lua` owns the private
+generation and waits for a value strictly greater than its capture;
+`src/dwarfspec/render_instrumentation.lua` reversibly intercepts the effective
+instance `onRender`, preserves multiple return values and inherited or
+instance behavior, records completion only after success, and retains failures
+without advancing. `src/dwarfspec/mount_adapters.lua` applies that interception
+to the DwarfSpec-owned widget/overlay host and directly to complete screens.
+The mount context synchronizes activation and mutations, and `ds` routes
+current-mount hover, click, input, type, and resize plus legacy fixture
+interactions through DwarfSpec-owned trackers. Bounded 16x8 screen and
+component-tree evidence is retained on the active run and included with the
+original failure text. README and `docs/writing-tests.md` no longer require a
+consumer render field or hook.
+
+Focused unit contracts cover generation capture/completion/failure, reversible
+inherited and instance interception, exact restoration, adapter ownership,
+failed first render rollback, and mutation waits. The complete unit command
+`tools/Run-UnitTests.ps1` passed with 106 successes, 0 failures, and 0 errors;
+`tools/Check-Lua.ps1` parsed and formatting-checked 76 files with Lua 5.4.6;
+the embedded DFHack Lua 5.3 runtime parsed and executed the new live modules;
+`luarocks lint dwarfspec-0.1.0-1.rockspec` and `git diff --check` passed; and
+the package contract verifies all three new modules in the rockspec. The
+source-tree runner now passes its already-validated pure-Lua dependency root
+to DFHack, so a local 5.4 dependency tree works without installing or loading
+5.4 native modules in embedded Lua 5.3.
+
+The product-independent live matrix mounts a plain widget class, an existing
+overlay instance, and a complete screen class with no `render_generation` or
+automation hook. Its widget case also completes hover, click, input, type, and
+resize waits. A deliberately failing widget retains `deliberate component
+render failure`, mount/category data, the component tree, and bounded screen
+dimensions. The complete DwarfSpec live command with
+`--test-glob '*_live_spec.lua'` passed 13 examples with 0 failures and 0 errors;
+report `dwarfspec-93784984-008fd562.json` records `state=passed`,
+`cleanup_confirmed=true`, and `cleanup_reason="suite completion"`.
 
 ## Phase 4: Implement the ordinary-widget adapter
 

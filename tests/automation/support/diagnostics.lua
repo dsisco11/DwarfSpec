@@ -129,4 +129,45 @@ function M.summarize_tree(node, depth)
     return summary
 end
 
+---Captures bounded evidence for a failed mounted-component operation.
+---@param mount table
+---@param operation string
+---@param failure any
+---@return table
+function M.capture_mount_failure(mount, operation, failure)
+    local root = mount.host_screen or mount.root
+    local tree = nil
+    if root then
+        local ok, value = pcall(M.capture_view_tree, root)
+        if ok then tree = value end
+    end
+    local screen = {width=0, height=0, cells={}}
+    local ok, value = pcall(M.capture_screen, {
+        max_width=16,
+        max_height=8,
+    })
+    if ok then screen = value end
+    return {
+        mount_id=mount.id,
+        category=mount.category,
+        operation=operation,
+        cause=tostring(failure),
+        tree=tree,
+        screen=screen,
+    }
+end
+
+---Formats original failure text with compact mount and screen diagnostics.
+---@param evidence table
+---@return string
+function M.format_mount_failure(evidence)
+    local tree_summary = evidence.tree and
+        M.summarize_tree(evidence.tree) or '<none>'
+    return ('DwarfSpec mount failure: operation=%q mount=%s category=%s ' ..
+        'cause=%s component_tree=%s screen_capture=%dx%d')
+        :format(evidence.operation, tostring(evidence.mount_id),
+            tostring(evidence.category), evidence.cause, tree_summary,
+            evidence.screen.width, evidence.screen.height)
+end
+
 return M

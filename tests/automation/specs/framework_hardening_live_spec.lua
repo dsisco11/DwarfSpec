@@ -29,7 +29,7 @@ describe('automation framework live resilience', function()
             '/tests/automation/support/busted_host.lua'))()
         local active = assert(dfhack.dwarfspec.active_run)
 
-        local ok, message = pcall(host.start, root,
+        local ok, message = pcall(host.start, root, root,
             competing_options('live-host-conflict'))
 
         assert.is_false(ok)
@@ -85,15 +85,17 @@ describe('automation framework live resilience', function()
 
     it('captures injected fixture failures and restores test-owned state',
             function()
-        local ok, message = pcall(ds.show_fixture, 'failing_screen')
+        local ok, message = pcall(ds.show_fixture,
+            'tests/automation/fixtures/failing_screen.lua')
         local run = assert(dfhack.dwarfspec.active_run)
 
         assert.is_false(ok)
-        assert.matches('operation="show fixture failing_screen"', message,
-            1, true)
+        assert.matches('operation="show fixture tests/automation/fixtures/' ..
+            'failing_screen.lua"', message, 1, true)
         assert.matches('deliberate automation fixture construction failure',
             message, 1, true)
-        assert.equals('show fixture failing_screen',
+        assert.equals('show fixture tests/automation/fixtures/' ..
+            'failing_screen.lua',
             run.last_interaction_diagnostics.operation)
         assert.equals(0, run.cleanup_module.pending_count(
             run.cleanup_registry))

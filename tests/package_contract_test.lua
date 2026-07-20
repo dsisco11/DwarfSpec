@@ -42,4 +42,17 @@ describe('DwarfSpec package contract', function()
             'src/dwarfspec/mount_context.lua'))
         assert.is_truthy(read_repository_file('src/dwarfspec/subject.lua'))
     end)
+
+    it('publishes render tracking and live mount adapter modules', function()
+        local rockspec = read_repository_file('dwarfspec-0.1.0-1.rockspec')
+        for name, path in pairs({
+                mount_adapters='src/dwarfspec/mount_adapters.lua',
+                render_instrumentation=
+                    'src/dwarfspec/render_instrumentation.lua',
+                render_tracker='src/dwarfspec/render_tracker.lua'}) do
+            assert.matches(('["dwarfspec.%s"]'):format(name), rockspec,
+                1, true)
+            assert.is_truthy(read_repository_file(path))
+        end
+    end)
 end)

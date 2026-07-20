@@ -3,6 +3,8 @@
 local cleanup = assert(loadfile(
     'tests/automation/support/cleanup.lua'))()
 local component = assert(loadfile('src/dwarfspec/component.lua'))()
+local render_tracker = assert(loadfile(
+    'src/dwarfspec/render_tracker.lua'))()
 local ds_factory = assert(loadfile(
     'tests/automation/support/ds.lua'))()
 
@@ -47,15 +49,20 @@ describe('DwarfSpec public mount commands', function()
         local scheduler = {run=run}
         local scheduler_module = {
             wait_frames=function() return 1 end,
+            wait_until=function(_, _, query) return assert(query()) end,
         }
         ds = ds_factory.new('.', {project_root='.', package_root='.'},
             scheduler_module, scheduler, cleanup, registry,
             {settings={}, commands={}}, {
                 boundary=boundary,
+                render_tracker_factory=function()
+                    return render_tracker.new(scheduler_module, scheduler)
+                end,
                 adapter_factory=function()
                     return {
-                        mount=function(_, _, prepared)
+                        mount=function(_, mount, prepared)
                             screen = {active=true}
+                            mount.render_tracker:completed()
                             return {
                                 root=prepared.component,
                                 host_screen=screen,

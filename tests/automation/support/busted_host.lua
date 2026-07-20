@@ -184,9 +184,10 @@ end
 
 ---Configures pinned Lua dependencies and DFHack-native adapters.
 ---@param package_root string
-local function configure_dependencies(package_root)
+---@param configured_lua_root string|nil
+local function configure_dependencies(package_root, configured_lua_root)
     local separator = package.config:sub(1, 1)
-    local lua_root = lua_module_root(package_root)
+    local lua_root = configured_lua_root or lua_module_root(package_root)
     local source_entries = {
         lua_root .. separator .. '?.lua',
         lua_root .. separator .. '?' .. separator .. 'init.lua',
@@ -293,7 +294,7 @@ end
 ---@param scheduler table
 local function execute_suite(package_root, project_root, run, scheduler_module,
         scheduler)
-    configure_dependencies(package_root)
+    configure_dependencies(package_root, run.options.lua_module_root)
     local busted = require('busted.core')()
     require('busted')(busted)
     local project_module = load_automation_module(package_root,

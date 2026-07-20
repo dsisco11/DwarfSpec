@@ -114,25 +114,14 @@ end)
 ```
 
 A screen fixture is a Lua module that returns a `new(options)` function. The
-function must create a DFHack screen with a numeric `render_generation` field
-that advances when the screen renders. `gui.ZScreen` is a convenient base:
+function creates a DFHack screen; DwarfSpec instruments successful renders
+automatically. `gui.ZScreen` is a convenient base:
 
 ```lua
 local gui = require('gui')
 
 ---@class tests.SearchFixture: gui.ZScreen
 local SearchFixture = defclass(nil, gui.ZScreen)
-
----Initializes fixture instrumentation.
-function SearchFixture:init()
-    self.render_generation = 0
-end
-
----Records each completed render.
-function SearchFixture:onRender()
-    SearchFixture.super.onRender(self)
-    self.render_generation = self.render_generation + 1
-end
 
 local M = {}
 

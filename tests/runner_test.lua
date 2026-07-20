@@ -84,12 +84,17 @@ describe('DwarfSpec external runner', function()
         assert.same({'progress line'}, emitted)
         assert.equals(3, calls)
         local test_glob_found = false
+        local lua_module_root_found = false
         for _, argument in ipairs(bootstrap_arguments) do
             if argument == '--test-glob=*.ds.lua' then
                 test_glob_found = true
             end
+            if argument:match('^%-%-lua%-module%-root=') then
+                lua_module_root_found = true
+            end
         end
         assert.is_true(test_glob_found)
+        assert.is_true(lua_module_root_found)
     end)
 
     it('propagates Busted failures without issuing a recovery abort', function()

@@ -33,6 +33,10 @@ build = {
         ["dwarfspec.glob"] = "src/dwarfspec/glob.lua",
         ["dwarfspec.layout"] = "src/dwarfspec/layout.lua",
         ["dwarfspec.mount_context"] = "src/dwarfspec/mount_context.lua",
+        ["dwarfspec.mount_adapters"] = "src/dwarfspec/mount_adapters.lua",
+        ["dwarfspec.render_instrumentation"] =
+            "src/dwarfspec/render_instrumentation.lua",
+        ["dwarfspec.render_tracker"] = "src/dwarfspec/render_tracker.lua",
         ["dwarfspec.process"] = "src/dwarfspec/process.lua",
         ["dwarfspec.project"] = "src/dwarfspec/project.lua",
         ["dwarfspec.report"] = "src/dwarfspec/report.lua",

@@ -17,8 +17,9 @@ local screen = ds.show_fixture(
 `tests/**/fixtures/*.fixture.lua` is the recommended co-located convention.
 It is not an allowlist or mandatory root. A fixture such as
 `tests/support/shared_screen.lua` remains valid when imported explicitly.
-Screen fixture modules return a table with `new(options)` and produce a shown
-DFHack screen instrumented with a numeric `render_generation` field.
+Screen fixture modules return a table with `new(options)` and produce a DFHack
+screen. DwarfSpec privately instruments successful renders and synchronizes
+fixture interactions without requiring fields or hooks in the fixture class.
 
 ## Condition waits
 

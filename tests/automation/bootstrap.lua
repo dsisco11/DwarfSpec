@@ -114,6 +114,11 @@ local function parse_options(args)
         elseif name == 'project-root' then
             if value == '' then error('--project-root must not be empty') end
             options.project_root = value
+        elseif name == 'lua-module-root' then
+            if value == '' then
+                error('--lua-module-root must not be empty')
+            end
+            options.lua_module_root = value
         else
             error('unknown automation option: --' .. name)
         end

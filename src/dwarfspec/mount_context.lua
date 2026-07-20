@@ -68,6 +68,8 @@ function M.new(options)
         'mount context requires a cleanup registry')
     assert(type(options.adapter_factory) == 'function',
         'mount context requires an adapter factory')
+    assert(type(options.render_tracker_factory) == 'function',
+        'mount context requires a render tracker factory')
     assert(type(options.subject_module) == 'table' and
         type(options.subject_module.new) == 'function',
         'mount context requires a subject factory')
@@ -78,11 +80,27 @@ function M.new(options)
         cleanup_module=options.cleanup_module,
         cleanup_registry=options.cleanup_registry,
         adapter_factory=options.adapter_factory,
+        render_tracker_factory=options.render_tracker_factory,
+        failure_reporter=options.failure_reporter,
         subject_module=options.subject_module,
         current=nil,
         next_mount_id=0,
         subject_mounts=setmetatable({}, {__mode='k'}),
     }
+
+    ---Adds bounded mount diagnostics to an operational failure when available.
+    ---@param mount table
+    ---@param operation string
+    ---@param failure any
+    ---@return string
+    function context:report_failure(mount, operation, failure)
+        local original = tostring(failure)
+        if type(self.failure_reporter) ~= 'function' then return original end
+        local ok, reported = pcall(self.failure_reporter,
+            mount, operation, original)
+        if ok and reported ~= nil then return tostring(reported) end
+        return original
+    end
 
     ---Returns the current mount or raises a command-specific error.
     ---@param operation string
@@ -156,6 +174,31 @@ function M.new(options)
         end
     end
 
+    ---Runs a mutating command and waits for its resulting completed render.
+    ---@param operation string
+    ---@param action function
+    ---@return any
+    function context:mutate(operation, action)
+        assert(type(operation) == 'string' and operation ~= '',
+            'mutation operation name must be a nonempty string')
+        assert(type(action) == 'function',
+            'mutation action must be a function')
+        local mount = self:require_current(operation)
+        local captured = mount.render_tracker:capture()
+        local results = table.pack(xpcall(action, debug.traceback))
+        if not results[1] then
+            error(self:report_failure(mount, operation, results[2]), 2)
+        end
+        local wait_ok, wait_result = xpcall(function()
+            return mount.render_tracker:wait_after(captured,
+                operation .. ' render')
+        end, debug.traceback)
+        if not wait_ok then
+            error(self:report_failure(mount, operation, wait_result), 2)
+        end
+        return table.unpack(results, 2, results.n)
+    end
+
     ---Replaces any current mount and activates one classified component.
     ---@param component any
     ---@param mount_options table|nil
@@ -178,7 +221,7 @@ function M.new(options)
             component_class=prepared.class,
             root=prepared.component,
             host_screen=nil,
-            render_generation=0,
+            render_tracker=self.render_tracker_factory(),
             adapter=adapter,
             active=false,
             cleaned=false,
@@ -196,6 +239,7 @@ function M.new(options)
         table.insert(mount.cleanup_entries, mount.cleanup_entry)
 
         local ok, result = xpcall(function()
+            local captured = mount.render_tracker:capture()
             local adapter_result = adapter:mount(
                 mount, prepared, function(name, action)
                 return self:push_cleanup(mount, name, action)
@@ -205,6 +249,9 @@ function M.new(options)
                 'component adapter mount() must return a table or nil')
             assert(type(adapter_result.root or prepared.component) == 'table',
                 'component adapter root must be a native component object')
+            mount.root = adapter_result.root or prepared.component
+            mount.host_screen = adapter_result.host_screen
+            mount.render_tracker:wait_after(captured, 'component mount render')
             return adapter_result
         end, debug.traceback)
         if not ok then
@@ -212,15 +259,14 @@ function M.new(options)
                 self.cleanup_registry, mount.cleanup_marker,
                 'failed component mount')
             local message = 'DwarfSpec mount failed while activating ' ..
-                prepared.category .. ' component: ' .. tostring(result)
+                prepared.category .. ' component: ' ..
+                self:report_failure(mount, 'mount', result)
             if not cleanup_ok then
                 message = message .. '; cleanup failed: ' ..
                     format_cleanup_failures(failures)
             end
             error(message, 2)
         end
-        mount.root = result.root or prepared.component
-        mount.host_screen = result.host_screen
         mount.active = true
         local subject_ok, root_subject = xpcall(function()
             return self:root()

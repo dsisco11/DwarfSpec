@@ -5,6 +5,8 @@ local cleanup = assert(loadfile(
 local component = assert(loadfile('src/dwarfspec/component.lua'))()
 local mount_context = assert(loadfile(
     'src/dwarfspec/mount_context.lua'))()
+local render_tracker = assert(loadfile(
+    'src/dwarfspec/render_tracker.lua'))()
 local subject = assert(loadfile('src/dwarfspec/subject.lua'))()
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
@@ -41,6 +43,7 @@ describe('DwarfSpec mount context', function()
     local fail_activation
     local invalid_result
     local fail_subject
+    local fail_render
 
     before_each(function()
         Widget = make_class()
@@ -53,6 +56,7 @@ describe('DwarfSpec mount context', function()
         fail_activation = false
         invalid_result = false
         fail_subject = false
+        fail_render = false
         local boundary = component.new({
             Widget=Widget,
             OverlayWidget=OverlayWidget,
@@ -63,6 +67,13 @@ describe('DwarfSpec mount context', function()
             boundary=boundary,
             cleanup_module=cleanup,
             cleanup_registry=registry,
+            render_tracker_factory=function()
+                return render_tracker.new({
+                    wait_until=function(_, _, query)
+                        return assert(query(), 'render did not complete')
+                    end,
+                }, {})
+            end,
             subject_module={
                 new=function(...)
                     if fail_subject then error('subject creation exploded') end
@@ -86,6 +97,12 @@ describe('DwarfSpec mount context', function()
                             error('activation exploded for ' .. screen.name)
                         end
                         if invalid_result then return 'invalid adapter result' end
+                        if fail_render then
+                            mount.render_tracker:failed(
+                                'render exploded for ' .. screen.name)
+                        else
+                            mount.render_tracker:completed()
+                        end
                         return {
                             root=prepared.component,
                             host_screen=screen,
@@ -127,7 +144,7 @@ describe('DwarfSpec mount context', function()
         assert.equals('first', mounted.root.name)
         assert.equals(screens[1], mounted.host_screen)
         assert.is_true(screens[1].active)
-        assert.equals(0, mounted.render_generation)
+        assert.equals(1, mounted.render_tracker:generation())
         assert.is_nil(mounted.root.render_generation)
         assert.is_nil(mounted.root.mount_id)
         assert.is_nil(mounted.root.host_screen)
@@ -136,6 +153,30 @@ describe('DwarfSpec mount context', function()
         assert.equals(2, cleanup.pending_count(registry))
         assert.equals('k', getmetatable(context.subject_mounts).__mode)
         assert.equals('k', getmetatable(mounted.selected_subjects).__mode)
+    end)
+
+    it('waits for the render caused by each mutating operation', function()
+        context:mount(TestWidget, {name='mutated'})
+
+        local result = context:mutate('click', function()
+            context.current.render_tracker:completed()
+            return 'clicked'
+        end)
+
+        assert.equals('clicked', result)
+        assert.equals(2, context.current.render_tracker:generation())
+    end)
+
+    it('reports render failure without advancing completion', function()
+        fail_render = true
+
+        local ok, message = pcall(context.mount, context,
+            TestWidget, {name='render-failure'})
+
+        assert.is_false(ok)
+        assert.matches('render exploded for render%-failure', message)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
     end)
 
     it('fully unmounts and settles before constructing a replacement',

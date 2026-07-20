@@ -117,6 +117,13 @@ local component_module = load_automation_module(package_root,
     'dwarfspec.component', '/src/dwarfspec/component.lua')
 local mount_context_module = load_automation_module(package_root,
     'dwarfspec.mount_context', '/src/dwarfspec/mount_context.lua')
+local mount_adapters_module = load_automation_module(package_root,
+    'dwarfspec.mount_adapters', '/src/dwarfspec/mount_adapters.lua')
+local render_instrumentation = load_automation_module(package_root,
+    'dwarfspec.render_instrumentation',
+    '/src/dwarfspec/render_instrumentation.lua')
+local render_tracker_module = load_automation_module(package_root,
+    'dwarfspec.render_tracker', '/src/dwarfspec/render_tracker.lua')
 local subject_module = load_automation_module(package_root,
     'dwarfspec.subject', '/src/dwarfspec/subject.lua')
     extensions = extensions or {settings={}, commands={}}
@@ -133,8 +140,22 @@ local subject_module = load_automation_module(package_root,
         pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry),
         screens=setmetatable({}, {__mode='k'}),
         screen_entries=setmetatable({}, {__mode='k'}),
+        screen_trackers=setmetatable({}, {__mode='k'}),
         run=scheduler.run,
     }
+    ---Creates one private render tracker using the run's wait settings.
+    ---@return table
+    local function new_render_tracker()
+        if mount_dependencies.render_tracker_factory then
+            return mount_dependencies.render_tracker_factory()
+        end
+        return render_tracker_module.new(scheduler_module, scheduler, {
+            wait_options={
+                timeout_ms=wait_settings.timeout_ms,
+                frame_budget=wait_settings.frame_budget,
+            },
+        })
+    end
     local boundary = mount_dependencies.boundary
     if not boundary then
         boundary = component_module.new({
@@ -143,17 +164,37 @@ local subject_module = load_automation_module(package_root,
             ZScreen=require('gui').ZScreen,
         })
     end
-    local adapter_factory = mount_dependencies.adapter_factory or
-        function(category)
-            error(('DwarfSpec %s component adapter is not available yet')
-                :format(category), 2)
+    ---Captures and formats one bounded mounted-component failure report.
+    ---@param mount table
+    ---@param operation string
+    ---@param failure any
+    ---@return string
+    local function report_mount_failure(mount, operation, failure)
+        local original = tostring(failure)
+        if original:find('DwarfSpec mount failure:', 1, true) then
+            return original
         end
+        local evidence = diagnostics.capture_mount_failure(
+            mount, operation, original)
+        context.run.last_mount_diagnostics = evidence
+        return diagnostics.format_mount_failure(evidence)
+    end
+    local adapter_factory = mount_dependencies.adapter_factory
+    if not adapter_factory then
+        adapter_factory = mount_adapters_module.new({
+            instrumentation=render_instrumentation,
+            enrich_failure=report_mount_failure,
+        })
+    end
     context.mount_context = mount_context_module.new({
         run=context.run,
         boundary=boundary,
         cleanup_module=cleanup_module,
         cleanup_registry=cleanup_registry,
         adapter_factory=adapter_factory,
+        failure_reporter=mount_dependencies.failure_reporter or
+            report_mount_failure,
+        render_tracker_factory=new_render_tracker,
         subject_module=mount_dependencies.subject_module or subject_module,
     })
     local ds = {
@@ -168,6 +209,24 @@ local subject_module = load_automation_module(package_root,
         context.mount_context:require_current(operation)
         error(('DwarfSpec %s requires a subject or native legacy target')
             :format(operation), 2)
+    end
+
+    ---Resolves a subject or omitted target against the implicit mount.
+    ---@param value any
+    ---@param operation string
+    ---@return any, table|nil, table|nil
+    local function resolve_interaction_target(value, operation)
+        if value == nil then
+            local mount = context.mount_context:require_current(operation)
+            return mount.root, mount.host_screen, mount
+        end
+        if context.mount_context.subject_mounts[value] then
+            local view = context.mount_context:resolve_subject(value,
+                operation)
+            return view, context.mount_context.current.host_screen,
+                context.mount_context.current
+        end
+        return value, owner_screen(context.screens, value), nil
     end
 
     ---Copies caller wait options and applies project-wide defaults.
@@ -186,20 +245,16 @@ local subject_module = load_automation_module(package_root,
         return result
     end
 
-    ---Waits for a fixture's instrumented real render generation to advance.
+    ---Waits for DwarfSpec's private fixture render generation to advance.
     ---@param view table
     ---@param previous_generation integer|nil
     ---@return integer
     local function wait_for_render(view, previous_generation)
         local screen = owner_screen(context.screens, view)
-        assert(screen and type(screen.render_generation) == 'number',
-            'view is not inside an instrumented automation fixture')
-        previous_generation = previous_generation or screen.render_generation
-        return scheduler_module.wait_until(scheduler, 'fixture render',
-            function()
-                return screen.render_generation > previous_generation and
-                    screen.render_generation or false
-            end)
+        local tracker = screen and context.screen_trackers[screen]
+        assert(tracker, 'view is not inside a DwarfSpec-owned fixture')
+        previous_generation = previous_generation or tracker:capture()
+        return tracker:wait_after(previous_generation, 'fixture render')
     end
 
     ---Restores all currently registered test-owned resources.
@@ -273,18 +328,38 @@ local subject_module = load_automation_module(package_root,
                     'restore fixture pause state', function()
                         df.global.pause_state = pause_state
                     end)
-                local entry = cleanup_module.push(cleanup_registry,
+                local tracker = new_render_tracker()
+                local restore = render_instrumentation.install(screen, tracker,
+                    function(failure)
+                        return report_mount_failure({
+                            id='legacy-fixture',
+                            category='screen',
+                            root=screen,
+                            host_screen=screen,
+                        }, 'render', failure)
+                    end)
+                local restore_entry = cleanup_module.push(cleanup_registry,
+                    'restore fixture render interception ' .. import_path,
+                    restore)
+                local dismiss_entry = cleanup_module.push(cleanup_registry,
                     'dismiss fixture ' .. import_path, function()
                         if is_active(screen) then screen:dismiss() end
                         context.screen_entries[screen] = nil
+                        context.screen_trackers[screen] = nil
                     end)
-                context.screen_entries[screen] = entry
+                context.screen_entries[screen] = {
+                    dismiss=dismiss_entry,
+                    restore=restore_entry,
+                    restore_action=restore,
+                }
+                context.screen_trackers[screen] = tracker
                 associate_screen(context.screens, screen, screen)
+                local captured = tracker:capture()
                 screen:show()
                 if type(screen.on_automation_shown) == 'function' then
                     screen:on_automation_shown()
                 end
-                wait_for_render(screen)
+                wait_for_render(screen, captured)
                 return screen
             end)
     end
@@ -298,9 +373,12 @@ local subject_module = load_automation_module(package_root,
             if is_active(screen) then screen:dismiss() end
             scheduler_module.wait_until(scheduler, 'fixture dismissal',
                 function() return not is_active(screen) end)
-            cleanup_module.release(cleanup_registry,
-                context.screen_entries[screen])
+            local entries = context.screen_entries[screen]
+            cleanup_module.release(cleanup_registry, entries.dismiss)
+            entries.restore_action()
+            cleanup_module.release(cleanup_registry, entries.restore)
             context.screen_entries[screen] = nil
+            context.screen_trackers[screen] = nil
         end)
     end
 
@@ -331,7 +409,7 @@ local subject_module = load_automation_module(package_root,
     ---@param view table
     ---@return table
     function ds.inspect(view)
-        require_interaction_target(view, 'inspect')
+        view = resolve_interaction_target(view, 'inspect')
         return diagnostics.inspect_view(view)
     end
 
@@ -360,10 +438,10 @@ local subject_module = load_automation_module(package_root,
     ---@param anchor string|nil
     ---@return integer, integer
     function ds.move_pointer(view, anchor)
-        require_interaction_target(view, 'move_pointer')
+        local mount
+        view, _, mount = resolve_interaction_target(view, 'move_pointer')
         local body = assert(view.frame_body, 'view has no live frame body')
         local screen = owner_screen(context.screens, view)
-        local generation = screen and screen.render_generation or nil
         anchor = anchor or 'center'
         local x = math.floor((body.x1 + body.x2) / 2)
         local y = math.floor((body.y1 + body.y2) / 2)
@@ -378,13 +456,28 @@ local subject_module = load_automation_module(package_root,
         else
             assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
         end
-        ds.set_pointer(x, y)
-        if screen then
-            wait_for_render(screen, generation)
+        if mount then
+            context.mount_context:mutate('move_pointer', function()
+                pointer_adapter_module.set(context.pointer, x, y)
+            end)
+        elseif screen then
+            local tracker = context.screen_trackers[screen]
+            local captured = tracker:capture()
+            pointer_adapter_module.set(context.pointer, x, y)
+            wait_for_render(screen, captured)
         else
+            pointer_adapter_module.set(context.pointer, x, y)
             ds.wait_frames(1, {description='wait after pointer movement'})
         end
         return x, y
+    end
+
+    ---Moves the virtual pointer over a subject and waits for its render.
+    ---@param view table|nil
+    ---@param anchor string|nil
+    ---@return integer, integer
+    function ds.hover(view, anchor)
+        return ds.move_pointer(view, anchor)
     end
 
     ---Restores the original physical-pointer query function.
@@ -397,14 +490,23 @@ local subject_module = load_automation_module(package_root,
     ---@param screen table
     ---@return integer
     function ds.input(keys, screen)
+        local mount
+        _, screen, mount = resolve_interaction_target(screen, 'input')
+        if mount then
+            return context.mount_context:mutate('input', function()
+                assert(is_active(screen),
+                    'input screen is not currently active')
+                require('gui').simulateInput(native_screen(screen), keys)
+            end)
+        end
         require_interaction_target(screen, 'input')
         return run_action(context, 'input', screen, function()
             assert(screen and is_active(screen),
                 'input screen is not currently active')
-            local owned = context.screen_entries[screen] ~= nil
-            local generation = owned and screen.render_generation or nil
+            local tracker = context.screen_trackers[screen]
+            local generation = tracker and tracker:capture() or nil
             require('gui').simulateInput(native_screen(screen), keys)
-            if owned then return wait_for_render(screen, generation) end
+            if tracker then return wait_for_render(screen, generation) end
             return ds.wait_frames(1, {description='wait after live input'})
         end)
     end
@@ -414,15 +516,32 @@ local subject_module = load_automation_module(package_root,
     ---@param button string|nil
     ---@return integer
     function ds.click(view, button)
+        local requested_view = view
+        local screen
+        local mount
+        view, screen, mount = resolve_interaction_target(view, 'click')
+        if mount then
+            local key = ({left='_MOUSE_L', right='_MOUSE_R',
+                middle='_MOUSE_M'})[button or 'left']
+            assert(key, 'unsupported mouse button: ' .. tostring(button))
+            local x, y = ds.move_pointer(requested_view)
+            return context.mount_context:mutate('click', function()
+                pointer_adapter_module.with_interface_mouse(x, y, function()
+                    require('gui').simulateInput(native_screen(screen), key)
+                end)
+            end)
+        end
         require_interaction_target(view, 'click')
         return run_action(context, 'click view', view, function()
-            local screen = assert(owner_screen(context.screens, view),
+            screen = assert(screen or owner_screen(context.screens, view),
                 'view is not inside an automation fixture')
             local key = ({left='_MOUSE_L', right='_MOUSE_R', middle='_MOUSE_M'})[
                 button or 'left']
             assert(key, 'unsupported mouse button: ' .. tostring(button))
             local x, y = ds.move_pointer(view)
-            local generation = screen.render_generation
+            local tracker = assert(context.screen_trackers[screen],
+                'fixture has no DwarfSpec render tracker')
+            local generation = tracker:capture()
             pointer_adapter_module.with_interface_mouse(x, y, function()
                 require('gui').simulateInput(native_screen(screen), key)
             end)
@@ -435,12 +554,29 @@ local subject_module = load_automation_module(package_root,
     ---@param screen table
     ---@return integer
     function ds.type(text, screen)
+        local mount
+        _, screen, mount = resolve_interaction_target(screen, 'type')
+        if mount then
+            return context.mount_context:mutate('type', function()
+                assert(type(text) == 'string',
+                    'text input must be a string')
+                local gui = require('gui')
+                for index = 1, #text do
+                    assert(text:byte(index) >= 1,
+                        'text input cannot contain NUL bytes')
+                    gui.simulateInput(native_screen(screen),
+                        ('STRING_A%03d'):format(text:byte(index)))
+                end
+            end)
+        end
         require_interaction_target(screen, 'type')
         return run_action(context, 'type text', screen, function()
             assert(type(text) == 'string', 'text input must be a string')
             assert(screen and context.screen_entries[screen],
                 'input screen is not owned by this automation run')
-            local generation = screen.render_generation
+            local tracker = assert(context.screen_trackers[screen],
+                'fixture has no DwarfSpec render tracker')
+            local generation = tracker:capture()
             local gui = require('gui')
             for index = 1, #text do
                 assert(text:byte(index) >= 1,
@@ -449,6 +585,19 @@ local subject_module = load_automation_module(package_root,
                     ('STRING_A%03d'):format(text:byte(index)))
             end
             return wait_for_render(screen, generation)
+        end)
+    end
+
+    ---Applies a layout resize to the current mounted screen and waits.
+    ---@param width integer
+    ---@param height integer
+    function ds.resize(width, height)
+        local mount = context.mount_context:require_current('resize')
+        assert(type(width) == 'number' and width >= 1 and
+            type(height) == 'number' and height >= 1,
+            'resize dimensions must be positive numbers')
+        return context.mount_context:mutate('resize', function()
+            mount.host_screen:onResize(width, height)
         end)
     end
 

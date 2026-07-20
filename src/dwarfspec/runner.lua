@@ -121,6 +121,7 @@ local function bootstrap_arguments(options, run_id)
         '--lease-timeout-ms=' .. tostring(options.lease_timeout_ms),
         '--lease-check-frames=' .. tostring(options.lease_check_frames),
         '--test-glob=' .. tostring(options.test_glob or '*.ds.lua'),
+        '--lua-module-root=' .. lua_module_root(options.package_root),
     }
     append_values(arguments, 'filter', options.filters)
     append_values(arguments, 'filter-out', options.filter_out)

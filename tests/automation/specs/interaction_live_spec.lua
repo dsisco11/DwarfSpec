@@ -6,7 +6,8 @@ describe('automation live interactions', function()
 
     before_each(function()
         initial_pause_state = df.global.pause_state
-        screen = ds.show_fixture('interaction_screen')
+        screen = ds.show_fixture(
+            'tests/automation/fixtures/interaction_screen.lua')
     end)
 
     it('shows, finds, inspects, hovers, clicks, types, captures, and dismisses',
