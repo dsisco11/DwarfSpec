@@ -85,24 +85,74 @@ contract tests before the legacy fixture API is removed.
 
 ## Phase 1: Characterize the component boundary
 
-- [ ] Add unit characterization for constructing and identifying a plain
+- [x] Add unit characterization for constructing and identifying a plain
   `widgets.Widget`, an `overlay.OverlayWidget`, and a `gui.ZScreen`.
-- [ ] Define unambiguous rules for constructor/class inputs versus component
+- [x] Define unambiguous rules for constructor/class inputs versus component
   instances and reject unsupported values with actionable errors.
-- [ ] Define the mount options common to every component, including viewport
+- [x] Define the mount options common to every component, including viewport
   size, component attributes, initial pause behavior, and optional backing
   viewscreen context.
-- [ ] Define whether constructor failures, initialization failures, and first
+- [x] Define whether constructor failures, initialization failures, and first
   render failures are reported as mount failures or host errors.
-- [ ] Record the minimum DFHack APIs required by the live mount adapters.
-- [ ] Add a public API contract test that reserves `mount`, `root`, `unmount`,
+- [x] Record the minimum DFHack APIs required by the live mount adapters.
+- [x] Add a public API contract test that reserves `mount`, `root`, `unmount`,
   and the initial subject methods.
 
 Exit evidence:
 
-- [ ] The three supported component categories and both supported input forms
+- [x] The three supported component categories and both supported input forms
   have executable contract tests.
-- [ ] No adapter behavior depends on product-specific classes or paths.
+- [x] No adapter behavior depends on product-specific classes or paths.
+
+Phase 1 evidence (2026-07-20):
+
+- `src/dwarfspec/component.lua` classifies callable DFHack `defclass` tables
+  before invoking them. Arbitrary functions are not constructors in this
+  contract because their category cannot be known before consumer code runs.
+  Existing instances are recognized from their class metatable. Overlay
+  classification precedes widget classification because `OverlayWidget`
+  derives from `Widget`.
+- Class inputs receive top-level, non-reserved mount options as constructor
+  attributes. Existing instances accept harness options but reject constructor
+  attributes instead of mutating an initialized component. Unsupported
+  scalars, tables, classes, and factories produce errors that list the three
+  supported DFHack bases and the accepted input forms.
+- Common options are `viewport={width=<positive integer>, height=<positive
+  integer>}`, `initial_pause=<boolean>` (default `true`), and
+  `backing_viewscreen=<DFHack viewscreen>`. A missing viewport means the live
+  interface dimensions at mount time. A complete screen class receives the
+  normalized pause choice during construction; later host adapters own the
+  equivalent behavior for widgets and overlays.
+- Construction, DFHack `preinit`/`init`/`postinit`, and the first completed
+  render belong to the mount operation and are reported as mount failures.
+  Failures in DwarfSpec scheduling, cleanup infrastructure, or run ownership
+  are host errors. `FAILURE_OWNERSHIP` and its unit contract reserve this
+  distinction before render adapters are implemented.
+- Minimum checked-out DFHack APIs were verified in `dfhack-53.15-r1`:
+  callable classes plus `super`, `ATTRS`, `__index`, and instance metatables in
+  `library/lua/class.lua`; `widgets.Widget` and the native view tree/layout,
+  frame-body, render, visibility, activation, focus, and input contracts in
+  `library/lua/gui/widgets/widget.lua` and `library/lua/gui.lua`;
+  `overlay.OverlayWidget`, its positioning/painter attributes, and
+  `overlay_onenable`, `overlay_onupdate`, `onInput`, and
+  `overlay_ondisable` in `plugins/lua/overlay.lua`; and `gui.ZScreen` with
+  `show`, `dismiss`, `isActive`, `onResize`, `onRender`, `onInput`, native
+  viewscreen ownership, parent input forwarding, and pause restoration in
+  `library/lua/gui.lua`.
+- `tests/component_boundary_test.lua` executes class and instance cases for
+  generic widget, overlay, and screen subclasses without importing any
+  consumer module or path. It also covers overlay precedence, option defaults
+  and validation, deterministic instance-attribute rejection, unsupported
+  inputs, constructor/init failures, and reserved public method names.
+  `tests/extensions_test.lua` proves a consumer cannot replace `ds.mount`, and
+  `tests/package_contract_test.lua` proves the installed-module mapping exists.
+- Verification: `tools/Run-UnitTests.ps1` reported 81 successes, 0 failures,
+  and 0 errors; `tools/Check-Lua.ps1` parsed and formatting-checked all 65 Lua
+  files with Lua 5.4.6; `luarocks lint dwarfspec-0.1.0-1.rockspec` passed; and
+  `git diff --check` passed. A separate clean-tree `luarocks make` package
+  smoke remains open for the release-proof work: local LuaRocks 3.9.2 aborts
+  before building with `Error: File exists` while creating the new tree's
+  `lib/luarocks/rocks-5.4/dwarfspec/0.1.0-1/conf` directory.
 
 ## Phase 2: Build the run-owned mount context
 

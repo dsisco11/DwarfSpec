@@ -24,4 +24,11 @@ describe('DwarfSpec package contract', function()
         assert.matches('"lua >= 5.3"', rockspec, 1, true)
         assert.is_nil(rockspec:find('< 5.4', 1, true))
     end)
+
+    it('publishes the component boundary module', function()
+        local rockspec = read_repository_file('dwarfspec-0.1.0-1.rockspec')
+        assert.matches('["dwarfspec.component"] = ' ..
+            '"src/dwarfspec/component.lua"', rockspec, 1, true)
+        assert.is_truthy(read_repository_file('src/dwarfspec/component.lua'))
+    end)
 end)

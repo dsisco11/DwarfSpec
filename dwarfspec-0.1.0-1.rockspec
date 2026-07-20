@@ -28,6 +28,7 @@ build = {
     type = "builtin",
     modules = {
         ["dwarfspec.cli"] = "src/dwarfspec/cli.lua",
+        ["dwarfspec.component"] = "src/dwarfspec/component.lua",
         ["dwarfspec.config"] = "src/dwarfspec/config.lua",
         ["dwarfspec.glob"] = "src/dwarfspec/glob.lua",
         ["dwarfspec.layout"] = "src/dwarfspec/layout.lua",
