@@ -156,27 +156,79 @@ Phase 1 evidence (2026-07-20):
 
 ## Phase 2: Build the run-owned mount context
 
-- [ ] Add a mount-context module owned by one automation run.
-- [ ] Track the current mount, root component, host screen, private render
+- [x] Add a mount-context module owned by one automation run.
+- [x] Track the current mount, root component, host screen, private render
   generation, selected subjects, and cleanup entries without storing test
   metadata on consumer components.
-- [ ] Implement `ds.mount(component, options)` and `ds.unmount()` against the
+- [x] Implement `ds.mount(component, options)` and `ds.unmount()` against the
   mount context.
-- [ ] Implement `ds.root()` as a subject for the current component root.
-- [ ] Make all mount-context references weak where ownership does not require a
+- [x] Implement `ds.root()` as a subject for the current component root.
+- [x] Make all mount-context references weak where ownership does not require a
   strong reference.
-- [ ] Make a second `ds.mount()` fully unmount and settle the previous mount
+- [x] Make a second `ds.mount()` fully unmount and settle the previous mount
   before constructing the replacement.
-- [ ] Produce clear errors for `root`, `get`, interaction, or unmount commands
+- [x] Produce clear errors for `root`, `get`, interaction, or unmount commands
   when no component is mounted.
-- [ ] Register mount cleanup before showing or activating a component so a
+- [x] Register mount cleanup before showing or activating a component so a
   partial mount failure remains reversible.
 
 Exit evidence:
 
-- [ ] Unit tests cover initial mount, replacement mount, explicit unmount,
+- [x] Unit tests cover initial mount, replacement mount, explicit unmount,
   partial mount failure, and operations without a current mount.
-- [ ] Cleanup leaves no active screen or pending mount entry after every case.
+- [x] Cleanup leaves no active screen or pending mount entry after every case.
+
+Phase 2 evidence (2026-07-20):
+
+- `src/dwarfspec/mount_context.lua` creates one context from the automation
+  run, its cleanup registry, the component boundary, an adapter factory, and a
+  subject factory. Its single `current` record owns the mount identity,
+  component category and class, root, host screen, private render generation,
+  normalized options, adapter, weak selected-subject set, cleanup marker, and
+  cleanup entries. Unit assertions confirm no mount id, host, cleanup list, or
+  render generation is written onto the consumer root.
+- `src/dwarfspec/subject.lua` stores only a scalar mount id plus weak values for
+  its context, mount, and native object. The context's subject map and each
+  mount's selected-subject set use weak keys. The current mount retains strong
+  root, host, and adapter references only while lifecycle ownership requires
+  them; cleanup clears those references and the implicit current mount.
+- `tests/automation/support/cleanup.lua` now exposes a monotonic marker and
+  `run_from()` scoped drain. Replacement, explicit unmount, and failed mount
+  rollback drain entries newer than the mount marker in strict LIFO order,
+  without draining older run resources. The original run-wide `run()` remains
+  the marker-zero form and stays idempotent.
+- The context classifies before construction, registers its parent unmount
+  action, and only then calls the category adapter. Adapters can register child
+  cleanup entries through the context. Activation exceptions, invalid adapter
+  results, and root-subject creation failures all take the same scoped rollback
+  path and retain the originating error. Adapter teardown and settling both run
+  before references are cleared, even if teardown itself reports a failure.
+- A replacement call synchronously drains and settles the previous mount
+  before the replacement constructor runs. The test constructor asserts the
+  observed event order `resource`, `unmount`, `settle`, then construction and
+  activation of the replacement. A replacement constructor failure leaves no
+  implicit mount and no pending mount-owned cleanup.
+- `tests/automation/support/ds.lua` wires `ds.mount`, `ds.root`, and
+  `ds.unmount` to the context. The one-argument `ds.get(view_id)` form selects
+  from the implicit root and returns a subject; the legacy two-argument form
+  remains available until consumer migration. Root, current-mount selection,
+  and omitted-target interaction calls all instruct the author to call
+  `ds.mount(component, options)` when no mount exists.
+- `tests/mount_context_test.lua` covers initial mount, host and private state,
+  replacement ordering, stale subjects, explicit idempotent unmount, adapter
+  activation failure, invalid adapter result, root-subject failure, failed
+  replacement construction, run cleanup, and no-mount errors.
+  `tests/ds_mount_commands_test.lua` covers the public command wiring and
+  implicit selection. Every example has an unconditional registry drain that
+  asserts `current == nil`, zero pending cleanup entries, and every created
+  host inactive after the example.
+- Verification: `tools/Run-UnitTests.ps1` reported 94 successes, 0 failures,
+  and 0 errors; `tools/Check-Lua.ps1` parsed and formatting-checked all 69 Lua
+  files with Lua 5.4.6; `luarocks lint dwarfspec-0.1.0-1.rockspec` passed; and
+  `git diff --check` passed. `tests/package_contract_test.lua` verifies both
+  new modules are present in the rockspec, and the isolated live export spec
+  now reserves the three public mount functions for its later installed-rock
+  run.
 
 ## Phase 3: Own render instrumentation
 

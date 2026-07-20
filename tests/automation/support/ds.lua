@@ -97,9 +97,10 @@ end
 ---@param cleanup_module table
 ---@param cleanup_registry table
 ---@param extensions table
+---@param mount_dependencies table|nil
 ---@return table
 function M.new(package_root, project, scheduler_module, scheduler,
-        cleanup_module, cleanup_registry, extensions)
+        cleanup_module, cleanup_registry, extensions, mount_dependencies)
 local fixture_loader = load_automation_module(package_root,
     'dwarfspec.automation.fixture_loader',
     '/tests/automation/support/fixture_loader.lua')
@@ -112,7 +113,14 @@ local pointer_adapter_module = load_automation_module(package_root,
 local overlay_fixture = load_automation_module(package_root,
     'dwarfspec.automation.overlay_fixture',
     '/tests/automation/support/overlay_fixture.lua')
+local component_module = load_automation_module(package_root,
+    'dwarfspec.component', '/src/dwarfspec/component.lua')
+local mount_context_module = load_automation_module(package_root,
+    'dwarfspec.mount_context', '/src/dwarfspec/mount_context.lua')
+local subject_module = load_automation_module(package_root,
+    'dwarfspec.subject', '/src/dwarfspec/subject.lua')
     extensions = extensions or {settings={}, commands={}}
+    mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
     local context = {
         package_root=package_root,
@@ -127,9 +135,40 @@ local overlay_fixture = load_automation_module(package_root,
         screen_entries=setmetatable({}, {__mode='k'}),
         run=scheduler.run,
     }
+    local boundary = mount_dependencies.boundary
+    if not boundary then
+        boundary = component_module.new({
+            Widget=require('gui.widgets').Widget,
+            OverlayWidget=require('plugins.overlay').OverlayWidget,
+            ZScreen=require('gui').ZScreen,
+        })
+    end
+    local adapter_factory = mount_dependencies.adapter_factory or
+        function(category)
+            error(('DwarfSpec %s component adapter is not available yet')
+                :format(category), 2)
+        end
+    context.mount_context = mount_context_module.new({
+        run=context.run,
+        boundary=boundary,
+        cleanup_module=cleanup_module,
+        cleanup_registry=cleanup_registry,
+        adapter_factory=adapter_factory,
+        subject_module=mount_dependencies.subject_module or subject_module,
+    })
     local ds = {
         protocol_version=1,
     }
+
+    ---Requires a current mount when an interaction target is omitted.
+    ---@param value any
+    ---@param operation string
+    local function require_interaction_target(value, operation)
+        if value ~= nil then return end
+        context.mount_context:require_current(operation)
+        error(('DwarfSpec %s requires a subject or native legacy target')
+            :format(operation), 2)
+    end
 
     ---Copies caller wait options and applies project-wide defaults.
     ---@param options table|nil
@@ -199,6 +238,25 @@ local overlay_fixture = load_automation_module(package_root,
             scheduler, description, query, wait_options(options, true))
     end
 
+    ---Mounts one supported component as the run's implicit current mount.
+    ---@param component any
+    ---@param options table|nil
+    ---@return table
+    function ds.mount(component, options)
+        return context.mount_context:mount(component, options)
+    end
+
+    ---Returns a subject for the current component root.
+    ---@return table
+    function ds.root()
+        return context.mount_context:root()
+    end
+
+    ---Unmounts and settles the current component.
+    function ds.unmount()
+        return context.mount_context:unmount()
+    end
+
     ---Shows an explicitly imported fixture and waits for its first real render.
     ---@param import_path string
     ---@param options table|nil
@@ -251,6 +309,16 @@ local overlay_fixture = load_automation_module(package_root,
     ---@param view_id string
     ---@return table
     function ds.get(root, view_id)
+        if view_id == nil then
+            view_id = root
+            local mount = context.mount_context:require_current('get')
+            assert(type(view_id) == 'string' and view_id ~= '',
+                'view id must be a nonempty string')
+            local view = mount.root.subviews and mount.root.subviews[view_id]
+            assert(view and view.view_id == view_id,
+                'current mount view id was not found: ' .. view_id)
+            return context.mount_context:new_subject(view)
+        end
         assert(type(view_id) == 'string' and view_id ~= '',
             'view id must be a nonempty string')
         local view = root.subviews and root.subviews[view_id]
@@ -263,6 +331,7 @@ local overlay_fixture = load_automation_module(package_root,
     ---@param view table
     ---@return table
     function ds.inspect(view)
+        require_interaction_target(view, 'inspect')
         return diagnostics.inspect_view(view)
     end
 
@@ -291,6 +360,7 @@ local overlay_fixture = load_automation_module(package_root,
     ---@param anchor string|nil
     ---@return integer, integer
     function ds.move_pointer(view, anchor)
+        require_interaction_target(view, 'move_pointer')
         local body = assert(view.frame_body, 'view has no live frame body')
         local screen = owner_screen(context.screens, view)
         local generation = screen and screen.render_generation or nil
@@ -327,6 +397,7 @@ local overlay_fixture = load_automation_module(package_root,
     ---@param screen table
     ---@return integer
     function ds.input(keys, screen)
+        require_interaction_target(screen, 'input')
         return run_action(context, 'input', screen, function()
             assert(screen and is_active(screen),
                 'input screen is not currently active')
@@ -343,6 +414,7 @@ local overlay_fixture = load_automation_module(package_root,
     ---@param button string|nil
     ---@return integer
     function ds.click(view, button)
+        require_interaction_target(view, 'click')
         return run_action(context, 'click view', view, function()
             local screen = assert(owner_screen(context.screens, view),
                 'view is not inside an automation fixture')
@@ -363,6 +435,7 @@ local overlay_fixture = load_automation_module(package_root,
     ---@param screen table
     ---@return integer
     function ds.type(text, screen)
+        require_interaction_target(screen, 'type')
         return run_action(context, 'type text', screen, function()
             assert(type(text) == 'string', 'text input must be a string')
             assert(screen and context.screen_entries[screen],

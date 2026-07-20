@@ -31,4 +31,15 @@ describe('DwarfSpec package contract', function()
             '"src/dwarfspec/component.lua"', rockspec, 1, true)
         assert.is_truthy(read_repository_file('src/dwarfspec/component.lua'))
     end)
+
+    it('publishes mount-context and subject modules', function()
+        local rockspec = read_repository_file('dwarfspec-0.1.0-1.rockspec')
+        assert.matches('["dwarfspec.mount_context"] = ' ..
+            '"src/dwarfspec/mount_context.lua"', rockspec, 1, true)
+        assert.matches('["dwarfspec.subject"] = ' ..
+            '"src/dwarfspec/subject.lua"', rockspec, 1, true)
+        assert.is_truthy(read_repository_file(
+            'src/dwarfspec/mount_context.lua'))
+        assert.is_truthy(read_repository_file('src/dwarfspec/subject.lua'))
+    end)
 end)

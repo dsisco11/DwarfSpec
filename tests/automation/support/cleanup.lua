@@ -64,11 +64,24 @@ function M.pending_count(registry)
     return #registry.entries
 end
 
----Executes and removes every pending action in strict reverse order.
+---Returns a marker for later scoped cleanup of newly registered actions.
 ---@param registry table
+---@return integer
+function M.mark(registry)
+    assert(not registry.cleaning,
+        'cleanup cannot be marked while cleanup is running')
+    return registry.next_id
+end
+
+---Executes and removes actions newer than a marker in reverse order.
+---@param registry table
+---@param marker integer
 ---@param reason string
 ---@return boolean, table[]
-function M.run(registry, reason)
+function M.run_from(registry, marker, reason)
+    assert(type(marker) == 'number' and marker >= 0 and marker % 1 == 0 and
+        marker <= registry.next_id,
+        'cleanup marker must identify this registry history')
     assert(type(reason) == 'string' and reason ~= '',
         'cleanup reason must be a nonempty string')
     if registry.cleaning then
@@ -79,7 +92,9 @@ function M.run(registry, reason)
     registry.reset_count = registry.reset_count + 1
     local failures = {}
     while #registry.entries > 0 do
-        local entry = table.remove(registry.entries)
+        local entry = registry.entries[#registry.entries]
+        if entry.id <= marker then break end
+        table.remove(registry.entries)
         if entry.state == 'pending' then
             entry.state = 'running'
             local ok, cleanup_error = xpcall(entry.action, debug.traceback)
@@ -101,6 +116,14 @@ function M.run(registry, reason)
     end
     registry.cleaning = false
     return #failures == 0, failures
+end
+
+---Executes and removes every pending action in strict reverse order.
+---@param registry table
+---@param reason string
+---@return boolean, table[]
+function M.run(registry, reason)
+    return M.run_from(registry, 0, reason)
 end
 
 return M
