@@ -9,14 +9,6 @@ local function repository_root()
     return assert(root, 'could not derive repository root from ' .. source)
 end
 
----Returns the active run's cleanup module and registry.
----@return table, table
-local function active_cleanup()
-    local run = assert(dfhack.dwarfspec.active_run,
-        'automation run is not active')
-    return run.cleanup_module, run.cleanup_registry
-end
-
 ---Builds the smallest valid competing host-run option set.
 ---@param run_id string
 ---@return table
@@ -107,20 +99,4 @@ describe('automation framework live resilience', function()
             run.cleanup_registry))
     end)
 
-    it('retains cleanup diagnostics after an injected cleanup failure',
-            function()
-        local cleanup, registry = active_cleanup()
-        cleanup.push(registry, 'deliberate live cleanup failure', function()
-            error('deliberate live cleanup failure')
-        end)
-
-        local ok, message = pcall(ds.reset)
-
-        assert.is_false(ok)
-        assert.matches('automation cleanup failed', message, 1, true)
-        assert.equals(1, #registry.failures)
-        assert.equals('deliberate live cleanup failure',
-            registry.failures[1].name)
-        assert.equals(0, cleanup.pending_count(registry))
-    end)
 end)

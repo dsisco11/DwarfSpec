@@ -45,8 +45,8 @@ dwarfspec version
 
 `run` supports project-root and discovery-glob configuration, Busted filters
 and tags, repeat count, external timeout and polling controls, lease controls,
-explicit overlay fixture definitions, result-directory selection, explicit
-run ids, and verbose runner diagnostics. `dwarfspec help run` prints the
+result-directory selection, explicit run ids, and verbose runner diagnostics.
+`dwarfspec help run` prints the
 complete option list.
 
 The runner lookup order is an explicit `--runner`, `DFHACK_RUNNER`,

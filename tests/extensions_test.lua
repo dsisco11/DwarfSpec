@@ -39,13 +39,13 @@ describe('DwarfSpec consumer extensions', function()
         return function() return result end
     end
 
-    it('loads config first and registers commands and diagnostics', function()
+    it('loads config first and registers commands', function()
         modules['consumer/tests/dwarfspec/config.lua'] = {
             settings={
                 wait={frame_budget=42, timeout_ms=900},
                 discovery={test_glob='tests/live/*.lua'},
             },
-            diagnostics={tooltip=function() return 'tooltip' end},
+            commands={tooltip_state=function() return 'tooltip' end},
         }
         modules['consumer/tests/dwarfspec/commands.lua'] = {
             commands={consumer_action=function() return 'action' end},
@@ -61,7 +61,7 @@ describe('DwarfSpec consumer extensions', function()
         assert.equals('tests/live/*.lua',
             loaded.settings.discovery.test_glob)
         assert.equals('action', loaded.commands.consumer_action.callback())
-        assert.equals('tooltip', loaded.diagnostics.tooltip.callback())
+        assert.equals('tooltip', loaded.commands.tooltip_state.callback())
     end)
 
     it('rejects duplicate commands with both source modules identified',
@@ -97,9 +97,9 @@ describe('DwarfSpec consumer extensions', function()
             'settings.discovery.test_glob must be a nonempty string')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
-            commands={click=function() end},
+            commands={input=function() end},
         }
         assert.has_error(function() extensions.load(descriptor, loader) end,
-            'tests/dwarfspec/config.lua: custom command conflicts with ds.click')
+            'tests/dwarfspec/config.lua: custom command conflicts with ds.input')
     end)
 end)

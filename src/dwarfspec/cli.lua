@@ -64,7 +64,6 @@ Options:
   --startup-delay-frames N     Frames before starting Busted (default: 1)
   --lease-timeout-ms MS        Lost-runner lease timeout (default: 5000)
   --lease-check-frames N       Lease check interval (default: 30)
-  --overlay-fixture PATH       Explicit overlay definition (repeatable)
   --results PATH               JSON result directory relative to project root
                                (default: .test-results/dwarfspec)
   --no-results                 Do not persist a JSON run report
@@ -99,7 +98,6 @@ local RUN_OPTIONS = {
     ['startup-delay-frames']=true,
     ['lease-timeout-ms']=true,
     ['lease-check-frames']=true,
-    ['overlay-fixture']=true,
     results=true,
     ['no-results']=true,
     ['run-id']=true,
@@ -158,7 +156,6 @@ local function defaults(package_root)
         names={},
         tags={},
         exclude_tags={},
-        overlay_fixtures={},
         repeat_count=1,
         timeout_seconds=30,
         poll_interval_ms=100,
@@ -235,8 +232,6 @@ local function parse_options(argv, start_index, package_root, allowed)
                     table.insert(options.tags, value)
                 elseif name == 'exclude-tag' then
                     table.insert(options.exclude_tags, value)
-                elseif name == 'overlay-fixture' then
-                    table.insert(options.overlay_fixtures, value)
                 elseif name == 'repeat' then
                     options.repeat_count = positive_integer(name, value)
                 elseif name == 'timeout' then

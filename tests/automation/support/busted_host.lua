@@ -273,21 +273,17 @@ end
 
 ---Installs run-scoped cleanup around every discovered Busted example.
 ---@param busted table
----@param ds table
-function M.install_ds_lifecycle(busted, ds)
+---@param reset function
+function M.install_ds_lifecycle(busted, reset)
     assert(type(busted) == 'table' and type(busted.api) == 'table',
         'Busted root API is required for automation lifecycle hooks')
     assert(type(busted.api.before_each) == 'function' and
         type(busted.api.after_each) == 'function',
         'Busted before_each and after_each APIs are required')
-    assert(type(ds) == 'table' and type(ds.reset) == 'function',
-        'automation ds.reset is required for lifecycle hooks')
-    busted.api.before_each(function()
-        ds.reset()
-    end)
-    busted.api.after_each(function()
-        ds.reset()
-    end)
+    assert(type(reset) == 'function',
+        'automation reset callback is required for lifecycle hooks')
+    busted.api.before_each(reset)
+    busted.api.after_each(reset)
 end
 
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
@@ -316,21 +312,12 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
             discovery.test_glob
         specs = project_module.discover_specs(project, configured_glob)
     end
-    local overlay_fixture = load_automation_module(package_root,
-        'dwarfspec.automation.overlay_fixture',
-        'tests/automation/support/overlay_fixture.lua')
-    run.staged_overlays = {}
-    for _, import_path in ipairs(run.options.overlay_fixtures or {}) do
-        table.insert(run.staged_overlays, overlay_fixture.stage(project,
-            import_path, run.run_id, run.cleanup_module,
-            run.suite_cleanup_registry))
-    end
     local ds_factory = load_automation_module(package_root, 'dwarfspec.ds',
         'tests/automation/support/ds.lua')
-    local ds = ds_factory.new(package_root, project, scheduler_module,
+    local ds, reset = ds_factory.new(package_root, project, scheduler_module,
         scheduler, run.cleanup_module, run.cleanup_registry, extensions)
     busted.export('ds', ds)
-    M.install_ds_lifecycle(busted, ds)
+    M.install_ds_lifecycle(busted, reset)
 
     local output_factory = load_automation_module(package_root,
         'dwarfspec.automation.output_handler',
@@ -393,17 +380,10 @@ local function clean_run(run, reason)
     cancel_timeout(run.lease_timeout_id)
     run.lease_timeout_id = nil
     local ok, failures = run.cleanup_module.run(run.cleanup_registry, reason)
-    local suite_ok, suite_failures = run.cleanup_module.run(
-        run.suite_cleanup_registry, reason)
-    for _, suite_failure in ipairs(suite_failures) do
-        table.insert(failures, suite_failure)
-    end
-    ok = ok and suite_ok
     run.coroutine = nil
     run.suspended = false
     run.cleanup_confirmed = ok and
         run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
-        run.cleanup_module.pending_count(run.suite_cleanup_registry) == 0 and
         run.outstanding_wait == nil and run.coroutine == nil and
         run.scheduler == nil and run.scheduled_timeout_id == nil and
         run.lease_timeout_id == nil
@@ -606,7 +586,6 @@ function M.start(package_root, project_root, options)
         outstanding_wait=nil,
         cleanup_module=cleanup_module,
         cleanup_registry=nil,
-        suite_cleanup_registry=nil,
         cleanup_confirmed=false,
         cleanup_reason=nil,
         scheduler_module=nil,
@@ -621,7 +600,6 @@ function M.start(package_root, project_root, options)
         run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0,
         'lease check interval must be a positive integer')
     run.cleanup_registry = cleanup_module.new(run)
-    run.suite_cleanup_registry = cleanup_module.new(run)
     registry.active_run = run
     local timeout_id = dfhack.timeout(options.defer_frames, 'frames', function()
         begin_queued_run(package_root, project_root, registry, run)

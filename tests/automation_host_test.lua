@@ -70,7 +70,6 @@ describe('automation host ownership', function()
             repeat_count=1,
             seed=1,
             specs={},
-            overlay_fixtures={},
             defer_frames=1,
             lease_timeout_ms=10000,
             lease_check_frames=1,
@@ -212,7 +211,7 @@ describe('automation host ownership', function()
         assert.equals(0, #callbacks)
     end)
 
-    it('installs ds reset hooks around every Busted example', function()
+    it('installs internal reset hooks around every Busted example', function()
         local hooks = {}
         local reset_count = 0
         local busted = {
@@ -226,11 +225,9 @@ describe('automation host ownership', function()
             },
         }
 
-        host.install_ds_lifecycle(busted, {
-            reset=function()
-                reset_count = reset_count + 1
-            end,
-        })
+        host.install_ds_lifecycle(busted, function()
+            reset_count = reset_count + 1
+        end)
         hooks.before_each()
         hooks.after_each()
 

@@ -1,14 +1,6 @@
--- Live contracts for frame scheduling and test-owned cleanup.
+-- Live contracts for frame scheduling.
 
-describe('automation scheduler and cleanup', function()
-    ---Returns the cleanup registry owned by the active automation run.
-    ---@return table, table
-    local function active_cleanup()
-        local run = assert(dfhack.dwarfspec.active_run,
-            'automation run is not active')
-        return run.cleanup_module, run.cleanup_registry
-    end
-
+describe('automation scheduler', function()
     it('resumes after real raw-frame callbacks', function()
         local run = assert(dfhack.dwarfspec.active_run)
         local started_ms = dfhack.getTickCount()
@@ -53,23 +45,6 @@ describe('automation scheduler and cleanup', function()
         assert.is_false(query_ok)
         assert.matches('automation interaction error', query_error, 1, true)
         assert.matches('deliberate query failure', query_error, 1, true)
-    end)
-
-    it('cleans once in LIFO order and permits repeated reset', function()
-        local cleanup, registry = active_cleanup()
-        local order = {}
-        cleanup.push(registry, 'first live resource', function()
-            table.insert(order, 'first')
-        end)
-        cleanup.push(registry, 'second live resource', function()
-            table.insert(order, 'second')
-        end)
-
-        ds.reset()
-        ds.reset()
-
-        assert.same({'second', 'first'}, order)
-        assert.equals(0, cleanup.pending_count(registry))
     end)
 
     it('rejects waits from a non-owner coroutine', function()

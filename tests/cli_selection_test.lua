@@ -212,7 +212,6 @@ describe('DwarfSpec CLI selection', function()
             '--name=exact example', '--tag=fast', '--exclude-tag=slow',
             '--repeat=2',
             '--timeout=12.5', '--poll-interval-ms=25',
-            '--overlay-fixture=tests/fixture with spaces.lua',
             '--results=result directory', '--run-id=quoted-run', '--verbose',
         }, context))
         assert.same({'name with spaces'}, invoked.filters)
@@ -220,8 +219,6 @@ describe('DwarfSpec CLI selection', function()
         assert.same({'exact example'}, invoked.names)
         assert.same({'fast'}, invoked.tags)
         assert.same({'slow'}, invoked.exclude_tags)
-        assert.same({'tests/fixture with spaces.lua'},
-            invoked.overlay_fixtures)
         assert.equals(2, invoked.repeat_count)
         assert.equals(12.5, invoked.timeout_seconds)
         assert.equals('result directory', invoked.result_directory)

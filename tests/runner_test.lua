@@ -43,7 +43,6 @@ local function options(run_id)
         identities={'tests/live/minimal.ds.lua'},
         runner='bin/dwarfspec',
         filters={}, filter_out={}, names={}, tags={}, exclude_tags={},
-        overlay_fixtures={},
         repeat_count=1,
         timeout_seconds=30,
         poll_interval_ms=1,

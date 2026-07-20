@@ -7,20 +7,16 @@ local RESERVED_COMMANDS = {
     capture_view_tree=true,
     clear_pointer=true,
     click=true,
-    diagnostic=true,
     dismiss=true,
     get=true,
+    input=true,
     inspect=true,
-    move_pointer_to=true,
-    press=true,
+    move_pointer=true,
     protocol_version=true,
-    reset=true,
-    send_input=true,
     set_pointer=true,
     show_fixture=true,
     stage_overlay_fixture=true,
     type=true,
-    wait_for_render=true,
     wait_frames=true,
     await=true,
 }
@@ -75,27 +71,24 @@ local function validate_settings(value, source)
     }
 end
 
----Registers one validated callback map without permitting duplicates.
+---Registers one validated command map without permitting duplicates.
 ---@param target table
 ---@param callbacks any
----@param kind string
 ---@param source string
-local function register_callbacks(target, callbacks, kind, source)
+local function register_commands(target, callbacks, source)
     if callbacks == nil then return end
     assert(type(callbacks) == 'table',
-        source .. ': ' .. kind .. ' must be a table')
+        source .. ': commands must be a table')
     for name, callback in pairs(callbacks) do
         assert(type(name) == 'string' and name:match('^[%a_][%w_]*$'),
-            source .. ': invalid ' .. kind .. ' name: ' .. tostring(name))
+            source .. ': invalid command name: ' .. tostring(name))
         assert(type(callback) == 'function',
-            source .. ': ' .. kind .. '.' .. name .. ' must be a function')
-        if kind == 'commands' then
-            assert(not RESERVED_COMMANDS[name],
-                source .. ': custom command conflicts with ds.' .. name)
-        end
+            source .. ': commands.' .. name .. ' must be a function')
+        assert(not RESERVED_COMMANDS[name],
+            source .. ': custom command conflicts with ds.' .. name)
         local previous = target[name]
-        assert(not previous, ('%s: duplicate %s %q; first registered by %s')
-            :format(source, kind, name,
+        assert(not previous, ('%s: duplicate commands %q; first registered by %s')
+            :format(source, name,
                 previous and previous.source or '<unknown>'))
         target[name] = {callback=callback, source=source}
     end
@@ -116,7 +109,7 @@ local function load_module(absolute_path, relative_path, loader)
     assert(type(result) == 'table',
         relative_path .. ': module must return a table')
     for key in pairs(result) do
-        assert(key == 'settings' or key == 'commands' or key == 'diagnostics',
+        assert(key == 'settings' or key == 'commands',
             relative_path .. ': unknown module field: ' .. tostring(key))
     end
     return result
@@ -130,7 +123,7 @@ function M.load(project, loader)
     assert(type(project) == 'table' and type(project.project_root) == 'string',
         'extension loading requires a project descriptor')
     loader = loader or loadfile
-    local result = {settings={}, commands={}, diagnostics={}, modules={}}
+    local result = {settings={}, commands={}, modules={}}
 local ok, project_module = pcall(require, 'dwarfspec.automation.project')
 if not ok then
     project_module = assert(loadfile(project.package_root ..
@@ -147,10 +140,7 @@ end
             assert(module.settings == nil,
                 relative_path .. ': settings are only allowed in config.lua')
         end
-        register_callbacks(result.commands, module.commands, 'commands',
-            relative_path)
-        register_callbacks(result.diagnostics, module.diagnostics,
-            'diagnostics', relative_path)
+        register_commands(result.commands, module.commands, relative_path)
         table.insert(result.modules, relative_path)
     end
     return result

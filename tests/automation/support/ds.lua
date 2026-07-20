@@ -112,7 +112,7 @@ local pointer_adapter_module = load_automation_module(package_root,
 local overlay_fixture = load_automation_module(package_root,
     'dwarfspec.automation.overlay_fixture',
     '/tests/automation/support/overlay_fixture.lua')
-    extensions = extensions or {settings={}, commands={}, diagnostics={}}
+    extensions = extensions or {settings={}, commands={}}
     local wait_settings = extensions.settings.wait or {}
     local context = {
         package_root=package_root,
@@ -147,6 +147,39 @@ local overlay_fixture = load_automation_module(package_root,
         return result
     end
 
+    ---Waits for a fixture's instrumented real render generation to advance.
+    ---@param view table
+    ---@param previous_generation integer|nil
+    ---@return integer
+    local function wait_for_render(view, previous_generation)
+        local screen = owner_screen(context.screens, view)
+        assert(screen and type(screen.render_generation) == 'number',
+            'view is not inside an instrumented automation fixture')
+        previous_generation = previous_generation or screen.render_generation
+        return scheduler_module.wait_until(scheduler, 'fixture render',
+            function()
+                return screen.render_generation > previous_generation and
+                    screen.render_generation or false
+            end)
+    end
+
+    ---Restores all currently registered test-owned resources.
+    local function reset()
+        local ok, failures = cleanup_module.run(cleanup_registry,
+            'automation lifecycle')
+        if not ok then
+            local messages = {}
+            for _, failure in ipairs(failures) do
+                table.insert(messages, failure.name .. ': ' .. failure.message)
+            end
+            error('automation cleanup failed: ' .. table.concat(messages, '; '),
+                2)
+        end
+        scheduler_module.wait_frames(scheduler, 1, {
+            description='wait for automation cleanup',
+        })
+    end
+
     ---Waits for actual DFHack raw-frame callbacks without blocking the game.
     ---@param count integer
     ---@param options table|nil
@@ -164,22 +197,6 @@ local overlay_fixture = load_automation_module(package_root,
     function ds.await(description, query, options)
         return scheduler_module.wait_until(
             scheduler, description, query, wait_options(options, true))
-    end
-
-    ---Restores all currently registered test-owned resources.
-    function ds.reset()
-        local ok, failures = cleanup_module.run(cleanup_registry, 'ds.reset')
-        if not ok then
-            local messages = {}
-            for _, failure in ipairs(failures) do
-                table.insert(messages, failure.name .. ': ' .. failure.message)
-            end
-            error('automation cleanup failed: ' .. table.concat(messages, '; '),
-                2)
-        end
-        scheduler_module.wait_frames(scheduler, 1, {
-            description='wait for automation cleanup',
-        })
     end
 
     ---Shows an explicitly imported fixture and waits for its first real render.
@@ -209,7 +226,7 @@ local overlay_fixture = load_automation_module(package_root,
                 if type(screen.on_automation_shown) == 'function' then
                     screen:on_automation_shown()
                 end
-                ds.wait_for_render(screen)
+                wait_for_render(screen)
                 return screen
             end)
     end
@@ -273,8 +290,10 @@ local overlay_fixture = load_automation_module(package_root,
     ---@param view table
     ---@param anchor string|nil
     ---@return integer, integer
-    function ds.move_pointer_to(view, anchor)
+    function ds.move_pointer(view, anchor)
         local body = assert(view.frame_body, 'view has no live frame body')
+        local screen = owner_screen(context.screens, view)
+        local generation = screen and screen.render_generation or nil
         anchor = anchor or 'center'
         local x = math.floor((body.x1 + body.x2) / 2)
         local y = math.floor((body.y1 + body.y2) / 2)
@@ -290,6 +309,11 @@ local overlay_fixture = load_automation_module(package_root,
             assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
         end
         ds.set_pointer(x, y)
+        if screen then
+            wait_for_render(screen, generation)
+        else
+            ds.wait_frames(1, {description='wait after pointer movement'})
+        end
         return x, y
     end
 
@@ -298,44 +322,18 @@ local overlay_fixture = load_automation_module(package_root,
         pointer_adapter_module.clear(context.pointer)
     end
 
-    ---Waits for a fixture's instrumented real render generation to advance.
-    ---@param view table
-    ---@param previous_generation integer|nil
-    ---@return integer
-    function ds.wait_for_render(view, previous_generation)
-        local screen = owner_screen(context.screens, view)
-        assert(screen and type(screen.render_generation) == 'number',
-            'view is not inside an instrumented automation fixture')
-        previous_generation = previous_generation or screen.render_generation
-        return scheduler_module.wait_until(scheduler, 'fixture render',
-            function()
-                return screen.render_generation > previous_generation and
-                    screen.render_generation or false
-            end)
-    end
-
-    ---Sends supported native keys and waits for the owning fixture to render.
+    ---Sends supported native input and waits for the live screen to settle.
     ---@param keys string|table
     ---@param screen table
     ---@return integer
-    function ds.press(keys, screen)
-        return run_action(context, 'press keys', screen, function()
-            assert(screen and context.screen_entries[screen],
-                'input screen is not owned by this automation run')
-            local generation = screen.render_generation
-            require('gui').simulateInput(native_screen(screen), keys)
-            return ds.wait_for_render(screen, generation)
-        end)
-    end
-
-    ---Sends input to one currently shown live screen through DFHack's native path.
-    ---@param keys string|table
-    ---@param screen table
-    function ds.send_input(keys, screen)
-        return run_action(context, 'send input', screen, function()
+    function ds.input(keys, screen)
+        return run_action(context, 'input', screen, function()
             assert(screen and is_active(screen),
                 'input screen is not currently active')
+            local owned = context.screen_entries[screen] ~= nil
+            local generation = owned and screen.render_generation or nil
             require('gui').simulateInput(native_screen(screen), keys)
+            if owned then return wait_for_render(screen, generation) end
             return ds.wait_frames(1, {description='wait after live input'})
         end)
     end
@@ -351,12 +349,12 @@ local overlay_fixture = load_automation_module(package_root,
             local key = ({left='_MOUSE_L', right='_MOUSE_R', middle='_MOUSE_M'})[
                 button or 'left']
             assert(key, 'unsupported mouse button: ' .. tostring(button))
-            local x, y = ds.move_pointer_to(view)
+            local x, y = ds.move_pointer(view)
             local generation = screen.render_generation
             pointer_adapter_module.with_interface_mouse(x, y, function()
                 require('gui').simulateInput(native_screen(screen), key)
             end)
-            return ds.wait_for_render(screen, generation)
+            return wait_for_render(screen, generation)
         end)
     end
 
@@ -377,7 +375,7 @@ local overlay_fixture = load_automation_module(package_root,
                 gui.simulateInput(native_screen(screen),
                     ('STRING_A%03d'):format(text:byte(index)))
             end
-            return ds.wait_for_render(screen, generation)
+            return wait_for_render(screen, generation)
         end)
     end
 
@@ -402,17 +400,6 @@ local overlay_fixture = load_automation_module(package_root,
             cleanup_module, cleanup_registry)
     end
 
-    ---Invokes one named consumer diagnostic adapter in the isolated ds scope.
-    ---@param name string
-    ---@param ... any
-    ---@return any
-    function ds.diagnostic(name, ...)
-        local adapter = extensions.diagnostics[name]
-        assert(adapter, 'consumer diagnostic adapter was not found: ' ..
-            tostring(name))
-        return adapter.callback(ds, ...)
-    end
-
     for name, command in pairs(extensions.commands) do
         local callback = command.callback
         ds[name] = function(...)
@@ -420,7 +407,7 @@ local overlay_fixture = load_automation_module(package_root,
         end
     end
 
-    return ds
+    return ds, reset
 end
 
 return M

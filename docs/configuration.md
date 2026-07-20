@@ -18,7 +18,7 @@ return {
 
 The configuration module is loaded once by the external command for discovery
 and again inside DFHack for live extensions. Keep its top-level code portable
-and defer DFHack-only calls to command or diagnostic callbacks.
+and defer DFHack-only calls to command callbacks.
 
 `DWARFSPEC_TEST_GLOB` replaces the project setting for subsequent commands,
 and `--test-glob GLOB` overrides both for one `list` or `run` command.
@@ -48,8 +48,7 @@ return {
 Both values are optional positive integers. Other modules cannot define
 settings.
 
-Any module in this directory may declare custom commands and diagnostic
-adapters:
+Any module in this directory may declare custom commands:
 
 ```lua
 return {
@@ -57,19 +56,17 @@ return {
         selected_text=function(ds, view)
             return ds.inspect(view).text
         end,
-    },
-    diagnostics={
-        tooltip=function(ds, service)
+        tooltip_state=function(ds, service)
             return service:get_diagnostics()
         end,
     },
 }
 ```
 
-Commands become `ds.selected_text(...)`. Diagnostic adapters are invoked as
-`ds.diagnostic('tooltip', ...)`. The first callback argument is always the
-isolated run-scoped `ds` object. Names must be Lua identifiers, duplicate names
-are rejected, and commands cannot replace built-in `ds` methods.
+Commands become `ds.selected_text(...)` and `ds.tooltip_state(...)`. The first
+callback argument is always the isolated run-scoped `ds` object. Names must be
+Lua identifiers, duplicate names are rejected, and commands cannot replace
+built-in `ds` methods.
 
 Modules execute in isolated environments. They can read normal Lua and DFHack
 globals, but assigning a global does not modify the process-wide `_G` table.

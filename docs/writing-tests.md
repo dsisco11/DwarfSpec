@@ -28,7 +28,7 @@ the operation in progress and is included in timeout diagnostics.
 
 ```lua
 local renderer = ds.await('tooltip becomes visible', function()
-    local state = ds.diagnostic('tooltip')
+    local state = ds.tooltip_state()
     return state.screen.renderer.visible and state.screen.renderer
 end)
 ```
@@ -50,4 +50,20 @@ return {
 
 `ds.stage_overlay_fixture(definition_path)` copies the source to a unique
 run-owned GUI script name, rescans overlays, and guarantees exact removal and a
-final rescan through automatic cleanup.
+final rescan through automatic cleanup. Stage overlays from the spec itself;
+the external command has no separate overlay-fixture option.
+
+## Public commands
+
+The first-release surface is intentionally small:
+
+- synchronization: `await`, `wait_frames`;
+- fixtures: `show_fixture`, `dismiss`, `stage_overlay_fixture`;
+- queries: `get`, `inspect`;
+- input: `set_pointer`, `move_pointer`, `clear_pointer`, `click`, `input`,
+  `type`; and
+- evidence: `capture_view_tree`, `capture_screen`.
+
+Input commands perform their own required render or frame synchronization.
+Cleanup and render-generation waiting are internal lifecycle details rather
+than public commands.

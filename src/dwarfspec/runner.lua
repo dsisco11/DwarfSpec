@@ -127,7 +127,6 @@ local function bootstrap_arguments(options, run_id)
     append_values(arguments, 'name', options.names)
     append_values(arguments, 'tag', options.tags)
     append_values(arguments, 'exclude-tag', options.exclude_tags)
-    append_values(arguments, 'overlay-fixture', options.overlay_fixtures)
     for _, identity in ipairs(options.identities) do
         table.insert(arguments, '--spec=' .. project.host_spec(identity))
     end

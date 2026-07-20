@@ -27,7 +27,7 @@ framework coverage.
 
 Every host run receives two roots. The package root owns Busted, the scheduler,
 cleanup, reporting, and the `ds` implementation. The project root owns live
-specs, configuration modules, custom commands, diagnostics, and fixtures.
+specs, configuration modules, custom commands, and fixtures.
 Neither root is inferred from the layout of the other.
 
 The external command recursively discovers files whose basenames match
@@ -38,8 +38,7 @@ convention.
 
 Modules in `tests/dwarfspec/` execute in private environments that read process
 globals but retain their own global writes. Their commands are bound only onto
-the run-scoped `ds` object. Diagnostic adapters are reached through
-`ds.diagnostic(name, ...)`; they do not add product-specific inspection to the
+the run-scoped `ds` object, so product-specific inspection remains outside the
 library.
 
 Screen fixtures and overlay fixture definitions are explicit imports. Paths
