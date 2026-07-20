@@ -125,6 +125,8 @@ local mount_context_module = load_automation_module(package_root,
     'dwarfspec.mount_context', '/src/dwarfspec/mount_context.lua')
 local mount_adapters_module = load_automation_module(package_root,
     'dwarfspec.mount_adapters', '/src/dwarfspec/mount_adapters.lua')
+local overlay_mount_module = load_automation_module(package_root,
+    'dwarfspec.overlay_mount', '/src/dwarfspec/overlay_mount.lua')
 local render_instrumentation = load_automation_module(package_root,
     'dwarfspec.render_instrumentation',
     '/src/dwarfspec/render_instrumentation.lua')
@@ -190,6 +192,7 @@ local subject_module = load_automation_module(package_root,
         adapter_factory = mount_adapters_module.new({
             instrumentation=render_instrumentation,
             enrich_failure=report_mount_failure,
+            overlay_mount_module=overlay_mount_module,
         })
     end
     context.mount_context = mount_context_module.new({

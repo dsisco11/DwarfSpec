@@ -39,6 +39,39 @@ The truthy query result is returned to the test. Optional `frame_budget` and
 Use `ds.wait_frames(count)` only when the number of raw DFHack frames is itself
 part of the contract.
 
+## Isolated overlay components
+
+Mount an `overlay.OverlayWidget` class or existing instance through the same
+component entry point as any other GUI component:
+
+```lua
+local overlay = require('plugins.overlay')
+
+local root = ds.mount(MyOverlayWidget, {
+    backing_viewscreen=dfhack.gui.getCurViewscreen(true),
+    overlay_position={x=4, y=-2},
+})
+```
+
+`overlay_position` uses DFHack's one-based overlay coordinates. Positive
+values anchor from the left or top, while negative values anchor from the
+right or bottom. The position is local to the mount and is never read from or
+written to persisted overlay configuration. If the component has no `name`,
+DwarfSpec assigns a run-owned logical name for the duration of the mount.
+
+The owned host supplies the normal scaled-interface painter, or the full
+window painter when `fullscreen=true`. A `full_interface=true` overlay still
+uses the scaled-interface painter, matching DFHack. The host also calls
+`overlay_onenable`, throttled `overlay_onupdate`, active-and-visible `onInput`,
+and `overlay_ondisable` in their normal lifecycle order. The explicit
+`backing_viewscreen` is supplied to `overlay_onupdate`.
+
+This isolated component path intentionally bypasses GUI script discovery,
+persisted enablement and position, viewscreen and focus filtering, hotspot
+registration, overlay database registration, and rescanning. Tests for those
+integration behaviors should use the separate overlay-registration support;
+they do not require another component mount command.
+
 Overlay fixture definitions are also explicit imports. A definition returns a
 safe logical name and a project-relative source file:
 

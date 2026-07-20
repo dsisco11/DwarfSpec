@@ -347,31 +347,77 @@ errors. Report `dwarfspec-95309203-6885caaf.json` records `state=passed`,
 
 ## Phase 5: Implement the overlay-widget adapter
 
-- [ ] Accept `overlay.OverlayWidget` through the same `ds.mount()` dispatcher.
-- [ ] Reuse the generic host screen and private render tracker instead of
+- [x] Accept `overlay.OverlayWidget` through the same `ds.mount()` dispatcher.
+- [x] Reuse the generic host screen and private render tracker instead of
   installing a GUI script.
-- [ ] Assign an isolated run-owned logical name when the caller did not provide
+- [x] Assign an isolated run-owned logical name when the caller did not provide
   one.
-- [ ] Apply test-local frame positioning without reading or writing persisted
+- [x] Apply test-local frame positioning without reading or writing persisted
   overlay configuration.
-- [ ] Use the correct scaled, full-interface, or fullscreen painter contract.
-- [ ] Emulate applicable `overlay_onenable`, `overlay_onupdate`, `onInput`, and
+- [x] Use the correct scaled, full-interface, or fullscreen painter contract.
+- [x] Emulate applicable `overlay_onenable`, `overlay_onupdate`, `onInput`, and
   `overlay_ondisable` lifecycle calls in the same order as the DFHack overlay
   framework.
-- [ ] Supply an explicit backing viewscreen context to callbacks that normally
+- [x] Supply an explicit backing viewscreen context to callbacks that normally
   receive one.
-- [ ] Cover visible, active, fullscreen, full-interface, update-throttled, and
+- [x] Cover visible, active, fullscreen, full-interface, update-throttled, and
   input-handling behavior.
-- [ ] Document that isolated mounting intentionally bypasses script discovery,
+- [x] Document that isolated mounting intentionally bypasses script discovery,
   persisted enablement and position, viewscreen/focus filtering, hotspot
   registration, and overlay database registration.
 
 Exit evidence:
 
-- [ ] The same mount, selection, interaction, synchronization, and cleanup
+- [x] The same mount, selection, interaction, synchronization, and cleanup
   tests pass for ordinary and overlay widgets.
-- [ ] No public method named `mount_overlay`, `show_overlay_fixture`, or similar
+- [x] No public method named `mount_overlay`, `show_overlay_fixture`, or similar
   exists.
+
+Phase 5 evidence (2026-07-20):
+
+- `src/dwarfspec/overlay_mount.lua` owns the isolated logical name, copied
+  frame positioning, scaled/fullscreen painter selection, throttled update,
+  visible/active input gates, explicit backing viewscreen, lifecycle callbacks,
+  and idempotent restoration. `mount_adapters.lua` routes overlays through the
+  existing private component host and render instrumentation; it does not load
+  or register a GUI script.
+- `overlay_position={x=<integer>, y=<integer>}` is a reserved overlay-only
+  harness option. Positive and negative coordinates match DFHack's one-based
+  left/top and right/bottom anchors, while zero is normalized to one as the
+  overlay framework does. Existing component names and frame tables are
+  restored on unmount.
+- `docs/writing-tests.md` documents isolated overlay mounting and explicitly
+  lists the discovery, persisted configuration, viewscreen/focus filtering,
+  hotspot, database-registration, and rescan behavior that it bypasses.
+- `tools/Run-UnitTests.ps1` passes 114 tests with no failures, errors, or
+  pending tests. The focused overlay contracts cover names, positioning,
+  scaled full-interface and fullscreen painters, visibility, activation,
+  throttling, input, callback order, backing viewscreens, and idempotent
+  cleanup.
+- `tools/Check-Lua.ps1` passes Lua 5.4.6 syntax and formatting checks for 80
+  Lua files. The focused overlay live suite passes 2 tests in DFHack's embedded
+  Lua 5.3 for both a class and an existing instance. Its report has
+  `cleanup_confirmed=true`.
+- The complete product-independent live suite passes 17 tests with no failures
+  or errors in run `dwarfspec-96956125-3c27fb4b`; its terminal report records
+  `cleanup_confirmed=true` and `cleanup_reason="suite completion"`. An earlier
+  run reached the scheduler diagnostic while the backing UI focus was
+  `dwarfmode/AnnouncementAlert`; after restoring that test's documented
+  `dwarfmode/Default` precondition, the final suite passed.
+- The live export contract passes and proves `ds.mount` exists while
+  `ds.mount_overlay` and `ds.show_overlay_fixture` are absent. The overlay live
+  contract uses the same implicit selection, click, inspection, render wait,
+  explicit unmount, and automatic cleanup paths as the ordinary-widget live
+  contract.
+- `luarocks lint dwarfspec-0.1.0-1.rockspec` passes. A local
+  `luarocks make --pack-binary-rock --deps-mode none` succeeds, and the packed
+  archive contains `lua/dwarfspec/overlay_mount.lua` and `rock_manifest`; the
+  archive also installs successfully into an isolated local tree with
+  dependency resolution disabled.
+  Source-rock `luarocks pack` cannot clone the configured public source URL:
+  GitHub returns `Repository not found` for
+  `https://github.com/dsisco11/DwarfSpec.git`; this does not affect the local
+  checkout package-content proof.
 
 ## Phase 6: Implement the complete-screen adapter
 

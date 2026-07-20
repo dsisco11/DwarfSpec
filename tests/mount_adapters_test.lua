@@ -83,6 +83,7 @@ end
 
 describe('DwarfSpec mount adapters', function()
     local factory
+    local last_overlay_controller
 
     before_each(function()
         factory = mount_adapters.new({
@@ -92,11 +93,36 @@ describe('DwarfSpec mount adapters', function()
             enrich_failure=function(_, operation, failure)
                 return operation .. ': ' .. failure
             end,
+            overlay_factory={
+                create=function(_, mount, widget, options)
+                    local controller = {
+                        mount=mount,
+                        widget=widget,
+                        options=options,
+                        calls={},
+                    }
+                    for _, name in ipairs({
+                        'layout', 'render', 'update', 'enable',
+                        'disable', 'restore',
+                    }) do
+                        controller[name] = function(self)
+                            table.insert(self.calls, name)
+                        end
+                    end
+                    controller.input = function(self, keys)
+                        table.insert(self.calls, 'input')
+                        self.keys = keys
+                        return true
+                    end
+                    last_overlay_controller = controller
+                    return controller
+                end,
+            },
         })
     end)
 
-    it('hosts widgets and overlays on an instrumented owned screen', function()
-        for _, category in ipairs({'widget', 'overlay'}) do
+    it('hosts widgets on an instrumented owned screen', function()
+        for _, category in ipairs({'widget'}) do
             local tracker = tracker_double()
             local mount = {
                 id=1,
@@ -147,6 +173,52 @@ describe('DwarfSpec mount adapters', function()
             assert.is_nil(rawget(result.host_screen, 'onRender'))
             assert.is_nil(rawget(component_class, 'onRender'))
         end
+    end)
+
+    it('routes overlay lifecycle through the generic owned host', function()
+        local tracker = tracker_double()
+        local mount = {
+            id=3,
+            render_tracker=tracker,
+            refresh_views=function() end,
+        }
+        local component = {focus_group={}}
+        local backing = {kind='backing'}
+        local cleanups = {}
+        local result = factory('overlay'):mount(mount, {
+            component=component,
+            options={
+                initial_pause=true,
+                backing_viewscreen=backing,
+            },
+        }, function(name, action)
+            table.insert(cleanups, {name=name, action=action})
+        end)
+
+        assert.equals(component, result.root)
+        assert.equals(component, result.host_screen.subviews[1])
+        assert.equals(backing, result.host_screen.shown_parent)
+        assert.equals(last_overlay_controller,
+            result.host_screen.overlay_controller)
+        assert.same({'enable', 'layout'},
+            last_overlay_controller.calls)
+        result.host_screen:renderSubviews({})
+        result.host_screen:onIdle()
+        assert.is_true(result.host_screen:inputToSubviews({SELECT=true}))
+        assert.same({'enable', 'layout', 'render', 'update', 'input'},
+            last_overlay_controller.calls)
+        assert.equals(4, #cleanups)
+        assert.matches('restore overlay component state',
+            cleanups[1].name, 1, true)
+        assert.matches('disable overlay component',
+            cleanups[4].name, 1, true)
+
+        for index=#cleanups,1,-1 do cleanups[index].action() end
+        assert.same({
+            'enable', 'layout', 'render', 'update', 'input',
+            'disable', 'restore',
+        }, last_overlay_controller.calls)
+        assert.is_false(result.host_screen.active)
     end)
 
     it('instruments and restores a complete screen instance', function()

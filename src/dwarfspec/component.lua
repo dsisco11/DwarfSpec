@@ -20,6 +20,7 @@ M.FAILURE_OWNERSHIP = {
 local RESERVED_OPTIONS = {
     backing_viewscreen=true,
     initial_pause=true,
+    overlay_position=true,
     viewport=true,
 }
 
@@ -83,6 +84,25 @@ local function normalize_viewport(viewport)
         viewport.height % 1 == 0,
         'mount option viewport.height must be a positive integer')
     return {width=viewport.width, height=viewport.height}
+end
+
+---Validates and copies an optional one-based overlay position.
+---@param position table|nil
+---@return table|nil
+local function normalize_overlay_position(position)
+    if position == nil then return nil end
+    assert(type(position) == 'table',
+        'mount option overlay_position must be a table with x and y')
+    for _, axis in ipairs({'x', 'y'}) do
+        local value = position[axis]
+        assert(type(value) == 'number' and value % 1 == 0,
+            ('mount option overlay_position.%s must be an integer')
+                :format(axis))
+    end
+    return {
+        x=position.x == 0 and 1 or position.x,
+        y=position.y == 0 and 1 or position.y,
+    }
 end
 
 ---Returns component attribute names in deterministic diagnostic order.
@@ -170,6 +190,8 @@ function M.new(types)
             attributes=attributes,
             backing_viewscreen=backing_viewscreen,
             initial_pause=initial_pause == nil and true or initial_pause,
+            overlay_position=normalize_overlay_position(
+                options.overlay_position),
             viewport=normalize_viewport(options.viewport),
         }
     end
@@ -181,6 +203,10 @@ function M.new(types)
     function boundary:prepare(value, options)
         local classification = self:classify(value)
         local normalized = self:normalize_options(options)
+        assert(classification.category == 'overlay' or
+            normalized.overlay_position == nil,
+            'mount option overlay_position is only valid for OverlayWidget ' ..
+                'components')
         if classification.input_form == 'instance' then
             local names = attribute_names(normalized.attributes)
             assert(#names == 0,

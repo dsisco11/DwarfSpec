@@ -280,6 +280,7 @@ function M.new(options)
         self.next_mount_id = self.next_mount_id + 1
         local mount = {
             id=self.next_mount_id,
+            run=self.run,
             category=prepared.category,
             input_form=prepared.input_form,
             component_class=prepared.class,

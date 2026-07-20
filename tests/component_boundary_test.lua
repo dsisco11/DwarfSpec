@@ -167,6 +167,26 @@ describe('DwarfSpec component boundary', function()
         end, 'mount option initial_pause must be a boolean')
     end)
 
+    it('normalizes overlay-only test positioning', function()
+        local prepared = boundary:prepare(TestOverlay(), {
+            overlay_position={x=0, y=-5},
+        })
+        assert.same({x=1, y=-5}, prepared.options.overlay_position)
+        assert.same({}, prepared.options.attributes)
+
+        assert.has_error(function()
+            boundary:prepare(PlainWidget, {
+                overlay_position={x=1, y=2},
+            })
+        end, 'mount option overlay_position is only valid for ' ..
+            'OverlayWidget components')
+        assert.has_error(function()
+            boundary:prepare(TestOverlay, {
+                overlay_position={x=1.5, y=2},
+            })
+        end, 'mount option overlay_position.x must be an integer')
+    end)
+
     it('reserves the initial mount and subject API names', function()
         assert.same({'mount', 'root', 'unmount'},
             component.PUBLIC_API.mount_context)

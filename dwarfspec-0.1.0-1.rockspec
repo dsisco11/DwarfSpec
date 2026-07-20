@@ -34,6 +34,7 @@ build = {
         ["dwarfspec.layout"] = "src/dwarfspec/layout.lua",
         ["dwarfspec.mount_context"] = "src/dwarfspec/mount_context.lua",
         ["dwarfspec.mount_adapters"] = "src/dwarfspec/mount_adapters.lua",
+        ["dwarfspec.overlay_mount"] = "src/dwarfspec/overlay_mount.lua",
         ["dwarfspec.render_instrumentation"] =
             "src/dwarfspec/render_instrumentation.lua",
         ["dwarfspec.render_tracker"] = "src/dwarfspec/render_tracker.lua",
