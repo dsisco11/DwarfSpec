@@ -188,8 +188,9 @@ describe('DwarfSpec mount context', function()
         assert.is_nil(context:find_view('original'))
         assert.is_nil(context.view_mounts[original])
         assert.has_error(function() original_subject:raw() end,
-            'DwarfSpec subject raw access rejected a view outside the ' ..
-                'current mount')
+            'DwarfSpec subject raw access rejected subject ' ..
+                'view_id="original" mount=1 because its view is outside ' ..
+                'the current mount')
     end)
 
     it('waits for the render caused by each mutating operation', function()
@@ -202,6 +203,60 @@ describe('DwarfSpec mount context', function()
 
         assert.equals('clicked', result)
         assert.equals(2, context.current.render_tracker:generation())
+    end)
+
+    it('rejects duplicate propagated IDs and recovers after tree changes',
+            function()
+        local first = {view_id='duplicate', subviews={}}
+        local second = {view_id='duplicate', subviews={}}
+        context:mount(TestWidget, {
+            name='duplicate-root',
+            subviews={first, second},
+        })
+
+        assert.has_error(function() context:find_view('duplicate') end,
+            'DwarfSpec get is ambiguous: view_id="duplicate" mount=1 ' ..
+                'matches 2 views')
+
+        context:mutate('remove duplicate child', function()
+            table.remove(context.current.root.subviews, 2)
+            context.current.render_tracker:completed()
+        end)
+
+        assert.equals(first, context:find_view('duplicate'))
+    end)
+
+    it('retains selected view and mount identity for command failures',
+            function()
+        local retained
+        local child = {view_id='submit', subviews={}}
+        context:mount(TestWidget, {
+            name='failure-root',
+            subviews={child},
+        })
+        context.failure_reporter=function(mount, operation, failure)
+            retained = {
+                operation=operation,
+                selected=mount.command_subject,
+                failure=failure,
+            }
+            return failure
+        end
+        context.subject_commands.click=function()
+            error('click exploded')
+        end
+        local selected = context:new_subject(child, 'submit')
+
+        local ok, message = pcall(selected.click, selected)
+
+        assert.is_false(ok)
+        assert.matches('operation="click" view_id="submit" ' ..
+            'subject_mount=1 current_mount=1', message, 1, true)
+        assert.matches('click exploded', message, 1, true)
+        assert.equals('click', retained.operation)
+        assert.same({mount_id=1, view_id='submit'}, retained.selected)
+        assert.matches('click exploded', retained.failure, 1, true)
+        assert.is_nil(context.current.command_subject)
     end)
 
     it('reports render failure without advancing completion', function()
@@ -234,8 +289,19 @@ describe('DwarfSpec mount context', function()
         assert.equals(2, context.current.id)
         assert.equals('second', second_subject:raw().name)
         assert.has_error(function() first_subject:raw() end,
-            'DwarfSpec subject raw access rejected a stale subject from ' ..
-            'mount 1; current mount is 2')
+            'DwarfSpec subject raw access rejected stale subject ' ..
+            'view_id="<root>" from mount 1; current mount is 2')
+        local invoked = false
+        context.subject_commands.click=function()
+            invoked = true
+        end
+        local command_ok, command_error = pcall(first_subject.click,
+            first_subject)
+        assert.is_false(command_ok)
+        assert.matches('view_id="<root>" subject_mount=1 ' ..
+            'current_mount=2', command_error, 1, true)
+        assert.matches('current mount is 2', command_error, 1, true)
+        assert.is_false(invoked)
     end)
 
     it('explicitly unmounts once and remains cleanup-idempotent', function()
@@ -251,8 +317,8 @@ describe('DwarfSpec mount context', function()
             'unmount:explicit', 'settle:explicit',
         }, events)
         assert.has_error(function() root_subject:raw() end,
-            'DwarfSpec subject raw access requires a mounted component; ' ..
-            'call ds.mount(component, options) first')
+            'DwarfSpec subject raw access rejected stale subject ' ..
+            'view_id="<root>" from mount 1; no component is currently mounted')
         assert.is_true(cleanup.run(registry, 'post-unmount reset'))
         assert.same(4, #events)
     end)

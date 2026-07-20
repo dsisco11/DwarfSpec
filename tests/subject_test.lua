@@ -28,6 +28,9 @@ describe('DwarfSpec subject commands', function()
                     return {text='saved'}
                 end,
             },
+            invoke_subject_command=function(self, selected, name, ...)
+                return self.subject_commands[name](selected, ...)
+            end,
             resolve_subject=function(_, _, operation)
                 assert.equals('subject raw access', operation)
                 return {view_id='status'}
@@ -35,7 +38,10 @@ describe('DwarfSpec subject commands', function()
         }
         local subject = subject_module.new(context, {id=9}, {})
 
+        assert.equals(9, subject.mount_id)
+        assert.equals('<root>', subject.view_id)
         assert.equals(subject, subject:click('right'))
+        assert.same({{'click', 'right'}}, calls)
         assert.equals(subject, subject:hover('top_left'))
         assert.equals(subject, subject:move_pointer('center'))
         assert.equals(subject, subject:input('SELECT'))

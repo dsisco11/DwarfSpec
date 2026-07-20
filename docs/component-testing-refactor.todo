@@ -481,31 +481,67 @@ Phase 6 evidence (2026-07-20):
 
 ## Phase 7: Add implicit selection and fluent subjects
 
-- [ ] Implement `ds.get(view_id)` against only the current mount's propagated
+- [x] Implement `ds.get(view_id)` against only the current mount's propagated
   view-id index.
-- [ ] Return a run-owned subject wrapper containing the selected view and mount
+- [x] Return a run-owned subject wrapper containing the selected view and mount
   identity.
-- [ ] Reject stale subjects after unmount or replacement mount.
-- [ ] Move view-oriented operations from `ds` functions onto subjects:
+- [x] Reject stale subjects after unmount or replacement mount.
+- [x] Move view-oriented operations from `ds` functions onto subjects:
   `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`, and `text`.
-- [ ] Make interaction methods return a useful subject so compatible commands
+- [x] Make interaction methods return a useful subject so compatible commands
   can be chained.
-- [ ] Define when a command preserves the subject, changes it, or returns a
+- [x] Define when a command preserves the subject, changes it, or returns a
   scalar observation.
-- [ ] Keep command execution immediate within the live coroutine; do not add a
+- [x] Keep command execution immediate within the live coroutine; do not add a
   deferred command queue.
-- [ ] Add `subject:raw()` as an explicitly documented escape hatch and ensure
+- [x] Add `subject:raw()` as an explicitly documented escape hatch and ensure
   internal APIs never require callers to use it.
-- [ ] Make mount-scoped capture commands infer the current root.
-- [ ] Include the selected view id and current mount identity in failures and
+- [x] Make mount-scoped capture commands infer the current root.
+- [x] Include the selected view id and current mount identity in failures and
   retained diagnostics.
 
 Exit evidence:
 
-- [ ] Representative tests use `ds.get('id'):click()` and Busted assertions
+- [x] Representative tests use `ds.get('id'):click()` and Busted assertions
   without passing a fixture, screen, root, or raw view to normal commands.
-- [ ] Unit tests cover fluent return behavior, stale subjects, duplicate ids,
+- [x] Unit tests cover fluent return behavior, stale subjects, duplicate ids,
   missing ids, and dynamic view-tree changes.
+
+Phase 7 evidence (2026-07-20):
+
+- `ds.get(view_id)` now accepts one view id, searches the refreshed index for
+  the implicit current mount, and rejects missing or duplicate ids with the
+  requested id and mount identity. The run-owned subject stores stable
+  `view_id` and `mount_id` identity while retaining only weak native/context
+  references.
+- Subject commands execute immediately through the owning mount context.
+  `click`, `hover`, `move_pointer`, `input`, and `type` preserve the subject;
+  `inspect` returns a stable table and `text` returns its text scalar. No
+  current command changes selection. `docs/writing-tests.md` and `README.md`
+  document these semantics and reserve `raw()` for exceptional native access.
+- Stale subjects are rejected after explicit unmount, replacement mount, and
+  dynamic subtree removal. Operational failures and retained mount evidence
+  include the selected view id, its original mount id, and the current mount
+  id. Mount-scoped `capture_view_tree(name)` infers the current component root;
+  the legacy fixture capture form remains only for the pending fixture
+  migration.
+- Focused Busted runs pass 2 subject-command tests, 14 mount-context tests, and
+  4 public mount-command tests. They cover immediate fluent returns and scalar
+  observations, missing and duplicate ids, dynamic add/remove and duplicate
+  recovery, stale raw and command access, implicit capture roots, and retained
+  selection diagnostics.
+- `tools/Run-UnitTests.ps1` passes 120 tests with no failures, errors, or
+  pending tests. `tools/Check-Lua.ps1` passes Lua 5.4.6 syntax and formatting
+  checks for 82 Lua files; `luarocks lint dwarfspec-0.1.0-1.rockspec` and
+  `git diff --check` pass.
+- DFHack's embedded Lua 5.3 parsed and executed the complete 19-test
+  product-independent live suite, including ordinary widget, overlay widget,
+  and complete screen classes and existing instances. Fluent editing,
+  clicking, input, inspection, dynamic selection, implicit tree capture, and
+  stale-subject diagnostics pass without passing raw targets to normal
+  component commands. Report `dwarfspec-99019562-6cc01600.json` records
+  `state=passed`, zero failures/errors, `cleanup_confirmed=true`, and
+  `cleanup_reason="suite completion"`.
 
 ## Phase 8: Harden lifecycle and failure recovery
 

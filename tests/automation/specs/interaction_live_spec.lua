@@ -12,8 +12,8 @@ describe('automation live interactions', function()
 
     it('shows, finds, inspects, hovers, clicks, types, captures, and dismisses',
             function()
-        local target = ds.get(screen, 'tooltip_target')
-        local input = ds.get(screen, 'input_echo')
+        local target = screen.subviews.tooltip_target
+        local input = screen.subviews.input_echo
         local initial_pointer_function = dfhack.screen.getMousePos
 
         local inspection = ds.inspect(target)

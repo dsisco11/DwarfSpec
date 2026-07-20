@@ -47,6 +47,8 @@ local function cleanup_mount(context, mount)
     end
     mount.owned_views = setmetatable({}, {__mode='k'})
     mount.views_by_id = {}
+    mount.duplicate_view_ids = {}
+    mount.command_subject = nil
     for subject in pairs(mount.selected_subjects) do
         context.subject_mounts[subject] = nil
     end
@@ -110,6 +112,7 @@ function M.new(options)
         end
         mount.owned_views = setmetatable({}, {__mode='k'})
         mount.views_by_id = {}
+        mount.duplicate_view_ids = {}
         local visited = setmetatable({}, {__mode='k'})
 
         ---Indexes one view and its ordered descendants exactly once.
@@ -120,9 +123,18 @@ function M.new(options)
             self.view_mounts[view] = mount.id
             mount.owned_views[view] = true
             local view_id = view.view_id
-            if type(view_id) == 'string' and view_id ~= '' and
-                    mount.views_by_id[view_id] == nil then
-                mount.views_by_id[view_id] = view
+            if type(view_id) == 'string' and view_id ~= '' then
+                local existing = mount.views_by_id[view_id]
+                if existing == nil then
+                    mount.views_by_id[view_id] = view
+                else
+                    local duplicates = mount.duplicate_view_ids[view_id]
+                    if duplicates == nil then
+                        duplicates = {existing}
+                        mount.duplicate_view_ids[view_id] = duplicates
+                    end
+                    table.insert(duplicates, view)
+                end
             end
             for _, child in ipairs(view.subviews or {}) do visit(child) end
         end
@@ -135,6 +147,12 @@ function M.new(options)
     ---@return table|nil
     function context:find_view(view_id)
         local mount = self:require_current('get')
+        local duplicates = mount.duplicate_view_ids[view_id]
+        if duplicates then
+            error(('DwarfSpec get is ambiguous: view_id=%q mount=%s ' ..
+                'matches %d views'):format(view_id, tostring(mount.id),
+                    #duplicates), 2)
+        end
         return mount.views_by_id[view_id]
     end
 
@@ -189,12 +207,13 @@ function M.new(options)
 
     ---Creates and weakly tracks one subject in the current mount.
     ---@param view table
+    ---@param view_id string|nil
     ---@return table
-    function context:new_subject(view)
+    function context:new_subject(view, view_id)
         local mount = self:require_current('subject creation')
         assert(self.view_mounts[view] == mount.id,
             'subject view is outside the current mount')
-        local subject = self.subject_module.new(self, mount, view)
+        local subject = self.subject_module.new(self, mount, view, view_id)
         self.subject_mounts[subject] = mount.id
         mount.selected_subjects[subject] = true
         return subject
@@ -205,25 +224,74 @@ function M.new(options)
     ---@param operation string
     ---@return table
     function context:resolve_subject(subject, operation)
-        local mount = self:require_current(operation)
+        local mount = self.current
+        assert(mount and mount.active,
+            ('DwarfSpec %s rejected stale subject view_id=%q from mount %s; ' ..
+                'no component is currently mounted'):format(operation,
+                    subject.view_id, tostring(subject.mount_id)))
         assert(self.subject_mounts[subject] == mount.id and
             subject.mount_id == mount.id,
-            ('DwarfSpec %s rejected a stale subject from mount %s; ' ..
-                'current mount is %s'):format(operation,
+            ('DwarfSpec %s rejected stale subject view_id=%q from mount %s; ' ..
+                'current mount is %s'):format(operation, subject.view_id,
                     tostring(subject.mount_id), tostring(mount.id)))
         local view = subject._references and subject._references.view
-        assert(view, 'DwarfSpec subject native object is no longer available')
+        assert(view, ('DwarfSpec %s subject view_id=%q mount=%s native ' ..
+            'object is no longer available'):format(operation,
+                subject.view_id, tostring(subject.mount_id)))
         assert(self.view_mounts[view] == mount.id,
-            ('DwarfSpec %s rejected a view outside the current mount')
-                :format(operation))
+            ('DwarfSpec %s rejected subject view_id=%q mount=%s because ' ..
+                'its view is outside the current mount'):format(operation,
+                    subject.view_id, tostring(subject.mount_id)))
         return view
+    end
+
+    ---Executes one subject command immediately with retained selection context.
+    ---@param subject table
+    ---@param operation string
+    ---@param ... any
+    ---@return any
+    function context:invoke_subject_command(subject, operation, ...)
+        assert(type(operation) == 'string' and operation ~= '',
+            'subject operation name must be a nonempty string')
+        local mount = self.current
+        local previous = mount and mount.command_subject or nil
+        if mount then
+            mount.command_subject = {
+                mount_id=subject.mount_id,
+                view_id=subject.view_id,
+            }
+        end
+        local arguments = table.pack(...)
+        local results = table.pack(xpcall(function()
+            self:resolve_subject(subject, operation)
+            local command = self.subject_commands[operation]
+            assert(type(command) == 'function',
+                'DwarfSpec subject command is unavailable: ' .. operation)
+            return command(subject,
+                table.unpack(arguments, 1, arguments.n))
+        end, debug.traceback))
+        local reported
+        if not results[1] then
+            reported = mount and
+                self:report_failure(mount, operation, results[2]) or
+                tostring(results[2])
+        end
+        if mount then mount.command_subject = previous end
+        if not results[1] then
+            error(('DwarfSpec subject failure: operation=%q view_id=%q ' ..
+                'subject_mount=%s current_mount=%s cause=%s')
+                :format(operation, subject.view_id,
+                    tostring(subject.mount_id),
+                    tostring(mount and mount.id or nil), reported), 2)
+        end
+        return table.unpack(results, 2, results.n)
     end
 
     ---Returns a subject for the current component root.
     ---@return table
     function context:root()
         local mount = self:require_current('root')
-        return self:new_subject(mount.root)
+        return self:new_subject(mount.root, mount.root.view_id or '<root>')
     end
 
     ---Unmounts and settles the current component through scoped LIFO cleanup.
@@ -297,6 +365,8 @@ function M.new(options)
             selected_subjects=setmetatable({}, {__mode='k'}),
             owned_views=setmetatable({}, {__mode='k'}),
             views_by_id={},
+            duplicate_view_ids={},
+            command_subject=nil,
             options=prepared.options,
         }
         mount.refresh_views = function() self:refresh_views(mount) end

@@ -21,6 +21,40 @@ Screen fixture modules return a table with `new(options)` and produce a DFHack
 screen. DwarfSpec privately instruments successful renders and synchronizes
 fixture interactions without requiring fields or hooks in the fixture class.
 
+## Component subjects
+
+`ds.mount(component, options)` establishes the test's one implicit current
+mount and returns a subject for its root. `ds.get(view_id)` searches only that
+mount's propagated view-id index and returns another subject. Missing and
+duplicate ids fail with the requested id and mount identity instead of choosing
+an arbitrary view.
+
+```lua
+ds.mount(MyComponent, {value='draft'})
+ds.get('editor'):click():type('saved')
+ds.get('submit'):click()
+
+local state = ds.get('status'):inspect()
+assert.equals('saved', state.text)
+assert.equals('saved', ds.get('status'):text())
+```
+
+Commands execute immediately in the live test coroutine. `click`, `hover`,
+`move_pointer`, `input`, and `type` preserve and return their subject for
+chaining. `inspect` returns a stable diagnostic table, while `text` returns the
+inspected text scalar. No current subject command changes the selection; call
+`ds.get` to obtain a different subject. A subject is valid only while its
+original mount remains current; unmounting or replacing that mount makes the
+subject stale.
+
+`subject:raw()` exposes the underlying DFHack object for an exceptional native
+API that DwarfSpec does not model. Normal selection, interaction, inspection,
+capture, synchronization, and assertions do not require this escape hatch.
+
+Mount-scoped evidence also uses the implicit context. For example,
+`ds.capture_view_tree('before-submit')` captures the current component root;
+callers do not pass a root or screen.
+
 ## Condition waits
 
 `ds.await(description, query, options)` polls a read-only query between live
@@ -119,10 +153,12 @@ the external command has no separate overlay-fixture option.
 The first-release surface is intentionally small:
 
 - synchronization: `await`, `wait_frames`;
+- components: `mount`, `root`, `get`, `unmount`, `resize`;
+- subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
+  `text`, and the exceptional `raw` escape hatch;
 - fixtures: `show_fixture`, `dismiss`, `stage_overlay_fixture`;
-- queries: `get`, `inspect`;
-- input: `set_pointer`, `move_pointer`, `clear_pointer`, `click`, `input`,
-  `type`; and
+- legacy fixture input: `set_pointer`, `clear_pointer`, and the fixture-target
+  compatibility forms of interaction commands; and
 - evidence: `capture_view_tree`, `capture_screen`.
 
 Input commands perform their own required render or frame synchronization.

@@ -4,6 +4,7 @@ local M = {}
 
 ---@class dwarfspec.Subject
 ---@field mount_id integer
+---@field view_id string
 ---@field _references table
 local Subject = {}
 Subject.__index = Subject
@@ -17,11 +18,9 @@ local function invoke(subject, name, ...)
     local context = subject._references.context
     assert(context,
         'DwarfSpec subject is unavailable because its run has ended')
-    local command = context.subject_commands and
-        context.subject_commands[name]
-    assert(type(command) == 'function',
-        'DwarfSpec subject command is unavailable: ' .. name)
-    return command(subject, ...)
+    assert(type(context.invoke_subject_command) == 'function',
+        'DwarfSpec subject command context is unavailable')
+    return context:invoke_subject_command(subject, name, ...)
 end
 
 ---Clicks this subject and preserves it for fluent chaining.
@@ -90,13 +89,15 @@ end
 ---@param context table
 ---@param mount table
 ---@param view table
+---@param view_id string|nil
 ---@return dwarfspec.Subject
-function M.new(context, mount, view)
+function M.new(context, mount, view, view_id)
     assert(type(context) == 'table' and type(mount) == 'table',
         'subject requires an owning mount context')
     assert(type(view) == 'table', 'subject requires a native component object')
     local subject = setmetatable({
         mount_id=mount.id,
+        view_id=view_id or view.view_id or '<root>',
         _references=setmetatable({
             context=context,
             mount=mount,

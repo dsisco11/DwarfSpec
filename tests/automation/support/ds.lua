@@ -406,27 +406,30 @@ local subject_module = load_automation_module(package_root,
         end)
     end
 
-    ---Finds one native propagated view id below a live fixture root.
-    ---@param root table
+    ---Selects one unique propagated view id from the implicit current mount.
     ---@param view_id string
     ---@return table
-    function ds.get(root, view_id)
-        if view_id == nil then
-            view_id = root
-            local mount = context.mount_context:require_current('get')
-            assert(type(view_id) == 'string' and view_id ~= '',
-                'view id must be a nonempty string')
-            local view = context.mount_context:find_view(view_id)
-            assert(view and view.view_id == view_id,
-                'current mount view id was not found: ' .. view_id)
-            return context.mount_context:new_subject(view)
-        end
+    function ds.get(view_id)
+        local mount = context.mount_context:require_current('get')
         assert(type(view_id) == 'string' and view_id ~= '',
             'view id must be a nonempty string')
-        local view = root.subviews and root.subviews[view_id]
-        assert(view and view.view_id == view_id,
-            'live view id was not found: ' .. view_id)
-        return view
+        local previous = mount.command_subject
+        mount.command_subject = {mount_id=mount.id, view_id=view_id}
+        local ok, view = pcall(context.mount_context.find_view,
+            context.mount_context, view_id)
+        if ok and view == nil then
+            ok = false
+            view = ('DwarfSpec get failed: view_id=%q mount=%s was not found')
+                :format(view_id, tostring(mount.id))
+        end
+        if not ok then
+            local reported = context.mount_context:report_failure(
+                mount, 'get', view)
+            mount.command_subject = previous
+            error(reported, 2)
+        end
+        mount.command_subject = previous
+        return context.mount_context:new_subject(view, view_id)
     end
 
     ---Returns a stable read-only diagnostic table for one live view.
@@ -437,11 +440,21 @@ local subject_module = load_automation_module(package_root,
         return diagnostics.inspect_view(view)
     end
 
-    ---Captures and retains one live fixture tree under a caller-selected name.
-    ---@param root table
-    ---@param name string
+    ---Captures a current mount tree or a temporary legacy fixture tree.
+    ---@param root_or_name table|string
+    ---@param legacy_name string|nil
     ---@return table
-    function ds.capture_view_tree(root, name)
+    function ds.capture_view_tree(root_or_name, legacy_name)
+        local root
+        local name
+        if legacy_name == nil then
+            name = root_or_name
+            root = context.mount_context:require_current(
+                'capture_view_tree').root
+        else
+            root = root_or_name
+            name = legacy_name
+        end
         assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
             'capture name must be a relative identifier')
         context.run.captures = context.run.captures or {}

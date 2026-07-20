@@ -92,13 +92,42 @@ describe('DwarfSpec public mount commands', function()
 
         assert.equals('root', mounted:raw().name)
         assert.equals(mounted:raw(), ds.root():raw())
-        assert.equals(child, ds.get('child'):raw())
+        local selected = ds.get('child')
+        assert.equals(child, selected:raw())
+        assert.equals('child', selected.view_id)
+        local tree = ds.capture_view_tree('implicit-tree')
+        assert.equals('child', tree.children[1].view_id)
         assert.is_true(screen.active)
 
         ds.unmount()
 
         assert.is_false(screen.active)
         assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('reports missing and duplicate IDs with current mount identity',
+            function()
+        local first = {view_id='duplicate', subviews={}}
+        local second = {view_id='duplicate', subviews={}}
+        ds.mount(TestWidget, {
+            name='selection-errors',
+            subviews={first, second},
+        })
+
+        local missing_ok, missing = pcall(ds.get, 'missing')
+        local duplicate_ok, duplicate = pcall(ds.get, 'duplicate')
+
+        assert.is_false(missing_ok)
+        assert.matches('operation="get" mount=1', missing, 1, true)
+        assert.matches('selected_view_id="missing" selected_mount=1',
+            missing, 1, true)
+        assert.matches('view_id="missing" mount=1 was not found',
+            missing, 1, true)
+        assert.is_false(duplicate_ok)
+        assert.matches('selected_view_id="duplicate" selected_mount=1',
+            duplicate, 1, true)
+        assert.matches('view_id="duplicate" mount=1 matches 2 views',
+            duplicate, 1, true)
     end)
 
     it('reports public commands clearly without a current mount', function()

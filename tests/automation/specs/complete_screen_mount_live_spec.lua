@@ -160,8 +160,12 @@ describe('complete screen component mount', function()
         ds.get('open_modal'):click()
         assert.is_true(screen.modal:isActive())
         assert.equals(screen, ds.root():raw())
-        assert.has_error(function() ds.get('modal_only') end,
-            'current mount view id was not found: modal_only')
+        local selected, selection_error = pcall(ds.get, 'modal_only')
+        assert.is_false(selected)
+        assert.matches('selected_view_id="modal_only"', selection_error,
+            1, true)
+        assert.matches('view_id="modal_only" mount=1 was not found',
+            selection_error, 1, true)
         root:input('CUSTOM_A')
         assert.equals('handled', screen.modal_result)
         assert.is_false(screen.modal:isActive())

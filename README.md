@@ -174,15 +174,22 @@ frames is itself part of the behavior being tested.
 | `ds.show_fixture(path, options)` | Create and show a test-owned screen. |
 | `ds.dismiss(screen)` | Dismiss a test-owned screen early. |
 | `ds.stage_overlay_fixture(path)` | Stage a test-owned DFHack overlay. |
-| `ds.get(root, view_id)` | Find a live child view by its propagated ID. |
-| `ds.inspect(view)` | Return stable, read-only information about a view. |
+| `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject. |
+| `ds.root()` | Return a subject for the implicit current mount root. |
+| `ds.get(view_id)` | Select a unique propagated ID from the implicit current mount. |
+| `ds.unmount()` | Cleanly remove and settle the implicit current mount. |
+| `ds.resize(width, height)` | Resize the mounted host and wait for its render. |
+| `subject:inspect()` | Return stable, read-only information about the selected view. |
+| `subject:text()` | Return the selected view's inspected text value. |
+| `subject:raw()` | Access the native object as an exceptional escape hatch. |
 | `ds.set_pointer(x, y)` | Set the run's virtual pointer position. |
-| `ds.move_pointer(view, anchor)` | Move the pointer into a live view. |
+| `subject:move_pointer(anchor)` | Move the pointer into the selected view. |
+| `subject:hover(anchor)` | Hover the selected view and preserve the subject. |
 | `ds.clear_pointer()` | Restore physical pointer queries. |
-| `ds.click(view, button)` | Click a live view. |
-| `ds.input(keys, screen)` | Send native DFHack input to an active screen. |
-| `ds.type(text, screen)` | Type ASCII text into a test-owned screen. |
-| `ds.capture_view_tree(root, name)` | Retain a structured view-tree capture. |
+| `subject:click(button)` | Click the selected view and preserve the subject. |
+| `subject:input(keys)` | Send native DFHack input through the mounted screen. |
+| `subject:type(text)` | Type ASCII text through the mounted screen. |
+| `ds.capture_view_tree(name)` | Retain the implicit mount's structured view tree. |
 | `ds.capture_screen(name, options)` | Retain a bounded screen-cell capture. |
 
 See [Writing live tests](docs/writing-tests.md) for fixture and overlay

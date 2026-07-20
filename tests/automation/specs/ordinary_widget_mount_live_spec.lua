@@ -89,6 +89,7 @@ describe('ordinary widget component host', function()
             viewport={width=60, height=20},
         })
         local editor = ds.get('editor')
+        local tree = ds.capture_view_tree('ordinary-implicit-tree')
 
         assert.is_true(root:raw().saw_real_painter)
         assert.equals(60, root:raw().frame_parent_rect.width)
@@ -96,6 +97,7 @@ describe('ordinary widget component host', function()
         assert.is_true(editor:inspect().visible)
         assert.is_true(editor:inspect().active)
         assert.is_truthy(editor:inspect().body)
+        assert.equals('nested_panel', tree.children[1].view_id)
 
         editor:click():type('saved')
         assert.is_true(editor:inspect().focused)
@@ -111,8 +113,11 @@ describe('ordinary widget component host', function()
 
         ds.unmount()
         assert.equals(original_pause, df.global.pause_state)
-        assert.has_error(function() root:raw() end,
-            'DwarfSpec subject raw access requires a mounted component; ' ..
-                'call ds.mount(component, options) first')
+        local available, stale_error = pcall(root.raw, root)
+        assert.is_false(available)
+        assert.matches('subject raw access rejected stale subject ' ..
+            'view_id="<root>" from mount ', stale_error, 1, true)
+        assert.matches('no component is currently mounted', stale_error,
+            1, true)
     end)
 end)
