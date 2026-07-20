@@ -4,6 +4,7 @@ local M = {}
 
 local APPROVED_FIXTURES = {
     cover_screen=true,
+    failing_screen=true,
     interaction_screen=true,
     tooltip_screen=true,
 }

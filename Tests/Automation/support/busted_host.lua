@@ -166,7 +166,7 @@ end
 ---Creates the standard Busted filter options for one automation run.
 ---@param options table
 ---@return table
-local function filter_options(options)
+function M.filter_options(options)
     return {
         tags=filter_list(options.tags),
         excludeTags=filter_list(options.exclude_tags),
@@ -178,6 +178,33 @@ local function filter_options(options)
         nokeepgoing=false,
         suppressPending=false,
     }
+end
+
+---Discovers only approved live-spec files from the selected repository root.
+---@param repo_root string
+---@param loader function
+---@param spec string|nil
+---@return table
+function M.discover_tests(repo_root, loader, spec)
+    assert(type(repo_root) == 'string' and repo_root ~= '',
+        'repository root must be a nonempty string')
+    assert(type(loader) == 'function', 'live spec discovery requires a loader')
+    if spec then
+        assert(type(spec) == 'string' and
+            spec:match('^[%w_.-]+_live_spec%.lua$'),
+            'live spec must name one *_live_spec.lua file without a path')
+    end
+    local roots
+    if spec then
+        roots = {join_path(repo_root, 'Tests/Automation/specs/' .. spec)}
+    else
+        roots = {join_path(repo_root, 'Tests/Automation/specs')}
+    end
+    return loader(roots, {'_live_spec%.lua$'}, {
+        excludes={},
+        recursive=true,
+        verbose=false,
+    })
 end
 
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
@@ -199,22 +226,12 @@ local function execute_suite(repo_root, run, scheduler_module, scheduler)
         'Tests/Automation/support/output_handler.lua')))()
     output_factory.new(busted, run)
     require('busted.modules.filter_loader')()(busted,
-        filter_options(run.options))
+        M.filter_options(run.options))
 
     local loader = require('busted.modules.test_file_loader')(
         busted, {'lua'})
-    local roots
-    if run.options.spec then
-        roots = {join_path(repo_root,
-            'Tests/Automation/specs/' .. run.options.spec)}
-    else
-        roots = {join_path(repo_root, 'Tests/Automation/specs')}
-    end
-    run.discovered_files = loader(roots, {'_live_spec%.lua$'}, {
-        excludes={},
-        recursive=true,
-        verbose=false,
-    })
+    run.discovered_files = M.discover_tests(repo_root, loader,
+        run.options.spec)
 
     busted.randomize = false
     busted.sort = true

@@ -162,4 +162,47 @@ describe('automation host ownership', function()
         assert.equals('\0', report.failures[1].trace)
         assert.is_true(report.cleanup_confirmed)
     end)
+
+    it('normalizes Busted filters and discovers only approved live specs',
+            function()
+        local filters = host.filter_options({
+            tags='fast',
+            exclude_tags={'slow'},
+            filter='tooltip',
+            names={'one'},
+            filter_out='legacy',
+        })
+        local received_roots
+        local received_patterns
+        local received_options
+        local discovered = host.discover_tests('repository',
+            function(roots, patterns, options)
+                received_roots = roots
+                received_patterns = patterns
+                received_options = options
+                return {'tooltip_live_spec.lua'}
+            end, 'tooltip_live_spec.lua')
+
+        assert.same({'fast'}, filters.tags)
+        assert.same({'slow'}, filters.excludeTags)
+        assert.same({'tooltip'}, filters.filter)
+        assert.same({'one'}, filters.name)
+        assert.same({'legacy'}, filters.filterOut)
+        assert.same({'tooltip_live_spec.lua'}, discovered)
+        assert.matches('Tests[/\\]Automation[/\\]specs[/\\]' ..
+            'tooltip_live_spec.lua$', received_roots[1])
+        assert.same({'_live_spec%.lua$'}, received_patterns)
+        assert.is_true(received_options.recursive)
+        assert.has_error(function()
+            host.discover_tests('repository', function() end,
+                '../outside.lua')
+        end, 'live spec must name one *_live_spec.lua file without a path')
+    end)
+
+    it('rejects unsafe host run identifiers before scheduling work', function()
+        assert.has_error(function()
+            host.start('.', options('../unsafe'))
+        end, 'run id must contain only letters, digits, dot, underscore, or dash')
+        assert.equals(0, #callbacks)
+    end)
 end)
