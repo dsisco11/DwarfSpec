@@ -421,21 +421,63 @@ Phase 5 evidence (2026-07-20):
 
 ## Phase 6: Implement the complete-screen adapter
 
-- [ ] Accept `gui.ZScreen` through the same `ds.mount()` dispatcher.
-- [ ] Show the supplied screen directly rather than placing it inside another
+- [x] Accept `gui.ZScreen` through the same `ds.mount()` dispatcher.
+- [x] Show the supplied screen directly rather than placing it inside another
   covering screen.
-- [ ] Install and remove automatic render interception on the mounted instance.
-- [ ] Preserve native screen activation, dismissal, parent input forwarding,
+- [x] Install and remove automatic render interception on the mounted instance.
+- [x] Preserve native screen activation, dismissal, parent input forwarding,
   and pause-state behavior.
-- [ ] Associate the complete screen and all descendants with the current mount.
-- [ ] Verify modal and child-screen behavior without allowing an unowned screen
+- [x] Associate the complete screen and all descendants with the current mount.
+- [x] Verify modal and child-screen behavior without allowing an unowned screen
   to become the implicit component root.
 
 Exit evidence:
 
-- [ ] Complete-screen component tests use the same `ds.mount`, `ds.get`, and
+- [x] Complete-screen component tests use the same `ds.mount`, `ds.get`, and
   fluent subject commands as widget tests.
-- [ ] The tested screen has no test-only render counter or lifecycle hook.
+- [x] The tested screen has no test-only render counter or lifecycle hook.
+
+Phase 6 evidence (2026-07-20):
+
+- `src/dwarfspec/mount_adapters.lua` dispatches the `screen` category to the
+  supplied `gui.ZScreen` instance itself. It installs private render
+  interception and optional fixed-viewport resize interception only on that
+  instance, passes `backing_viewscreen` to its native `show()` method, and
+  restores both intercepted methods after native dismissal. It does not create
+  a covering host for complete screens or replace `onInput` or `dismiss`.
+- `src/dwarfspec/mount_context.lua` keeps the mounted screen as the immutable
+  implicit root and recursively indexes its ordered native view descendants.
+  `tests/automation/support/ds.lua` routes input to the current native child
+  only when its parent chain contains the mounted screen; this preserves modal
+  input while an unrelated screen cannot become the component root.
+- The reserved subject operations now forward synchronously to the existing
+  run-owned commands. Mutating subject methods preserve the subject for fluent
+  chaining, while `inspect()` and `text()` return stable observations. The
+  ordinary-widget and complete-screen live contracts both use forms such as
+  `ds.get('submit'):click()` and `ds.get('status'):text()` without a deferred
+  command queue.
+- `tests/automation/specs/complete_screen_mount_live_spec.lua` mounts both a
+  class and an existing instance. It proves direct activation, nested
+  descendant selection, fixed viewport behavior, automatic render-method
+  restoration, native dismissal, parent pause-input forwarding, initial pause
+  and restoration, fluent editing and clicking, and a modal child that handles
+  input without changing `ds.root()` or making its `modal_only` view selectable.
+- `tests/automation/specs/component_render_tracking_live_spec.lua` retains a
+  minimal complete screen with no `onRender`, render counter, or automation
+  lifecycle hook. DwarfSpec instruments and restores the instance without
+  changing its class.
+- `tools/Run-UnitTests.ps1` passes 117 tests with no failures, errors, or
+  pending tests. Focused contracts cover exact direct-screen identity,
+  backing-screen and viewport forwarding, unchanged native input and dismissal
+  methods, reversible interception, fluent subject returns and observations,
+  and native-child input resolution that rejects unrelated screens.
+- `tools/Check-Lua.ps1` passes Lua 5.4.6 syntax and formatting checks for 82
+  Lua files. The focused complete-screen live suite passes two tests in
+  DFHack's embedded Lua 5.3 and records `cleanup_confirmed=true` in run
+  `dwarfspec-97791203-2fa9cf49`.
+- The complete product-independent live suite passes 19 tests with no failures
+  or errors in run `dwarfspec-97831000-60fd04c3`. Its terminal report records
+  `cleanup_confirmed=true` and `cleanup_reason="suite completion"`.
 
 ## Phase 7: Add implicit selection and fluent subjects
 

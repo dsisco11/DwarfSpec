@@ -94,6 +94,7 @@ function M.new(options)
         current=nil,
         next_mount_id=0,
         subject_mounts=setmetatable({}, {__mode='k'}),
+        subject_commands={},
         view_mounts=setmetatable({}, {__mode='k'}),
     }
 

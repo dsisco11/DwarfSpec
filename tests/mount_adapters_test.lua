@@ -226,24 +226,47 @@ describe('DwarfSpec mount adapters', function()
         local original = function(self)
             self.original_called = true
         end
+        local original_resize = function(self, width, height)
+            self.layout_width = width
+            self.layout_height = height
+        end
+        local original_input = function() return 'native-input' end
         local screen = setmetatable({
             active=false,
+            initial_pause=false,
             subviews={},
             onRender=original,
+            onResize=original_resize,
+            onInput=original_input,
         }, {__index=base})
         local tracker = tracker_double()
         local mount = {id=2, render_tracker=tracker}
         local cleanups = {}
+        local backing = {child={}}
 
-        local result = factory('screen'):mount(mount, {component=screen},
+        local result = factory('screen'):mount(mount, {
+            component=screen,
+            options={
+                backing_viewscreen=backing,
+                viewport={width=44, height=18},
+            },
+        },
             function(_, action) table.insert(cleanups, action) end)
 
         assert.equals(screen, result.root)
         assert.equals(screen, result.host_screen)
+        assert.equals(backing, screen.shown_parent)
+        assert.equals(44, screen.layout_width)
+        assert.equals(18, screen.layout_height)
+        assert.is_false(screen.initial_pause)
+        assert.equals(original_input, rawget(screen, 'onInput'))
         assert.is_true(screen.original_called)
         assert.equals(1, tracker.completions)
-        cleanups[2]()
-        cleanups[1]()
+        assert.equals(3, #cleanups)
+        for index=#cleanups,1,-1 do cleanups[index]() end
+        assert.is_false(screen.active)
         assert.equals(original, rawget(screen, 'onRender'))
+        assert.equals(original_resize, rawget(screen, 'onResize'))
+        assert.equals(original_input, rawget(screen, 'onInput'))
     end)
 end)

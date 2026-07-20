@@ -8,6 +8,75 @@ local M = {}
 local Subject = {}
 Subject.__index = Subject
 
+---Invokes one command through the subject's current run-owned context.
+---@param subject dwarfspec.Subject
+---@param name string
+---@param ... any
+---@return any
+local function invoke(subject, name, ...)
+    local context = subject._references.context
+    assert(context,
+        'DwarfSpec subject is unavailable because its run has ended')
+    local command = context.subject_commands and
+        context.subject_commands[name]
+    assert(type(command) == 'function',
+        'DwarfSpec subject command is unavailable: ' .. name)
+    return command(subject, ...)
+end
+
+---Clicks this subject and preserves it for fluent chaining.
+---@param button string|nil
+---@return dwarfspec.Subject
+function Subject:click(button)
+    invoke(self, 'click', button)
+    return self
+end
+
+---Moves the pointer over this subject and preserves it for fluent chaining.
+---@param anchor string|nil
+---@return dwarfspec.Subject
+function Subject:hover(anchor)
+    invoke(self, 'hover', anchor)
+    return self
+end
+
+---Moves the pointer to this subject and preserves it for fluent chaining.
+---@param anchor string|nil
+---@return dwarfspec.Subject
+function Subject:move_pointer(anchor)
+    invoke(self, 'move_pointer', anchor)
+    return self
+end
+
+---Sends native input through this subject's mounted screen.
+---@param keys string|table
+---@return dwarfspec.Subject
+function Subject:input(keys)
+    invoke(self, 'input', keys)
+    return self
+end
+
+---Types text through this subject's mounted screen.
+---@param text string
+---@return dwarfspec.Subject
+function Subject:type(text)
+    invoke(self, 'type', text)
+    return self
+end
+
+---Returns a stable diagnostic snapshot of this subject.
+---@return table
+function Subject:inspect()
+    return invoke(self, 'inspect')
+end
+
+---Returns the stable inspected text value for this subject.
+---@return string|nil
+function Subject:text()
+    local state = self:inspect()
+    return state.text
+end
+
 ---Returns the native object after validating current mount ownership.
 ---@return table
 function Subject:raw()

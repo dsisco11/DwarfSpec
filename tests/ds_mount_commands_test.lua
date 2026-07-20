@@ -121,4 +121,18 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function() ds.type('text') end,
             'DwarfSpec type' .. suffix)
     end)
+
+    it('routes input to a native child while retaining the mounted root',
+            function()
+        local root_native = {name='root'}
+        local child_native = {name='child', parent=root_native}
+        local unrelated = {name='unrelated'}
+
+        assert.equals(child_native, ds_factory.resolve_native_screen(
+            {_native=root_native}, function() return child_native end))
+        assert.equals(root_native, ds_factory.resolve_native_screen(
+            {_native=root_native}, function() return unrelated end))
+        assert.equals(root_native, ds_factory.resolve_native_screen(
+            {_native=root_native}, function() error('unavailable') end))
+    end)
 end)

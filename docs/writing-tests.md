@@ -72,6 +72,33 @@ registration, overlay database registration, and rescanning. Tests for those
 integration behaviors should use the separate overlay-registration support;
 they do not require another component mount command.
 
+## Complete screen components
+
+Mount a `gui.ZScreen` class or existing instance with the same entry point:
+
+```lua
+local root = ds.mount(MyScreen, {
+    backing_viewscreen=dfhack.gui.getCurViewscreen(true),
+    viewport={width=80, height=25},
+})
+
+ds.get('submit'):click()
+assert.equals('saved', ds.get('status'):text())
+```
+
+DwarfSpec shows the supplied screen directly and installs reversible render
+instrumentation on that instance. Native activation, dismissal, pause
+restoration, and parent input forwarding remain the screen's responsibility.
+An optional fixed `viewport` is applied through reversible instance resize
+interception, and `backing_viewscreen` is passed to the screen's normal
+`show()` method.
+
+If the component opens a native modal child screen, input follows that child
+while it remains above the mounted screen. The implicit component root does
+not change: `ds.root()` and `ds.get(view_id)` continue to refer only to the
+original mounted screen and its view descendants. A view that exists only in
+an unowned child screen is therefore not selected into the current mount.
+
 Overlay fixture definitions are also explicit imports. A definition returns a
 safe logical name and a project-relative source file:
 

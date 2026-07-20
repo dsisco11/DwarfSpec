@@ -54,11 +54,22 @@ local function is_active(screen)
     return ok and not not active
 end
 
----Returns the native DFHack viewscreen owned by a shown GUI screen.
+---Returns the top native child belonging to a shown GUI screen, or its root.
 ---@param screen table
+---@param current_viewscreen function|nil
 ---@return userdata
-local function native_screen(screen)
+function M.resolve_native_screen(screen, current_viewscreen)
     assert(screen._native, 'input screen is not shown')
+    if current_viewscreen then
+        local ok, current = pcall(current_viewscreen)
+        if ok then
+            local candidate = current
+            while candidate do
+                if candidate == screen._native then return current end
+                candidate = candidate.parent
+            end
+        end
+    end
     return screen._native
 end
 
@@ -150,6 +161,8 @@ local subject_module = load_automation_module(package_root,
         screen_entries=setmetatable({}, {__mode='k'}),
         screen_trackers=setmetatable({}, {__mode='k'}),
         run=scheduler.run,
+        current_viewscreen=mount_dependencies.current_viewscreen or
+            function() return dfhack.gui.getCurViewscreen(true) end,
     }
     ---Creates one private render tracker using the run's wait settings.
     ---@return table
@@ -507,7 +520,8 @@ local subject_module = load_automation_module(package_root,
             return context.mount_context:mutate('input', function()
                 assert(is_active(screen),
                     'input screen is not currently active')
-                require('gui').simulateInput(native_screen(screen), keys)
+                require('gui').simulateInput(M.resolve_native_screen(
+                    screen, context.current_viewscreen), keys)
             end)
         end
         require_interaction_target(screen, 'input')
@@ -516,7 +530,8 @@ local subject_module = load_automation_module(package_root,
                 'input screen is not currently active')
             local tracker = context.screen_trackers[screen]
             local generation = tracker and tracker:capture() or nil
-            require('gui').simulateInput(native_screen(screen), keys)
+        require('gui').simulateInput(M.resolve_native_screen(
+            screen, context.current_viewscreen), keys)
             if tracker then return wait_for_render(screen, generation) end
             return ds.wait_frames(1, {description='wait after live input'})
         end)
@@ -538,7 +553,8 @@ local subject_module = load_automation_module(package_root,
             local x, y = ds.move_pointer(requested_view)
             return context.mount_context:mutate('click', function()
                 pointer_adapter_module.with_interface_mouse(x, y, function()
-                    require('gui').simulateInput(native_screen(screen), key)
+                    require('gui').simulateInput(M.resolve_native_screen(
+                        screen, context.current_viewscreen), key)
                 end)
             end)
         end
@@ -554,7 +570,8 @@ local subject_module = load_automation_module(package_root,
                 'fixture has no DwarfSpec render tracker')
             local generation = tracker:capture()
             pointer_adapter_module.with_interface_mouse(x, y, function()
-                require('gui').simulateInput(native_screen(screen), key)
+            require('gui').simulateInput(M.resolve_native_screen(
+                screen, context.current_viewscreen), key)
             end)
             return wait_for_render(screen, generation)
         end)
@@ -575,7 +592,8 @@ local subject_module = load_automation_module(package_root,
                 for index = 1, #text do
                     assert(text:byte(index) >= 1,
                         'text input cannot contain NUL bytes')
-                    gui.simulateInput(native_screen(screen),
+                    gui.simulateInput(M.resolve_native_screen(
+                        screen, context.current_viewscreen),
                         ('STRING_A%03d'):format(text:byte(index)))
                 end
             end)
@@ -592,7 +610,8 @@ local subject_module = load_automation_module(package_root,
             for index = 1, #text do
                 assert(text:byte(index) >= 1,
                     'text input cannot contain NUL bytes')
-                gui.simulateInput(native_screen(screen),
+                gui.simulateInput(M.resolve_native_screen(
+                    screen, context.current_viewscreen),
                     ('STRING_A%03d'):format(text:byte(index)))
             end
             return wait_for_render(screen, generation)
@@ -639,6 +658,17 @@ local subject_module = load_automation_module(package_root,
             return callback(ds, ...)
         end
     end
+
+    context.mount_context.subject_commands = {
+        click=function(subject, button) return ds.click(subject, button) end,
+        hover=function(subject, anchor) return ds.hover(subject, anchor) end,
+        move_pointer=function(subject, anchor)
+            return ds.move_pointer(subject, anchor)
+        end,
+        input=function(subject, keys) return ds.input(keys, subject) end,
+        type=function(subject, text) return ds.type(text, subject) end,
+        inspect=function(subject) return ds.inspect(subject) end,
+    }
 
     return ds, reset
 end

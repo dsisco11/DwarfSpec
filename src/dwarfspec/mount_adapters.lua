@@ -100,6 +100,34 @@ local function prepare_screen(mount, screen, instrumentation,
         end)
 end
 
+---Installs reversible fixed-viewport resize interception on one screen.
+---@param screen table
+---@param viewport table|nil
+---@return function|nil
+local function install_fixed_viewport(screen, viewport)
+    if not viewport then return nil end
+    local original_instance_method = rawget(screen, 'onResize')
+    local original_effective_method = screen.onResize
+    local installed_method
+    installed_method = function(self)
+        return original_effective_method(
+            self, viewport.width, viewport.height)
+    end
+    rawset(screen, 'onResize', installed_method)
+    local restored = false
+
+    ---Restores the exact instance resize method present at installation.
+    ---@return boolean
+    return function()
+        if restored then return false end
+        assert(rawget(screen, 'onResize') == installed_method,
+            'fixed-viewport onResize changed before restoration')
+        rawset(screen, 'onResize', original_instance_method)
+        restored = true
+        return true
+    end
+end
+
 ---Creates category adapters backed by live DFHack screens.
 ---@param options table
 ---@return function
@@ -184,6 +212,7 @@ function M.new(options)
         if is_active(mount.host_screen) then mount.host_screen:dismiss() end
     end
 
+    ---@class dwarfspec.CompleteScreenAdapter
     local screen_adapter = {}
 
     ---Shows one complete screen with reversible instance instrumentation.
@@ -193,9 +222,15 @@ function M.new(options)
     ---@return table
     function screen_adapter:mount(mount, prepared, register_cleanup)
         local screen = prepared.component
+        local restore_resize = install_fixed_viewport(
+            screen, prepared.options.viewport)
+        if restore_resize then
+            register_cleanup(('restore component resize interception %d')
+                :format(mount.id), restore_resize)
+        end
         prepare_screen(mount, screen, instrumentation, register_cleanup,
             enrich_failure)
-        screen:show()
+        screen:show(prepared.options.backing_viewscreen)
         return {root=screen, host_screen=screen}
     end
 
