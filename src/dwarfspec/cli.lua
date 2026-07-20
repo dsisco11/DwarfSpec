@@ -150,7 +150,6 @@ local function defaults(package_root)
     return {
         package_root=package_root,
         host_scripts=nil,
-        dependency_lua_root=nil,
         project_root=nil,
         test_glob=nil,
         runner=nil,
@@ -348,7 +347,6 @@ function M.main(argv, context)
             options.emit = function(line) write(output, line) end
             options.environment = context.environment
             options.host_scripts = context.host_scripts
-            options.dependency_lua_root = context.dependency_lua_root
             options.invoke = context.invoke
             options.system = context.system
             options.now = context.now
@@ -363,7 +361,6 @@ function M.main(argv, context)
             assert(#positionals == 1, 'abort requires exactly one run id')
             options.environment = context.environment
             options.host_scripts = context.host_scripts
-            options.dependency_lua_root = context.dependency_lua_root
             options.invoke = context.invoke
             options.decode_json = context.decode_json
             options.emit = function(line) write(output, line) end

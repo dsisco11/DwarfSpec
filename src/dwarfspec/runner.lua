@@ -66,15 +66,24 @@ local function host_script(options, name)
         '.lua')
 end
 
+---Resolves the shared Lua 5.3 module root for source and installed layouts.
+---@param package_root string
+---@return string
+local function dependency_root(package_root)
+    if is_file(project.join(package_root, 'busted/core.lua')) then
+        return package_root
+    end
+    return project.join(package_root, '.luarocks/share/lua/5.3')
+end
+
 ---Validates pure-Lua dependencies required by the in-process host.
 ---@param options table
 local function validate_dependencies(options)
-    local dependency_lua_root = options.dependency_lua_root or
-        project.join(options.package_root, '.luarocks/share/lua/5.4')
+    local lua_root = dependency_root(options.package_root)
     for _, path in ipairs({
-            project.join(dependency_lua_root, 'busted/core.lua'),
-            project.join(dependency_lua_root, 'busted/init.lua'),
-            project.join(dependency_lua_root, 'luassert/init.lua'),
+            project.join(lua_root, 'busted/core.lua'),
+            project.join(lua_root, 'busted/init.lua'),
+            project.join(lua_root, 'luassert/init.lua'),
             host_script(options, 'bootstrap'),
             host_script(options, 'status'),
             host_script(options, 'abort'),

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Standalone repository baseline containing the reusable automation host,
   generic framework tests, and generic fixtures extracted from DwarfUI.
 - Lua 5.3 syntax and repository formatting checks.
+- A single Lua 5.3 runtime for local tests, packaging, the CLI, and DFHack.
 - A pinned local Busted unit-test command.
 
 ### Changed

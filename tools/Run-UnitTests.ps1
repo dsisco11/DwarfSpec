@@ -10,6 +10,7 @@ Set-StrictMode -Version Latest
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $rockTree = Join-Path $projectRoot '.luarocks'
 $bustedVersion = '2.3.0-1'
+$luaSystemVersion = '0.3.0-2'
 
 if (-not (Get-Command lua -ErrorAction SilentlyContinue)) {
     throw 'Lua was not found on PATH.'
@@ -18,9 +19,23 @@ if (-not (Get-Command luarocks -ErrorAction SilentlyContinue)) {
     throw 'LuaRocks was not found on PATH.'
 }
 
-$luaVersion = & lua -e "io.write(_VERSION:match('(%d+%.%d+)'))"
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($luaVersion)) {
-    throw 'Could not determine the Lua version.'
+$luaCommand = Get-Command lua
+$luaVersion = & $luaCommand.Source -e "io.write(_VERSION)"
+if ($LASTEXITCODE -ne 0 -or $luaVersion -ne 'Lua 5.3') {
+    throw "DwarfSpec tests require Lua 5.3; found '$luaVersion'."
+}
+$rockLuaVersion = & luarocks config lua_version
+if ($LASTEXITCODE -ne 0 -or $rockLuaVersion -ne '5.3') {
+    throw "DwarfSpec tests require LuaRocks for Lua 5.3; found '$rockLuaVersion'."
+}
+
+& luarocks show luasystem $luaSystemVersion --tree $rockTree *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Installing LuaSystem $luaSystemVersion into .luarocks..."
+    & luarocks install luasystem $luaSystemVersion --tree $rockTree
+    if ($LASTEXITCODE -ne 0) {
+        throw "LuaRocks failed to install LuaSystem $luaSystemVersion."
+    }
 }
 
 & luarocks show busted $bustedVersion --tree $rockTree *> $null
@@ -46,13 +61,13 @@ $oldLuaPath = [Environment]::GetEnvironmentVariable('LUA_PATH', 'Process')
 $oldLuaCPath = [Environment]::GetEnvironmentVariable('LUA_CPATH', 'Process')
 try {
     $luaPath = @(
-        (Join-Path $rockTree "share\lua\$luaVersion\?.lua"),
-        (Join-Path $rockTree "share\lua\$luaVersion\?\init.lua")
+        (Join-Path $rockTree 'share\lua\5.3\?.lua'),
+        (Join-Path $rockTree 'share\lua\5.3\?\init.lua')
     ) -join ';'
     if ($null -ne $oldLuaPath) { $luaPath += ";$oldLuaPath" }
     Set-Item -LiteralPath Env:LUA_PATH -Value $luaPath
 
-    $luaCPath = Join-Path $rockTree "lib\lua\$luaVersion\?.dll"
+    $luaCPath = Join-Path $rockTree 'lib\lua\5.3\?.dll'
     if ($null -ne $oldLuaCPath) { $luaCPath += ";$oldLuaCPath" }
     Set-Item -LiteralPath Env:LUA_CPATH -Value $luaCPath
 

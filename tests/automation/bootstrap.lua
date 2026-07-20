@@ -131,7 +131,6 @@ end
 
 local root, lua_root = package_root()
 local options = parse_options(arguments)
-options.dependency_lua_root = lua_root
 local host = load_host(root, lua_root)
 local run = host.start(root, options.project_root, options)
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')

@@ -1,28 +1,26 @@
 [CmdletBinding()]
-param(
-    [string] $LuaCommand = $env:LUA53
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-if ([string]::IsNullOrWhiteSpace($LuaCommand)) {
-    $candidate = Get-Command lua5.3 -ErrorAction SilentlyContinue
-    if ($null -eq $candidate) {
-        throw 'Lua 5.3 was not found. Pass -LuaCommand or set LUA53.'
-    }
-    $LuaCommand = $candidate.Source
+if (-not (Get-Command luac -ErrorAction SilentlyContinue)) {
+    throw 'Lua 5.3 compiler was not found on PATH.'
 }
 
-$version = & $LuaCommand -e 'io.write(_VERSION)'
-if ($LASTEXITCODE -ne 0 -or $version -ne 'Lua 5.3') {
-    throw "Lua 5.3 is required for the compatibility gate; found '$version'."
+$compiler = Get-Command luac
+$version = (& $compiler.Source -v 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0 -or $version -notmatch '^Lua 5\.3') {
+    throw "DwarfSpec requires Lua 5.3; found '$version'."
 }
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $luaFiles = @(
     Get-ChildItem -LiteralPath $projectRoot -Recurse -File -Filter '*.lua' |
-        Where-Object { $_.FullName -notmatch '[\\/]\.luarocks[\\/]' } |
+        Where-Object {
+            $_.FullName -notmatch '[\\/]\.luarocks[\\/]' -and
+            $_.FullName -notmatch '[\\/]\.package-[^\\/]+[\\/]'
+        } |
         Sort-Object FullName
 )
 
@@ -31,7 +29,7 @@ if ($luaFiles.Count -eq 0) {
 }
 
 foreach ($file in $luaFiles) {
-    & $LuaCommand -e 'assert(loadfile(arg[1]))' $file.FullName
+    & $compiler.Source -p $file.FullName
     if ($LASTEXITCODE -ne 0) {
         throw "Lua 5.3 syntax check failed: $($file.FullName)"
     }

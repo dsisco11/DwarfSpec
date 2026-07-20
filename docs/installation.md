@@ -1,6 +1,6 @@
 # Installation
 
-Install a released DwarfSpec rock with Lua 5.4 and LuaRocks:
+Install a released DwarfSpec rock with Lua 5.3 and LuaRocks:
 
 ```powershell
 luarocks install dwarfspec
@@ -34,6 +34,6 @@ The public LuaRocks workflow is identical to the released install command.
 Use `dwarfspec help` after installation to verify that the command resolves
 from the selected rock tree.
 
-The external command uses Lua 5.4 dependencies. When it invokes DFHack, the
-installed host adds only pure-Lua module paths for DwarfSpec and Busted. It
-does not add the external Lua 5.4 native-module path to DFHack.
+The external command and DFHack host both use Lua 5.3. The host replaces the
+native `system` and `lfs` modules with DFHack-backed adapters before Busted is
+loaded, so native libraries are never loaded into the game process.

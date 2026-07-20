@@ -159,13 +159,31 @@ local function archive_run(registry, run)
     registry.last_completed = run
 end
 
----Configures pinned pure-Lua dependencies and DFHack-native adapters.
+---Returns whether a file can be opened for reading.
+---@param path string
+---@return boolean
+local function is_file(path)
+    local file = io.open(path, 'rb')
+    if not file then return false end
+    file:close()
+    return true
+end
+
+---Resolves the shared Lua 5.3 module root for source and installed layouts.
 ---@param package_root string
----@param dependency_lua_root string|nil
-local function configure_dependencies(package_root, dependency_lua_root)
+---@return string
+local function dependency_root(package_root)
+    if is_file(join_path(package_root, 'busted/core.lua')) then
+        return package_root
+    end
+    return join_path(package_root, '.luarocks/share/lua/5.3')
+end
+
+---Configures pinned Lua dependencies and DFHack-native adapters.
+---@param package_root string
+local function configure_dependencies(package_root)
     local separator = package.config:sub(1, 1)
-    local lua_root = dependency_lua_root or join_path(package_root,
-        '.luarocks/share/lua/5.4')
+    local lua_root = dependency_root(package_root)
     local source_entries = {
         lua_root .. separator .. '?.lua',
         lua_root .. separator .. '?' .. separator .. 'init.lua',
@@ -276,7 +294,7 @@ end
 ---@param scheduler table
 local function execute_suite(package_root, project_root, run, scheduler_module,
         scheduler)
-    configure_dependencies(package_root, run.options.dependency_lua_root)
+    configure_dependencies(package_root)
     local busted = require('busted.core')()
     require('busted')(busted)
     local project_module = load_automation_module(package_root,

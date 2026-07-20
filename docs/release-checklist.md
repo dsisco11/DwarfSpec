@@ -2,7 +2,7 @@
 
 1. Set the rock version and revision in the rockspec.
 2. Add the release notes to `CHANGELOG.md`.
-3. Run the Lua 5.3 syntax check and the full unit suite.
+3. Run the syntax check and full unit suite with Lua 5.3 on `PATH`.
 4. Run `luarocks lint`, then build the source rock with `luarocks pack`.
 5. Build the binary release rock in Linux with LuaRocks configured as
    `arch = 'all'`. The archive contains only Lua code and the paired Unix and

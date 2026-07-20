@@ -20,21 +20,20 @@ project-relative Lua module can be used.
 
 Requirements:
 
-- Lua 5.3 for the compatibility syntax gate;
-- Lua 5.4 and LuaRocks for the current local unit-test toolchain; and
+- Lua 5.3 and LuaRocks; and
 - PowerShell 7 or Windows PowerShell 5.1.
 
 Run the repository checks from its root:
 
 ```powershell
-./tools/Check-Lua.ps1 -LuaCommand lua5.3
-./tools/Run-Unittests.ps1
+./tools/Check-Lua.ps1
+./tools/Run-UnitTests.ps1
 ```
 
-`LUA53` can provide the Lua 5.3 executable when `-LuaCommand` is omitted. The
-unit runner installs its pinned Busted dependencies into the ignored local
-`.luarocks/` tree and executes only the framework unit tests. Live DFHack specs
-remain a separate verification layer.
+Both commands use the `lua` executable on `PATH` and reject any version other
+than Lua 5.3. The unit runner installs its pinned Busted dependencies into the
+ignored local `.luarocks/` tree and executes only the framework unit tests.
+Live DFHack specs remain a separate verification layer.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for repository conventions and
 [docs/architecture.md](docs/architecture.md) for the package boundary. See

@@ -43,7 +43,6 @@ function M.current()
     if is_file(installed_bootstrap) then
         return {
             package_root=lua_root,
-            dependency_lua_root=lua_root,
             host_scripts={
                 bootstrap=installed_bootstrap,
                 status=join(lua_root, 'dwarfspec/automation/status.lua'),
@@ -56,7 +55,6 @@ function M.current()
     local package_root = lua_root:gsub('[/\\]src$', '')
     return {
         package_root=package_root,
-        dependency_lua_root=join(package_root, '.luarocks/share/lua/5.4'),
         host_scripts={
             bootstrap=join(package_root, 'tests/automation/bootstrap.lua'),
             status=join(package_root, 'tests/automation/status.lua'),
