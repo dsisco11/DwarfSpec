@@ -161,7 +161,7 @@ local overlay_fixture = load_automation_module(package_root,
     ---@param query function
     ---@param options table|nil
     ---@return any
-    function ds.wait_until(description, query, options)
+    function ds.await(description, query, options)
         return scheduler_module.wait_until(
             scheduler, description, query, wait_options(options, true))
     end

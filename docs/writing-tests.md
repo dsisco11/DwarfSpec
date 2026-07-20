@@ -17,6 +17,24 @@ It is not an allowlist or mandatory root. A fixture such as
 Screen fixture modules return a table with `new(options)` and produce a shown
 DFHack screen instrumented with a numeric `render_generation` field.
 
+## Condition waits
+
+`ds.await(description, query, options)` polls a read-only query between live
+DFHack frames until it returns a truthy value. The required description names
+the operation in progress and is included in timeout diagnostics.
+
+```lua
+local renderer = ds.await('tooltip becomes visible', function()
+    local state = ds.diagnostic('tooltip')
+    return state.screen.renderer.visible and state.screen.renderer
+end)
+```
+
+The truthy query result is returned to the test. Optional `frame_budget` and
+`timeout_ms` values override the project-wide wait settings for one operation.
+Use `ds.wait_frames(count)` only when the number of raw DFHack frames is itself
+part of the contract.
+
 Overlay fixture definitions are also explicit imports. A definition returns a
 safe logical name and a project-relative source file:
 

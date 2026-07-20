@@ -22,7 +22,7 @@ local RESERVED_COMMANDS = {
     type=true,
     wait_for_render=true,
     wait_frames=true,
-    wait_until=true,
+    await=true,
 }
 
 ---Validates one positive integer setting when it is present.

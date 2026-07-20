@@ -23,7 +23,7 @@ describe('automation scheduler and cleanup', function()
     it('polls a read-only condition between frames', function()
         local observations = 0
 
-        local value = ds.wait_until('third observation', function()
+        local value = ds.await('third observation', function()
             observations = observations + 1
             return observations == 3 and 'ready' or false
         end, {frame_budget=5, timeout_ms=2000})
@@ -33,10 +33,10 @@ describe('automation scheduler and cleanup', function()
     end)
 
     it('reports actionable timeout and interaction diagnostics', function()
-        local timeout_ok, timeout_error = pcall(ds.wait_until,
+        local timeout_ok, timeout_error = pcall(ds.await,
             'deliberately absent value', function() return false end,
             {frame_budget=2, timeout_ms=2000})
-        local query_ok, query_error = pcall(ds.wait_until,
+        local query_ok, query_error = pcall(ds.await,
             'deliberately broken query', function()
                 error('deliberate query failure')
             end, {frame_budget=2, timeout_ms=2000})

@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Lua 5.3 syntax and repository formatting checks.
 - A pinned local Busted unit-test command.
 
+### Changed
+
+- Renamed the unpublished public condition wait from `ds.wait_until(...)` to
+  `ds.await(...)`; the diagnostic description remains required.
+
 ## [0.1.0] - 2026-07-20
 
 ### Added
