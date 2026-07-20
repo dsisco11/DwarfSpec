@@ -4,7 +4,7 @@
 ---@return string
 local function repository_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
-    local root = source:match('^(.*)[/\\]Tests[/\\]automation[/\\]specs[/\\]' ..
+    local root = source:match('^(.*)[/\\]tests[/\\]automation[/\\]specs[/\\]' ..
         'framework_hardening_live_spec%.lua$')
     return assert(root, 'could not derive repository root from ' .. source)
 end
@@ -34,7 +34,7 @@ describe('automation framework live resilience', function()
             function()
         local root = repository_root()
         local host = assert(loadfile(root ..
-            '/Tests/automation/support/busted_host.lua'))()
+            '/tests/automation/support/busted_host.lua'))()
         local active = assert(dfhack.dwarfui.automation.active_run)
 
         local ok, message = pcall(host.start, root,
@@ -50,7 +50,7 @@ describe('automation framework live resilience', function()
             function()
         local root = repository_root()
         local scheduler_module = assert(loadfile(root ..
-            '/Tests/automation/support/scheduler.lua'))()
+            '/tests/automation/support/scheduler.lua'))()
         local run = {outstanding_wait=nil, suspended=false}
         local complete_calls = 0
         local stale_callback

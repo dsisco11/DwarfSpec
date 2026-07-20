@@ -142,9 +142,9 @@ local function configure_dependencies(repo_root)
     end
 
     local system_adapter = assert(loadfile(join_path(repo_root,
-        'Tests/automation/support/system_adapter.lua')))()
+        'tests/automation/support/system_adapter.lua')))()
     local lfs_adapter = assert(loadfile(join_path(repo_root,
-        'Tests/automation/support/lfs_adapter.lua')))()
+        'tests/automation/support/lfs_adapter.lua')))()
     package.preload.system = function() return system_adapter end
     package.preload.lfs = function() return lfs_adapter end
     package.loaded.system = system_adapter
@@ -196,9 +196,9 @@ function M.discover_tests(repo_root, loader, spec)
     end
     local roots
     if spec then
-        roots = {join_path(repo_root, 'Tests/automation/specs/' .. spec)}
+        roots = {join_path(repo_root, 'tests/automation/specs/' .. spec)}
     else
-        roots = {join_path(repo_root, 'Tests/automation/specs')}
+        roots = {join_path(repo_root, 'tests/automation/specs')}
     end
     return loader(roots, {'_live_spec%.lua$'}, {
         excludes={},
@@ -236,14 +236,14 @@ local function execute_suite(repo_root, run, scheduler_module, scheduler)
     local busted = require('busted.core')()
     require('busted')(busted)
     local ds_factory = assert(loadfile(join_path(repo_root,
-        'Tests/automation/support/ds.lua')))()
+        'tests/automation/support/ds.lua')))()
     local ds = ds_factory.new(repo_root, scheduler_module, scheduler,
         run.cleanup_module, run.cleanup_registry)
     busted.export('ds', ds)
     M.install_ds_lifecycle(busted, ds)
 
     local output_factory = assert(loadfile(join_path(repo_root,
-        'Tests/automation/support/output_handler.lua')))()
+        'tests/automation/support/output_handler.lua')))()
     output_factory.new(busted, run)
     require('busted.modules.filter_loader')()(busted,
         M.filter_options(run.options))
@@ -362,7 +362,7 @@ local function begin_queued_run(repo_root, registry, run)
     run.started_ms = dfhack.getTickCount()
     run.started_frame = current_frame()
     local scheduler_module = assert(loadfile(join_path(repo_root,
-        'Tests/automation/support/scheduler.lua')))()
+        'tests/automation/support/scheduler.lua')))()
     local scheduler
     scheduler = scheduler_module.new(run, {
         is_current=function()
@@ -468,7 +468,7 @@ function M.start(repo_root, options)
 
     registry.generation = registry.generation + 1
     local cleanup_module = assert(loadfile(join_path(repo_root,
-        'Tests/automation/support/cleanup.lua')))()
+        'tests/automation/support/cleanup.lua')))()
     local created_ms = dfhack.getTickCount()
     local run = {
         protocol_version=M.protocol_version,

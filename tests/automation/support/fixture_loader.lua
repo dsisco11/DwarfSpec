@@ -27,7 +27,7 @@ function M.load(repo_root, name)
         'fixture name must be a relative identifier')
     assert(APPROVED_FIXTURES[name], 'unknown automation fixture: ' .. name)
     local fixture_path = join_path(repo_root,
-        'Tests/automation/fixtures/' .. name .. '.lua')
+        'tests/automation/fixtures/' .. name .. '.lua')
     local fixture = assert(loadfile(fixture_path))()
     assert(type(fixture) == 'table' and type(fixture.new) == 'function',
         'automation fixture must export new(options): ' .. name)

@@ -1,6 +1,6 @@
 -- Unit contracts for live automation ownership and generation guards.
 
-local host_path = 'Tests/automation/support/busted_host.lua'
+local host_path = 'tests/automation/support/busted_host.lua'
 
 describe('automation host ownership', function()
     local original_dfhack
@@ -189,7 +189,7 @@ describe('automation host ownership', function()
         assert.same({'one'}, filters.name)
         assert.same({'legacy'}, filters.filterOut)
         assert.same({'tooltip_live_spec.lua'}, discovered)
-        assert.matches('Tests[/\\]automation[/\\]specs[/\\]' ..
+        assert.matches('tests[/\\]automation[/\\]specs[/\\]' ..
             'tooltip_live_spec.lua$', received_roots[1])
         assert.same({'_live_spec%.lua$'}, received_patterns)
         assert.is_true(received_options.recursive)

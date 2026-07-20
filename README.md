@@ -21,7 +21,7 @@ Run the repository checks from its root:
 
 ```powershell
 ./Tools/Check-Lua.ps1 -LuaCommand lua5.3
-./Tools/Run-UnitTests.ps1
+./Tools/Run-Unittests.ps1
 ```
 
 `LUA53` can provide the Lua 5.3 executable when `-LuaCommand` is omitted. The

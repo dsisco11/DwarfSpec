@@ -20,6 +20,6 @@ modules, tooltip fixtures, tooltip specifications, build tools, and product
 documentation remain in DwarfUI.
 
 The source tree reserves `src/dwarfspec/` for installed modules, `bin/` for the
-cross-platform command, and `Tests/` for DwarfSpec's own unit and live
+cross-platform command, and `tests/` for DwarfSpec's own unit and live
 framework coverage. The preserved files retain their original paths until the
 separately reviewable namespace and package-boundary migrations.

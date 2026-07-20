@@ -1,7 +1,7 @@
 -- Unit contracts for Busted event collection in the in-process host.
 
 local output_handler = assert(loadfile(
-    'Tests/automation/support/output_handler.lua'))()
+    'tests/automation/support/output_handler.lua'))()
 
 describe('automation Busted output collection', function()
     local original_base_loader

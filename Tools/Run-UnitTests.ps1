@@ -33,7 +33,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $testFiles = @(
-    Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Tests') -Recurse -File |
+    Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Recurse -File |
         Where-Object { $_.Name -match '(^test_.*|.*_test)\.lua$' } |
         Sort-Object FullName |
         ForEach-Object FullName
