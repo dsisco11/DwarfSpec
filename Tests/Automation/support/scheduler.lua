@@ -170,7 +170,7 @@ end
 ---@return any
 local function suspend(scheduler, wait)
     if coroutine.running() ~= scheduler.owner then
-        error('dy waits must run inside the active automation suite coroutine', 3)
+        error('ds waits must run inside the active automation suite coroutine', 3)
     end
     if not scheduler.callbacks.is_current() then
         error('automation run no longer owns the scheduler', 3)

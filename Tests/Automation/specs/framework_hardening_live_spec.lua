@@ -84,7 +84,7 @@ describe('automation framework live resilience', function()
 
         current = false
         dfhack.timeout(1, 'frames', stale_callback)
-        dy.wait_frames(2)
+        ds.wait_frames(2)
 
         assert.equals(1, run.scheduler_state.stale_callback_count)
         assert.equals(0, complete_calls)
@@ -93,7 +93,7 @@ describe('automation framework live resilience', function()
 
     it('captures injected fixture failures and restores test-owned state',
             function()
-        local ok, message = pcall(dy.show_fixture, 'failing_screen')
+        local ok, message = pcall(ds.show_fixture, 'failing_screen')
         local run = assert(dfhack.dwarfui.automation.active_run)
 
         assert.is_false(ok)
@@ -114,7 +114,7 @@ describe('automation framework live resilience', function()
             error('deliberate live cleanup failure')
         end)
 
-        local ok, message = pcall(dy.reset)
+        local ok, message = pcall(ds.reset)
 
         assert.is_false(ok)
         assert.matches('automation cleanup failed', message, 1, true)

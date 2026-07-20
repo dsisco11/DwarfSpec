@@ -209,20 +209,20 @@ end
 
 ---Installs run-scoped cleanup around every discovered Busted example.
 ---@param busted table
----@param dy table
-function M.install_dy_lifecycle(busted, dy)
+---@param ds table
+function M.install_ds_lifecycle(busted, ds)
     assert(type(busted) == 'table' and type(busted.api) == 'table',
         'Busted root API is required for automation lifecycle hooks')
     assert(type(busted.api.before_each) == 'function' and
         type(busted.api.after_each) == 'function',
         'Busted before_each and after_each APIs are required')
-    assert(type(dy) == 'table' and type(dy.reset) == 'function',
-        'automation dy.reset is required for lifecycle hooks')
+    assert(type(ds) == 'table' and type(ds.reset) == 'function',
+        'automation ds.reset is required for lifecycle hooks')
     busted.api.before_each(function()
-        dy.reset()
+        ds.reset()
     end)
     busted.api.after_each(function()
-        dy.reset()
+        ds.reset()
     end)
 end
 
@@ -235,12 +235,12 @@ local function execute_suite(repo_root, run, scheduler_module, scheduler)
     configure_dependencies(repo_root)
     local busted = require('busted.core')()
     require('busted')(busted)
-    local dy_factory = assert(loadfile(join_path(repo_root,
-        'Tests/Automation/support/dy.lua')))()
-    local dy = dy_factory.new(repo_root, scheduler_module, scheduler,
+    local ds_factory = assert(loadfile(join_path(repo_root,
+        'Tests/Automation/support/ds.lua')))()
+    local ds = ds_factory.new(repo_root, scheduler_module, scheduler,
         run.cleanup_module, run.cleanup_registry)
-    busted.export('dy', dy)
-    M.install_dy_lifecycle(busted, dy)
+    busted.export('ds', ds)
+    M.install_ds_lifecycle(busted, ds)
 
     local output_factory = assert(loadfile(join_path(repo_root,
         'Tests/Automation/support/output_handler.lua')))()

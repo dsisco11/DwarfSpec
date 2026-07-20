@@ -165,7 +165,7 @@ describe('automation scheduler', function()
 
         assert.has_error(function()
             scheduler_module.wait_frames(scheduler, 1)
-        end, 'dy waits must run inside the active automation suite coroutine')
+        end, 'ds waits must run inside the active automation suite coroutine')
     end)
 
     it('rejects a nested wait before scheduling another callback', function()

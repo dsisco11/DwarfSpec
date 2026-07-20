@@ -21,7 +21,7 @@ end
 ---Rejects blocking sleeps in DFHack's core context.
 ---@param seconds number
 function M.sleep(seconds)
-    error(('blocking sleep(%s) is forbidden in live automation; yield through dy')
+    error(('blocking sleep(%s) is forbidden in live automation; yield through ds')
         :format(tostring(seconds)), 2)
 end
 

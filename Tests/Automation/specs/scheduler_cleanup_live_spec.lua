@@ -13,7 +13,7 @@ describe('automation scheduler and cleanup', function()
         local run = assert(dfhack.dwarfui.automation.active_run)
         local started_ms = dfhack.getTickCount()
 
-        local elapsed_frames = dy.wait_frames(3)
+        local elapsed_frames = ds.wait_frames(3)
 
         assert.equals(3, elapsed_frames)
         assert.is_true(dfhack.getTickCount() >= started_ms)
@@ -23,7 +23,7 @@ describe('automation scheduler and cleanup', function()
     it('polls a read-only condition between frames', function()
         local observations = 0
 
-        local value = dy.wait_until('third observation', function()
+        local value = ds.wait_until('third observation', function()
             observations = observations + 1
             return observations == 3 and 'ready' or false
         end, {frame_budget=5, timeout_ms=2000})
@@ -33,10 +33,10 @@ describe('automation scheduler and cleanup', function()
     end)
 
     it('reports actionable timeout and interaction diagnostics', function()
-        local timeout_ok, timeout_error = pcall(dy.wait_until,
+        local timeout_ok, timeout_error = pcall(ds.wait_until,
             'deliberately absent value', function() return false end,
             {frame_budget=2, timeout_ms=2000})
-        local query_ok, query_error = pcall(dy.wait_until,
+        local query_ok, query_error = pcall(ds.wait_until,
             'deliberately broken query', function()
                 error('deliberate query failure')
             end, {frame_budget=2, timeout_ms=2000})
@@ -65,8 +65,8 @@ describe('automation scheduler and cleanup', function()
             table.insert(order, 'second')
         end)
 
-        dy.reset()
-        dy.reset()
+        ds.reset()
+        ds.reset()
 
         assert.same({'second', 'first'}, order)
         assert.equals(0, cleanup.pending_count(registry))
@@ -76,7 +76,7 @@ describe('automation scheduler and cleanup', function()
         local wait_ok
         local wait_error
         local rogue = coroutine.create(function()
-            wait_ok, wait_error = pcall(dy.wait_frames, 1)
+            wait_ok, wait_error = pcall(ds.wait_frames, 1)
         end)
 
         assert.is_true(coroutine.resume(rogue))

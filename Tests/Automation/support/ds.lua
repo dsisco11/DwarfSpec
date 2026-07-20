@@ -104,7 +104,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
         screen_entries=setmetatable({}, {__mode='k'}),
         run=scheduler.run,
     }
-    local dy = {
+    local ds = {
         protocol_version=1,
     }
 
@@ -112,7 +112,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param count integer
     ---@param options table|nil
     ---@return integer
-    function dy.wait_frames(count, options)
+    function ds.wait_frames(count, options)
         return scheduler_module.wait_frames(scheduler, count, options)
     end
 
@@ -121,14 +121,14 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param query function
     ---@param options table|nil
     ---@return any
-    function dy.wait_until(description, query, options)
+    function ds.wait_until(description, query, options)
         return scheduler_module.wait_until(
             scheduler, description, query, options)
     end
 
     ---Restores all currently registered test-owned resources.
-    function dy.reset()
-        local ok, failures = cleanup_module.run(cleanup_registry, 'dy.reset')
+    function ds.reset()
+        local ok, failures = cleanup_module.run(cleanup_registry, 'ds.reset')
         if not ok then
             local messages = {}
             for _, failure in ipairs(failures) do
@@ -146,7 +146,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param name string
     ---@param options table|nil
     ---@return table
-    function dy.show_fixture(name, options)
+    function ds.show_fixture(name, options)
         return run_action(context, 'show fixture ' .. tostring(name), nil,
             function()
                 local fixture = fixture_loader.load(repo_root, name)
@@ -169,14 +169,14 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
                 if type(screen.on_automation_shown) == 'function' then
                     screen:on_automation_shown()
                 end
-                dy.wait_for_render(screen)
+                ds.wait_for_render(screen)
                 return screen
             end)
     end
 
     ---Dismisses one test-owned fixture screen and waits until it is inactive.
     ---@param screen table
-    function dy.dismiss(screen)
+    function ds.dismiss(screen)
         return run_action(context, 'dismiss fixture', screen, function()
             assert(context.screen_entries[screen],
                 'screen is not owned by this automation run')
@@ -193,7 +193,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param root table
     ---@param view_id string
     ---@return table
-    function dy.get(root, view_id)
+    function ds.get(root, view_id)
         assert(type(view_id) == 'string' and view_id ~= '',
             'view id must be a nonempty string')
         local view = root.subviews and root.subviews[view_id]
@@ -205,7 +205,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---Returns a stable read-only diagnostic table for one live view.
     ---@param view table
     ---@return table
-    function dy.inspect(view)
+    function ds.inspect(view)
         return diagnostics.inspect_view(view)
     end
 
@@ -213,7 +213,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param root table
     ---@param name string
     ---@return table
-    function dy.capture_view_tree(root, name)
+    function ds.capture_view_tree(root, name)
         assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
             'capture name must be a relative identifier')
         context.run.captures = context.run.captures or {}
@@ -225,7 +225,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---Installs a virtual interface pointer position for this automation run.
     ---@param x integer
     ---@param y integer
-    function dy.set_pointer(x, y)
+    function ds.set_pointer(x, y)
         pointer_adapter_module.set(context.pointer, x, y)
     end
 
@@ -233,7 +233,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param view table
     ---@param anchor string|nil
     ---@return integer, integer
-    function dy.move_pointer_to(view, anchor)
+    function ds.move_pointer_to(view, anchor)
         local body = assert(view.frame_body, 'view has no live frame body')
         anchor = anchor or 'center'
         local x = math.floor((body.x1 + body.x2) / 2)
@@ -249,12 +249,12 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
         else
             assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
         end
-        dy.set_pointer(x, y)
+        ds.set_pointer(x, y)
         return x, y
     end
 
     ---Restores the original physical-pointer query function.
-    function dy.clear_pointer()
+    function ds.clear_pointer()
         pointer_adapter_module.clear(context.pointer)
     end
 
@@ -262,7 +262,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param view table
     ---@param previous_generation integer|nil
     ---@return integer
-    function dy.wait_for_render(view, previous_generation)
+    function ds.wait_for_render(view, previous_generation)
         local screen = owner_screen(context.screens, view)
         assert(screen and type(screen.render_generation) == 'number',
             'view is not inside an instrumented automation fixture')
@@ -278,25 +278,25 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param keys string|table
     ---@param screen table
     ---@return integer
-    function dy.press(keys, screen)
+    function ds.press(keys, screen)
         return run_action(context, 'press keys', screen, function()
             assert(screen and context.screen_entries[screen],
                 'input screen is not owned by this automation run')
             local generation = screen.render_generation
             require('gui').simulateInput(native_screen(screen), keys)
-            return dy.wait_for_render(screen, generation)
+            return ds.wait_for_render(screen, generation)
         end)
     end
 
     ---Sends input to one currently shown live screen through DFHack's native path.
     ---@param keys string|table
     ---@param screen table
-    function dy.send_input(keys, screen)
+    function ds.send_input(keys, screen)
         return run_action(context, 'send input', screen, function()
             assert(screen and is_active(screen),
                 'input screen is not currently active')
             require('gui').simulateInput(native_screen(screen), keys)
-            return dy.wait_frames(1, {description='wait after live input'})
+            return ds.wait_frames(1, {description='wait after live input'})
         end)
     end
 
@@ -304,19 +304,19 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param view table
     ---@param button string|nil
     ---@return integer
-    function dy.click(view, button)
+    function ds.click(view, button)
         return run_action(context, 'click view', view, function()
             local screen = assert(owner_screen(context.screens, view),
                 'view is not inside an automation fixture')
             local key = ({left='_MOUSE_L', right='_MOUSE_R', middle='_MOUSE_M'})[
                 button or 'left']
             assert(key, 'unsupported mouse button: ' .. tostring(button))
-            local x, y = dy.move_pointer_to(view)
+            local x, y = ds.move_pointer_to(view)
             local generation = screen.render_generation
             pointer_adapter_module.with_interface_mouse(x, y, function()
                 require('gui').simulateInput(native_screen(screen), key)
             end)
-            return dy.wait_for_render(screen, generation)
+            return ds.wait_for_render(screen, generation)
         end)
     end
 
@@ -324,7 +324,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param text string
     ---@param screen table
     ---@return integer
-    function dy.type(text, screen)
+    function ds.type(text, screen)
         return run_action(context, 'type text', screen, function()
             assert(type(text) == 'string', 'text input must be a string')
             assert(screen and context.screen_entries[screen],
@@ -337,7 +337,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
                 gui.simulateInput(native_screen(screen),
                     ('STRING_A%03d'):format(text:byte(index)))
             end
-            return dy.wait_for_render(screen, generation)
+            return ds.wait_for_render(screen, generation)
         end)
     end
 
@@ -345,7 +345,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@param name string
     ---@param options table|nil
     ---@return table
-    function dy.capture_screen(name, options)
+    function ds.capture_screen(name, options)
         assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
             'capture name must be a relative identifier')
         context.run.captures = context.run.captures or {}
@@ -354,7 +354,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
         return capture
     end
 
-    return dy
+    return ds
 end
 
 return M

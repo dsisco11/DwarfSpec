@@ -206,7 +206,7 @@ describe('automation host ownership', function()
         assert.equals(0, #callbacks)
     end)
 
-    it('installs dy reset hooks around every Busted example', function()
+    it('installs ds reset hooks around every Busted example', function()
         local hooks = {}
         local reset_count = 0
         local busted = {
@@ -220,7 +220,7 @@ describe('automation host ownership', function()
             },
         }
 
-        host.install_dy_lifecycle(busted, {
+        host.install_ds_lifecycle(busted, {
             reset=function()
                 reset_count = reset_count + 1
             end,
