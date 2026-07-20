@@ -1,0 +1,347 @@
+# DwarfSpec component-testing refactor
+
+## Goal
+
+Replace the fixture-oriented live UI API with a Cypress-style component-testing
+model. A test mounts one DFHack UI component into a DwarfSpec-owned live
+harness, and all later commands implicitly operate on that mount or on a fluent
+subject selected from it.
+
+The refactor is complete when ordinary widgets, overlay widgets, and complete
+screens all use the same `ds.mount()` entry point; consumers do not implement
+render counters; and tests do not pass fixture screens or raw views between
+normal `ds` commands.
+
+## Decisions
+
+- Busted remains responsible for discovery, suites, examples, hooks,
+  assertions, and result classification.
+- DwarfSpec commands retain synchronous-looking coroutine semantics. This work
+  does not introduce Cypress's deferred JavaScript command queue.
+- `ds.mount(component, options)` is the only component mount operation.
+- A mount accepts an ordinary `widgets.Widget`, an `overlay.OverlayWidget`, or
+  a complete `gui.ZScreen`, either as a supported constructor/class or as an
+  already-created instance.
+- DwarfSpec owns the mount harness, render instrumentation, current-mount
+  context, synchronization, diagnostics, and cleanup.
+- A Busted example has at most one active mount. Mounting another component
+  cleanly unmounts the current component before installing its replacement.
+- `ds.get(view_id)` searches the current mount and returns a DwarfSpec subject,
+  not a raw DFHack view.
+- Subject commands are fluent, for example `ds.get('submit'):click()`.
+- Busted and Luassert remain the assertion API. DwarfSpec subjects expose
+  stable values and diagnostics for assertions but do not add a parallel
+  `should()` assertion language.
+- Render generations are private DwarfSpec state. Consumers never add or
+  maintain a `render_generation` field.
+- Overlay widgets use `ds.mount()` like every other component. Any helper for
+  proving overlay script discovery, configuration, or registration is an
+  integration facility, not a separate overlay mount operation.
+- Test-support factories remain ordinary Lua helpers. There is no required
+  DwarfSpec fixture-module protocol or mandatory fixture directory.
+
+## Target authoring experience
+
+```lua
+local TooltipOverlay =
+    reqscript('gui/dwarfui-tooltip').OVERLAY_WIDGETS.tooltip
+
+describe('tooltip overlay', function()
+    before_each(function()
+        ds.mount(TooltipOverlay, {
+            message='Example tooltip',
+        })
+    end)
+
+    it('shows its tooltip while hovering', function()
+        ds.get('trigger'):hover()
+
+        local tooltip = ds.await('tooltip becomes visible', function()
+            local subject = ds.get('tooltip')
+            return subject:inspect().visible and subject
+        end)
+
+        assert.equals('Example tooltip', tooltip:text())
+    end)
+end)
+```
+
+Escape hatches such as `subject:raw()` may expose a native object for uncommon
+product-specific assertions, but ordinary selection and interaction must not
+require raw views.
+
+## Public API target
+
+- mount context: `ds.mount`, `ds.root`, `ds.unmount`;
+- selection: `ds.get`;
+- synchronization: `ds.await`, `ds.wait_frames`;
+- subject interaction: `click`, `hover`, `move_pointer`, `input`, `type`;
+- subject observation: `inspect`, `text`, and an explicit raw-view escape
+  hatch;
+- evidence: mount-scoped view-tree and screen capture commands.
+
+The final method names and return values must be documented and covered by
+contract tests before the legacy fixture API is removed.
+
+## Phase 1: Characterize the component boundary
+
+- [ ] Add unit characterization for constructing and identifying a plain
+  `widgets.Widget`, an `overlay.OverlayWidget`, and a `gui.ZScreen`.
+- [ ] Define unambiguous rules for constructor/class inputs versus component
+  instances and reject unsupported values with actionable errors.
+- [ ] Define the mount options common to every component, including viewport
+  size, component attributes, initial pause behavior, and optional backing
+  viewscreen context.
+- [ ] Define whether constructor failures, initialization failures, and first
+  render failures are reported as mount failures or host errors.
+- [ ] Record the minimum DFHack APIs required by the live mount adapters.
+- [ ] Add a public API contract test that reserves `mount`, `root`, `unmount`,
+  and the initial subject methods.
+
+Exit evidence:
+
+- [ ] The three supported component categories and both supported input forms
+  have executable contract tests.
+- [ ] No adapter behavior depends on product-specific classes or paths.
+
+## Phase 2: Build the run-owned mount context
+
+- [ ] Add a mount-context module owned by one automation run.
+- [ ] Track the current mount, root component, host screen, private render
+  generation, selected subjects, and cleanup entries without storing test
+  metadata on consumer components.
+- [ ] Implement `ds.mount(component, options)` and `ds.unmount()` against the
+  mount context.
+- [ ] Implement `ds.root()` as a subject for the current component root.
+- [ ] Make all mount-context references weak where ownership does not require a
+  strong reference.
+- [ ] Make a second `ds.mount()` fully unmount and settle the previous mount
+  before constructing the replacement.
+- [ ] Produce clear errors for `root`, `get`, interaction, or unmount commands
+  when no component is mounted.
+- [ ] Register mount cleanup before showing or activating a component so a
+  partial mount failure remains reversible.
+
+Exit evidence:
+
+- [ ] Unit tests cover initial mount, replacement mount, explicit unmount,
+  partial mount failure, and operations without a current mount.
+- [ ] Cleanup leaves no active screen or pending mount entry after every case.
+
+## Phase 3: Own render instrumentation
+
+- [ ] Add a private render tracker that can wait for a generation greater than
+  a captured generation without requiring a component field.
+- [ ] Instrument the DwarfSpec host screen's completed render path for mounted
+  widgets and overlay widgets.
+- [ ] Instrument a mounted complete screen's effective `onRender` path without
+  requiring the screen class to cooperate.
+- [ ] Preserve the original complete-screen render behavior and restore any
+  instance interception during cleanup.
+- [ ] Increment generations only after successful completed renders.
+- [ ] Route mount, click, hover, input, type, resize, and other mutating
+  operations through the private render tracker.
+- [ ] Capture bounded screen and component-tree diagnostics when mounting or
+  rendering fails.
+- [ ] Remove the `render_generation` requirement from the public fixture and
+  interaction contracts.
+
+Exit evidence:
+
+- [ ] Live tests prove automatic generation changes for a plain widget, an
+  overlay widget, and a complete screen whose source contains no DwarfSpec
+  instrumentation.
+- [ ] A render failure retains the original error plus mount diagnostics.
+
+## Phase 4: Implement the ordinary-widget adapter
+
+- [ ] Create a generic DwarfSpec `ZScreen` host for ordinary widgets.
+- [ ] Mount the component as the host's root content without mutating its class.
+- [ ] Propagate layout, visibility, activation, focus, input, and resize through
+  normal DFHack widget behavior.
+- [ ] Ensure the mounted component receives a real painter and real live frame
+  bodies.
+- [ ] Associate descendants with the owning mount automatically after layout
+  and after dynamic subtree changes.
+- [ ] Restore the prior pause state and dismiss the host during unmount.
+
+Exit evidence:
+
+- [ ] A live component test can mount a product-independent widget, locate a
+  descendant, click it, type into it, inspect it, and unmount it without ever
+  receiving or passing the host screen.
+
+## Phase 5: Implement the overlay-widget adapter
+
+- [ ] Accept `overlay.OverlayWidget` through the same `ds.mount()` dispatcher.
+- [ ] Reuse the generic host screen and private render tracker instead of
+  installing a GUI script.
+- [ ] Assign an isolated run-owned logical name when the caller did not provide
+  one.
+- [ ] Apply test-local frame positioning without reading or writing persisted
+  overlay configuration.
+- [ ] Use the correct scaled, full-interface, or fullscreen painter contract.
+- [ ] Emulate applicable `overlay_onenable`, `overlay_onupdate`, `onInput`, and
+  `overlay_ondisable` lifecycle calls in the same order as the DFHack overlay
+  framework.
+- [ ] Supply an explicit backing viewscreen context to callbacks that normally
+  receive one.
+- [ ] Cover visible, active, fullscreen, full-interface, update-throttled, and
+  input-handling behavior.
+- [ ] Document that isolated mounting intentionally bypasses script discovery,
+  persisted enablement and position, viewscreen/focus filtering, hotspot
+  registration, and overlay database registration.
+
+Exit evidence:
+
+- [ ] The same mount, selection, interaction, synchronization, and cleanup
+  tests pass for ordinary and overlay widgets.
+- [ ] No public method named `mount_overlay`, `show_overlay_fixture`, or similar
+  exists.
+
+## Phase 6: Implement the complete-screen adapter
+
+- [ ] Accept `gui.ZScreen` through the same `ds.mount()` dispatcher.
+- [ ] Show the supplied screen directly rather than placing it inside another
+  covering screen.
+- [ ] Install and remove automatic render interception on the mounted instance.
+- [ ] Preserve native screen activation, dismissal, parent input forwarding,
+  and pause-state behavior.
+- [ ] Associate the complete screen and all descendants with the current mount.
+- [ ] Verify modal and child-screen behavior without allowing an unowned screen
+  to become the implicit component root.
+
+Exit evidence:
+
+- [ ] Complete-screen component tests use the same `ds.mount`, `ds.get`, and
+  fluent subject commands as widget tests.
+- [ ] The tested screen has no test-only render counter or lifecycle hook.
+
+## Phase 7: Add implicit selection and fluent subjects
+
+- [ ] Implement `ds.get(view_id)` against only the current mount's propagated
+  view-id index.
+- [ ] Return a run-owned subject wrapper containing the selected view and mount
+  identity.
+- [ ] Reject stale subjects after unmount or replacement mount.
+- [ ] Move view-oriented operations from `ds` functions onto subjects:
+  `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`, and `text`.
+- [ ] Make interaction methods return a useful subject so compatible commands
+  can be chained.
+- [ ] Define when a command preserves the subject, changes it, or returns a
+  scalar observation.
+- [ ] Keep command execution immediate within the live coroutine; do not add a
+  deferred command queue.
+- [ ] Add `subject:raw()` as an explicitly documented escape hatch and ensure
+  internal APIs never require callers to use it.
+- [ ] Make mount-scoped capture commands infer the current root.
+- [ ] Include the selected view id and current mount identity in failures and
+  retained diagnostics.
+
+Exit evidence:
+
+- [ ] Representative tests use `ds.get('id'):click()` and Busted assertions
+  without passing a fixture, screen, root, or raw view to normal commands.
+- [ ] Unit tests cover fluent return behavior, stale subjects, duplicate ids,
+  missing ids, and dynamic view-tree changes.
+
+## Phase 8: Harden lifecycle and failure recovery
+
+- [ ] Run mount reset before and after every Busted example.
+- [ ] Preserve strict LIFO cleanup for component, host screen, pointer state,
+  pause state, lifecycle callbacks, and render interception.
+- [ ] Ensure assertion failures, command errors, render errors, timeouts,
+  external lease expiry, and explicit abort all drain mount resources.
+- [ ] Make cleanup idempotent after explicit unmount or replacement mount.
+- [ ] Report cleanup failures without hiding the originating test failure.
+- [ ] Retain bounded mount-tree and screen captures for failed interactions.
+- [ ] Confirm that a failed example cannot leak its current mount or subjects
+  into the following example.
+
+Exit evidence:
+
+- [ ] Resilience unit tests cover every terminal path.
+- [ ] Live abort and timeout reports have `cleanup_confirmed=true` and leave no
+  DwarfSpec-owned screen active.
+
+## Phase 9: Separate component and overlay-integration coverage
+
+- [ ] Migrate overlay behavior tests to `ds.mount(OverlayWidget, options)`.
+- [ ] Retain a minimal integration test for real `OVERLAY_WIDGETS` discovery,
+  registration, rescan, enablement, positioning, focus filtering, and cleanup.
+- [ ] Keep any run-owned script staging helper internal unless consumers have a
+  demonstrated need to author registration integration tests.
+- [ ] Ensure an integration helper cannot overwrite product scripts or persist
+  configuration changes.
+- [ ] Name and document integration tests distinctly from component tests.
+
+Exit evidence:
+
+- [ ] Overlay component behavior is proven without copying files into
+  `hack/scripts/gui`.
+- [ ] The smaller integration suite proves the DFHack overlay boundary and
+  restores every modified external artifact.
+
+## Phase 10: Remove the fixture protocol and migrate consumers
+
+- [ ] Replace DwarfSpec's `show_fixture` self-tests with direct component
+  mounts.
+- [ ] Replace `stage_overlay_fixture` behavior tests with overlay component
+  mounts, retaining only the integration coverage identified above.
+- [ ] Migrate DwarfUI live specs to direct mounts and fluent subjects.
+- [ ] Convert reusable fixture modules into ordinary constructors, data
+  builders, or product-independent test-support helpers.
+- [ ] Remove manual `render_generation` fields and `on_automation_shown` hooks
+  from consumer test components.
+- [ ] Remove or formally deprecate `ds.show_fixture`, `ds.dismiss(screen)`, and
+  `ds.stage_overlay_fixture` after all in-repository consumers migrate.
+- [ ] Remove fixture-loader and overlay-fixture modules that have no remaining
+  integration responsibility.
+- [ ] Confirm the configurable `*.ds.lua` discovery contract continues to
+  exclude conventional `*.fixture.lua` and support files by default.
+
+Exit evidence:
+
+- [ ] Repository search finds no consumer-authored `render_generation`, no
+  normal interaction that passes a root or screen, and no obsolete fixture API
+  usage.
+- [ ] DwarfSpec and DwarfUI unit and live suites pass against the same installed
+  rock artifact.
+
+## Phase 11: Documentation and release proof
+
+- [ ] Rewrite the writing guide around `ds.mount()` and fluent subjects.
+- [ ] Document constructor, instance, ordinary-widget, overlay-widget, and
+  complete-screen examples.
+- [ ] Document component-test isolation versus real overlay-plugin integration.
+- [ ] Update the architecture document to replace fixture ownership with mount
+  context and adapter ownership.
+- [ ] Update the command reference and changelog for removed or deprecated
+  methods.
+- [ ] Run Lua 5.3 and Lua 5.4 syntax checks and the complete DwarfSpec unit
+  suite.
+- [ ] Run rockspec lint, pack the rock, inspect its manifest, and install it into
+  an empty LuaRocks tree.
+- [ ] Run DwarfSpec's product-independent live component matrix from the
+  installed rock.
+- [ ] Run the migrated DwarfUI live suite from that exact installed artifact.
+- [ ] Verify deterministic JSON reports and `cleanup_confirmed=true` for pass,
+  failure, timeout, and abort runs.
+
+Exit evidence:
+
+- [ ] All public documentation presents one component-testing model centered
+  on `ds.mount()`.
+- [ ] Installed-package tests prove ordinary widgets, overlay widgets, and
+  complete screens through identical author-facing commands.
+
+## Completion checklist
+
+- [ ] One `ds.mount()` operation supports all three component categories.
+- [ ] No consumer implements DwarfSpec render counters.
+- [ ] Normal commands infer the current mount and use fluent subjects.
+- [ ] Busted remains the only test and assertion framework.
+- [ ] Component tests do not install overlay scripts.
+- [ ] Overlay registration integration remains testable and reversible.
+- [ ] Every live terminal path confirms cleanup.
+- [ ] DwarfSpec and DwarfUI pass locally and against the same installed rock.
