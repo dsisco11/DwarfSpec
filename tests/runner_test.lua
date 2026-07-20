@@ -85,16 +85,13 @@ describe('DwarfSpec external runner', function()
         assert.same({'progress line'}, emitted)
         assert.equals(3, calls)
         local test_glob_found = false
-        local dependency_root_found = false
         for _, argument in ipairs(bootstrap_arguments) do
+            assert.is_nil(argument:match('^%-%-dependency%-root='))
             if argument == '--test-glob=*.ds.lua' then
                 test_glob_found = true
-            elseif argument:match('^%-%-dependency%-root=.+') then
-                dependency_root_found = true
             end
         end
         assert.is_true(test_glob_found)
-        assert.is_true(dependency_root_found)
     end)
 
     it('propagates Busted failures without issuing a recovery abort', function()

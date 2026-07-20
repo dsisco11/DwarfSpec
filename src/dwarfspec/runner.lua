@@ -68,24 +68,21 @@ end
 
 ---Resolves the shared Lua module root for source and installed layouts.
 ---@param package_root string
----@return string|nil
-local function dependency_root(package_root)
+---@return string
+local function lua_module_root(package_root)
     if is_file(project.join(package_root, 'busted/core.lua')) then
         return package_root
     end
-    local path = package.searchpath('busted.core', package.path)
-    if not path then return nil end
-    return path:gsub('\\', '/'):match('^(.*)/busted/core%.lua$')
+    local lua_version = assert(_VERSION:match('Lua (%d+%.%d+)'),
+        'could not determine the active Lua version from ' .. tostring(_VERSION))
+    return project.join(package_root,
+        '.luarocks/share/lua/' .. lua_version)
 end
 
 ---Validates pure-Lua dependencies required by the in-process host.
 ---@param options table
 local function validate_dependencies(options)
-    local lua_root = dependency_root(options.package_root)
-    if not lua_root then
-        fail('dependency', 'DwarfSpec could not resolve the active Busted ' ..
-            'module root')
-    end
+    local lua_root = lua_module_root(options.package_root)
     for _, path in ipairs({
             project.join(lua_root, 'busted/core.lua'),
             project.join(lua_root, 'busted/init.lua'),
@@ -98,7 +95,6 @@ local function validate_dependencies(options)
             fail('dependency', 'DwarfSpec dependency was not found: ' .. path)
         end
     end
-    options.dependency_root = lua_root
 end
 
 ---Appends one repeated bootstrap option for every caller value.
@@ -125,7 +121,6 @@ local function bootstrap_arguments(options, run_id)
         '--lease-timeout-ms=' .. tostring(options.lease_timeout_ms),
         '--lease-check-frames=' .. tostring(options.lease_check_frames),
         '--test-glob=' .. tostring(options.test_glob or '*.ds.lua'),
-        '--dependency-root=' .. assert(options.dependency_root),
     }
     append_values(arguments, 'filter', options.filters)
     append_values(arguments, 'filter-out', options.filter_out)
