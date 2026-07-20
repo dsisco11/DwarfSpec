@@ -12,6 +12,7 @@ local function create_host_class(gui_module, define_class)
     HostScreen.ATTRS{
         component=DEFAULT_NIL,
         focus_path='dwarfspec/component-host',
+        viewport=DEFAULT_NIL,
     }
 
     ---Adds the mounted component to its DwarfSpec-owned screen.
@@ -19,6 +20,17 @@ local function create_host_class(gui_module, define_class)
         assert(self.component,
             'DwarfSpec component host requires a component')
         self:addviews{self.component}
+    end
+
+    ---Lays out hosted content against a fixed or live interface viewport.
+    ---@param width integer
+    ---@param height integer
+    function HostScreen:onResize(width, height)
+        if self.viewport then
+            width = self.viewport.width
+            height = self.viewport.height
+        end
+        HostScreen.super.onResize(self, width, height)
     end
 
     return HostScreen
@@ -45,6 +57,8 @@ local function prepare_screen(mount, screen, instrumentation,
     local restore = instrumentation.install(screen, mount.render_tracker,
         function(failure)
             return enrich_failure(mount, 'render', failure)
+        end, function()
+            if mount.refresh_views then mount.refresh_views() end
         end)
     register_cleanup(('restore component render interception %d')
         :format(mount.id), restore)
@@ -76,10 +90,14 @@ function M.new(options)
     ---@param register_cleanup function
     ---@return table
     function host_adapter:mount(mount, prepared, register_cleanup)
-        local screen = HostScreen{component=prepared.component}
+        local screen = HostScreen{
+            component=prepared.component,
+            initial_pause=prepared.options.initial_pause,
+            viewport=prepared.options.viewport,
+        }
         prepare_screen(mount, screen, instrumentation, register_cleanup,
             enrich_failure)
-        screen:show()
+        screen:show(prepared.options.backing_viewscreen)
         return {root=prepared.component, host_screen=screen}
     end
 

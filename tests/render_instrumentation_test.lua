@@ -83,4 +83,38 @@ describe('DwarfSpec render instrumentation', function()
         assert.has_error(restore,
             'instrumented onRender changed before restoration')
     end)
+
+    it('runs completion work before publishing the generation', function()
+        local order = {}
+        local tracker = tracker_double()
+        tracker.completed = function(self)
+            table.insert(order, 'generation')
+            self.completions = self.completions + 1
+        end
+        local target = {onRender=function()
+            table.insert(order, 'render')
+        end}
+        instrumentation.install(target, tracker, nil, function()
+            table.insert(order, 'completion')
+        end)
+
+        target:onRender()
+
+        assert.same({'render', 'completion', 'generation'}, order)
+    end)
+
+    it('does not publish a generation when completion work fails', function()
+        local tracker = tracker_double()
+        local target = {onRender=function() end}
+        instrumentation.install(target, tracker, nil, function()
+            error('completion indexing exploded', 0)
+        end)
+
+        local ok, message = pcall(target.onRender, target)
+
+        assert.is_false(ok)
+        assert.matches('completion indexing exploded', message, 1, true)
+        assert.equals(0, tracker.completions)
+        assert.equals(1, #tracker.failures)
+    end)
 end)

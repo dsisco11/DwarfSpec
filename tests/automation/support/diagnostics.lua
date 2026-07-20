@@ -57,7 +57,7 @@ end
 ---@return table
 function M.inspect_view(view)
     assert(view, 'cannot inspect a nil view')
-    local focused = false
+    local focused = not not view.focus
     if type(view.hasFocus) == 'function' then
         local ok, value = pcall(view.hasFocus, view)
         focused = ok and not not value

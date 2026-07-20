@@ -39,6 +39,14 @@ local function cleanup_mount(context, mount)
     mount.adapter = nil
     mount.cleanup_entry = nil
     mount.cleanup_entries = {}
+    mount.refresh_views = nil
+    for view in pairs(mount.owned_views) do
+        if context.view_mounts[view] == mount.id then
+            context.view_mounts[view] = nil
+        end
+    end
+    mount.owned_views = setmetatable({}, {__mode='k'})
+    mount.views_by_id = {}
     for subject in pairs(mount.selected_subjects) do
         context.subject_mounts[subject] = nil
     end
@@ -86,7 +94,57 @@ function M.new(options)
         current=nil,
         next_mount_id=0,
         subject_mounts=setmetatable({}, {__mode='k'}),
+        view_mounts=setmetatable({}, {__mode='k'}),
     }
+
+    ---Refreshes weak ownership and ID indexes from the current native tree.
+    ---@param mount table
+    function context:refresh_views(mount)
+        assert(type(mount) == 'table' and not mount.cleaned,
+            'cannot refresh a cleaned component mount')
+        for view in pairs(mount.owned_views) do
+            if self.view_mounts[view] == mount.id then
+                self.view_mounts[view] = nil
+            end
+        end
+        mount.owned_views = setmetatable({}, {__mode='k'})
+        mount.views_by_id = {}
+        local visited = setmetatable({}, {__mode='k'})
+
+        ---Indexes one view and its ordered descendants exactly once.
+        ---@param view table
+        local function visit(view)
+            if visited[view] then return end
+            visited[view] = true
+            self.view_mounts[view] = mount.id
+            mount.owned_views[view] = true
+            local view_id = view.view_id
+            if type(view_id) == 'string' and view_id ~= '' and
+                    mount.views_by_id[view_id] == nil then
+                mount.views_by_id[view_id] = view
+            end
+            for _, child in ipairs(view.subviews or {}) do visit(child) end
+        end
+
+        visit(mount.root)
+    end
+
+    ---Finds one indexed view ID in the current mounted component tree.
+    ---@param view_id string
+    ---@return table|nil
+    function context:find_view(view_id)
+        local mount = self:require_current('get')
+        return mount.views_by_id[view_id]
+    end
+
+    ---Returns the current mount that owns a native view, if any.
+    ---@param view table
+    ---@return table|nil
+    function context:mount_for_view(view)
+        local mount = self.current
+        if mount and self.view_mounts[view] == mount.id then return mount end
+        return nil
+    end
 
     ---Adds bounded mount diagnostics to an operational failure when available.
     ---@param mount table
@@ -133,6 +191,8 @@ function M.new(options)
     ---@return table
     function context:new_subject(view)
         local mount = self:require_current('subject creation')
+        assert(self.view_mounts[view] == mount.id,
+            'subject view is outside the current mount')
         local subject = self.subject_module.new(self, mount, view)
         self.subject_mounts[subject] = mount.id
         mount.selected_subjects[subject] = true
@@ -152,6 +212,9 @@ function M.new(options)
                     tostring(subject.mount_id), tostring(mount.id)))
         local view = subject._references and subject._references.view
         assert(view, 'DwarfSpec subject native object is no longer available')
+        assert(self.view_mounts[view] == mount.id,
+            ('DwarfSpec %s rejected a view outside the current mount')
+                :format(operation))
         return view
     end
 
@@ -196,6 +259,7 @@ function M.new(options)
         if not wait_ok then
             error(self:report_failure(mount, operation, wait_result), 2)
         end
+        self:refresh_views(mount)
         return table.unpack(results, 2, results.n)
     end
 
@@ -229,8 +293,11 @@ function M.new(options)
             cleanup_entry=nil,
             cleanup_entries={},
             selected_subjects=setmetatable({}, {__mode='k'}),
+            owned_views=setmetatable({}, {__mode='k'}),
+            views_by_id={},
             options=prepared.options,
         }
+        mount.refresh_views = function() self:refresh_views(mount) end
         self.current = mount
         mount.cleanup_entry = self.cleanup_module.push(
             self.cleanup_registry,
@@ -267,6 +334,7 @@ function M.new(options)
             end
             error(message, 2)
         end
+        self:refresh_views(mount)
         mount.active = true
         local subject_ok, root_subject = xpcall(function()
             return self:root()

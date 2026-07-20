@@ -6,8 +6,9 @@ local M = {}
 ---@param target table
 ---@param tracker table
 ---@param enrich_failure function|nil
+---@param on_completed function|nil
 ---@return function
-function M.install(target, tracker, enrich_failure)
+function M.install(target, tracker, enrich_failure, on_completed)
     assert(type(target) == 'table',
         'render instrumentation target must be a table')
     assert(type(target.onRender) == 'function',
@@ -18,6 +19,8 @@ function M.install(target, tracker, enrich_failure)
         'render instrumentation requires a render tracker')
     assert(enrich_failure == nil or type(enrich_failure) == 'function',
         'render failure enricher must be a function')
+    assert(on_completed == nil or type(on_completed) == 'function',
+        'render completion callback must be a function')
 
     local original_instance_method = rawget(target, 'onRender')
     local original_effective_method = target.onRender
@@ -37,6 +40,22 @@ function M.install(target, tracker, enrich_failure)
             end
             tracker:failed(reported_failure)
             error(reported_failure, 0)
+        end
+        if on_completed then
+            local completed_ok, completed_failure = xpcall(on_completed,
+                debug.traceback)
+            if not completed_ok then
+                local reported_failure = completed_failure
+                if enrich_failure then
+                    local ok, enriched = pcall(enrich_failure,
+                        completed_failure)
+                    if ok and enriched ~= nil then
+                        reported_failure = enriched
+                    end
+                end
+                tracker:failed(reported_failure)
+                error(reported_failure, 0)
+            end
         end
         tracker:completed()
         return table.unpack(results, 2, results.n)

@@ -49,9 +49,15 @@ end
 ---@return table
 local function load_automation_module(package_root, module_name,
         source_relative)
+    local source_path = join_path(package_root, source_relative)
+    local source_file = io.open(source_path, 'rb')
+    if source_file then
+        source_file:close()
+        return assert(loadfile(source_path))()
+    end
     local ok, module = pcall(require, module_name)
     if ok then return module end
-    return assert(loadfile(join_path(package_root, source_relative)))()
+    error(module, 0)
 end
 
 ---Returns whether a semicolon-delimited Lua search path contains an entry.

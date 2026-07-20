@@ -293,21 +293,57 @@ report `dwarfspec-93784984-008fd562.json` records `state=passed`,
 
 ## Phase 4: Implement the ordinary-widget adapter
 
-- [ ] Create a generic DwarfSpec `ZScreen` host for ordinary widgets.
-- [ ] Mount the component as the host's root content without mutating its class.
-- [ ] Propagate layout, visibility, activation, focus, input, and resize through
+- [x] Create a generic DwarfSpec `ZScreen` host for ordinary widgets.
+- [x] Mount the component as the host's root content without mutating its class.
+- [x] Propagate layout, visibility, activation, focus, input, and resize through
   normal DFHack widget behavior.
-- [ ] Ensure the mounted component receives a real painter and real live frame
+- [x] Ensure the mounted component receives a real painter and real live frame
   bodies.
-- [ ] Associate descendants with the owning mount automatically after layout
+- [x] Associate descendants with the owning mount automatically after layout
   and after dynamic subtree changes.
-- [ ] Restore the prior pause state and dismiss the host during unmount.
+- [x] Restore the prior pause state and dismiss the host during unmount.
 
 Exit evidence:
 
-- [ ] A live component test can mount a product-independent widget, locate a
+- [x] A live component test can mount a product-independent widget, locate a
   descendant, click it, type into it, inspect it, and unmount it without ever
   receiving or passing the host screen.
+
+Evidence (2026-07-20): `src/dwarfspec/mount_adapters.lua` constructs one
+private `gui.ZScreen` class, adds the ordinary component instance through
+`addviews`, and delegates resize to the inherited screen implementation using
+either the normalized fixed viewport or live dimensions. The adapter passes
+the normalized pause and backing-viewscreen choices to the host and registers
+dismissal before reversible render interception in LIFO cleanup order. It does
+not assign methods or harness fields to the component or its class.
+
+`src/dwarfspec/mount_context.lua` maintains weak view-to-mount ownership and a
+run-owned ID index. The index is rebuilt from the ordered native tree after
+the first layout/render, after each synchronized mutation, and in the render
+completion callback before the new generation is published. Removed views are
+disassociated and their subjects are rejected. Unit contracts cover initial,
+nested, dynamically added, dynamically removed, and cleaned ownership plus
+fixed viewport, backing viewscreen, pause-option forwarding, exact class
+preservation, host dismissal, and completion-callback failure behavior.
+
+`tests/automation/specs/ordinary_widget_mount_live_spec.lua` mounts both a
+class and an existing product-independent `widgets.Panel` instance. Its nested
+standard `EditField` and `HotkeyLabel` exercise real layout, visibility,
+activation, focus, mouse input, text input, fixed and explicit resize, a real
+`gui.Painter`, dynamic `addviews`, `ds.get(view_id)`, `ds.inspect`, and
+`ds.unmount` without receiving or passing the host screen. Pause state is
+unchanged after unmount, the component class remains unchanged, and the root
+subject becomes stale. Source-tree live loading now prefers checked-out files
+over a long-running DFHack process's module cache while installed layouts
+continue to use `require`.
+
+`tools/Run-UnitTests.ps1` passed with 110 successes, 0 failures, and 0 errors;
+`tools/Check-Lua.ps1` parsed and formatting-checked 77 Lua files with Lua
+5.4.6; the embedded DFHack Lua 5.3 runtime parsed and executed the new live
+spec; `luarocks lint dwarfspec-0.1.0-1.rockspec` and `git diff --check` passed.
+The complete source-tree live suite passed 15 examples with 0 failures and 0
+errors. Report `dwarfspec-95309203-6885caaf.json` records `state=passed`,
+`cleanup_confirmed=true`, and `cleanup_reason="suite completion"`.
 
 ## Phase 5: Implement the overlay-widget adapter
 

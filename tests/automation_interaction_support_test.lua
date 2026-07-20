@@ -93,6 +93,17 @@ describe('automation interaction support', function()
         assert.same(65, capture.cells[1][1].ch)
     end)
 
+    it('reports native widget focus without requiring hasFocus()', function()
+        local inspection = diagnostics.inspect_view({
+            _type='EditField',
+            visible=true,
+            active=true,
+            focus=true,
+        })
+
+        assert.is_true(inspection.focused)
+    end)
+
     it('restores the virtual pointer and temporary native click position', function()
         local registry = cleanup.new({})
         local adapter = pointer_adapter.new(cleanup, registry)

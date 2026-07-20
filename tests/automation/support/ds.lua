@@ -9,9 +9,15 @@ local M = {}
 ---@return table
 local function load_automation_module(package_root, module_name,
         source_relative)
+    local source_path = package_root .. source_relative
+    local source_file = io.open(source_path, 'rb')
+    if source_file then
+        source_file:close()
+        return assert(loadfile(source_path))()
+    end
     local ok, module = pcall(require, module_name)
     if ok then return module end
-    return assert(loadfile(package_root .. source_relative))()
+    error(module, 0)
 end
 
 ---Returns the test-owned fixture screen associated with one view.
@@ -226,6 +232,8 @@ local subject_module = load_automation_module(package_root,
             return view, context.mount_context.current.host_screen,
                 context.mount_context.current
         end
+        local mount = context.mount_context:mount_for_view(value)
+        if mount then return value, mount.host_screen, mount end
         return value, owner_screen(context.screens, value), nil
     end
 
@@ -392,7 +400,7 @@ local subject_module = load_automation_module(package_root,
             local mount = context.mount_context:require_current('get')
             assert(type(view_id) == 'string' and view_id ~= '',
                 'view id must be a nonempty string')
-            local view = mount.root.subviews and mount.root.subviews[view_id]
+            local view = context.mount_context:find_view(view_id)
             assert(view and view.view_id == view_id,
                 'current mount view id was not found: ' .. view_id)
             return context.mount_context:new_subject(view)

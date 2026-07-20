@@ -44,9 +44,18 @@ local function screen_base()
             self.render_calls = (self.render_calls or 0) + 1
             return 'rendered'
         end,
-        show=function(self)
+        show=function(self, parent)
+            self.shown_parent = parent
             self.active = true
+            self:onResize(80, 25)
             self:onRender()
+        end,
+        onResize=function(self, width, height)
+            self.layout_width = width
+            self.layout_height = height
+            for _, view in ipairs(self.subviews) do
+                view.frame_body = {width=width, height=height}
+            end
         end,
         dismiss=function(self)
             self.active = false
@@ -89,12 +98,28 @@ describe('DwarfSpec mount adapters', function()
     it('hosts widgets and overlays on an instrumented owned screen', function()
         for _, category in ipairs({'widget', 'overlay'}) do
             local tracker = tracker_double()
-            local mount = {id=1, render_tracker=tracker}
-            local component = {focus_group={}}
+            local mount = {
+                id=1,
+                render_tracker=tracker,
+                refresh_calls=0,
+            }
+            mount.refresh_views = function()
+                mount.refresh_calls = mount.refresh_calls + 1
+            end
+            local component_class = {}
+            local component = setmetatable({focus_group={}}, component_class)
             local cleanups = {}
+            local backing = {child={}}
 
             local result = factory(category):mount(mount,
-                {component=component}, function(name, action)
+                {
+                    component=component,
+                    options={
+                        initial_pause=false,
+                        viewport={width=40, height=20},
+                        backing_viewscreen=backing,
+                    },
+                }, function(name, action)
                     table.insert(cleanups, {name=name, action=action})
                 end)
 
@@ -102,7 +127,14 @@ describe('DwarfSpec mount adapters', function()
             assert.not_equals(component, result.host_screen)
             assert.equals(component, result.host_screen.subviews[1])
             assert.is_true(result.host_screen.active)
+            assert.is_false(result.host_screen.initial_pause)
+            assert.equals(backing, result.host_screen.shown_parent)
+            assert.equals(40, result.host_screen.layout_width)
+            assert.equals(20, result.host_screen.layout_height)
+            assert.equals(40, component.frame_body.width)
             assert.equals(1, tracker.completions)
+            assert.equals(1, mount.refresh_calls)
+            assert.is_nil(rawget(component_class, 'onRender'))
             assert.equals(2, #cleanups)
             assert.matches('restore component render interception',
                 cleanups[1].name, 1, true)
@@ -113,6 +145,7 @@ describe('DwarfSpec mount adapters', function()
             cleanups[1].action()
             assert.is_false(result.host_screen.active)
             assert.is_nil(rawget(result.host_screen, 'onRender'))
+            assert.is_nil(rawget(component_class, 'onRender'))
         end
     end)
 

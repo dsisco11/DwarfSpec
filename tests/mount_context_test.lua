@@ -152,7 +152,44 @@ describe('DwarfSpec mount context', function()
         assert.equals(2, #mounted.cleanup_entries)
         assert.equals(2, cleanup.pending_count(registry))
         assert.equals('k', getmetatable(context.subject_mounts).__mode)
+        assert.equals('k', getmetatable(context.view_mounts).__mode)
         assert.equals('k', getmetatable(mounted.selected_subjects).__mode)
+        assert.equals(mounted.id, context.view_mounts[mounted.root])
+    end)
+
+    it('refreshes descendant ownership and IDs after dynamic mutations',
+            function()
+        local original = {view_id='original', subviews={}}
+        local nested = {view_id='nested', subviews={original}}
+        context:mount(TestWidget, {
+            name='dynamic-root',
+            subviews={nested},
+        })
+
+        assert.equals(nested, context:find_view('nested'))
+        assert.equals(original, context:find_view('original'))
+        assert.equals(context.current.id, context.view_mounts[original])
+        local original_subject = context:new_subject(original)
+        local dynamic = {view_id='dynamic', subviews={}}
+
+        context:mutate('add dynamic child', function()
+            table.insert(nested.subviews, dynamic)
+            context.current.render_tracker:completed()
+        end)
+
+        assert.equals(dynamic, context:find_view('dynamic'))
+        assert.equals(context.current.id, context.view_mounts[dynamic])
+
+        context:mutate('remove original child', function()
+            table.remove(nested.subviews, 1)
+            context.current.render_tracker:completed()
+        end)
+
+        assert.is_nil(context:find_view('original'))
+        assert.is_nil(context.view_mounts[original])
+        assert.has_error(function() original_subject:raw() end,
+            'DwarfSpec subject raw access rejected a view outside the ' ..
+                'current mount')
     end)
 
     it('waits for the render caused by each mutating operation', function()

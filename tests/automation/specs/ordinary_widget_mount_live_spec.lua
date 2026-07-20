@@ -1,0 +1,119 @@
+-- Product-independent live proof for ordinary widget component mounting.
+
+local widgets = require('gui.widgets')
+
+---@class tests.OrdinaryWidgetHarness: widgets.Panel
+local OrdinaryWidgetHarness = defclass(nil, widgets.Panel)
+OrdinaryWidgetHarness.ATTRS{
+    frame={w=50, h=8},
+}
+
+---Creates nested interactive content using only normal DFHack widgets.
+function OrdinaryWidgetHarness:init()
+    self.saw_real_painter = false
+    self:addviews{
+        widgets.Panel{
+            view_id='nested_panel',
+            frame={l=1, t=1, w=46, h=6},
+            subviews={
+                widgets.EditField{
+                    view_id='editor',
+                    frame={l=0, t=0, w=24},
+                    text='',
+                },
+                widgets.HotkeyLabel{
+                    view_id='submit',
+                    frame={l=0, t=2, w=14},
+                    label='Submit',
+                    on_activate=self:callback('submit'),
+                },
+                widgets.Label{
+                    view_id='status',
+                    frame={l=0, t=4, w=30},
+                    text='pending',
+                },
+            },
+        },
+    }
+end
+
+---Records that normal rendering supplied a live painter to the component.
+---@param dc gui.Painter
+function OrdinaryWidgetHarness:onRenderBody(dc)
+    self.saw_real_painter = type(dc) == 'table' and
+        type(dc.seek) == 'function'
+    OrdinaryWidgetHarness.super.onRenderBody(self, dc)
+end
+
+---Applies the entered value and adds a dynamically indexed descendant.
+function OrdinaryWidgetHarness:submit()
+    local editor = self.subviews.editor
+    self.subviews.status:setText('saved:' .. editor.text)
+    if not self.subviews.dynamic_result then
+        self.subviews.nested_panel:addviews{
+            widgets.Label{
+                view_id='dynamic_result',
+                frame={l=16, t=2, w=24},
+                text='created:' .. editor.text,
+            },
+        }
+        self:updateLayout()
+    end
+end
+
+describe('ordinary widget component host', function()
+    it('mounts an existing widget instance without mutating its class',
+            function()
+        local instance = OrdinaryWidgetHarness{}
+        local original_on_render = rawget(OrdinaryWidgetHarness, 'onRender')
+        local original_pause = df.global.pause_state
+        local root = ds.mount(instance, {initial_pause=false})
+
+        assert.equals(instance, root:raw())
+        assert.equals(original_pause, df.global.pause_state)
+        assert.equals(original_on_render,
+            rawget(OrdinaryWidgetHarness, 'onRender'))
+        ds.resize(44, 12)
+        assert.equals(44, instance.frame_parent_rect.width)
+        assert.equals(12, instance.frame_parent_rect.height)
+        ds.unmount()
+        assert.equals(original_pause, df.global.pause_state)
+        assert.equals(original_on_render,
+            rawget(OrdinaryWidgetHarness, 'onRender'))
+    end)
+
+    it('uses implicit mount context for nested interaction and inspection',
+            function()
+        local original_pause = df.global.pause_state
+        local root = ds.mount(OrdinaryWidgetHarness, {
+            viewport={width=60, height=20},
+        })
+        local editor = ds.get('editor')
+
+        assert.is_true(root:raw().saw_real_painter)
+        assert.equals(60, root:raw().frame_parent_rect.width)
+        assert.equals(20, root:raw().frame_parent_rect.height)
+        assert.is_true(ds.inspect(editor).visible)
+        assert.is_true(ds.inspect(editor).active)
+        assert.is_truthy(ds.inspect(editor).body)
+
+        ds.click(editor)
+        assert.is_true(ds.inspect(editor).focused)
+        ds.type('saved')
+        assert.equals('saved', ds.inspect(editor).text)
+        ds.click(ds.get('submit'))
+        assert.is_truthy(root:raw().subviews.nested_panel.subviews
+            .dynamic_result)
+
+        local dynamic = ds.get('dynamic_result')
+        assert.is_true(ds.inspect(dynamic).visible)
+        assert.is_true(ds.inspect(dynamic).active)
+        assert.is_truthy(ds.inspect(dynamic).body)
+
+        ds.unmount()
+        assert.equals(original_pause, df.global.pause_state)
+        assert.has_error(function() root:raw() end,
+            'DwarfSpec subject raw access requires a mounted component; ' ..
+                'call ds.mount(component, options) first')
+    end)
+end)
