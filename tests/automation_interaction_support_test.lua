@@ -33,15 +33,25 @@ describe('automation interaction support', function()
         rawset(_G, 'df', original_df)
     end)
 
-    it('limits fixture names to the approved fixture registry', function()
-        assert.is_true(fixture_loader.is_approved('interaction_screen'))
-        assert.is_false(fixture_loader.is_approved('..\\outside'))
+    it('imports fixtures explicitly without a library-owned allowlist', function()
+        local descriptor = {
+            project_root='project',
+            package_root='.',
+            filesystem={
+                isfile=function(path)
+                    return path:gsub('\\', '/') ==
+                        'project/custom/location/example.lua'
+                end,
+            },
+        }
         assert.has_error(function()
-            fixture_loader.load('.', '../outside')
-        end, 'fixture name must be a relative identifier')
-        assert.has_error(function()
-            fixture_loader.load('.', 'outside')
-        end, 'unknown automation fixture: outside')
+            fixture_loader.load(descriptor, '../outside.lua')
+        end, 'project-relative path must not escape its root: ../outside.lua')
+        local fixture = fixture_loader.load(descriptor,
+            'custom/location/example.lua', function()
+                return function() return {new=function() end} end
+            end)
+        assert.is_function(fixture.new)
     end)
 
     it('captures stable view and screen diagnostics without mutation', function()

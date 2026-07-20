@@ -125,10 +125,10 @@ local function archive_run(registry, run)
 end
 
 ---Configures pinned pure-Lua dependencies and DFHack-native adapters.
----@param repo_root string
-local function configure_dependencies(repo_root)
+---@param package_root string
+local function configure_dependencies(package_root)
     local separator = package.config:sub(1, 1)
-    local lua_root = join_path(repo_root, '.luarocks/share/lua/5.4')
+    local lua_root = join_path(package_root, '.luarocks/share/lua/5.4')
     local source_entries = {
         lua_root .. separator .. '?.lua',
         lua_root .. separator .. '?' .. separator .. 'init.lua',
@@ -140,9 +140,9 @@ local function configure_dependencies(repo_root)
         end
     end
 
-    local system_adapter = assert(loadfile(join_path(repo_root,
+    local system_adapter = assert(loadfile(join_path(package_root,
         'tests/automation/support/system_adapter.lua')))()
-    local lfs_adapter = assert(loadfile(join_path(repo_root,
+    local lfs_adapter = assert(loadfile(join_path(package_root,
         'tests/automation/support/lfs_adapter.lua')))()
     package.preload.system = function() return system_adapter end
     package.preload.lfs = function() return lfs_adapter end
@@ -179,27 +179,28 @@ function M.filter_options(options)
     }
 end
 
----Discovers only approved live-spec files from the selected repository root.
----@param repo_root string
+---Discovers only DwarfSpec live-spec files from the selected project root.
+---@param project_root string
 ---@param loader function
 ---@param spec string|nil
 ---@return table
-function M.discover_tests(repo_root, loader, spec)
-    assert(type(repo_root) == 'string' and repo_root ~= '',
-        'repository root must be a nonempty string')
+function M.discover_tests(project_root, loader, spec)
+    assert(type(project_root) == 'string' and project_root ~= '',
+        'project root must be a nonempty string')
     assert(type(loader) == 'function', 'live spec discovery requires a loader')
     if spec then
         assert(type(spec) == 'string' and
-            spec:match('^[%w_.-]+_live_spec%.lua$'),
-            'live spec must name one *_live_spec.lua file without a path')
+            spec:match('^[%w_./-]+_spec%.ds%.lua$') and
+            not spec:match('^[/\\]') and not spec:match('%.%.[/\\]'),
+            'live spec must name one project-relative *_spec.ds.lua path')
     end
     local roots
     if spec then
-        roots = {join_path(repo_root, 'tests/automation/specs/' .. spec)}
+        roots = {join_path(project_root, 'tests/' .. spec)}
     else
-        roots = {join_path(repo_root, 'tests/automation/specs')}
+        roots = {join_path(project_root, 'tests')}
     end
-    return loader(roots, {'_live_spec%.lua$'}, {
+    return loader(roots, {'_spec%.ds%.lua$'}, {
         excludes={},
         recursive=true,
         verbose=false,
@@ -230,18 +231,26 @@ end
 ---@param run table
 ---@param scheduler_module table
 ---@param scheduler table
-local function execute_suite(repo_root, run, scheduler_module, scheduler)
-    configure_dependencies(repo_root)
+local function execute_suite(package_root, project_root, run, scheduler_module,
+        scheduler)
+    configure_dependencies(package_root)
     local busted = require('busted.core')()
     require('busted')(busted)
-    local ds_factory = assert(loadfile(join_path(repo_root,
+    local project_module = assert(loadfile(join_path(package_root,
+        'tests/automation/support/project.lua')))()
+    local project = project_module.new(project_root, package_root,
+        dfhack.filesystem)
+    local extensions_module = assert(loadfile(join_path(package_root,
+        'tests/automation/support/extensions.lua')))()
+    local extensions = extensions_module.load(project)
+    local ds_factory = assert(loadfile(join_path(package_root,
         'tests/automation/support/ds.lua')))()
-    local ds = ds_factory.new(repo_root, scheduler_module, scheduler,
-        run.cleanup_module, run.cleanup_registry)
+    local ds = ds_factory.new(package_root, project, scheduler_module,
+        scheduler, run.cleanup_module, run.cleanup_registry, extensions)
     busted.export('ds', ds)
     M.install_ds_lifecycle(busted, ds)
 
-    local output_factory = assert(loadfile(join_path(repo_root,
+    local output_factory = assert(loadfile(join_path(package_root,
         'tests/automation/support/output_handler.lua')))()
     output_factory.new(busted, run)
     require('busted.modules.filter_loader')()(busted,
@@ -249,7 +258,7 @@ local function execute_suite(repo_root, run, scheduler_module, scheduler)
 
     local loader = require('busted.modules.test_file_loader')(
         busted, {'lua'})
-    run.discovered_files = M.discover_tests(repo_root, loader,
+    run.discovered_files = M.discover_tests(project_root, loader,
         run.options.spec)
 
     busted.randomize = false
@@ -348,10 +357,11 @@ local function finalize_run(registry, run, ok, host_error)
 end
 
 ---Starts Busted execution when the queued generation still owns the run.
----@param repo_root string
+---@param package_root string
+---@param project_root string
 ---@param registry table
 ---@param run table
-local function begin_queued_run(repo_root, registry, run)
+local function begin_queued_run(package_root, project_root, registry, run)
     if registry.active_run ~= run or registry.generation ~= run.generation or
             run.state ~= 'starting' then
         return
@@ -360,7 +370,7 @@ local function begin_queued_run(repo_root, registry, run)
     transition(run, 'starting', 'running')
     run.started_ms = dfhack.getTickCount()
     run.started_frame = current_frame()
-    local scheduler_module = assert(loadfile(join_path(repo_root,
+    local scheduler_module = assert(loadfile(join_path(package_root,
         'tests/automation/support/scheduler.lua')))()
     local scheduler
     scheduler = scheduler_module.new(run, {
@@ -382,7 +392,8 @@ local function begin_queued_run(repo_root, registry, run)
     run.scheduler_module = scheduler_module
     run.scheduler = scheduler
     run.coroutine = coroutine.create(function()
-        execute_suite(repo_root, run, scheduler_module, scheduler)
+        execute_suite(package_root, project_root, run, scheduler_module,
+            scheduler)
     end)
     scheduler_module.bind(scheduler, run.coroutine)
     local ok, yielded = coroutine.resume(run.coroutine)
@@ -446,12 +457,17 @@ local function schedule_lease_check(registry, run)
 end
 
 ---Starts one uniquely owned nonblocking automation run.
----@param repo_root string
+---@param package_root string
+---@param project_root string
 ---@param options table
 ---@return table
-function M.start(repo_root, options)
+function M.start(package_root, project_root, options)
     assert(dfhack.is_core_context,
         'live automation must run in DFHack core context')
+    assert(type(package_root) == 'string' and package_root ~= '',
+        'DwarfSpec package root must be a nonempty string')
+    assert(type(project_root) == 'string' and project_root ~= '',
+        'project root must be a nonempty string')
     validate_run_id(options.run_id)
     local registry = get_registry()
     if registry.active_run and not M.is_terminal(registry.active_run) then
@@ -466,7 +482,7 @@ function M.start(repo_root, options)
     end
 
     registry.generation = registry.generation + 1
-    local cleanup_module = assert(loadfile(join_path(repo_root,
+    local cleanup_module = assert(loadfile(join_path(package_root,
         'tests/automation/support/cleanup.lua')))()
     local created_ms = dfhack.getTickCount()
     local run = {
@@ -515,7 +531,7 @@ function M.start(repo_root, options)
     run.cleanup_registry = cleanup_module.new(run)
     registry.active_run = run
     local timeout_id = dfhack.timeout(options.defer_frames, 'frames', function()
-        begin_queued_run(repo_root, registry, run)
+        begin_queued_run(package_root, project_root, registry, run)
     end)
     if not timeout_id then
         registry.active_run = nil

@@ -2,9 +2,9 @@
 
 local arguments = {...}
 
----Derives the repository root from this entry point's absolute source path.
+---Derives the DwarfSpec package root from this entry point's source path.
 ---@return string
-local function repository_root()
+local function package_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
     local root = source:match('^(.*)[/\\]tests[/\\]automation[/\\]bootstrap%.lua$')
     return assert(root, 'could not derive repository root from ' .. source)
@@ -36,6 +36,7 @@ local function parse_options(args)
         repeat_count=1,
         seed=1,
         spec=nil,
+        project_root=dfhack.filesystem.getcwd(),
         defer_frames=1,
         lease_timeout_ms=5000,
         lease_check_frames=30,
@@ -67,10 +68,14 @@ local function parse_options(args)
             options.lease_check_frames = positive_integer(
                 '--lease-check-frames', value)
         elseif name == 'spec' then
-            if not value:match('^[%w_.-]+_live_spec%.lua$') then
-                error('--spec must name one *_live_spec.lua file without a path')
+            if not value:match('^[%w_./-]+_spec%.ds%.lua$') or
+                    value:match('^[/\\]') or value:match('%.%.[/\\]') then
+                error('--spec must name one project-relative *_spec.ds.lua path')
             end
             options.spec = value
+        elseif name == 'project-root' then
+            if value == '' then error('--project-root must not be empty') end
+            options.project_root = value
         else
             error('unknown automation option: --' .. name)
         end
@@ -78,10 +83,11 @@ local function parse_options(args)
     return options
 end
 
-local root = repository_root()
+local root = package_root()
+local options = parse_options(arguments)
 local host = assert(loadfile(root ..
     '/tests/automation/support/busted_host.lua'))()
-local run = host.start(root, parse_options(arguments))
-print(('DWARFUI_AUTOMATION protocol=%d run_id=%s state=%s generation=%d')
+local run = host.start(root, options.project_root, options)
+print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))
-print('DWARFUI_AUTOMATION_JSON ' .. host.encode_report(run))
+print('DWARFSPEC_JSON ' .. host.encode_report(run))

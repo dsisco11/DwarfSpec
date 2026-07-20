@@ -77,10 +77,10 @@ describe('automation host ownership', function()
     end
 
     it('rejects overlap and ignores a callback after abort', function()
-        local run = host.start('.', options('owner'))
+        local run = host.start('.', '.', options('owner'))
         assert.equals('starting', run.state)
         assert.has_error(function()
-            host.start('.', options('overlap'))
+            host.start('.', '.', options('overlap'))
         end, 'automation run owner is already starting')
 
         local cleaned = false
@@ -101,13 +101,14 @@ describe('automation host ownership', function()
 
     it('retains an unobserved result until its owner acknowledges it', function()
         local aborted = host.abort(host.start(
+            '.',
             '.', options('retained')).run_id)
         assert.has_error(function()
-            host.start('.', options('replacement'))
+            host.start('.', '.', options('replacement'))
         end, 'automation run retained has an unobserved aborted result')
 
         aborted.terminal_observed = true
-        local replacement = host.start('.', options('replacement'))
+        local replacement = host.start('.', '.', options('replacement'))
         assert.equals('starting', replacement.state)
         host.abort(replacement.run_id)
     end)
@@ -115,7 +116,7 @@ describe('automation host ownership', function()
     it('expires an unpolled lease and performs emergency cleanup', function()
         local lease_options = options('lease-owner')
         lease_options.lease_timeout_ms = 10
-        local run = host.start('.', lease_options)
+        local run = host.start('.', '.', lease_options)
         local cleaned = false
         run.cleanup_module.push(run.cleanup_registry, 'lease proof', function()
             cleaned = true
@@ -179,28 +180,28 @@ describe('automation host ownership', function()
                 received_roots = roots
                 received_patterns = patterns
                 received_options = options
-                return {'tooltip_live_spec.lua'}
-            end, 'tooltip_live_spec.lua')
+                return {'tooltip_spec.ds.lua'}
+            end, 'tooltip_spec.ds.lua')
 
         assert.same({'fast'}, filters.tags)
         assert.same({'slow'}, filters.excludeTags)
         assert.same({'tooltip'}, filters.filter)
         assert.same({'one'}, filters.name)
         assert.same({'legacy'}, filters.filterOut)
-        assert.same({'tooltip_live_spec.lua'}, discovered)
-        assert.matches('tests[/\\]automation[/\\]specs[/\\]' ..
-            'tooltip_live_spec.lua$', received_roots[1])
-        assert.same({'_live_spec%.lua$'}, received_patterns)
+        assert.same({'tooltip_spec.ds.lua'}, discovered)
+        assert.matches('repository[/\\]tests[/\\]tooltip_spec%.ds%.lua$',
+            received_roots[1])
+        assert.same({'_spec%.ds%.lua$'}, received_patterns)
         assert.is_true(received_options.recursive)
         assert.has_error(function()
             host.discover_tests('repository', function() end,
-                '../outside.lua')
-        end, 'live spec must name one *_live_spec.lua file without a path')
+                '../outside_spec.ds.lua')
+        end, 'live spec must name one project-relative *_spec.ds.lua path')
     end)
 
     it('rejects unsafe host run identifiers before scheduling work', function()
         assert.has_error(function()
-            host.start('.', options('../unsafe'))
+            host.start('.', '.', options('../unsafe'))
         end, 'run id must contain only letters, digits, dot, underscore, or dash')
         assert.equals(0, #callbacks)
     end)

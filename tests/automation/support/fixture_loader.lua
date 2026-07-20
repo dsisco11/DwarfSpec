@@ -1,44 +1,42 @@
--- Approved test-fixture loader for live automation screens.
+-- Explicit consumer fixture importer for live automation screens.
 
 local M = {}
 
-local APPROVED_FIXTURES = {
-    cover_screen=true,
-    failing_screen=true,
-    interaction_screen=true,
-    tooltip_screen=true,
-}
-
----Joins a repository path with a portable relative path.
----@param root string
----@param relative_path string
----@return string
-local function join_path(root, relative_path)
-    local separator = package.config:sub(1, 1)
-    return root .. separator .. relative_path:gsub('[/\\]', separator)
+---Resolves and validates one project-relative fixture module path.
+---@param project table
+---@param import_path string
+---@return string, string
+function M.resolve(project, import_path)
+    assert(type(project) == 'table' and type(project.project_root) == 'string',
+        'fixture loading requires a project descriptor')
+    local project_module = assert(loadfile(project.package_root ..
+        '/tests/automation/support/project.lua'))()
+    local relative_path = project_module.relative_path(import_path)
+    assert(relative_path:match('%.lua$'),
+        'fixture import must name one Lua module: ' .. relative_path)
+    local absolute_path = project_module.join(project.project_root,
+        relative_path)
+    assert(project.filesystem.isfile(absolute_path),
+        'fixture module was not found: ' .. relative_path)
+    return absolute_path, relative_path
 end
 
----Loads one named fixture from the approved fixture directory.
----@param repo_root string
----@param name string
+---Explicitly imports one fixture module from the consumer project.
+---@param project table
+---@param import_path string
+---@param loader function|nil
 ---@return table
-function M.load(repo_root, name)
-    assert(type(name) == 'string' and name:match('^[%a_][%w_]*$'),
-        'fixture name must be a relative identifier')
-    assert(APPROVED_FIXTURES[name], 'unknown automation fixture: ' .. name)
-    local fixture_path = join_path(repo_root,
-        'tests/automation/fixtures/' .. name .. '.lua')
-    local fixture = assert(loadfile(fixture_path))()
+function M.load(project, import_path, loader)
+    local absolute_path, relative_path = M.resolve(project, import_path)
+    local chunk, load_error = (loader or loadfile)(absolute_path)
+    assert(chunk, relative_path .. ': could not load fixture: ' ..
+        tostring(load_error))
+    local ok, fixture = xpcall(chunk, debug.traceback)
+    assert(ok, relative_path .. ': fixture failed to load: ' ..
+        tostring(fixture))
     assert(type(fixture) == 'table' and type(fixture.new) == 'function',
-        'automation fixture must export new(options): ' .. name)
+        'automation fixture must export new(options): ' .. relative_path)
     return fixture
-end
-
----Returns whether a fixture name is approved for automation use.
----@param name string
----@return boolean
-function M.is_approved(name)
-    return APPROVED_FIXTURES[name] == true
 end
 
 return M

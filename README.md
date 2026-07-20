@@ -4,10 +4,16 @@ DwarfSpec is an in-process Busted host for automating live DFHack user
 interfaces. It lets a Busted test yield across real game frames, interact with
 test-owned screens, and receive deterministic results and cleanup diagnostics.
 
-This repository currently contains the mechanically extracted reusable host
-from DwarfUI. The extraction deliberately retains the original internal paths
-and public names so its behavior and history can be reviewed before the
-DwarfSpec namespace and LuaRocks packaging changes are applied.
+The host resolves its own package files independently from the consumer
+project. Consumer live specs are discovered only as
+`tests/**/*_spec.ds.lua`, and the public `ds` object exists only inside each
+isolated Busted spec environment.
+
+Consumer-wide settings and extensions are optional. Put them in
+`tests/dwarfspec/*.lua`; `config.lua` is loaded first, followed by the other
+modules in stable path order. Fixtures are imported explicitly. The recommended
+co-located name is `tests/**/fixtures/*.fixture.lua`, but any safe importable
+project-relative Lua module can be used.
 
 ## Development
 
@@ -30,7 +36,9 @@ unit runner installs its pinned Busted dependencies into the ignored local
 remain a separate verification layer.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for repository conventions and
-[docs/architecture.md](docs/architecture.md) for the extraction boundary.
+[docs/architecture.md](docs/architecture.md) for the package boundary. See
+[docs/configuration.md](docs/configuration.md) and
+[docs/writing-tests.md](docs/writing-tests.md) for the consumer contracts.
 
 ## License
 

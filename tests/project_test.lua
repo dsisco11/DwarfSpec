@@ -42,8 +42,8 @@ describe('DwarfSpec project resolution', function()
 
     it('discovers optional configuration modules in stable order', function()
         local descriptor = project.new('project', 'package', filesystem())
-        assert.same({'tests/dwarfspec/commands.lua',
-            'tests/dwarfspec/config.lua'},
+        assert.same({'tests/dwarfspec/config.lua',
+            'tests/dwarfspec/commands.lua'},
             project.discover_config_modules(descriptor))
     end)
 

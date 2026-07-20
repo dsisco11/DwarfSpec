@@ -2,19 +2,19 @@
 
 local run_id = assert(..., 'run id argument is required')
 
----Derives the repository root from this entry point's absolute source path.
+---Derives the DwarfSpec package root from this entry point's source path.
 ---@return string
-local function repository_root()
+local function package_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
     local root = source:match('^(.*)[/\\]tests[/\\]automation[/\\]abort%.lua$')
     return assert(root, 'could not derive repository root from ' .. source)
 end
 
-local root = repository_root()
+local root = package_root()
 local host = assert(loadfile(root ..
     '/tests/automation/support/busted_host.lua'))()
 local run = host.abort(run_id)
 run.terminal_observed = true
-print(('DWARFUI_AUTOMATION protocol=%d run_id=%s state=%s generation=%d')
+print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))
-print('DWARFUI_AUTOMATION_JSON ' .. host.encode_report(run))
+print('DWARFSPEC_JSON ' .. host.encode_report(run))

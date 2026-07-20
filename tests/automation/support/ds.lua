@@ -78,22 +78,29 @@ local function run_action(context, operation, view, action)
 end
 
 ---Creates the run-scoped live interaction namespace.
----@param repo_root string
+---@param package_root string
+---@param project table
 ---@param scheduler_module table
 ---@param scheduler table
 ---@param cleanup_module table
 ---@param cleanup_registry table
+---@param extensions table
 ---@return table
-function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
-        cleanup_registry)
-    local fixture_loader = assert(loadfile(repo_root ..
+function M.new(package_root, project, scheduler_module, scheduler,
+        cleanup_module, cleanup_registry, extensions)
+    local fixture_loader = assert(loadfile(package_root ..
         '/tests/automation/support/fixture_loader.lua'))()
-    local diagnostics = assert(loadfile(repo_root ..
+    local diagnostics = assert(loadfile(package_root ..
         '/tests/automation/support/diagnostics.lua'))()
-    local pointer_adapter_module = assert(loadfile(repo_root ..
+    local pointer_adapter_module = assert(loadfile(package_root ..
         '/tests/automation/support/pointer_adapter.lua'))()
+    local overlay_fixture = assert(loadfile(package_root ..
+        '/tests/automation/support/overlay_fixture.lua'))()
+    extensions = extensions or {settings={}, commands={}, diagnostics={}}
+    local wait_settings = extensions.settings.wait or {}
     local context = {
-        repo_root=repo_root,
+        package_root=package_root,
+        project=project,
         scheduler=scheduler,
         scheduler_module=scheduler_module,
         cleanup_module=cleanup_module,
@@ -108,12 +115,29 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
         protocol_version=1,
     }
 
+    ---Copies caller wait options and applies project-wide defaults.
+    ---@param options table|nil
+    ---@param include_frame_budget boolean
+    ---@return table
+    local function wait_options(options, include_frame_budget)
+        local result = {}
+        for key, value in pairs(options or {}) do result[key] = value end
+        if result.timeout_ms == nil then
+            result.timeout_ms = wait_settings.timeout_ms
+        end
+        if include_frame_budget and result.frame_budget == nil then
+            result.frame_budget = wait_settings.frame_budget
+        end
+        return result
+    end
+
     ---Waits for actual DFHack raw-frame callbacks without blocking the game.
     ---@param count integer
     ---@param options table|nil
     ---@return integer
     function ds.wait_frames(count, options)
-        return scheduler_module.wait_frames(scheduler, count, options)
+        return scheduler_module.wait_frames(scheduler, count,
+            wait_options(options, false))
     end
 
     ---Polls a read-only condition once per frame until it becomes ready.
@@ -123,7 +147,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
     ---@return any
     function ds.wait_until(description, query, options)
         return scheduler_module.wait_until(
-            scheduler, description, query, options)
+            scheduler, description, query, wait_options(options, true))
     end
 
     ---Restores all currently registered test-owned resources.
@@ -142,14 +166,14 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
         })
     end
 
-    ---Shows an approved test-owned fixture and waits for its first real render.
-    ---@param name string
+    ---Shows an explicitly imported fixture and waits for its first real render.
+    ---@param import_path string
     ---@param options table|nil
     ---@return table
-    function ds.show_fixture(name, options)
-        return run_action(context, 'show fixture ' .. tostring(name), nil,
+    function ds.show_fixture(import_path, options)
+        return run_action(context, 'show fixture ' .. tostring(import_path), nil,
             function()
-                local fixture = fixture_loader.load(repo_root, name)
+                local fixture = fixture_loader.load(project, import_path)
                 local pause_state = df.global.pause_state
                 local screen = fixture.new(options)
                 assert(type(screen.show) == 'function',
@@ -159,7 +183,7 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
                         df.global.pause_state = pause_state
                     end)
                 local entry = cleanup_module.push(cleanup_registry,
-                    'dismiss fixture ' .. name, function()
+                    'dismiss fixture ' .. import_path, function()
                         if is_active(screen) then screen:dismiss() end
                         context.screen_entries[screen] = nil
                     end)
@@ -352,6 +376,32 @@ function M.new(repo_root, scheduler_module, scheduler, cleanup_module,
         local capture = diagnostics.capture_screen(options)
         context.run.captures[name] = capture
         return capture
+    end
+
+    ---Stages an explicitly imported overlay fixture for this run.
+    ---@param import_path string
+    ---@return table
+    function ds.stage_overlay_fixture(import_path)
+        return overlay_fixture.stage(project, import_path, context.run.run_id,
+            cleanup_module, cleanup_registry)
+    end
+
+    ---Invokes one named consumer diagnostic adapter in the isolated ds scope.
+    ---@param name string
+    ---@param ... any
+    ---@return any
+    function ds.diagnostic(name, ...)
+        local adapter = extensions.diagnostics[name]
+        assert(adapter, 'consumer diagnostic adapter was not found: ' ..
+            tostring(name))
+        return adapter.callback(ds, ...)
+    end
+
+    for name, command in pairs(extensions.commands) do
+        local callback = command.callback
+        ds[name] = function(...)
+            return callback(ds, ...)
+        end
     end
 
     return ds

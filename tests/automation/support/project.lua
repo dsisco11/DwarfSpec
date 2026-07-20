@@ -91,7 +91,12 @@ function M.discover_config_modules(project)
             table.insert(modules, 'tests/dwarfspec/' .. entry)
         end
     end
-    table.sort(modules)
+    table.sort(modules, function(left, right)
+        local left_config = left == 'tests/dwarfspec/config.lua'
+        local right_config = right == 'tests/dwarfspec/config.lua'
+        if left_config ~= right_config then return left_config end
+        return left < right
+    end)
     return modules
 end
 

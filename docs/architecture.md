@@ -21,5 +21,25 @@ documentation remain in DwarfUI.
 
 The source tree reserves `src/dwarfspec/` for installed modules, `bin/` for the
 cross-platform command, and `tests/` for DwarfSpec's own unit and live
-framework coverage. The preserved files retain their original paths until the
-separately reviewable namespace and package-boundary migrations.
+framework coverage.
+
+## Package and consumer boundary
+
+Every host run receives two roots. The package root owns Busted, the scheduler,
+cleanup, reporting, and the `ds` implementation. The project root owns live
+specs, configuration modules, custom commands, diagnostics, and fixtures.
+Neither root is inferred from the layout of the other.
+
+The host discovers only `tests/**/*_spec.ds.lua` beneath the project root in
+stable path order. Ordinary Busted unit specs do not match this suffix.
+
+Modules in `tests/dwarfspec/` execute in private environments that read process
+globals but retain their own global writes. Their commands are bound only onto
+the run-scoped `ds` object. Diagnostic adapters are reached through
+`ds.diagnostic(name, ...)`; they do not add product-specific inspection to the
+library.
+
+Screen fixtures and overlay fixture definitions are explicit imports. Paths
+are project-relative and cannot escape the project root. Overlay files receive
+run-unique `dwarfspec_*` names, cannot overwrite existing files, and register
+exact removal plus a final overlay rescan in the run's LIFO cleanup registry.
