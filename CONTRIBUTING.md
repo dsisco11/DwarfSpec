@@ -5,8 +5,8 @@ and tests that require a running DFHack process.
 
 Before submitting a change:
 
-1. Run `Tools/Check-Lua.ps1` with a Lua 5.3 interpreter.
-2. Run `Tools/Run-Unittests.ps1` with Lua and LuaRocks available on `PATH`.
+1. Run `tools/Check-Lua.ps1` with a Lua 5.3 interpreter.
+2. Run `tools/Run-Unittests.ps1` with Lua and LuaRocks available on `PATH`.
 3. Run the relevant live DFHack specifications when host behavior changes.
 4. Document every Lua module and function with triple-dash LuaDoc prose.
 
