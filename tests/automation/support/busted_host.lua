@@ -10,6 +10,29 @@ local TERMINAL_STATES = {
     aborted=true,
 }
 
+local TEST_DEPENDENCY_ROOTS = {
+    busted=true,
+    cliargs=true,
+    dkjson=true,
+    lfs=true,
+    luassert=true,
+    mediator=true,
+    pl=true,
+    say=true,
+    system=true,
+    term=true,
+}
+
+---Clears cached test-runtime modules before loading one package tree's copies.
+---@param loaded table|nil
+function M.clear_dependency_modules(loaded)
+    loaded = loaded or package.loaded
+    for name in pairs(loaded) do
+        local root = name:match('^([^.]+)')
+        if TEST_DEPENDENCY_ROOTS[root] then loaded[name] = nil end
+    end
+end
+
 ---Returns a repository path using the active platform separator.
 ---@param root string
 ---@param relative_path string
@@ -154,6 +177,8 @@ local function configure_dependencies(package_root, dependency_lua_root)
         end
     end
 
+    M.clear_dependency_modules()
+
     local system_adapter = load_automation_module(package_root,
         'dwarfspec.automation.system_adapter',
         'tests/automation/support/system_adapter.lua')
@@ -165,8 +190,6 @@ local function configure_dependencies(package_root, dependency_lua_root)
     package.loaded.system = system_adapter
     package.loaded.lfs = lfs_adapter
 
-    -- busted.init consumes its callable metatable during initialization.
-    package.loaded.busted = nil
 end
 
 ---Normalizes a caller's optional scalar or dense-list filter value.

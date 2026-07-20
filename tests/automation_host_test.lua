@@ -232,4 +232,37 @@ describe('automation host ownership', function()
 
         assert.equals(2, reset_count)
     end)
+
+    it('clears cached test dependencies without touching unrelated modules',
+            function()
+        local loaded = {
+            ['busted.core']={},
+            cliargs={},
+            dkjson={},
+            lfs={},
+            luassert={},
+            mediator={},
+            ['pl.path']={},
+            say={},
+            system={},
+            ['term.colors']={},
+            ['gui.widgets']={},
+            json={},
+        }
+
+        host.clear_dependency_modules(loaded)
+
+        assert.same({}, loaded['gui.widgets'])
+        assert.same({}, loaded.json)
+        assert.is_nil(loaded['busted.core'])
+        assert.is_nil(loaded.cliargs)
+        assert.is_nil(loaded.dkjson)
+        assert.is_nil(loaded.lfs)
+        assert.is_nil(loaded.luassert)
+        assert.is_nil(loaded.mediator)
+        assert.is_nil(loaded['pl.path'])
+        assert.is_nil(loaded.say)
+        assert.is_nil(loaded.system)
+        assert.is_nil(loaded['term.colors'])
+    end)
 end)
