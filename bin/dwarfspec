@@ -45,8 +45,13 @@ local function prepend(current, entry)
 end
 
 local root = package_root()
+local lua_version = _VERSION:match('(%d+%.%d+)')
 package.path = prepend(package.path, root .. '/src/?.lua')
 package.path = prepend(package.path, root .. '/src/?/init.lua')
+package.path = prepend(package.path,
+    root .. '/share/lua/' .. lua_version .. '/?.lua')
+package.path = prepend(package.path,
+    root .. '/share/lua/' .. lua_version .. '/?/init.lua')
 package.path = prepend(package.path, root .. '/.luarocks/share/lua/5.4/?.lua')
 package.path = prepend(package.path,
     root .. '/.luarocks/share/lua/5.4/?/init.lua')

@@ -13,3 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   generic framework tests, and generic fixtures extracted from DwarfUI.
 - Lua 5.3 syntax and repository formatting checks.
 - A pinned local Busted unit-test command.
+
+## [0.1.0] - 2026-07-20
+
+### Added
+
+- LuaRocks package metadata, namespaced module installation, and the
+  `dwarfspec` command launcher.
+- Installation and release guidance for the portable pure-Lua rock.
