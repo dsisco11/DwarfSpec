@@ -84,6 +84,12 @@ describe('DwarfSpec package contract', function()
             'tests/automation/support/overlay_registration.lua'))
     end)
 
+    it('lets LuaRocks generate the platform command launcher', function()
+        local rockspec = read_repository_file(ROCKSPEC_PATH)
+        assert.matches('dwarfspec = "bin/dwarfspec"', rockspec, 1, true)
+        assert.is_nil(rockspec:find('["dwarfspec.bat"]', 1, true))
+    end)
+
     it('provides a VS Code task for building the portable release rock',
             function()
         local tasks = read_repository_file('.vscode/tasks.json')

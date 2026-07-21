@@ -35,3 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   diagnostics, current-mount state, and cleanup.
 - Lua 5.3 compatibility and Lua 5.4 repository formatting checks.
 - A pinned local Busted unit-test command.
+
+### Fixed
+
+- Install one portable command script and let LuaRocks generate the appropriate
+  platform launcher instead of publishing overlapping command entries.

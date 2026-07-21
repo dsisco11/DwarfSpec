@@ -15,10 +15,10 @@ luarocks install .\dist\dwarfspec-0.1.0-1.all.rock
 
 The VS Code `Publish` task, or `tools/Publish.ps1`, produces that portable
 artifact with LuaRocks configured as `arch = 'all'`. This is deliberate:
-DwarfSpec contains only Lua modules plus a Unix shell launcher and a Windows
-batch launcher. It does not contain a compiled module. On Windows, add the
-selected rock tree's `bin` directory and the Lua interpreter directory to
-`PATH`, then run:
+DwarfSpec contains only Lua modules plus a portable Lua command script. It does
+not contain a compiled module. LuaRocks generates the platform-specific command
+launcher when it installs the rock. On Windows, add the selected rock tree's
+`bin` directory and the Lua interpreter directory to `PATH`, then run:
 
 ```powershell
 dwarfspec help

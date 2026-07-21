@@ -63,7 +63,6 @@ build = {
     install = {
         bin = {
             dwarfspec = "bin/dwarfspec",
-            ["dwarfspec.bat"] = "bin/dwarfspec.bat",
         },
     },
 }

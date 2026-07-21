@@ -30,6 +30,11 @@ local function package_root()
     end
     script_directory = script_directory:gsub('\\', '/')
         :gsub('/%./', '/'):gsub('/+$', '')
+
+    local installed_tree = script_directory:match(
+        '^(.-)/lib/luarocks/rocks[^/]*/dwarfspec/[^/]+/bin$')
+    if installed_tree then return installed_tree end
+
     return script_directory:gsub('/bin$', '')
 end
 

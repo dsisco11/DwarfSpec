@@ -39,6 +39,9 @@ jobs:
       - name: Install project
         run: luarocks make
 
+      - name: Check installed command
+        run: dwarfspec version
+
       - name: Run offline unit tests
         run: busted --no-recursive tests/unit
 
