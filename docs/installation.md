@@ -55,7 +55,7 @@ specifications through the project script:
 Pass normal `dwarfspec run` selectors after the script name. The script sets
 `DFHACK_ROOT` only for that process and restores any existing shell value when
 it exits. With no selectors, it runs the product live specifications under
-`tests/automation/specs/`. The `.env` file is ignored by Git and is not used by
+`tests/automation/`. The `.env` file is ignored by Git and is not used by
 GitHub Actions.
 
 The external command uses its installation's Lua version, which does not need

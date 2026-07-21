@@ -39,8 +39,8 @@ local function options(run_id)
     return {
         package_root='.',
         project_root='tests/framework/minimal_project',
-        test_glob='*.ds.lua',
-        identities={'tests/live/minimal.ds.lua'},
+        test_glob='tests/automation/*.lua',
+        identities={'tests/automation/minimal_spec.lua'},
         runner='bin/dwarfspec',
         filters={}, filter_out={}, names={}, tags={}, exclude_tags={},
         repeat_count=1,
@@ -86,7 +86,7 @@ describe('DwarfSpec external runner', function()
         local test_glob_found = false
         local lua_module_root_found = false
         for _, argument in ipairs(bootstrap_arguments) do
-            if argument == '--test-glob=*.ds.lua' then
+            if argument == '--test-glob=tests/automation/*.lua' then
                 test_glob_found = true
             end
             if argument:match('^%-%-lua%-module%-root=') then
@@ -318,7 +318,7 @@ describe('DwarfSpec external runner', function()
             function()
         local run_options = options('write-failure')
         run_options.result_directory = require('lfs').currentdir() ..
-            '/tests/runner_spec.lua'
+            '/tests/unit/runner_spec.lua'
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={

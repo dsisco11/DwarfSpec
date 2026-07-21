@@ -49,7 +49,7 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
-$testsRoot = Join-Path $projectRoot 'tests'
+$testsRoot = Join-Path $projectRoot 'tests\unit'
 
 $oldLuaPath = [Environment]::GetEnvironmentVariable('LUA_PATH', 'Process')
 $oldLuaCPath = [Environment]::GetEnvironmentVariable('LUA_CPATH', 'Process')

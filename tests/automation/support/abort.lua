@@ -14,7 +14,8 @@ local function package_root()
             separator .. '?' .. separator .. 'init.lua;' .. package.path
         return lua_root, lua_root
     end
-    local root = source:match('^(.*)[/\\]tests[/\\]automation[/\\]abort%.lua$')
+    local root = source:match(
+        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]abort%.lua$')
     root = assert(root, 'could not derive DwarfSpec root from ' .. source)
     package.path = root .. '/src/?.lua;' .. root ..
         '/src/?/init.lua;' .. package.path

@@ -56,10 +56,11 @@ function M.current()
     return {
         package_root=package_root,
         host_scripts={
-            bootstrap=join(package_root, 'tests/automation/bootstrap.lua'),
-            status=join(package_root, 'tests/automation/status.lua'),
-            abort=join(package_root, 'tests/automation/abort.lua'),
-            probe=join(package_root, 'tests/automation/probe.lua'),
+            bootstrap=join(package_root,
+                'tests/automation/support/bootstrap.lua'),
+            status=join(package_root, 'tests/automation/support/status.lua'),
+            abort=join(package_root, 'tests/automation/support/abort.lua'),
+            probe=join(package_root, 'tests/automation/support/probe.lua'),
         },
     }
 end

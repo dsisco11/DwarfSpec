@@ -14,7 +14,7 @@ end
 ---@return string
 local function repository_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
-    local root = source:match('^(.*)[/\\]tests[/\\]automation[/\\]specs[/\\]' ..
+    local root = source:match('^(.*)[/\\]tests[/\\]automation[/\\]' ..
         'framework_hardening_live_spec%.lua$')
     return assert(root, 'could not derive repository root from ' .. source)
 end

@@ -17,10 +17,9 @@ Before submitting a change:
    behavior changes.
 5. Document every Lua module and function with triple-dash LuaDoc prose.
 
-Standalone Busted unit specs live under `tests/` and use the conventional
-`*_spec.lua` suffix. Live DFHack specs remain in their dedicated live-spec
-directories and are not executed by `tools/Run-UnitTests.ps1` or GitHub
-Actions.
+Standalone Busted unit specs live under `tests/unit/`. Live DFHack specs live
+under `tests/automation/` and are not executed by `tools/Run-UnitTests.ps1` or
+GitHub Actions. This repository's automation script selects that directory;
 
 Use four spaces for indentation, LF line endings, no tabs, no trailing
 whitespace, and a final newline. Production framework modules ultimately live

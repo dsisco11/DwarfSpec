@@ -33,6 +33,7 @@ describe('DwarfSpec project resolution', function()
                 'dwarfspec', 'support'},
             ['project/tests/nested']={'z_spec.ds.lua', 'helper.lua',
                 'cover.fixture.lua'},
+            ['project/tests/support']={'external_screen.lua'},
             ['project/tests/dwarfspec']={'commands.lua', 'config.lua'},
             ['project/tests/support']={'external_screen.lua'},
         }

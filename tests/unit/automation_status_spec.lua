@@ -90,7 +90,8 @@ describe('automation status formatting', function()
         local run = host.start('.', '.', options())
         run.output_lines = {'line one\nline two'}
 
-        assert(loadfile('./tests/automation/status.lua'))('status-run', '0')
+        assert(loadfile('./tests/automation/support/status.lua'))('status-run',
+            '0')
 
         assert.matches('DWARFSPEC protocol=1 run_id=status-run ' ..
             'state=starting generation=1', lines[1], 1, true)

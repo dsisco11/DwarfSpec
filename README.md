@@ -87,7 +87,7 @@ For local live automation from this source checkout, copy `.env.example` to
 ```
 
 With no arguments, the script runs the product live specifications under
-`tests/automation/specs/`. Pass normal `dwarfspec run` selectors after the
+`tests/automation/`. Pass normal `dwarfspec run` selectors after the
 script name. The `.env` file is local-only and is not read by GitHub Actions.
 
 ## Add DwarfSpec to a project

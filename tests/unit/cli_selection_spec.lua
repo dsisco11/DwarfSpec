@@ -18,20 +18,20 @@ describe('DwarfSpec canonical selection', function()
     it('implements documented case-sensitive segment and recursive globs',
             function()
         local identities = {
-            'tests/a_spec.ds.lua',
-            'tests/nested/b_spec.ds.lua',
-            'tests/nested/deeper/c_spec.ds.lua',
+            'tests/automation/a_spec.lua',
+            'tests/automation/nested/b_spec.lua',
+            'tests/automation/nested/deeper/c_spec.lua',
         }
-        assert.same({'tests/a_spec.ds.lua'},
-            glob.select(identities, 'tests/*_spec.ds.lua'))
+        assert.same({'tests/automation/a_spec.lua'},
+            glob.select(identities, 'tests/automation/*_spec.lua'))
         assert.same(identities,
-            glob.select(identities, 'tests/**/*_spec.ds.lua'))
-        assert.same({'tests/nested/b_spec.ds.lua'},
-            glob.select(identities, 'tests/nested/?_spec.ds.lua'))
-        assert.is_false(glob.matches('tests/a_spec.ds.lua',
-            'tests/A_spec.ds.lua'))
-        assert.is_true(glob.matches('tests/star*_spec.ds.lua',
-            'tests/star\\*_spec.ds.lua'))
+            glob.select(identities, 'tests/**/*_spec.lua'))
+        assert.same({'tests/automation/nested/b_spec.lua'},
+            glob.select(identities, 'tests/automation/nested/?_spec.lua'))
+        assert.is_false(glob.matches('tests/automation/a_spec.lua',
+            'tests/automation/A_spec.lua'))
+        assert.is_true(glob.matches('tests/automation/star*_spec.lua',
+            'tests/automation/star\\*_spec.lua'))
     end)
 
     it('rejects malformed globs distinctly', function()
@@ -45,19 +45,18 @@ describe('DwarfSpec canonical selection', function()
 
     it('discovers only stable canonical live-spec identities', function()
         local files = {
-            ['project/tests/a.ds.lua']=true,
-            ['project/tests/nested/b_spec.ds.lua']=true,
-            ['project/tests/nested/legacy_live_spec.lua']=true,
-            ['project/tests/nested/ordinary_spec.lua']=true,
-            ['project/tests/nested/cover.fixture.lua']=true,
-            ['project/tests/support/external_screen.lua']=true,
+            ['project/tests/automation/a_spec.lua']=true,
+            ['project/tests/automation/ordinary_spec.lua']=true,
+            ['project/tests/automation/integration/registered_spec.lua']=true,
+            ['project/tests/automation/support/external_screen.lua']=true,
         }
         local directories = {
             project={'tests'},
-            ['project/tests']={'nested', 'a.ds.lua', 'support'},
-            ['project/tests/nested']={'ordinary_spec.lua', 'b_spec.ds.lua',
-                'legacy_live_spec.lua', 'cover.fixture.lua'},
-            ['project/tests/support']={'external_screen.lua'},
+            ['project/tests']={'automation'},
+            ['project/tests/automation']={'a_spec.lua', 'ordinary_spec.lua',
+                'integration', 'support'},
+            ['project/tests/automation/integration']={'registered_spec.lua'},
+            ['project/tests/automation/support']={'external_screen.lua'},
         }
         local filesystem = {
             isfile=function(path) return files[path:gsub('\\', '/')] end,
@@ -68,12 +67,13 @@ describe('DwarfSpec canonical selection', function()
                 return directories[path:gsub('\\', '/')]
             end,
         }
-        assert.same({'tests/a.ds.lua',
-            'tests/nested/b_spec.ds.lua'},
-            project.discover('project', filesystem))
-        assert.same({'tests/nested/legacy_live_spec.lua'},
+        assert.same({'tests/automation/a_spec.lua',
+            'tests/automation/ordinary_spec.lua'},
             project.discover('project', filesystem,
-                'tests/**/*_live_spec.lua'))
+                'tests/automation/*.lua'))
+        assert.same({'tests/automation/integration/registered_spec.lua'},
+            project.discover('project', filesystem,
+                'tests/automation/integration/*.lua'))
     end)
 end)
 
@@ -92,15 +92,16 @@ describe('DwarfSpec CLI selection', function()
         errors = stream()
         invoked = nil
         files = {
-            ['project/tests/a.ds.lua']=true,
-            ['project/tests/nested/b_spec.ds.lua']=true,
-            ['project/tests/nested/legacy_live_spec.lua']=true,
+            ['project/tests/automation/a_spec.lua']=true,
+            ['project/tests/automation/ordinary_spec.lua']=true,
+            ['project/tests/automation/integration/registered_spec.lua']=true,
         }
         directories = {
             project={'tests'},
-            ['project/tests']={'nested', 'a.ds.lua'},
-            ['project/tests/nested']={'b_spec.ds.lua',
-                'legacy_live_spec.lua'},
+            ['project/tests']={'automation'},
+            ['project/tests/automation']={'a_spec.lua', 'ordinary_spec.lua',
+                'integration'},
+            ['project/tests/automation/integration']={'registered_spec.lua'},
         }
         modules = {}
         filesystem = {
@@ -144,43 +145,46 @@ describe('DwarfSpec CLI selection', function()
     end)
 
     it('uses identical ordered selections for list and run', function()
-        local expression = 'tests/**/*.ds.lua'
-        assert.equals(0, cli.main({'list', expression}, context))
+        local expression = 'tests/automation/*.lua'
+        assert.equals(0, cli.main({'list', expression,
+            '--test-glob=tests/automation/*.lua'}, context))
         local listed = output.text
         output.text = ''
         assert.equals(0, cli.main({'run', expression,
-            '--no-results'}, context))
-        assert.same({'tests/a.ds.lua',
-            'tests/nested/b_spec.ds.lua'}, invoked.identities)
-        assert.equals('tests/a.ds.lua\n' ..
-            'tests/nested/b_spec.ds.lua\n', listed)
+            '--test-glob=tests/automation/*.lua', '--no-results'}, context))
+        assert.same({'tests/automation/a_spec.lua',
+            'tests/automation/ordinary_spec.lua'}, invoked.identities)
+        assert.equals('tests/automation/a_spec.lua\n' ..
+            'tests/automation/ordinary_spec.lua\n', listed)
     end)
 
     it('uses one configurable discovery glob for list and run', function()
-        local test_glob = 'tests/**/*_live_spec.lua'
+        local test_glob = 'tests/automation/integration/*.lua'
         assert.equals(0, cli.main({'list', '--test-glob=' .. test_glob},
             context))
         local listed = output.text
         output.text = ''
         assert.equals(0, cli.main({'run', '--test-glob', test_glob,
             '--no-results'}, context))
-        assert.same({'tests/nested/legacy_live_spec.lua'},
+        assert.same({'tests/automation/integration/registered_spec.lua'},
             invoked.identities)
         assert.equals(test_glob, invoked.test_glob)
-        assert.equals('tests/nested/legacy_live_spec.lua\n', listed)
+        assert.equals('tests/automation/integration/registered_spec.lua\n',
+            listed)
     end)
 
     it('accepts the discovery glob from the environment', function()
         context.environment = {
             getenv=function(name)
                 if name == 'DWARFSPEC_TEST_GLOB' then
-                    return 'tests/**/*_live_spec.lua'
+                    return 'tests/automation/integration/*.lua'
                 end
                 return nil
             end,
         }
         assert.equals(0, cli.main({'list'}, context))
-        assert.equals('tests/nested/legacy_live_spec.lua\n', output.text)
+        assert.equals('tests/automation/integration/registered_spec.lua\n',
+            output.text)
     end)
 
     it('accepts the discovery glob from project configuration', function()
@@ -188,11 +192,12 @@ describe('DwarfSpec CLI selection', function()
         files[path] = true
         modules[path] = {
             settings={
-                discovery={test_glob='tests/**/*_live_spec.lua'},
+                discovery={test_glob='tests/automation/integration/*.lua'},
             },
         }
         assert.equals(0, cli.main({'list'}, context))
-        assert.equals('tests/nested/legacy_live_spec.lua\n', output.text)
+        assert.equals('tests/automation/integration/registered_spec.lua\n',
+            output.text)
     end)
 
     it('returns distinct usage and no-match diagnostics', function()
@@ -210,7 +215,8 @@ describe('DwarfSpec CLI selection', function()
     it('forwards quoted values and every run control without tokenizing them',
             function()
         assert.equals(0, cli.main({
-            'run', 'tests/*',
+            'run', 'tests/automation/*',
+            '--test-glob=tests/automation/*.lua',
             '--filter', 'name with spaces', '--filter-out=legacy',
             '--name=exact example', '--tag=fast', '--exclude-tag=slow',
             '--repeat=2',

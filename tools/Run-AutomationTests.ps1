@@ -117,7 +117,7 @@ foreach ($argument in $DwarfSpecArgs) {
 }
 if (-not $hasTestGlob) {
     $runArguments += @('--test-glob',
-        'tests/automation/specs/*_live_spec.lua')
+        'tests/automation/*.lua')
 }
 $runArguments += $DwarfSpecArgs
 try {
