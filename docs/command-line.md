@@ -58,8 +58,12 @@ The default result directory is `.test-results/dwarfspec/` beneath the
 consumer project. Once the native host has produced a report, the command
 writes its exact DFHack-encoded JSON payload to `<run-id>.json`. The payload
 has schema `dwarfspec.run.v1` and includes the run state, Busted totals,
-failure details, output position, and cleanup confirmation. The external
-command does not re-encode it. `--results PATH` selects another directory;
+failure details, output position, and cleanup confirmation. Terminal runs that
+initialized the component driver also include `mount_cleanup_state`: whether
+lifecycle verification passed, counts of active owned screens and live
+subjects, the tracked-screen count, and whether the virtual pointer remained
+installed. The external command does not re-encode it. `--results PATH`
+selects another directory;
 `--no-results` disables persistence. Failures before a native report exists
 do not create a result file.
 

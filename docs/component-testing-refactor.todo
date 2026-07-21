@@ -545,22 +545,81 @@ Phase 7 evidence (2026-07-20):
 
 ## Phase 8: Harden lifecycle and failure recovery
 
-- [ ] Run mount reset before and after every Busted example.
-- [ ] Preserve strict LIFO cleanup for component, host screen, pointer state,
+- [x] Run mount reset before and after every Busted example.
+- [x] Preserve strict LIFO cleanup for component, host screen, pointer state,
   pause state, lifecycle callbacks, and render interception.
-- [ ] Ensure assertion failures, command errors, render errors, timeouts,
+- [x] Ensure assertion failures, command errors, render errors, timeouts,
   external lease expiry, and explicit abort all drain mount resources.
-- [ ] Make cleanup idempotent after explicit unmount or replacement mount.
-- [ ] Report cleanup failures without hiding the originating test failure.
-- [ ] Retain bounded mount-tree and screen captures for failed interactions.
-- [ ] Confirm that a failed example cannot leak its current mount or subjects
+- [x] Make cleanup idempotent after explicit unmount or replacement mount.
+- [x] Report cleanup failures without hiding the originating test failure.
+- [x] Retain bounded mount-tree and screen captures for failed interactions.
+- [x] Confirm that a failed example cannot leak its current mount or subjects
   into the following example.
 
 Exit evidence:
 
-- [ ] Resilience unit tests cover every terminal path.
-- [ ] Live abort and timeout reports have `cleanup_confirmed=true` and leave no
+- [x] Resilience unit tests cover every terminal path.
+- [x] Live abort and timeout reports have `cleanup_confirmed=true` and leave no
   DwarfSpec-owned screen active.
+
+Phase 8 evidence (2026-07-20):
+
+- DwarfSpec installs root Busted hooks that call the run-owned reset with
+  distinct `before example` and `after example` reasons. Reset drains the
+  shared registry in strict LIFO order, waits one live frame even after a
+  cleanup action fails, and remains idempotent after explicit unmount,
+  replacement mount, and repeated reset. Existing adapter contracts plus the
+  failed-overlay live proof cover component ownership, overlay disable and
+  state restoration, host dismissal and pause restoration, pointer cleanup,
+  render interception restoration, and complete-screen resize restoration.
+- Terminal reports now include `mount_cleanup_state` with an explicit
+  verification result, active and tracked owned-screen counts, live subject
+  count, and virtual-pointer state. Cleanup confirmation requires no current
+  mount, no active owned screen, no live subject ownership, no pointer patch,
+  no pending cleanup, coroutine, scheduler, wait, or timer, and no cleanup
+  failure anywhere earlier in the run.
+- Cleanup failures retained from per-example hooks make
+  `cleanup_confirmed=false`. Run `lifecycle-combined-failure-final` records the
+  original Luassert failure and the distinct `after_each` cleanup error as two
+  details without replacing either one; its lifecycle probe still verifies
+  zero active screens, subjects, and pointer patches.
+- Mount-tree diagnostics are bounded to depth 8 and 128 nodes by default and
+  carry explicit truncation metadata. Failed-interaction screen evidence
+  remains bounded to 16 by 8 cells. Unit tests cover both depth and node limits,
+  and live command/render failures retain the bounded tree and screen data
+  across cleanup.
+- Focused Busted contracts pass 5 cleanup-registry, 10 automation-host, 14
+  mount-context, 2 diagnostics, 14 external-runner, 5 public mount-command,
+  and 3 adapter tests. Together they cover strict LIFO continuation,
+  before/after reset, cleanup-failure history, false-confirmation rejection,
+  assertion/error propagation, render failure, command failure, internal and
+  external timeout, abort, lease expiry, stale generation, and idempotent
+  unmount/replacement cleanup.
+- `tools/Run-UnitTests.ps1` passes 125 tests with no failures, errors, or
+  pending tests. `tools/Check-Lua.ps1` passes Lua 5.4.6 syntax and formatting
+  checks for 88 Lua files; `luarocks lint dwarfspec-0.1.0-1.rockspec` and
+  `git diff --check` pass.
+- Product-independent failure runs in embedded Lua 5.3 intentionally finish
+  non-passing while proving recovery: `lifecycle-assertion-final` records one
+  expected assertion failure followed by one successful leak check;
+  `lifecycle-command-timeout-final` records the expected command error and
+  in-coroutine timeout followed by two successful leak checks; and
+  `lifecycle-overlay-final` records one expected assertion failure followed by
+  a successful lifecycle-order check. All three record
+  `cleanup_confirmed=true`, lifecycle verification true, zero active screens,
+  zero subjects, and no pointer patch.
+- External wall-clock timeout report `lifecycle-timeout-final` and explicit
+  abort report `lifecycle-explicit-abort-final` both finish `state=aborted`,
+  `cleanup_confirmed=true`, lifecycle verification true, zero active owned
+  screens, zero subjects, and no pointer patch. Direct native run
+  `lifecycle-lease-expiry-final` aborts after its 218 ms unpolled lease and
+  reports the same cleanup proof with reason `status lease expired after 218
+  ms`.
+- The complete product-independent live suite passes 19 tests with no
+  failures or errors in embedded Lua 5.3. Report `lifecycle-final-suite`
+  records `cleanup_confirmed=true`, `cleanup_reason="suite completion"`,
+  lifecycle verification true, zero active screens, zero subjects, and no
+  pointer patch.
 
 ## Phase 9: Separate component and overlay-integration coverage
 

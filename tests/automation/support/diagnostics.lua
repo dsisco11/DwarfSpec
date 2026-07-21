@@ -2,6 +2,9 @@
 
 local M = {}
 
+local DEFAULT_TREE_MAX_DEPTH = 8
+local DEFAULT_TREE_MAX_NODES = 128
+
 ---Returns a scalar value or the result of a lazy widget property.
 ---@param value any
 ---@return any
@@ -75,16 +78,60 @@ function M.inspect_view(view)
     }
 end
 
----Recursively captures a view tree through its ordered native child array.
+---Captures one bounded view subtree through ordered native child arrays.
 ---@param view table
+---@param options table
+---@param state table
+---@param depth integer
 ---@return table
-function M.capture_view_tree(view)
+local function capture_view_subtree(view, options, state, depth)
     local node = M.inspect_view(view)
     node.children = {}
+    state.node_count = state.node_count + 1
+    if depth >= options.max_depth then
+        if #(view.subviews or {}) > 0 then
+            node.truncated = true
+            state.truncated = true
+        end
+        return node
+    end
     for _, child in ipairs(view.subviews or {}) do
-        table.insert(node.children, M.capture_view_tree(child))
+        if state.node_count >= options.max_nodes then
+            node.truncated = true
+            state.truncated = true
+            break
+        end
+        table.insert(node.children, capture_view_subtree(
+            child, options, state, depth + 1))
     end
     return node
+end
+
+---Recursively captures a bounded view tree with explicit capture metadata.
+---@param view table
+---@param options table|nil
+---@return table
+function M.capture_view_tree(view, options)
+    options = options or {}
+    local bounds = {
+        max_depth=options.max_depth or DEFAULT_TREE_MAX_DEPTH,
+        max_nodes=options.max_nodes or DEFAULT_TREE_MAX_NODES,
+    }
+    assert(type(bounds.max_depth) == 'number' and bounds.max_depth >= 0 and
+        bounds.max_depth % 1 == 0,
+        'view-tree max depth must be a nonnegative integer')
+    assert(type(bounds.max_nodes) == 'number' and bounds.max_nodes >= 1 and
+        bounds.max_nodes % 1 == 0,
+        'view-tree max nodes must be a positive integer')
+    local state = {node_count=0, truncated=false}
+    local root = capture_view_subtree(view, bounds, state, 0)
+    root.capture_bounds = {
+        max_depth=bounds.max_depth,
+        max_nodes=bounds.max_nodes,
+        node_count=state.node_count,
+        truncated=state.truncated,
+    }
+    return root
 end
 
 ---Captures a bounded plain screen-cell buffer through DFHack's read API.

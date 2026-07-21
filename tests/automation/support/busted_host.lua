@@ -289,8 +289,8 @@ function M.install_ds_lifecycle(busted, reset)
         'Busted before_each and after_each APIs are required')
     assert(type(reset) == 'function',
         'automation reset callback is required for lifecycle hooks')
-    busted.api.before_each(reset)
-    busted.api.after_each(reset)
+    busted.api.before_each(function() reset('before example') end)
+    busted.api.after_each(function() reset('after example') end)
 end
 
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
@@ -360,15 +360,21 @@ end
 ---@param failures table[]
 local function record_cleanup_failures(run, failures)
     for _, failure in ipairs(failures) do
-        local message = ('cleanup %s failed during %s: %s')
-            :format(failure.name, failure.reason, failure.message)
-        table.insert(run.output_lines, 'CLEANUP_ERROR ' .. message)
-        table.insert(run.failure_details, {
-            kind='error',
-            name='automation cleanup: ' .. failure.name,
-            message=message,
-            trace=failure.message,
-        })
+        local failure_key = failure.id or failure
+        if not run.recorded_cleanup_failures[failure_key] then
+            run.recorded_cleanup_failures[failure_key] = true
+            if not failure.reported_by_busted then
+                local message = ('cleanup %s failed during %s: %s')
+                    :format(failure.name, failure.reason, failure.message)
+                table.insert(run.output_lines, 'CLEANUP_ERROR ' .. message)
+                table.insert(run.failure_details, {
+                    kind='error',
+                    name='automation cleanup: ' .. failure.name,
+                    message=message,
+                    trace=failure.message,
+                })
+            end
+        end
     end
 end
 
@@ -386,16 +392,46 @@ local function clean_run(run, reason)
     run.scheduled_timeout_id = nil
     cancel_timeout(run.lease_timeout_id)
     run.lease_timeout_id = nil
-    local ok, failures = run.cleanup_module.run(run.cleanup_registry, reason)
+    local ok = run.cleanup_module.run(run.cleanup_registry, reason)
     run.coroutine = nil
     run.suspended = false
-    run.cleanup_confirmed = ok and
+    local mount_state
+    local mount_ok = true
+    if run.mount_cleanup_probe then
+        local probe_ok, result = pcall(run.mount_cleanup_probe)
+        if probe_ok and type(result) == 'table' then
+            mount_state = result
+            mount_ok = result.current_mount_id == nil and
+                result.active_screen_count == 0 and
+                result.subject_count == 0 and
+                result.pointer_active ~= true
+        else
+            mount_ok = false
+            mount_state = {probe_error=tostring(result)}
+        end
+        run.mount_cleanup_probe = nil
+    end
+    if mount_state then mount_state.verified = mount_ok end
+    run.mount_cleanup_state = mount_state
+    local history_ok = #run.cleanup_registry.failures == 0
+    run.cleanup_confirmed = ok and history_ok and mount_ok and
         run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
         run.outstanding_wait == nil and run.coroutine == nil and
         run.scheduler == nil and run.scheduled_timeout_id == nil and
         run.lease_timeout_id == nil
     run.cleanup_reason = reason
-    if not ok then record_cleanup_failures(run, failures) end
+    record_cleanup_failures(run, run.cleanup_registry.failures)
+    if not mount_ok then
+        local message = 'mount lifecycle verification failed during ' ..
+            reason
+        table.insert(run.output_lines, 'CLEANUP_ERROR ' .. message)
+        table.insert(run.failure_details, {
+            kind='error',
+            name='automation cleanup: mount lifecycle verification',
+            message=message,
+            trace=mount_state and mount_state.probe_error or nil,
+        })
+    end
     return run.cleanup_confirmed
 end
 
@@ -417,7 +453,7 @@ local function finalize_run(registry, run, ok, host_error)
         table.insert(run.output_lines, 'HOST_ERROR ' .. run.host_error)
     end
     local cleanup_ok = clean_run(run, 'suite completion')
-    if not cleanup_ok then
+    if not cleanup_ok and not run.cleanup_failure_reported_by_busted then
         run.counts.errors = run.counts.errors + 1
         run.totals.errors = run.totals.errors + 1
     end
@@ -495,7 +531,11 @@ end
 local function terminate_aborted(registry, run, reason)
     registry.generation = registry.generation + 1
     transition(run, {'starting', 'running'}, 'cleaning')
-    clean_run(run, reason)
+    local cleanup_ok = clean_run(run, reason)
+    if not cleanup_ok and not run.cleanup_failure_reported_by_busted then
+        run.counts.errors = run.counts.errors + 1
+        run.totals.errors = run.totals.errors + 1
+    end
     run.finished_ms = dfhack.getTickCount()
     run.finished_frame = current_frame()
     table.insert(run.output_lines, 'ABORTED ' .. reason)
@@ -595,6 +635,10 @@ function M.start(package_root, project_root, options)
         cleanup_registry=nil,
         cleanup_confirmed=false,
         cleanup_reason=nil,
+        mount_cleanup_probe=nil,
+        mount_cleanup_state=nil,
+        recorded_cleanup_failures={},
+        cleanup_failure_reported_by_busted=false,
         scheduler_module=nil,
         scheduler=nil,
         suspended=false,
@@ -694,6 +738,7 @@ function M.report_data(run)
         output_count=#run.output_lines,
         cleanup_confirmed=run.cleanup_confirmed,
         cleanup_reason=run.cleanup_reason or JSON_NULL,
+        mount_cleanup_state=run.mount_cleanup_state or JSON_NULL,
         host_error=run.host_error or JSON_NULL,
         host_trace=run.host_trace or JSON_NULL,
         failures=failures,

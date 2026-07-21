@@ -31,6 +31,7 @@ end
 describe('DwarfSpec public mount commands', function()
     local ds
     local registry
+    local reset
     local screen
     local TestWidget
 
@@ -51,7 +52,8 @@ describe('DwarfSpec public mount commands', function()
             wait_frames=function() return 1 end,
             wait_until=function(_, _, query) return assert(query()) end,
         }
-        ds = ds_factory.new('.', {project_root='.', package_root='.'},
+        ds, reset = ds_factory.new('.',
+            {project_root='.', package_root='.'},
             scheduler_module, scheduler, cleanup, registry,
             {settings={}, commands={}}, {
                 boundary=boundary,
@@ -74,6 +76,22 @@ describe('DwarfSpec public mount commands', function()
                     }
                 end,
             })
+    end)
+
+    it('resets the implicit mount before and after examples idempotently',
+            function()
+        local mounted = ds.mount(TestWidget, {name='reset-root'})
+
+        reset('after example')
+
+        assert.is_false(screen.active)
+        assert.equals(0, cleanup.pending_count(registry))
+        assert.has_error(function() mounted:raw() end,
+            'DwarfSpec subject raw access rejected stale subject ' ..
+                'view_id="<root>" from mount 1; no component is currently ' ..
+                'mounted')
+        reset('before example')
+        assert.equals(0, cleanup.pending_count(registry))
     end)
 
     after_each(function()

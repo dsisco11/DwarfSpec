@@ -98,7 +98,36 @@ function M.new(options)
         subject_mounts=setmetatable({}, {__mode='k'}),
         subject_commands={},
         view_mounts=setmetatable({}, {__mode='k'}),
+        owned_screens=setmetatable({}, {__mode='k'}),
     }
+
+    ---Returns plain lifecycle counts suitable for terminal cleanup evidence.
+    ---@return table
+    function context:cleanup_state()
+        local active_screen_count = 0
+        local tracked_screen_count = 0
+        for screen in pairs(self.owned_screens) do
+            tracked_screen_count = tracked_screen_count + 1
+            local active = false
+            if type(screen.isActive) == 'function' then
+                local ok, value = pcall(screen.isActive, screen)
+                active = ok and not not value
+            elseif screen.active ~= nil then
+                active = not not screen.active
+            end
+            if active then active_screen_count = active_screen_count + 1 end
+        end
+        local subject_count = 0
+        for _ in pairs(self.subject_mounts) do
+            subject_count = subject_count + 1
+        end
+        return {
+            current_mount_id=self.current and self.current.id or nil,
+            active_screen_count=active_screen_count,
+            tracked_screen_count=tracked_screen_count,
+            subject_count=subject_count,
+        }
+    end
 
     ---Refreshes weak ownership and ID indexes from the current native tree.
     ---@param mount table
@@ -390,6 +419,9 @@ function M.new(options)
                 'component adapter root must be a native component object')
             mount.root = adapter_result.root or prepared.component
             mount.host_screen = adapter_result.host_screen
+            if mount.host_screen then
+                self.owned_screens[mount.host_screen] = true
+            end
             mount.render_tracker:wait_after(captured, 'component mount render')
             return adapter_result
         end, debug.traceback)

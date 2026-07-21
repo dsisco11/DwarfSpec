@@ -219,6 +219,11 @@ local subject_module = load_automation_module(package_root,
         render_tracker_factory=new_render_tracker,
         subject_module=mount_dependencies.subject_module or subject_module,
     })
+    context.run.mount_cleanup_probe = function()
+        local state = context.mount_context:cleanup_state()
+        state.pointer_active = context.pointer.patched_get_mouse_pos ~= nil
+        return state
+    end
     local ds = {
         protocol_version=1,
     }
@@ -282,20 +287,28 @@ local subject_module = load_automation_module(package_root,
     end
 
     ---Restores all currently registered test-owned resources.
-    local function reset()
+    local function reset(reason)
+        reason = reason or 'automation lifecycle'
         local ok, failures = cleanup_module.run(cleanup_registry,
-            'automation lifecycle')
-        if not ok then
-            local messages = {}
-            for _, failure in ipairs(failures) do
-                table.insert(messages, failure.name .. ': ' .. failure.message)
-            end
-            error('automation cleanup failed: ' .. table.concat(messages, '; '),
-                2)
+            reason)
+        local wait_ok, wait_error = xpcall(function()
+            scheduler_module.wait_frames(scheduler, 1, {
+                description='wait for automation cleanup',
+            })
+        end, debug.traceback)
+        local messages = {}
+        for _, failure in ipairs(failures) do
+            failure.reported_by_busted = true
+            table.insert(messages, failure.name .. ': ' .. failure.message)
         end
-        scheduler_module.wait_frames(scheduler, 1, {
-            description='wait for automation cleanup',
-        })
+        if not wait_ok then
+            table.insert(messages, 'settle wait: ' .. tostring(wait_error))
+        end
+        if not ok or not wait_ok then
+            context.run.cleanup_failure_reported_by_busted = not ok
+            error('automation cleanup failed during ' .. reason .. ': ' ..
+                table.concat(messages, '; '), 2)
+        end
     end
 
     ---Waits for actual DFHack raw-frame callbacks without blocking the game.

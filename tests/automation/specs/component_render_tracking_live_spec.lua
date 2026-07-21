@@ -79,6 +79,18 @@ describe('automatic component render tracking', function()
         assert.matches('screen_capture=', message, 1, true)
         assert.equals('render', run.last_mount_diagnostics.operation)
         assert.equals('widget', run.last_mount_diagnostics.category)
+        assert.is_true(run.last_mount_diagnostics.tree.capture_bounds
+            .node_count <= 128)
+        assert.equals(128, run.last_mount_diagnostics.tree.capture_bounds
+            .max_nodes)
+        assert.equals(8, run.last_mount_diagnostics.tree.capture_bounds
+            .max_depth)
+        assert.is_true(run.last_mount_diagnostics.screen.width <= 16)
+        assert.is_true(run.last_mount_diagnostics.screen.height <= 8)
+        local lifecycle = run.mount_cleanup_probe()
+        assert.is_nil(lifecycle.current_mount_id)
+        assert.equals(0, lifecycle.active_screen_count)
+        assert.equals(0, lifecycle.subject_count)
         assert.has_error(function() ds.root() end,
             'DwarfSpec root requires a mounted component; call ' ..
                 'ds.mount(component, options) first')

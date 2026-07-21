@@ -87,12 +87,23 @@ describe('automation host ownership', function()
         run.cleanup_module.push(run.cleanup_registry, 'abort proof', function()
             cleaned = true
         end)
+        run.mount_cleanup_probe = function()
+            return {
+                current_mount_id=nil,
+                active_screen_count=cleaned and 0 or 1,
+                tracked_screen_count=1,
+                subject_count=cleaned and 0 or 1,
+                pointer_active=not cleaned,
+            }
+        end
         local aborted = host.abort('owner')
         assert.equals('aborted', aborted.state)
         assert.is_nil(active_callbacks[1])
         assert.is_nil(active_callbacks[2])
         assert.is_true(cleaned)
         assert.is_true(aborted.cleanup_confirmed)
+        assert.is_true(aborted.mount_cleanup_state.verified)
+        assert.equals(0, aborted.mount_cleanup_state.active_screen_count)
         callbacks[1]()
         callbacks[2]()
         assert.equals('aborted', aborted.state)
@@ -121,6 +132,15 @@ describe('automation host ownership', function()
         run.cleanup_module.push(run.cleanup_registry, 'lease proof', function()
             cleaned = true
         end)
+        run.mount_cleanup_probe = function()
+            return {
+                current_mount_id=nil,
+                active_screen_count=cleaned and 0 or 1,
+                tracked_screen_count=1,
+                subject_count=cleaned and 0 or 1,
+                pointer_active=not cleaned,
+            }
+        end
 
         tick = 100
         callbacks[2]()
@@ -128,8 +148,58 @@ describe('automation host ownership', function()
         assert.equals('aborted', run.state)
         assert.is_true(cleaned)
         assert.is_true(run.cleanup_confirmed)
+        assert.is_true(run.mount_cleanup_state.verified)
         assert.matches('status lease expired', run.output_lines[1], 1, true)
         assert.is_nil(active_callbacks[1])
+    end)
+
+    it('refuses cleanup confirmation while an owned screen remains active',
+            function()
+        local run = host.start('.', '.', options('active-screen'))
+        run.mount_cleanup_probe = function()
+            return {
+                current_mount_id=1,
+                active_screen_count=1,
+                tracked_screen_count=1,
+                subject_count=1,
+                pointer_active=true,
+            }
+        end
+
+        local aborted = host.abort(run.run_id)
+
+        assert.is_false(aborted.cleanup_confirmed)
+        assert.equals(1, aborted.totals.errors)
+        assert.is_false(aborted.mount_cleanup_state.verified)
+        assert.equals(1, aborted.mount_cleanup_state.active_screen_count)
+        assert.matches('mount lifecycle verification failed',
+            aborted.failure_details[1].message, 1, true)
+    end)
+
+    it('never confirms cleanup after an earlier cleanup action failed',
+            function()
+        local run = host.start('.', '.', options('cleanup-failure'))
+        local restored = false
+        run.cleanup_module.push(run.cleanup_registry, 'restoration', function()
+            restored = true
+        end)
+        run.cleanup_module.push(run.cleanup_registry, 'broken cleanup',
+            function()
+                error('cleanup exploded')
+            end)
+
+        local aborted = host.abort(run.run_id)
+
+        assert.equals('aborted', aborted.state)
+        assert.is_true(restored)
+        assert.is_false(aborted.cleanup_confirmed)
+        assert.equals(1, aborted.totals.errors)
+        assert.equals(0, aborted.cleanup_module.pending_count(
+            aborted.cleanup_registry))
+        assert.matches('cleanup broken cleanup failed during by request',
+            aborted.failure_details[1].message, 1, true)
+        assert.matches('cleanup exploded', aborted.failure_details[1].message,
+            1, true)
     end)
 
     it('builds a complete JSON-safe report for PowerShell consumption', function()
@@ -144,6 +214,13 @@ describe('automation host ownership', function()
             output_lines={'one'},
             cleanup_confirmed=true,
             cleanup_reason='suite completion',
+            mount_cleanup_state={
+                active_screen_count=0,
+                tracked_screen_count=1,
+                subject_count=0,
+                pointer_active=false,
+                verified=true,
+            },
             host_error=nil,
             host_trace=nil,
             failure_details={{
@@ -162,6 +239,7 @@ describe('automation host ownership', function()
         assert.equals('line one\nline two', report.failures[1].message)
         assert.equals('\0', report.failures[1].trace)
         assert.is_true(report.cleanup_confirmed)
+        assert.is_true(report.mount_cleanup_state.verified)
     end)
 
     it('normalizes filters and loads exact safe externally selected specs',
@@ -213,7 +291,7 @@ describe('automation host ownership', function()
 
     it('installs internal reset hooks around every Busted example', function()
         local hooks = {}
-        local reset_count = 0
+        local reset_reasons = {}
         local busted = {
             api={
                 before_each=function(callback)
@@ -225,13 +303,13 @@ describe('automation host ownership', function()
             },
         }
 
-        host.install_ds_lifecycle(busted, function()
-            reset_count = reset_count + 1
+        host.install_ds_lifecycle(busted, function(reason)
+            table.insert(reset_reasons, reason)
         end)
         hooks.before_each()
         hooks.after_each()
 
-        assert.equals(2, reset_count)
+        assert.same({'before example', 'after example'}, reset_reasons)
     end)
 
     it('clears cached test dependencies without touching unrelated modules',

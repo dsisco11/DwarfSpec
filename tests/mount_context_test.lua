@@ -153,8 +153,15 @@ describe('DwarfSpec mount context', function()
         assert.equals(2, cleanup.pending_count(registry))
         assert.equals('k', getmetatable(context.subject_mounts).__mode)
         assert.equals('k', getmetatable(context.view_mounts).__mode)
+        assert.equals('k', getmetatable(context.owned_screens).__mode)
         assert.equals('k', getmetatable(mounted.selected_subjects).__mode)
         assert.equals(mounted.id, context.view_mounts[mounted.root])
+        assert.same({
+            current_mount_id=1,
+            active_screen_count=1,
+            tracked_screen_count=1,
+            subject_count=1,
+        }, context:cleanup_state())
     end)
 
     it('refreshes descendant ownership and IDs after dynamic mutations',
@@ -319,6 +326,12 @@ describe('DwarfSpec mount context', function()
         assert.has_error(function() root_subject:raw() end,
             'DwarfSpec subject raw access rejected stale subject ' ..
             'view_id="<root>" from mount 1; no component is currently mounted')
+        assert.same({
+            current_mount_id=nil,
+            active_screen_count=0,
+            tracked_screen_count=1,
+            subject_count=0,
+        }, context:cleanup_state())
         assert.is_true(cleanup.run(registry, 'post-unmount reset'))
         assert.same(4, #events)
     end)
