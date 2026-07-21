@@ -1,0 +1,2 @@
+☐ Add ability to configure the "screen dimensions" for mounted components under test.
+☐ Set reasonable default for mounted component screen size (e.g., 1024x768).
