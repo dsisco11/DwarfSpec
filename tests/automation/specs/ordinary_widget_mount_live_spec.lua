@@ -62,6 +62,25 @@ function OrdinaryWidgetHarness:submit()
 end
 
 describe('ordinary widget component host', function()
+    it('requires explicit unmount before mounting another widget', function()
+        local first_instance = OrdinaryWidgetHarness{}
+        local first = ds.mount(first_instance)
+
+        assert.has_error(function()
+            ds.mount(OrdinaryWidgetHarness)
+        end, ('DwarfSpec mount rejected because mount %d is still current; ' ..
+            'call ds.unmount() before mounting another component')
+                :format(first.mount_id))
+        assert.equals(first_instance, first:raw())
+        assert.equals(first_instance, ds.root():raw())
+
+        ds.unmount()
+        local second = ds.mount(OrdinaryWidgetHarness)
+
+        assert.is_not.equals(first_instance, second:raw())
+        ds.unmount()
+    end)
+
     it('mounts an existing widget instance without mutating its class',
             function()
         local instance = OrdinaryWidgetHarness{}

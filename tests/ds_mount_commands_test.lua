@@ -123,6 +123,26 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('requires explicit unmount before mounting another component',
+            function()
+        local first = ds.mount(TestWidget, {name='first'})
+        local first_screen = screen
+
+        assert.has_error(function()
+            ds.mount(TestWidget, {name='second'})
+        end, 'DwarfSpec mount rejected because mount 1 is still current; ' ..
+            'call ds.unmount() before mounting another component')
+        assert.is_true(first_screen.active)
+        assert.equals('first', first:raw().name)
+
+        ds.unmount()
+        local second = ds.mount(TestWidget, {name='second'})
+
+        assert.is_false(first_screen.active)
+        assert.is_true(screen.active)
+        assert.equals('second', second:raw().name)
+    end)
+
     it('reports missing and duplicate IDs with current mount identity',
             function()
         local first = {view_id='duplicate', subviews={}}

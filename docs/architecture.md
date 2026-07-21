@@ -47,8 +47,9 @@ library.
 `ds.mount(component, options)` is the only component entry point. The
 component boundary classifies a `widgets.Widget`, `overlay.OverlayWidget`, or
 `gui.ZScreen` class or existing instance and normalizes mount-only options. A
-run owns at most one implicit current mount. Replacing it first completes the
-previous mount's scoped cleanup and settlement.
+run owns at most one implicit current mount. Calling `ds.mount()` while that
+mount remains current is an error; the test must call `ds.unmount()` before
+mounting another component.
 
 The mount context assigns identity, owns the component root and host screen,
 indexes propagated view IDs, retains weak subject ownership, captures command
@@ -78,7 +79,7 @@ and screen diagnostics while preserving the original cause.
 
 Every mount resource is registered before it can escape. Example completion,
 assertion failure, command timeout, external timeout, lease expiry, explicit
-abort, and replacement all drain run-owned cleanup in strict LIFO order.
+abort, and explicit unmount all drain run-owned cleanup in strict LIFO order.
 Cleanup is idempotent, continues after individual teardown failures, restores
 pause and pointer state, settles screens, invalidates subjects, and reports
 confirmation only after lifecycle probes verify that no active mount resource

@@ -278,19 +278,36 @@ describe('DwarfSpec mount context', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
-    it('fully unmounts and settles before constructing a replacement',
+    it('rejects a second mount until the current mount is unmounted',
             function()
         local first_subject = context:mount(TestWidget, {name='first'})
-        local Replacement = make_class(Widget, function()
+        local constructed = false
+        local NextWidget = make_class(Widget, function()
+            constructed = true
             assert.equals('settle:first', events[#events])
         end)
 
-        local second_subject = context:mount(Replacement, {name='second'})
+        assert.has_error(function()
+            context:mount(NextWidget, {name='second'})
+        end, 'DwarfSpec mount rejected because mount 1 is still current; ' ..
+            'call ds.unmount() before mounting another component')
+
+        assert.same({
+            'mount:first',
+        }, events)
+        assert.is_false(constructed)
+        assert.is_true(screens[1].active)
+        assert.equals(1, context.current.id)
+        assert.equals('first', first_subject:raw().name)
+
+        context:unmount()
+        local second_subject = context:mount(NextWidget, {name='second'})
 
         assert.same({
             'mount:first', 'resource:first', 'unmount:first', 'settle:first',
             'mount:second',
         }, events)
+        assert.is_true(constructed)
         assert.is_false(screens[1].active)
         assert.is_true(screens[2].active)
         assert.equals(2, context.current.id)
@@ -385,10 +402,12 @@ describe('DwarfSpec mount context', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
-    it('leaves no mount when replacement construction fails', function()
+    it('leaves no mount when construction fails after explicit unmount',
+            function()
         context:mount(TestWidget, {name='first'})
+        context:unmount()
         local FailingWidget = make_class(Widget, function()
-            error('replacement construction exploded')
+            error('component construction exploded')
         end)
         local retained
         context.failure_reporter=function(mount, operation, failure)
@@ -407,7 +426,7 @@ describe('DwarfSpec mount context', function()
         assert.is_false(ok)
         assert.matches('reported mount failure for mount 2:',
             message, 1, true)
-        assert.matches('replacement construction exploded', message, 1, true)
+        assert.matches('component construction exploded', message, 1, true)
         assert.equals(2, retained.mount_id)
         assert.equals('widget', retained.category)
         assert.equals('mount', retained.operation)

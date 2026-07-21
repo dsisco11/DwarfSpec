@@ -24,8 +24,9 @@ normal `ds` commands.
   already-created instance.
 - DwarfSpec owns the mount harness, render instrumentation, current-mount
   context, synchronization, diagnostics, and cleanup.
-- A Busted example has at most one active mount. Mounting another component
-  cleanly unmounts the current component before installing its replacement.
+- A Busted example has at most one active mount. Calling `ds.mount()` while a
+  component remains mounted is an error; the test must call `ds.unmount()`
+  before mounting another component.
 - `ds.get(view_id)` searches the current mount and returns a DwarfSpec subject,
   not a raw DFHack view.
 - Subject commands are fluent, for example `ds.get('submit'):click()`.
@@ -165,8 +166,8 @@ Phase 1 evidence (2026-07-20):
 - [x] Implement `ds.root()` as a subject for the current component root.
 - [x] Make all mount-context references weak where ownership does not require a
   strong reference.
-- [x] Make a second `ds.mount()` fully unmount and settle the previous mount
-  before constructing the replacement.
+- [x] Reject a second `ds.mount()` before classification or construction while
+  preserving the current mount; require explicit `ds.unmount()` first.
 - [x] Produce clear errors for `root`, `get`, interaction, or unmount commands
   when no component is mounted.
 - [x] Register mount cleanup before showing or activating a component so a
@@ -174,8 +175,8 @@ Phase 1 evidence (2026-07-20):
 
 Exit evidence:
 
-- [x] Unit tests cover initial mount, replacement mount, explicit unmount,
-  partial mount failure, and operations without a current mount.
+- [x] Unit tests cover initial mount, rejected second mount, explicit unmount,
+  a later mount, partial mount failure, and operations without a current mount.
 - [x] Cleanup leaves no active screen or pending mount entry after every case.
 
 Phase 2 evidence (2026-07-20):
@@ -193,8 +194,8 @@ Phase 2 evidence (2026-07-20):
   root, host, and adapter references only while lifecycle ownership requires
   them; cleanup clears those references and the implicit current mount.
 - `tests/automation/support/cleanup.lua` now exposes a monotonic marker and
-  `run_from()` scoped drain. Replacement, explicit unmount, and failed mount
-  rollback drain entries newer than the mount marker in strict LIFO order,
+  `run_from()` scoped drain. Explicit unmount and failed mount rollback drain
+  entries newer than the mount marker in strict LIFO order,
   without draining older run resources. The original run-wide `run()` remains
   the marker-zero form and stays idempotent.
 - The context classifies before construction, registers its parent unmount
@@ -203,11 +204,11 @@ Phase 2 evidence (2026-07-20):
   results, and root-subject creation failures all take the same scoped rollback
   path and retain the originating error. Adapter teardown and settling both run
   before references are cleared, even if teardown itself reports a failure.
-- A replacement call synchronously drains and settles the previous mount
-  before the replacement constructor runs. The test constructor asserts the
-  observed event order `resource`, `unmount`, `settle`, then construction and
-  activation of the replacement. A replacement constructor failure leaves no
-  implicit mount and no pending mount-owned cleanup.
+- A second mount call fails before classification or construction and leaves
+  the current mount and its subjects active. After explicit unmount, cleanup
+  observes `resource`, `unmount`, and `settle` before the next constructor and
+  activation. A later constructor failure leaves no implicit mount and no
+  pending mount-owned cleanup.
 - `tests/automation/support/ds.lua` wires `ds.mount`, `ds.root`, and
   `ds.unmount` to the context. The one-argument `ds.get(view_id)` form selects
   from the implicit root and returns a subject; the legacy two-argument form
@@ -215,13 +216,14 @@ Phase 2 evidence (2026-07-20):
   and omitted-target interaction calls all instruct the author to call
   `ds.mount(component, options)` when no mount exists.
 - `tests/mount_context_test.lua` covers initial mount, host and private state,
-  replacement ordering, stale subjects, explicit idempotent unmount, adapter
+  second-mount rejection, stale subjects, explicit idempotent unmount, adapter
   activation failure, invalid adapter result, root-subject failure, failed
-  replacement construction, run cleanup, and no-mount errors.
+  construction after unmount, run cleanup, and no-mount errors.
   `tests/ds_mount_commands_test.lua` covers the public command wiring and
-  implicit selection. Every example has an unconditional registry drain that
-  asserts `current == nil`, zero pending cleanup entries, and every created
-  host inactive after the example.
+  implicit selection, including the explicit-unmount requirement. Every
+  example has an unconditional registry drain that asserts `current == nil`,
+  zero pending cleanup entries, and every created host inactive after the
+  example.
 - Verification: `tools/Run-UnitTests.ps1` reported 94 successes, 0 failures,
   and 0 errors; `tools/Check-Lua.ps1` parsed and formatting-checked all 69 Lua
   files with Lua 5.4.6; `luarocks lint dwarfspec-0.1.0-1.rockspec` passed; and
@@ -229,6 +231,21 @@ Phase 2 evidence (2026-07-20):
   new modules are present in the rockspec, and the isolated live export spec
   now reserves the three public mount functions for its later installed-rock
   run.
+
+Contract revision evidence (2026-07-21):
+
+- The mount context rejects a second call before component classification or
+  construction. Context and public-command tests prove the rejection preserves
+  the current screen, root, subject, mount identity, and cleanup entries. They
+  then explicitly unmount and successfully mount the next component.
+- `tools/Run-UnitTests.ps1` passes 130 tests with no failures, errors, or
+  pending tests. `tools/Check-Lua.ps1` passes Lua 5.4.6 syntax and formatting
+  checks for all 82 Lua files.
+- DFHack's embedded Lua 5.3 passes the focused 3-example ordinary-widget live
+  spec and the complete 20-example product-independent live suite. Report
+  `dwarfspec-158497593-46eec53a.json` records `state=passed`, zero failures and
+  errors, `cleanup_confirmed=true`, lifecycle verification true, zero active
+  screens, zero subjects, and no pointer patch.
 
 ## Phase 3: Own render instrumentation
 
@@ -485,7 +502,7 @@ Phase 6 evidence (2026-07-20):
   view-id index.
 - [x] Return a run-owned subject wrapper containing the selected view and mount
   identity.
-- [x] Reject stale subjects after unmount or replacement mount.
+- [x] Reject stale subjects after unmount.
 - [x] Move view-oriented operations from `ds` functions onto subjects:
   `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`, and `text`.
 - [x] Make interaction methods return a useful subject so compatible commands
@@ -519,8 +536,8 @@ Phase 7 evidence (2026-07-20):
   `inspect` returns a stable table and `text` returns its text scalar. No
   current command changes selection. `docs/writing-tests.md` and `README.md`
   document these semantics and reserve `raw()` for exceptional native access.
-- Stale subjects are rejected after explicit unmount, replacement mount, and
-  dynamic subtree removal. Operational failures and retained mount evidence
+- Stale subjects are rejected after explicit unmount and dynamic subtree
+  removal. Operational failures and retained mount evidence
   include the selected view id, its original mount id, and the current mount
   id. Mount-scoped `capture_view_tree(name)` infers the current component root;
   the legacy fixture capture form remains only for the pending fixture
@@ -550,7 +567,7 @@ Phase 7 evidence (2026-07-20):
   pause state, lifecycle callbacks, and render interception.
 - [x] Ensure assertion failures, command errors, render errors, timeouts,
   external lease expiry, and explicit abort all drain mount resources.
-- [x] Make cleanup idempotent after explicit unmount or replacement mount.
+- [x] Make cleanup idempotent after explicit unmount.
 - [x] Report cleanup failures without hiding the originating test failure.
 - [x] Retain bounded mount-tree and screen captures for failed interactions.
 - [x] Confirm that a failed example cannot leak its current mount or subjects
@@ -567,8 +584,8 @@ Phase 8 evidence (2026-07-20):
 - DwarfSpec installs root Busted hooks that call the run-owned reset with
   distinct `before example` and `after example` reasons. Reset drains the
   shared registry in strict LIFO order, waits one live frame even after a
-  cleanup action fails, and remains idempotent after explicit unmount,
-  replacement mount, and repeated reset. Existing adapter contracts plus the
+  cleanup action fails, and remains idempotent after explicit unmount and
+  repeated reset. Existing adapter contracts plus the
   failed-overlay live proof cover component ownership, overlay disable and
   state restoration, host dismissal and pause restoration, pointer cleanup,
   render interception restoration, and complete-screen resize restoration.
@@ -593,8 +610,8 @@ Phase 8 evidence (2026-07-20):
   and 3 adapter tests. Together they cover strict LIFO continuation,
   before/after reset, cleanup-failure history, false-confirmation rejection,
   assertion/error propagation, render failure, command failure, internal and
-  external timeout, abort, lease expiry, stale generation, and idempotent
-  unmount/replacement cleanup.
+  external timeout, abort, lease expiry, stale generation, second-mount
+  rejection, and idempotent unmount cleanup.
 - `tools/Run-UnitTests.ps1` passes 125 tests with no failures, errors, or
   pending tests. `tools/Check-Lua.ps1` passes Lua 5.4.6 syntax and formatting
   checks for 88 Lua files; `luarocks lint dwarfspec-0.1.0-1.rockspec` and

@@ -94,7 +94,8 @@ mount-only options such as the `viewport` shown above remain available.
 mount and returns a subject for its root. `ds.get(view_id)` searches only that
 mount's propagated view-id index and returns another subject. Missing and
 duplicate ids fail with the requested id and mount identity instead of choosing
-an arbitrary view.
+an arbitrary view. Calling `ds.mount()` again while the mount remains current
+is an error; call `ds.unmount()` before mounting another component.
 
 ```lua
 ds.mount(MyComponent, {value='draft'})
@@ -111,8 +112,7 @@ Commands execute immediately in the live test coroutine. `click`, `hover`,
 chaining. `inspect` returns a stable diagnostic table, while `text` returns the
 inspected text scalar. No current subject command changes the selection; call
 `ds.get` to obtain a different subject. A subject is valid only while its
-original mount remains current; unmounting or replacing that mount makes the
-subject stale.
+original mount remains current; unmounting that mount makes the subject stale.
 
 `subject:raw()` exposes the underlying DFHack object for an exceptional native
 API that DwarfSpec does not model. Normal selection, interaction, inspection,

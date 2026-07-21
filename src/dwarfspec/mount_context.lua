@@ -361,12 +361,15 @@ function M.new(options)
         return table.unpack(results, 2, results.n)
     end
 
-    ---Replaces any current mount and activates one classified component.
+    ---Activates one classified component when no mount is current.
     ---@param component any
     ---@param mount_options table|nil
     ---@return table
     function context:mount(component, mount_options)
-        if self.current then self:unmount() end
+        assert(not self.current,
+            ('DwarfSpec mount rejected because mount %d is still current; ' ..
+                'call ds.unmount() before mounting another component')
+                :format(self.current and self.current.id or -1))
 
         local classification = self.boundary:classify(component)
         local adapter = self.adapter_factory(classification.category)
