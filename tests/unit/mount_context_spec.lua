@@ -172,7 +172,7 @@ describe('DwarfSpec mount context', function()
         }, context:cleanup_state())
     end)
 
-    it('refreshes descendant ownership and IDs after dynamic mutations',
+    it('refreshes descendant ownership and control paths after dynamic mutations',
             function()
         local original = {view_id='original', subviews={}}
         local nested = {view_id='nested', subviews={original}}
@@ -181,10 +181,11 @@ describe('DwarfSpec mount context', function()
             subviews={nested},
         })
 
-        assert.equals(nested, context:find_view('nested'))
-        assert.equals(original, context:find_view('original'))
+        assert.equals(nested, context:resolve_control_path('nested'))
+        assert.equals(original,
+            context:resolve_control_path('nested/original'))
         assert.equals(context.current.id, context.view_mounts[original])
-        local original_subject = context:new_subject(original)
+        local original_subject = context:new_subject(original, 'nested/original')
         local dynamic = {view_id='dynamic', subviews={}}
 
         context:mutate('add dynamic child', function()
@@ -192,7 +193,7 @@ describe('DwarfSpec mount context', function()
             context.current.render_tracker:completed()
         end)
 
-        assert.equals(dynamic, context:find_view('dynamic'))
+        assert.equals(dynamic, context:resolve_control_path('nested/dynamic'))
         assert.equals(context.current.id, context.view_mounts[dynamic])
 
         context:mutate('remove original child', function()
@@ -200,12 +201,113 @@ describe('DwarfSpec mount context', function()
             context.current.render_tracker:completed()
         end)
 
-        assert.is_nil(context:find_view('original'))
+        local resolved, missing = pcall(context.resolve_control_path, context,
+            'nested/original')
+        assert.is_false(resolved)
+        assert.matches('missing segment="original"', missing, 1, true)
         assert.is_nil(context.view_mounts[original])
         assert.has_error(function() original_subject:raw() end,
             'DwarfSpec subject raw access rejected subject ' ..
-                'view_id="original" mount=1 because its view is outside ' ..
+                'control_path="nested/original" mount=1 because its view is outside ' ..
                 'the current mount')
+
+        context:mutate('reparent dynamic child', function()
+            table.remove(nested.subviews, 1)
+            table.insert(context.current.root.subviews, dynamic)
+            context.current.render_tracker:completed()
+        end)
+
+        assert.equals(dynamic, context:resolve_control_path('dynamic'))
+        assert.has_error(function()
+            context:resolve_control_path('nested/dynamic')
+        end, 'DwarfSpec get failed: control_path="nested/dynamic" mount=1 ' ..
+            'missing segment="dynamic" after="nested"; available children=<none>')
+    end)
+
+    it('resolves only explicit direct-child control paths', function()
+        local editor = {view_id='editor', subviews={}}
+        local panel = {view_id='panel', subviews={editor}}
+        context:mount(TestWidget, {name='strict-paths', subviews={panel}})
+
+        assert.equals(panel, context:resolve_control_path('panel'))
+        assert.equals(editor, context:resolve_control_path('panel/editor'))
+        assert.has_error(function()
+            context:resolve_control_path('editor')
+        end, 'DwarfSpec get failed: control_path="editor" mount=1 missing ' ..
+            'segment="editor" after="<root>"; available children=panel')
+        assert.has_error(function()
+            context:resolve_control_path('panel/missing')
+        end, 'DwarfSpec get failed: control_path="panel/missing" mount=1 ' ..
+            'missing segment="missing" after="panel"; available children=editor')
+    end)
+
+    it('does not skip anonymous or named hierarchy boundaries', function()
+        local anonymous_child = {view_id='hidden', subviews={}}
+        local anonymous = {subviews={anonymous_child}}
+        local nested = {view_id='nested', subviews={anonymous}}
+        context:mount(TestWidget, {name='boundaries', subviews={nested}})
+
+        assert.has_error(function()
+            context:resolve_control_path('hidden')
+        end, 'DwarfSpec get failed: control_path="hidden" mount=1 missing ' ..
+            'segment="hidden" after="<root>"; available children=nested')
+        assert.has_error(function()
+            context:resolve_control_path('nested/hidden')
+        end, 'DwarfSpec get failed: control_path="nested/hidden" mount=1 ' ..
+            'missing segment="hidden" after="nested"; available children=<none>')
+    end)
+
+    it('keeps same leaf IDs distinct beneath different parents', function()
+        local left_name = {view_id='name', subviews={}}
+        local right_name = {view_id='name', subviews={}}
+        local left = {view_id='left', subviews={left_name}}
+        local right = {view_id='right', subviews={right_name}}
+        context:mount(TestWidget, {name='separate-leaves', subviews={left, right}})
+
+        assert.equals(left_name, context:resolve_control_path('left/name'))
+        assert.equals(right_name, context:resolve_control_path('right/name'))
+    end)
+
+    it('rejects malformed paths and root-ID selection', function()
+        context:mount(TestWidget, {
+            name='root-id',
+            view_id='mounted-root',
+            subviews={},
+        })
+
+        assert.has_error(function() context:resolve_control_path('') end,
+            'control path must be a nonempty string')
+        assert.has_error(function() context:resolve_control_path('/child') end,
+            'control path cannot start or end with "/"')
+        assert.has_error(function() context:resolve_control_path('child/') end,
+            'control path cannot start or end with "/"')
+        assert.has_error(function() context:resolve_control_path('child/../name') end,
+            'control path contains reserved segment ".."')
+        assert.has_error(function()
+            context:resolve_control_path('mounted-root')
+        end, 'DwarfSpec get failed: control_path="mounted-root" mount=1 ' ..
+            'missing segment="mounted-root" after="<root>"; ' ..
+            'available children=<none>')
+    end)
+
+    it('rejects reserved direct child IDs while mounting', function()
+        local slash_ok, slash_error = pcall(context.mount, context,
+            TestWidget, {
+                name='slash-child',
+                subviews={{view_id='invalid/path', subviews={}}},
+            })
+        assert.is_false(slash_ok)
+        assert.matches('DwarfSpec invalid component tree: parent ' ..
+            'control_path="<root>" has child view_id="invalid/path" ' ..
+            'containing "/"', slash_error, 1, true)
+        local dot_ok, dot_error = pcall(context.mount, context, TestWidget, {
+            name='dot-child',
+            subviews={{view_id='.', subviews={}}},
+        })
+        assert.is_false(dot_ok)
+        assert.matches('DwarfSpec invalid component tree: parent ' ..
+            'control_path="<root>" has reserved child view_id="."',
+            dot_error, 1, true)
     end)
 
     it('waits for the render caused by each mutating operation', function()
@@ -257,25 +359,18 @@ describe('DwarfSpec mount context', function()
         assert.same({width=128, height=64}, context.current.options.viewport)
     end)
 
-    it('rejects duplicate propagated IDs and recovers after tree changes',
+    it('rejects duplicate direct child IDs while mounting',
             function()
         local first = {view_id='duplicate', subviews={}}
         local second = {view_id='duplicate', subviews={}}
-        context:mount(TestWidget, {
+        local mounted, failure = pcall(context.mount, context, TestWidget, {
             name='duplicate-root',
             subviews={first, second},
         })
-
-        assert.has_error(function() context:find_view('duplicate') end,
-            'DwarfSpec get is ambiguous: view_id="duplicate" mount=1 ' ..
-                'matches 2 views')
-
-        context:mutate('remove duplicate child', function()
-            table.remove(context.current.root.subviews, 2)
-            context.current.render_tracker:completed()
-        end)
-
-        assert.equals(first, context:find_view('duplicate'))
+        assert.is_false(mounted)
+        assert.matches('DwarfSpec invalid component tree: parent ' ..
+            'control_path="<root>" has multiple direct children with ' ..
+            'view_id="duplicate"', failure, 1, true)
     end)
 
     it('retains selected view and mount identity for command failures',
@@ -302,11 +397,11 @@ describe('DwarfSpec mount context', function()
         local ok, message = pcall(selected.click, selected)
 
         assert.is_false(ok)
-        assert.matches('operation="click" view_id="submit" ' ..
+        assert.matches('operation="click" control_path="submit" ' ..
             'subject_mount=1 current_mount=1', message, 1, true)
         assert.matches('click exploded', message, 1, true)
         assert.equals('click', retained.operation)
-        assert.same({mount_id=1, view_id='submit'}, retained.selected)
+        assert.same({mount_id=1, control_path='submit'}, retained.selected)
         assert.matches('click exploded', retained.failure, 1, true)
         assert.is_nil(context.current.command_subject)
     end)
@@ -359,7 +454,7 @@ describe('DwarfSpec mount context', function()
         assert.equals('second', second_subject:raw().name)
         assert.has_error(function() first_subject:raw() end,
             'DwarfSpec subject raw access rejected stale subject ' ..
-            'view_id="<root>" from mount 1; current mount is 2')
+            'control_path="<root>" from mount 1; current mount is 2')
         local invoked = false
         context.subject_commands.click=function()
             invoked = true
@@ -367,7 +462,7 @@ describe('DwarfSpec mount context', function()
         local command_ok, command_error = pcall(first_subject.click,
             first_subject)
         assert.is_false(command_ok)
-        assert.matches('view_id="<root>" subject_mount=1 ' ..
+        assert.matches('control_path="<root>" subject_mount=1 ' ..
             'current_mount=2', command_error, 1, true)
         assert.matches('current mount is 2', command_error, 1, true)
         assert.is_false(invoked)
@@ -387,7 +482,7 @@ describe('DwarfSpec mount context', function()
         }, events)
         assert.has_error(function() root_subject:raw() end,
             'DwarfSpec subject raw access rejected stale subject ' ..
-            'view_id="<root>" from mount 1; no component is currently mounted')
+            'control_path="<root>" from mount 1; no component is currently mounted')
         assert.same({
             current_mount_id=nil,
             active_screen_count=0,

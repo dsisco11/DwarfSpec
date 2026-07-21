@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   complete screens supplied as classes or existing instances.
 - Fluent mount subjects for selection, interaction, inspection, text access,
   and exceptional native-object access.
+- Strict mounted-component-relative control paths for `ds.get(control_path)`.
+  Selection walks direct `subviews` children and does not search propagated
+  descendant IDs.
 - A separately selected, reversible real overlay-registration integration
   helper.
 - The public `ds.await(...)` condition wait with a required diagnostic

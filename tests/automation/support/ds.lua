@@ -191,7 +191,7 @@ local subject_module = load_automation_module(package_root,
                 context.mount_context.current
         end
         error(('DwarfSpec %s requires a subject from the current mount; ' ..
-            'use ds.get(view_id) or ds.root()'):format(operation), 2)
+            'use ds.get(control_path) or ds.root()'):format(operation), 2)
     end
 
     ---Copies caller wait options and applies project-wide defaults.
@@ -273,22 +273,18 @@ local subject_module = load_automation_module(package_root,
         return context.mount_context:unmount()
     end
 
-    ---Selects one unique propagated view id from the implicit current mount.
-    ---@param view_id string
+    ---Selects one strict control path from the implicit current mount.
+    ---@param control_path string
     ---@return table
-    function ds.get(view_id)
+    function ds.get(control_path)
         local mount = context.mount_context:require_current('get')
-        assert(type(view_id) == 'string' and view_id ~= '',
-            'view id must be a nonempty string')
         local previous = mount.command_subject
-        mount.command_subject = {mount_id=mount.id, view_id=view_id}
-        local ok, view = pcall(context.mount_context.find_view,
-            context.mount_context, view_id)
-        if ok and view == nil then
-            ok = false
-            view = ('DwarfSpec get failed: view_id=%q mount=%s was not found')
-                :format(view_id, tostring(mount.id))
-        end
+        mount.command_subject = {
+            mount_id=mount.id,
+            control_path=control_path,
+        }
+        local ok, view = pcall(context.mount_context.resolve_control_path,
+            context.mount_context, control_path)
         if not ok then
             local reported = context.mount_context:report_failure(
                 mount, 'get', view)
@@ -296,7 +292,7 @@ local subject_module = load_automation_module(package_root,
             error(reported, 2)
         end
         mount.command_subject = previous
-        return context.mount_context:new_subject(view, view_id)
+        return context.mount_context:new_subject(view, control_path)
     end
 
     ---Returns a stable read-only diagnostic table for one live view.

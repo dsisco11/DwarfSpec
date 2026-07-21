@@ -55,10 +55,10 @@ The runner lookup order is an explicit `--runner`, `DFHACK_RUNNER`,
 ## Live component commands
 
 Every supported component category uses `ds.mount(component, options)` inside
-the live Busted coroutine. `ds.get(view_id)` searches the one implicit current
-mount and returns a fluent subject; `ds.unmount()` removes that mount early
-when a test needs explicit teardown. Normal interaction commands do not take a
-fixture root, screen, or raw view.
+the live Busted coroutine. `ds.get(control_path)` walks the one implicit current
+mount through direct child IDs and returns a fluent subject; `ds.unmount()`
+removes that mount early when a test needs explicit teardown. Normal interaction
+commands do not take a fixture root, screen, or raw view.
 
 `ds.mount` supports ordinary widgets, overlay widgets, and complete screens.
 `ds.stage_overlay_registration` is reserved for distinctly named and

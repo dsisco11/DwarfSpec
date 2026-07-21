@@ -148,23 +148,24 @@ describe('complete screen component mount', function()
         assert.is_nil(screen.render_generation)
         assert.is_nil(rawget(CompleteScreenHarness, 'onRender'))
 
-        ds.get('editor'):click():type('value')
-        ds.get('submit'):click()
-        assert.equals('saved:value', ds.get('status'):text())
+        ds.get('content/editor'):click():type('value')
+        ds.get('content/submit'):click()
+        assert.equals('saved:value', ds.get('content/status'):text())
         ds.viewport(90, 30)
         assert.equals(90, screen.frame_parent_rect.width)
         assert.equals(30, screen.frame_parent_rect.height)
 
         root:input('D_PAUSE')
         assert.equals(1, backing.forwarded_pause)
-        ds.get('open_modal'):click()
+        ds.get('content/open_modal'):click()
         assert.is_true(screen.modal:isActive())
         assert.equals(screen, ds.root():raw())
         local selected, selection_error = pcall(ds.get, 'modal_only')
         assert.is_false(selected)
-        assert.matches('selected_view_id="modal_only"', selection_error,
+        assert.matches('selected_control_path="modal_only"', selection_error,
             1, true)
-        assert.matches('view_id="modal_only" mount=1 was not found',
+        assert.matches('control_path="modal_only" mount=1 missing ' ..
+            'segment="modal_only" after="<root>"',
             selection_error, 1, true)
         root:input('CUSTOM_A')
         assert.equals('handled', screen.modal_result)

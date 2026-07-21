@@ -4,7 +4,7 @@ local M = {}
 
 ---@class dwarfspec.Subject
 ---@field mount_id integer
----@field view_id string
+---@field control_path string
 ---@field _references table
 local Subject = {}
 Subject.__index = Subject
@@ -89,15 +89,15 @@ end
 ---@param context table
 ---@param mount table
 ---@param view table
----@param view_id string|nil
+---@param control_path string|nil
 ---@return dwarfspec.Subject
-function M.new(context, mount, view, view_id)
+function M.new(context, mount, view, control_path)
     assert(type(context) == 'table' and type(mount) == 'table',
         'subject requires an owning mount context')
     assert(type(view) == 'table', 'subject requires a native component object')
     local subject = setmetatable({
         mount_id=mount.id,
-        view_id=view_id or view.view_id or '<root>',
+        control_path=control_path or '<root>',
         _references=setmetatable({
             context=context,
             mount=mount,

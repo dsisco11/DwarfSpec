@@ -27,8 +27,8 @@ normal `ds` commands.
 - A Busted example has at most one active mount. Calling `ds.mount()` while a
   component remains mounted is an error; the test must call `ds.unmount()`
   before mounting another component.
-- `ds.get(view_id)` searches the current mount and returns a DwarfSpec subject,
-  not a raw DFHack view.
+- `ds.get(control_path)` traverses direct children from the current mounted
+  component and returns a DwarfSpec subject, not a raw DFHack view.
 - Subject commands are fluent, for example `ds.get('submit'):click()`.
 - Busted and Luassert remain the assertion API. DwarfSpec subjects expose
   stable values and diagnostics for assertions but do not add a parallel

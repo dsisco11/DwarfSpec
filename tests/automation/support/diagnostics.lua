@@ -198,8 +198,8 @@ function M.capture_mount_failure(mount, operation, failure)
         mount_id=mount.id,
         selected_mount_id=mount.command_subject and
             mount.command_subject.mount_id or nil,
-        selected_view_id=mount.command_subject and
-            mount.command_subject.view_id or nil,
+        selected_control_path=mount.command_subject and
+            mount.command_subject.control_path or nil,
         category=mount.category,
         operation=operation,
         cause=tostring(failure),
@@ -215,10 +215,10 @@ function M.format_mount_failure(evidence)
     local tree_summary = evidence.tree and
         M.summarize_tree(evidence.tree) or '<none>'
     return ('DwarfSpec mount failure: operation=%q mount=%s category=%s ' ..
-        'selected_view_id=%q selected_mount=%s cause=%s component_tree=%s ' ..
+        'selected_control_path=%q selected_mount=%s cause=%s component_tree=%s ' ..
         'screen_capture=%dx%d')
         :format(evidence.operation, tostring(evidence.mount_id),
-            tostring(evidence.category), evidence.selected_view_id,
+            tostring(evidence.category), evidence.selected_control_path,
             tostring(evidence.selected_mount_id), evidence.cause,
             tree_summary, evidence.screen.width, evidence.screen.height)
 end

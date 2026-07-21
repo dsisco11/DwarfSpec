@@ -52,12 +52,13 @@ mount remains current is an error; the test must call `ds.unmount()` before
 mounting another component.
 
 The mount context assigns identity, owns the component root and host screen,
-indexes propagated view IDs, retains weak subject ownership, captures command
-context for diagnostics, and registers mount teardown in the run's LIFO
-cleanup registry. `ds.get(view_id)` searches only that index. Fluent subjects
-retain mount and selection identity, become stale as soon as their mount is no
-longer current, and prevent normal commands from accepting unrelated raw
-views or screens.
+validates direct child control IDs, retains weak subject ownership, captures
+command context for diagnostics, and registers mount teardown in the run's
+LIFO cleanup registry. `ds.get(control_path)` walks direct `subviews` children
+from the mounted root; it never searches propagated descendant IDs. Fluent
+subjects retain mount and complete control-path identity, become stale as soon
+as their mount is no longer current, and prevent normal commands from
+accepting unrelated raw views or screens.
 
 Ordinary widgets and overlay widgets render inside a DwarfSpec-owned
 instrumented `gui.ZScreen`. Each mount owns a mutable DF-cell viewport, which

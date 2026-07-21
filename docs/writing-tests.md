@@ -97,11 +97,18 @@ resulting render before returning.
 ## Component subjects
 
 `ds.mount(component, options)` establishes the test's one implicit current
-mount and returns a subject for its root. `ds.get(view_id)` searches only that
-mount's propagated view-id index and returns another subject. Missing and
-duplicate ids fail with the requested id and mount identity instead of choosing
-an arbitrary view. Calling `ds.mount()` again while the mount remains current
-is an error; call `ds.unmount()` before mounting another component.
+mount and returns a subject for its root. `ds.get(control_path)` returns another
+subject by walking direct children from that root. A path such as
+`form/editor` selects `editor` only when it is a direct child of `form`, and
+`form` is a direct child of the mounted component. DwarfSpec never performs a
+global descendant-ID search. Calling `ds.mount()` again while the mount remains
+current is an error; call `ds.unmount()` before mounting another component.
+
+Every path segment is an exact `view_id`. `/` is reserved as the separator;
+paths cannot start or end with `/`, contain empty segments, `.` or `..`, or
+cross an anonymous control. Assign a `view_id` to every parent control that a
+test must traverse. `ds.root()` is the only way to select the mounted component
+itself. A parent cannot contain two direct children with the same `view_id`.
 
 ```lua
 ds.mount(MyComponent, {value='draft'})
@@ -222,9 +229,10 @@ all mounted component categories.
 
 If the component opens a native modal child screen, input follows that child
 while it remains above the mounted screen. The implicit component root does
-not change: `ds.root()` and `ds.get(view_id)` continue to refer only to the
-original mounted screen and its view descendants. A view that exists only in
-an unowned child screen is therefore not selected into the current mount.
+not change: `ds.root()` and `ds.get(control_path)` continue to refer only to
+the original mounted screen and its direct-child control tree. A view that
+exists only in an unowned child screen is therefore not selected into the
+current mount.
 
 ## Real overlay registration integration
 

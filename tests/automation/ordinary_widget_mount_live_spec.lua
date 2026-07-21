@@ -109,7 +109,7 @@ describe('ordinary widget component host', function()
         local root = ds.mount(OrdinaryWidgetHarness, {
             viewport={width=60, height=20},
         })
-        local editor = ds.get('editor')
+        local editor = ds.get('nested_panel/editor')
         local tree = ds.capture_view_tree('ordinary-implicit-tree')
 
         assert.is_true(root:raw().saw_real_painter)
@@ -123,11 +123,11 @@ describe('ordinary widget component host', function()
         editor:click():type('saved')
         assert.is_true(editor:inspect().focused)
         assert.equals('saved', editor:text())
-        ds.get('submit'):click()
+        ds.get('nested_panel/submit'):click()
         assert.is_truthy(root:raw().subviews.nested_panel.subviews
             .dynamic_result)
 
-        local dynamic = ds.get('dynamic_result')
+        local dynamic = ds.get('nested_panel/dynamic_result')
         assert.is_true(dynamic:inspect().visible)
         assert.is_true(dynamic:inspect().active)
         assert.is_truthy(dynamic:inspect().body)
@@ -137,7 +137,7 @@ describe('ordinary widget component host', function()
         local available, stale_error = pcall(root.raw, root)
         assert.is_false(available)
         assert.matches('subject raw access rejected stale subject ' ..
-            'view_id="<root>" from mount ', stale_error, 1, true)
+            'control_path="<root>" from mount ', stale_error, 1, true)
         assert.matches('no component is currently mounted', stale_error,
             1, true)
     end)

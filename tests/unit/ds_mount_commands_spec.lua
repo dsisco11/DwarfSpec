@@ -88,7 +88,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
         assert.has_error(function() mounted:raw() end,
             'DwarfSpec subject raw access rejected stale subject ' ..
-                'view_id="<root>" from mount 1; no component is currently ' ..
+            'control_path="<root>" from mount 1; no component is currently ' ..
                 'mounted')
         reset('before example')
         assert.equals(0, cleanup.pending_count(registry))
@@ -112,7 +112,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(mounted:raw(), ds.root():raw())
         local selected = ds.get('child')
         assert.equals(child, selected:raw())
-        assert.equals('child', selected.view_id)
+        assert.equals('child', selected.control_path)
         local tree = ds.capture_view_tree('implicit-tree')
         assert.equals('child', tree.children[1].view_id)
         assert.is_true(screen.active)
@@ -143,29 +143,33 @@ describe('DwarfSpec public mount commands', function()
         assert.equals('second', second:raw().name)
     end)
 
-    it('reports missing and duplicate IDs with current mount identity',
+    it('reports missing control paths with current mount identity',
             function()
-        local first = {view_id='duplicate', subviews={}}
-        local second = {view_id='duplicate', subviews={}}
         ds.mount(TestWidget, {
             name='selection-errors',
-            subviews={first, second},
+            subviews={},
         })
 
         local missing_ok, missing = pcall(ds.get, 'missing')
-        local duplicate_ok, duplicate = pcall(ds.get, 'duplicate')
 
         assert.is_false(missing_ok)
         assert.matches('operation="get" mount=1', missing, 1, true)
-        assert.matches('selected_view_id="missing" selected_mount=1',
+        assert.matches('selected_control_path="missing" selected_mount=1',
             missing, 1, true)
-        assert.matches('view_id="missing" mount=1 was not found',
+        assert.matches('control_path="missing" mount=1 missing segment="missing"',
             missing, 1, true)
-        assert.is_false(duplicate_ok)
-        assert.matches('selected_view_id="duplicate" selected_mount=1',
-            duplicate, 1, true)
-        assert.matches('view_id="duplicate" mount=1 matches 2 views',
-            duplicate, 1, true)
+    end)
+
+    it('rejects duplicate direct child IDs while mounting', function()
+        local first = {view_id='duplicate', subviews={}}
+        local second = {view_id='duplicate', subviews={}}
+
+        local mounted, failure = pcall(ds.mount, TestWidget,
+            {subviews={first, second}})
+        assert.is_false(mounted)
+        assert.matches('DwarfSpec invalid component tree: parent ' ..
+            'control_path="<root>" has multiple direct children with ' ..
+            'view_id="duplicate"', failure, 1, true)
     end)
 
     it('reports public commands clearly without a current mount', function()

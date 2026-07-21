@@ -197,7 +197,7 @@ frames is itself part of the behavior being tested.
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
 | `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject. |
 | `ds.root()` | Return a subject for the implicit current mount root. |
-| `ds.get(view_id)` | Select a unique propagated ID from the implicit current mount. |
+| `ds.get(control_path)` | Select one direct-child control path from the implicit current mount. |
 | `ds.unmount()` | Cleanly remove and settle the implicit current mount. |
 | `ds.viewport(width, height)` | Change the mounted viewport in DF cells and wait for its render. |
 | `subject:inspect()` | Return stable, read-only information about the selected view. |

@@ -39,7 +39,7 @@ describe('DwarfSpec subject commands', function()
         local subject = subject_module.new(context, {id=9}, {})
 
         assert.equals(9, subject.mount_id)
-        assert.equals('<root>', subject.view_id)
+        assert.equals('<root>', subject.control_path)
         assert.equals(subject, subject:click('right'))
         assert.same({{'click', 'right'}}, calls)
         assert.equals(subject, subject:hover('top_left'))

@@ -46,8 +46,6 @@ local function cleanup_mount(context, mount)
         end
     end
     mount.owned_views = setmetatable({}, {__mode='k'})
-    mount.views_by_id = {}
-    mount.duplicate_view_ids = {}
     mount.command_subject = nil
     for subject in pairs(mount.selected_subjects) do
         context.subject_mounts[subject] = nil
@@ -130,60 +128,140 @@ function M.new(options)
         }
     end
 
-    ---Refreshes weak ownership and ID indexes from the current native tree.
+    ---Formats one parent identity for control-path validation errors.
+    ---@param control_path string|nil
+    ---@return string
+local function parent_identity(control_path)
+        if control_path == '' then return '<root>' end
+        return control_path or '<anonymous>'
+    end
+
+    ---Refreshes weak ownership and validates direct child control identities.
     ---@param mount table
     function context:refresh_views(mount)
         assert(type(mount) == 'table' and not mount.cleaned,
             'cannot refresh a cleaned component mount')
+        local owned_views = setmetatable({}, {__mode='k'})
+        local visited = setmetatable({}, {__mode='k'})
+
+        ---Records one view and validates each of its direct child IDs.
+        ---@param view table
+        ---@param control_path string|nil
+        local function visit(view, control_path)
+            if visited[view] then return end
+            visited[view] = true
+            owned_views[view] = true
+            local child_ids = {}
+            for _, child in ipairs(view.subviews or {}) do
+                local child_id = child.view_id
+                local child_path = nil
+                if type(child_id) == 'string' and child_id ~= '' then
+                    assert(not child_id:find('/', 1, true),
+                        ('DwarfSpec invalid component tree: parent ' ..
+                        'control_path=%q has child view_id=%q containing "/"')
+                            :format(parent_identity(control_path), child_id))
+                    assert(child_id ~= '.' and child_id ~= '..',
+                        ('DwarfSpec invalid component tree: parent ' ..
+                        'control_path=%q has reserved child view_id=%q')
+                            :format(parent_identity(control_path), child_id))
+                    assert(not child_ids[child_id],
+                        ('DwarfSpec invalid component tree: parent ' ..
+                        'control_path=%q has multiple direct children with ' ..
+                        'view_id=%q'):format(parent_identity(control_path),
+                            child_id))
+                    child_ids[child_id] = true
+                    if control_path ~= nil then
+                        child_path = control_path == '' and child_id or
+                            control_path .. '/' .. child_id
+                    end
+                end
+                visit(child, child_path)
+            end
+        end
+
+        visit(mount.root, '')
         for view in pairs(mount.owned_views) do
             if self.view_mounts[view] == mount.id then
                 self.view_mounts[view] = nil
             end
         end
-        mount.owned_views = setmetatable({}, {__mode='k'})
-        mount.views_by_id = {}
-        mount.duplicate_view_ids = {}
-        local visited = setmetatable({}, {__mode='k'})
-
-        ---Indexes one view and its ordered descendants exactly once.
-        ---@param view table
-        local function visit(view)
-            if visited[view] then return end
-            visited[view] = true
-            self.view_mounts[view] = mount.id
-            mount.owned_views[view] = true
-            local view_id = view.view_id
-            if type(view_id) == 'string' and view_id ~= '' then
-                local existing = mount.views_by_id[view_id]
-                if existing == nil then
-                    mount.views_by_id[view_id] = view
-                else
-                    local duplicates = mount.duplicate_view_ids[view_id]
-                    if duplicates == nil then
-                        duplicates = {existing}
-                        mount.duplicate_view_ids[view_id] = duplicates
-                    end
-                    table.insert(duplicates, view)
-                end
-            end
-            for _, child in ipairs(view.subviews or {}) do visit(child) end
-        end
-
-        visit(mount.root)
+        for view in pairs(owned_views) do self.view_mounts[view] = mount.id end
+        mount.owned_views = owned_views
     end
 
-    ---Finds one indexed view ID in the current mounted component tree.
-    ---@param view_id string
-    ---@return table|nil
-    function context:find_view(view_id)
-        local mount = self:require_current('get')
-        local duplicates = mount.duplicate_view_ids[view_id]
-        if duplicates then
-            error(('DwarfSpec get is ambiguous: view_id=%q mount=%s ' ..
-                'matches %d views'):format(view_id, tostring(mount.id),
-                    #duplicates), 2)
+    ---Formats the available direct child control IDs for one resolution error.
+    ---@param view table
+    ---@return string
+    local function available_child_ids(view)
+        local ids = {}
+        for _, child in ipairs(view.subviews or {}) do
+            local child_id = child.view_id
+            if type(child_id) == 'string' and child_id ~= '' then
+                table.insert(ids, child_id)
+            end
         end
-        return mount.views_by_id[view_id]
+        table.sort(ids)
+        local limit = 12
+        local visible = {}
+        for index, child_id in ipairs(ids) do
+            if index > limit then break end
+            table.insert(visible, child_id)
+        end
+        if #ids > limit then
+            table.insert(visible, ('... (+%d more)'):format(#ids - limit))
+        end
+        return #visible > 0 and table.concat(visible, ', ') or '<none>'
+    end
+
+    ---Parses one strict component-relative control path.
+    ---@param control_path string
+    ---@return string[]
+    local function parse_control_path(control_path)
+        assert(type(control_path) == 'string' and control_path ~= '',
+            'control path must be a nonempty string')
+        assert(control_path:sub(1, 1) ~= '/' and
+            control_path:sub(-1) ~= '/',
+            'control path cannot start or end with "/"')
+        local segments = {}
+        for segment in control_path:gmatch('[^/]+') do
+            assert(segment ~= '.' and segment ~= '..',
+                ('control path contains reserved segment %q'):format(segment))
+            table.insert(segments, segment)
+        end
+        assert(#segments > 0, 'control path must contain at least one segment')
+        return segments
+    end
+
+    ---Resolves one strict path by walking direct mounted-component children.
+    ---@param control_path string
+    ---@return table
+    function context:resolve_control_path(control_path)
+        local mount = self:require_current('get')
+        local view = mount.root
+        local resolved_path = ''
+        for _, segment in ipairs(parse_control_path(control_path)) do
+            local selected = nil
+            for _, child in ipairs(view.subviews or {}) do
+                if child.view_id == segment then
+                    assert(selected == nil,
+                        ('DwarfSpec invalid component tree: parent ' ..
+                        'control_path=%q has multiple direct children with ' ..
+                        'view_id=%q'):format(parent_identity(resolved_path),
+                            segment))
+                    selected = child
+                end
+            end
+            assert(selected,
+                ('DwarfSpec get failed: control_path=%q mount=%s missing ' ..
+                'segment=%q after=%q; available children=%s')
+                    :format(control_path, tostring(mount.id), segment,
+                        parent_identity(resolved_path),
+                        available_child_ids(view)))
+            view = selected
+            resolved_path = resolved_path == '' and segment or
+                resolved_path .. '/' .. segment
+        end
+        return view
     end
 
     ---Returns the current mount that owns a native view, if any.
@@ -237,13 +315,13 @@ function M.new(options)
 
     ---Creates and weakly tracks one subject in the current mount.
     ---@param view table
-    ---@param view_id string|nil
+    ---@param control_path string|nil
     ---@return table
-    function context:new_subject(view, view_id)
+    function context:new_subject(view, control_path)
         local mount = self:require_current('subject creation')
         assert(self.view_mounts[view] == mount.id,
             'subject view is outside the current mount')
-        local subject = self.subject_module.new(self, mount, view, view_id)
+        local subject = self.subject_module.new(self, mount, view, control_path)
         self.subject_mounts[subject] = mount.id
         mount.selected_subjects[subject] = true
         return subject
@@ -256,22 +334,22 @@ function M.new(options)
     function context:resolve_subject(subject, operation)
         local mount = self.current
         assert(mount and mount.active,
-            ('DwarfSpec %s rejected stale subject view_id=%q from mount %s; ' ..
+            ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
                 'no component is currently mounted'):format(operation,
-                    subject.view_id, tostring(subject.mount_id)))
+                    subject.control_path, tostring(subject.mount_id)))
         assert(self.subject_mounts[subject] == mount.id and
             subject.mount_id == mount.id,
-            ('DwarfSpec %s rejected stale subject view_id=%q from mount %s; ' ..
-                'current mount is %s'):format(operation, subject.view_id,
+            ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
+                'current mount is %s'):format(operation, subject.control_path,
                     tostring(subject.mount_id), tostring(mount.id)))
         local view = subject._references and subject._references.view
-        assert(view, ('DwarfSpec %s subject view_id=%q mount=%s native ' ..
+        assert(view, ('DwarfSpec %s subject control_path=%q mount=%s native ' ..
             'object is no longer available'):format(operation,
-                subject.view_id, tostring(subject.mount_id)))
+                subject.control_path, tostring(subject.mount_id)))
         assert(self.view_mounts[view] == mount.id,
-            ('DwarfSpec %s rejected subject view_id=%q mount=%s because ' ..
+            ('DwarfSpec %s rejected subject control_path=%q mount=%s because ' ..
                 'its view is outside the current mount'):format(operation,
-                    subject.view_id, tostring(subject.mount_id)))
+                    subject.control_path, tostring(subject.mount_id)))
         return view
     end
 
@@ -288,7 +366,7 @@ function M.new(options)
         if mount then
             mount.command_subject = {
                 mount_id=subject.mount_id,
-                view_id=subject.view_id,
+                control_path=subject.control_path,
             }
         end
         local arguments = table.pack(...)
@@ -308,9 +386,9 @@ function M.new(options)
         end
         if mount then mount.command_subject = previous end
         if not results[1] then
-            error(('DwarfSpec subject failure: operation=%q view_id=%q ' ..
+            error(('DwarfSpec subject failure: operation=%q control_path=%q ' ..
                 'subject_mount=%s current_mount=%s cause=%s')
-                :format(operation, subject.view_id,
+                :format(operation, subject.control_path,
                     tostring(subject.mount_id),
                     tostring(mount and mount.id or nil), reported), 2)
         end
@@ -321,7 +399,7 @@ function M.new(options)
     ---@return table
     function context:root()
         local mount = self:require_current('root')
-        return self:new_subject(mount.root, mount.root.view_id or '<root>')
+        return self:new_subject(mount.root, '<root>')
     end
 
     ---Unmounts and settles the current component through scoped LIFO cleanup.
@@ -432,8 +510,6 @@ function M.new(options)
             cleanup_entries={},
             selected_subjects=setmetatable({}, {__mode='k'}),
             owned_views=setmetatable({}, {__mode='k'}),
-            views_by_id={},
-            duplicate_view_ids={},
             command_subject=nil,
             options=prepared.options,
         }
@@ -462,6 +538,7 @@ function M.new(options)
                 self.owned_screens[mount.host_screen] = true
             end
             mount.render_tracker:wait_after(captured, 'component mount render')
+            self:refresh_views(mount)
             return adapter_result
         end, debug.traceback)
         if not ok then
@@ -477,7 +554,6 @@ function M.new(options)
             end
             error(message, 2)
         end
-        self:refresh_views(mount)
         mount.active = true
         local subject_ok, root_subject = xpcall(function()
             return self:root()
