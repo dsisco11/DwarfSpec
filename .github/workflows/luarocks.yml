@@ -36,8 +36,8 @@ jobs:
         shell: pwsh
         run: ./tools/Check-Lua.ps1
 
-      - name: Install project dependencies
-        run: luarocks install --deps-only dwarfspec.rockspec
+      - name: Install project
+        run: luarocks make
 
       - name: Run offline unit tests
         run: busted --no-recursive tests/unit
@@ -74,7 +74,13 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          $content = Get-Content -LiteralPath dwarfspec.rockspec -Raw
+          $rockspecs = @(Get-ChildItem -LiteralPath . -File `
+              -Filter '*.rockspec')
+          if ($rockspecs.Count -ne 1) {
+              throw "Expected exactly one root rockspec; found $($rockspecs.Count)."
+          }
+          $rockspec = $rockspecs[0]
+          $content = Get-Content -LiteralPath $rockspec.FullName -Raw
           $packageMatch = [regex]::Match(
               $content, '(?m)^\s*package\s*=\s*["'']([^"'']+)["'']\s*$')
           $versionMatch = [regex]::Match(
@@ -91,7 +97,9 @@ jobs:
           $package = $packageMatch.Groups[1].Value
           $version = "$($versionMatch.Groups[1].Value)-$($versionMatch.Groups[2].Value)"
           $path = "$package-$version.rockspec"
-          Copy-Item -LiteralPath dwarfspec.rockspec -Destination $path
+          if ($rockspec.Name -ne $path) {
+              throw "Release rockspec filename must be '$path'."
+          }
           "path=$path" >> $env:GITHUB_OUTPUT
 
       - name: Build source rock

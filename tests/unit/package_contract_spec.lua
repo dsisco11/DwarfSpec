@@ -4,7 +4,24 @@ local separator = package.config:sub(1, 1)
 local source = debug.getinfo(1, 'S').source:gsub('^@', '')
 local tests_root = assert(source:match('^(.*)[/\\][^/\\]+$'))
 local repository_root = tests_root .. separator .. '..' .. separator .. '..'
-local ROCKSPEC_PATH = 'dwarfspec.rockspec'
+
+---Finds the repository's single root rockspec.
+---@return string
+local function find_rockspec()
+    local lfs = require('lfs')
+    local rockspec
+    for name in lfs.dir(repository_root) do
+        if name:match('%.rockspec$') then
+            assert.is_nil(rockspec,
+                'the repository must contain exactly one root rockspec')
+            rockspec = name
+        end
+    end
+    return assert(rockspec,
+        'the repository must contain exactly one root rockspec')
+end
+
+local ROCKSPEC_PATH = find_rockspec()
 
 ---Reads one repository file as binary text.
 ---@param relative_path string

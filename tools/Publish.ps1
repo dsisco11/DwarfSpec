@@ -7,10 +7,12 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$rockspecPath = Join-Path $projectRoot 'dwarfspec.rockspec'
-if (-not (Test-Path -LiteralPath $rockspecPath -PathType Leaf)) {
-    throw "Missing release rockspec: $rockspecPath"
+$rockspecFiles = @(Get-ChildItem -LiteralPath $projectRoot -File `
+    -Filter '*.rockspec')
+if ($rockspecFiles.Count -ne 1) {
+    throw "Expected exactly one root rockspec; found $($rockspecFiles.Count)."
 }
+$rockspecPath = $rockspecFiles[0].FullName
 if (-not (Get-Command luarocks -ErrorAction SilentlyContinue)) {
     throw 'LuaRocks was not found on PATH.'
 }
@@ -29,6 +31,9 @@ if (-not $packageMatch.Success -or -not $versionMatch.Success) {
 $packageName = $packageMatch.Groups[1].Value
 $packageVersion = $versionMatch.Groups[1].Value
 $versionedRockspecName = "$packageName-$packageVersion.rockspec"
+if ((Split-Path -Leaf $rockspecPath) -ne $versionedRockspecName) {
+    throw "Rockspec filename must be '$versionedRockspecName'."
+}
 $artifactName = "$packageName-$packageVersion.all.rock"
 $stagedArtifact = Join-Path $projectRoot $artifactName
 $outputCandidate = if ([IO.Path]::IsPathFullyQualified($OutputDir)) {
@@ -41,7 +46,6 @@ $publishedArtifact = Join-Path $outputPath $artifactName
 $scratchRoot = Join-Path $projectRoot '.tmp-luarocks'
 $tempRoot = Join-Path $scratchRoot "publish-$([guid]::NewGuid())"
 $configPath = Join-Path $tempRoot 'config.lua'
-$buildRockspecPath = Join-Path $tempRoot $versionedRockspecName
 
 $oldConfig = [Environment]::GetEnvironmentVariable(
     'LUAROCKS_CONFIG', 'Process')
@@ -50,14 +54,13 @@ $oldTmp = [Environment]::GetEnvironmentVariable('TMP', 'Process')
 New-Item -ItemType Directory -Force -Path $scratchRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 [IO.File]::WriteAllText($configPath, "arch = 'all'`n")
-[IO.File]::WriteAllText($buildRockspecPath, $rockspec)
 
 try {
     Set-Item -LiteralPath Env:LUAROCKS_CONFIG -Value $configPath
     Set-Item -LiteralPath Env:TEMP -Value $scratchRoot
     Set-Item -LiteralPath Env:TMP -Value $scratchRoot
 
-    & luarocks lint $buildRockspecPath
+    & luarocks lint $rockspecPath
     if ($LASTEXITCODE -ne 0) {
         throw 'LuaRocks rejected the release rockspec.'
     }
@@ -67,7 +70,7 @@ try {
     }
     Push-Location $projectRoot
     try {
-        & luarocks make $buildRockspecPath `
+        & luarocks make $rockspecPath `
             --pack-binary-rock --deps-mode=none
         if ($LASTEXITCODE -ne 0) {
             throw 'LuaRocks failed to build the release rock.'
