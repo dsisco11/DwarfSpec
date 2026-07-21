@@ -49,21 +49,7 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
-$testFiles = @(
-    Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Recurse -File |
-        Where-Object {
-            $_.Name -match '_spec\.lua$' -and
-            $_.FullName -notmatch
-                '[\\/]tests[\\/]automation[\\/]specs[\\/]' -and
-            $_.FullName -notmatch
-                '[\\/]tests[\\/]framework[\\/].*[\\/]tests[\\/]live[\\/]'
-        } |
-        Sort-Object FullName |
-        ForEach-Object FullName
-)
-if ($testFiles.Count -eq 0) {
-    throw 'No standalone Busted spec files were found.'
-}
+$testsRoot = Join-Path $projectRoot 'tests'
 
 $oldLuaPath = [Environment]::GetEnvironmentVariable('LUA_PATH', 'Process')
 $oldLuaCPath = [Environment]::GetEnvironmentVariable('LUA_CPATH', 'Process')
@@ -83,7 +69,7 @@ try {
     Set-Item -LiteralPath Env:LUA_CPATH -Value $luaCPath
 
     $bustedLauncher = Join-Path $rockTree 'bin\busted'
-    & lua $bustedLauncher @BustedArgs @testFiles
+    & lua $bustedLauncher @BustedArgs '--no-recursive' $testsRoot
     $testExitCode = $LASTEXITCODE
 }
 finally {
