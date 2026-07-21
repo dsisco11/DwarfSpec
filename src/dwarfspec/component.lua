@@ -2,8 +2,12 @@
 
 local M = {}
 
+local DEFAULT_VIEWPORT = {width=128, height=64}
+
+M.DEFAULT_VIEWPORT = {width=128, height=64}
+
 M.PUBLIC_API = {
-    mount_context={'mount', 'root', 'unmount'},
+    mount_context={'mount', 'root', 'unmount', 'viewport'},
     subject={
         'click', 'hover', 'move_pointer', 'input', 'type',
         'inspect', 'text', 'raw',
@@ -70,11 +74,16 @@ local function copy_table(source)
     return result
 end
 
----Validates and copies an optional fixed viewport.
+---Validates and copies a deterministic component viewport.
 ---@param viewport table|nil
----@return table|nil
+---@return table
 local function normalize_viewport(viewport)
-    if viewport == nil then return nil end
+    if viewport == nil then
+        return {
+            width=DEFAULT_VIEWPORT.width,
+            height=DEFAULT_VIEWPORT.height,
+        }
+    end
     assert(type(viewport) == 'table',
         'mount option viewport must be a table with width and height')
     assert(type(viewport.width) == 'number' and viewport.width >= 1 and
@@ -129,6 +138,13 @@ function M.new(types)
         'OverlayWidget must derive from Widget')
 
     local boundary = {}
+
+    ---Validates and copies viewport dimensions for one component mount.
+    ---@param viewport table|nil
+    ---@return table
+    function boundary:normalize_viewport(viewport)
+        return normalize_viewport(viewport)
+    end
 
     ---Classifies one supported component class or already-created instance.
     ---@param value any
@@ -192,7 +208,7 @@ function M.new(types)
             initial_pause=initial_pause == nil and true or initial_pause,
             overlay_position=normalize_overlay_position(
                 options.overlay_position),
-            viewport=normalize_viewport(options.viewport),
+            viewport=self:normalize_viewport(options.viewport),
         }
     end
 

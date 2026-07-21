@@ -38,7 +38,7 @@ describe('automatic component render tracking', function()
         assert.equals(PlainMountWidget, getmetatable(subject:raw()))
         assert.is_nil(subject:raw().render_generation)
         subject:hover():click():input('CUSTOM_A'):type('A')
-        ds.resize(40, 20)
+        ds.viewport(40, 20)
         ds.unmount()
     end)
 

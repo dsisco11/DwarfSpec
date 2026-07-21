@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Deterministic 128 by 64 DF-cell viewports for mounted components, explicit
+  mount-time viewport overrides, and the runtime `ds.viewport(width, height)`
+  command. The former `ds.resize(...)` command was removed.
+
 - Standalone repository baseline containing the reusable automation host,
   generic framework tests, and product-independent component coverage.
 - LuaRocks package metadata, namespaced module installation, and the

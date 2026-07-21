@@ -120,8 +120,8 @@ Phase 1 evidence (2026-07-20):
   supported DFHack bases and the accepted input forms.
 - Common options are `viewport={width=<positive integer>, height=<positive
   integer>}`, `initial_pause=<boolean>` (default `true`), and
-  `backing_viewscreen=<DFHack viewscreen>`. A missing viewport means the live
-  interface dimensions at mount time. A complete screen class receives the
+  `backing_viewscreen=<DFHack viewscreen>`. A missing viewport means the
+  deterministic 128 by 64 DF-cell default. A complete screen class receives the
   normalized pause choice during construction; later host adapters own the
   equivalent behavior for widgets and overlays.
 - Construction, DFHack `preinit`/`init`/`postinit`, and the first completed
@@ -458,7 +458,7 @@ Phase 6 evidence (2026-07-20):
 
 - `src/dwarfspec/mount_adapters.lua` dispatches the `screen` category to the
   supplied `gui.ZScreen` instance itself. It installs private render
-  interception and optional fixed-viewport resize interception only on that
+  interception and mount-owned viewport resize interception only on that
   instance, passes `backing_viewscreen` to its native `show()` method, and
   restores both intercepted methods after native dismissal. It does not create
   a covering host for complete screens or replace `onInput` or `dismiss`.
@@ -475,7 +475,7 @@ Phase 6 evidence (2026-07-20):
   command queue.
 - `tests/automation/specs/complete_screen_mount_live_spec.lua` mounts both a
   class and an existing instance. It proves direct activation, nested
-  descendant selection, fixed viewport behavior, automatic render-method
+  descendant selection, mount-owned viewport behavior, automatic render-method
   restoration, native dismissal, parent pause-input forwarding, initial pause
   and restoration, fluent editing and clicking, and a modal child that handles
   input without changing `ds.root()` or making its `modal_only` view selectable.

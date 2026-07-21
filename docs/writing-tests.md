@@ -88,6 +88,12 @@ Pass an already-created instance when setup outside the mount is itself part
 of the test. Component attributes cannot be supplied again for an instance;
 mount-only options such as the `viewport` shown above remain available.
 
+Every mount uses a deterministic 128 by 64 viewport in DF cells unless the
+test supplies `viewport={width=..., height=...}`. The default approximates a
+1024 by 768 display when DFHack cells are 8 by 12 pixels. Change the current
+mounted component later with `ds.viewport(width, height)`; it waits for the
+resulting render before returning.
+
 ## Component subjects
 
 `ds.mount(component, options)` establishes the test's one implicit current
@@ -209,9 +215,10 @@ ds.mount(screen, {
 DwarfSpec shows the supplied screen directly and installs reversible render
 instrumentation on that instance. Native activation, dismissal, pause
 restoration, and parent input forwarding remain the screen's responsibility.
-An optional fixed `viewport` is applied through reversible instance resize
+The mount-owned viewport is applied through reversible instance resize
 interception, and `backing_viewscreen` is passed to the screen's normal
-`show()` method.
+`show()` method. `ds.viewport(width, height)` updates that same viewport for
+all mounted component categories.
 
 If the component opens a native modal child screen, input follows that child
 while it remains above the mounted screen. The implicit component root does
@@ -246,7 +253,7 @@ and must be selected explicitly when validating the DFHack overlay boundary.
 The first-release surface is intentionally small:
 
 - synchronization: `await`, `wait_frames`;
-- components: `mount`, `root`, `get`, `unmount`, `resize`;
+- components: `mount`, `root`, `get`, `unmount`, `viewport`;
 - subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
   `text`, and the exceptional `raw` escape hatch;
 - evidence: `capture_view_tree`, `capture_screen`; and

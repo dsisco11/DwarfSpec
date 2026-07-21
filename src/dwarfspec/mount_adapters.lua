@@ -23,7 +23,7 @@ local function create_host_class(gui_module, define_class)
         self:addviews{self.component}
     end
 
-    ---Lays out hosted content against a fixed or live interface viewport.
+---Lays out hosted content against the current mount-owned viewport.
     ---@param width integer
     ---@param height integer
     function HostScreen:onResize(width, height)
@@ -100,12 +100,11 @@ local function prepare_screen(mount, screen, instrumentation,
         end)
 end
 
----Installs reversible fixed-viewport resize interception on one screen.
+---Installs reversible viewport resize interception on one screen.
 ---@param screen table
----@param viewport table|nil
----@return function|nil
-local function install_fixed_viewport(screen, viewport)
-    if not viewport then return nil end
+---@param viewport table
+---@return function
+local function install_viewport(screen, viewport)
     local original_instance_method = rawget(screen, 'onResize')
     local original_effective_method = screen.onResize
     local installed_method
@@ -121,11 +120,20 @@ local function install_fixed_viewport(screen, viewport)
     return function()
         if restored then return false end
         assert(rawget(screen, 'onResize') == installed_method,
-            'fixed-viewport onResize changed before restoration')
+            'viewport onResize changed before restoration')
         rawset(screen, 'onResize', original_instance_method)
         restored = true
         return true
     end
+end
+
+---Applies the current mount-owned viewport to one active host screen.
+---@param mount table
+---@param viewport table
+local function apply_viewport(mount, viewport)
+    assert(mount.host_screen and type(mount.host_screen.onResize) == 'function',
+        'component adapter requires an active host screen for viewport changes')
+    mount.host_screen:onResize(viewport.width, viewport.height)
 end
 
 ---Creates category adapters backed by live DFHack screens.
@@ -178,6 +186,13 @@ function M.new(options)
         if is_active(mount.host_screen) then mount.host_screen:dismiss() end
     end
 
+    ---Applies a runtime viewport change to a widget host.
+    ---@param mount table
+    ---@param viewport table
+    function host_adapter:viewport(mount, viewport)
+        return apply_viewport(mount, viewport)
+    end
+
     ---@class dwarfspec.OverlayAdapter
     local overlay_adapter = {}
 
@@ -212,6 +227,13 @@ function M.new(options)
         if is_active(mount.host_screen) then mount.host_screen:dismiss() end
     end
 
+    ---Applies a runtime viewport change to an overlay host and painter.
+    ---@param mount table
+    ---@param viewport table
+    function overlay_adapter:viewport(mount, viewport)
+        return apply_viewport(mount, viewport)
+    end
+
     ---@class dwarfspec.CompleteScreenAdapter
     local screen_adapter = {}
 
@@ -222,7 +244,7 @@ function M.new(options)
     ---@return table
     function screen_adapter:mount(mount, prepared, register_cleanup)
         local screen = prepared.component
-        local restore_resize = install_fixed_viewport(
+        local restore_resize = install_viewport(
             screen, prepared.options.viewport)
         if restore_resize then
             register_cleanup(('restore component resize interception %d')
@@ -238,6 +260,13 @@ function M.new(options)
     ---@param mount table
     function screen_adapter:unmount(mount)
         if is_active(mount.host_screen) then mount.host_screen:dismiss() end
+    end
+
+    ---Applies a runtime viewport change to a complete screen.
+    ---@param mount table
+    ---@param viewport table
+    function screen_adapter:viewport(mount, viewport)
+        return apply_viewport(mount, viewport)
     end
 
     ---Returns the adapter for a supported component category.

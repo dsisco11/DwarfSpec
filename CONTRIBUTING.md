@@ -12,7 +12,9 @@ Before submitting a change:
 3. Compile the same repository Lua files with Lua 5.3. DFHack's embedded Lua
    5.3 is an acceptable compatibility compiler; the external Lua and LuaRocks
    toolchain does not need to match it.
-4. Run the relevant live DFHack specifications when host behavior changes.
+4. Copy `.env.example` to `.env`, set `DFHACK_ROOT` to the local installation,
+   then run `tools/Run-AutomationTests.ps1` with relevant selectors when host
+   behavior changes.
 5. Document every Lua module and function with triple-dash LuaDoc prose.
 
 Standalone Busted unit specs live under `tests/` and use the conventional

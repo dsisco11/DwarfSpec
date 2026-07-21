@@ -67,7 +67,8 @@ function M.new(options)
         'mount context requires an automation run')
     assert(type(options.boundary) == 'table' and
         type(options.boundary.classify) == 'function' and
-        type(options.boundary.prepare) == 'function',
+        type(options.boundary.prepare) == 'function' and
+        type(options.boundary.normalize_viewport) == 'function',
         'mount context requires a component boundary')
     assert(type(options.cleanup_module) == 'table' and
         type(options.cleanup_module.push) == 'function' and
@@ -359,6 +360,26 @@ function M.new(options)
         end
         self:refresh_views(mount)
         return table.unpack(results, 2, results.n)
+    end
+
+    ---Changes the current mount viewport and waits for its completed render.
+    ---@param width integer
+    ---@param height integer
+    ---@return any
+    function context:viewport(width, height)
+        local mount = self:require_current('viewport')
+        local viewport = self.boundary:normalize_viewport({
+            width=width,
+            height=height,
+        })
+        assert(type(mount.adapter.viewport) == 'function',
+            'component adapter must provide viewport() for ' ..
+                mount.category)
+        return self:mutate('viewport', function()
+            mount.options.viewport.width = viewport.width
+            mount.options.viewport.height = viewport.height
+            return mount.adapter:viewport(mount, mount.options.viewport)
+        end)
     end
 
     ---Activates one classified component when no mount is current.

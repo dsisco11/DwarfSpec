@@ -106,12 +106,26 @@ if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
 $oldDFHackRoot = [Environment]::GetEnvironmentVariable('DFHACK_ROOT', 'Process')
 $oldDFHackRunner = [Environment]::GetEnvironmentVariable('DFHACK_RUNNER', 'Process')
 $locationPushed = $false
+$runArguments = @('run')
+$hasTestGlob = $false
+foreach ($argument in $DwarfSpecArgs) {
+    if ($argument -eq '--test-glob' -or
+            $argument.StartsWith('--test-glob=')) {
+        $hasTestGlob = $true
+        break
+    }
+}
+if (-not $hasTestGlob) {
+    $runArguments += @('--test-glob',
+        'tests/automation/specs/*_live_spec.lua')
+}
+$runArguments += $DwarfSpecArgs
 try {
     [Environment]::SetEnvironmentVariable('DFHACK_ROOT', $dfhackRoot, 'Process')
     [Environment]::SetEnvironmentVariable('DFHACK_RUNNER', $runner, 'Process')
     Push-Location -LiteralPath $projectRoot
     $locationPushed = $true
-    & lua $launcher run @DwarfSpecArgs
+    & lua $launcher @runArguments
     $exitCode = $LASTEXITCODE
 }
 finally {

@@ -78,6 +78,18 @@ dwarfspec help
 See [the installation guide](docs/installation.md) for local rocks, custom
 LuaRocks trees, and development servers.
 
+For local live automation from this source checkout, copy `.env.example` to
+`.env`, set `DFHACK_ROOT` to the DFHack installation containing
+`dfhack-run.exe`, and run:
+
+```powershell
+.\tools\Run-AutomationTests.ps1
+```
+
+With no arguments, the script runs the product live specifications under
+`tests/automation/specs/`. Pass normal `dwarfspec run` selectors after the
+script name. The `.env` file is local-only and is not read by GitHub Actions.
+
 ## Add DwarfSpec to a project
 
 By default, DwarfSpec recursively discovers files named `*.ds.lua` beneath
@@ -134,7 +146,9 @@ end)
 DwarfSpec accepts `widgets.Widget`, `overlay.OverlayWidget`, and `gui.ZScreen`
 classes or instances through the same entry point. It owns the host,
 instruments successful renders automatically, and cleans up the current mount
-after each example. Reusable factories remain ordinary Lua helpers.
+after each example. Every mount uses a 128 by 64 DF-cell viewport by default;
+pass `viewport={width=..., height=...}` to select another size. Reusable
+factories remain ordinary Lua helpers.
 
 ```lua
 local gui = require('gui')
@@ -185,7 +199,7 @@ frames is itself part of the behavior being tested.
 | `ds.root()` | Return a subject for the implicit current mount root. |
 | `ds.get(view_id)` | Select a unique propagated ID from the implicit current mount. |
 | `ds.unmount()` | Cleanly remove and settle the implicit current mount. |
-| `ds.resize(width, height)` | Resize the mounted host and wait for its render. |
+| `ds.viewport(width, height)` | Change the mounted viewport in DF cells and wait for its render. |
 | `subject:inspect()` | Return stable, read-only information about the selected view. |
 | `subject:text()` | Return the selected view's inspected text value. |
 | `subject:raw()` | Access the native object as an exceptional escape hatch. |

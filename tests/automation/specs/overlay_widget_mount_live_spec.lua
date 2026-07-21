@@ -1,6 +1,5 @@
 -- Product-independent live proof for isolated overlay component mounting.
 
-local gui = require('gui')
 local widgets = require('gui.widgets')
 local overlay = require('plugins.overlay')
 
@@ -85,16 +84,18 @@ describe('overlay widget component host', function()
             overlay_position={x=6, y=7},
         })
         local instance = root:raw()
-        local scaled = gui.ViewRect{rect=gui.get_interface_rect()}
 
         assert.matches('^dwarfspec%.', instance.name)
         assert.equals(5, instance.frame.l)
         assert.equals(6, instance.frame.t)
         assert.equals('enable', instance.events[1])
-        assert.equals(scaled.x1, instance.last_painter.x1)
-        assert.equals(scaled.y1, instance.last_painter.y1)
-        assert.equals(scaled.width, instance.last_painter.width)
-        assert.equals(scaled.height, instance.last_painter.height)
+        assert.equals(0, instance.last_painter.x1)
+        assert.equals(0, instance.last_painter.y1)
+        assert.equals(128, instance.last_painter.width)
+        assert.equals(64, instance.last_painter.height)
+        ds.viewport(60, 20)
+        assert.equals(60, instance.last_painter.width)
+        assert.equals(20, instance.last_painter.height)
 
         ds.wait_frames(2)
         assert.is_true(instance.update_count > 0)
@@ -130,13 +131,15 @@ describe('overlay widget component host', function()
             overlay_onupdate_max_freq_seconds=60,
         }
         local original_frame = instance.frame
-        local width, height = dfhack.screen.getWindowSize()
         ds.mount(instance, {overlay_position={x=-2, y=-3}})
 
         assert.equals(1, instance.frame.r)
         assert.equals(2, instance.frame.b)
-        assert.equals(width, instance.last_painter.width)
-        assert.equals(height, instance.last_painter.height)
+        assert.equals(128, instance.last_painter.width)
+        assert.equals(64, instance.last_painter.height)
+        ds.viewport(61, 31)
+        assert.equals(61, instance.last_painter.width)
+        assert.equals(31, instance.last_painter.height)
         ds.wait_frames(3)
         assert.is_true(instance.update_count <= 1)
         ds.unmount()

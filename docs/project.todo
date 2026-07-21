@@ -1,4 +1,4 @@
-☐ Complete the deterministic DF-cell viewport work in `docs/viewport.todo`, including the mount option, 128 by 64 default, and `ds.viewport(width, height)` command.
+☑ Complete the deterministic DF-cell viewport work in `docs/viewport.todo`, including the mount option, 128 by 64 default, and `ds.viewport(width, height)` command.
 ☐ Update `ds.get(...)` to accept and parse hierarchy paths for nested components.
 ☐ Update `ds.get(...)` to accept and parse simple CSS-like selector queries.
 ☐ Create a list of possible useful commands that can be added for non-ui (behavioral) game logic testing, such as `ds.get_state(...)`, `ds.set_state(...)`, `ds.spy(...)` (for DF game events), `ds.trigger_event(...)`, etc.

@@ -410,17 +410,11 @@ local subject_module = load_automation_module(package_root,
         end)
     end
 
-    ---Applies a layout resize to the current mounted screen and waits.
+    ---Changes the current mounted component viewport and waits for its render.
     ---@param width integer
     ---@param height integer
-    function ds.resize(width, height)
-        local mount = context.mount_context:require_current('resize')
-        assert(type(width) == 'number' and width >= 1 and
-            type(height) == 'number' and height >= 1,
-            'resize dimensions must be positive numbers')
-        return context.mount_context:mutate('resize', function()
-            mount.host_screen:onResize(width, height)
-        end)
+    function ds.viewport(width, height)
+        return context.mount_context:viewport(width, height)
     end
 
     ---Captures and retains a bounded plain screen-cell buffer.

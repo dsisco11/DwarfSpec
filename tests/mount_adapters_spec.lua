@@ -136,13 +136,14 @@ describe('DwarfSpec mount adapters', function()
             local component = setmetatable({focus_group={}}, component_class)
             local cleanups = {}
             local backing = {child={}}
+            local viewport = {width=40, height=20}
 
             local result = factory(category):mount(mount,
                 {
                     component=component,
                     options={
                         initial_pause=false,
-                        viewport={width=40, height=20},
+                        viewport=viewport,
                         backing_viewscreen=backing,
                     },
                 }, function(name, action)
@@ -167,6 +168,14 @@ describe('DwarfSpec mount adapters', function()
             assert.matches('dismiss component screen', cleanups[2].name,
                 1, true)
 
+            mount.host_screen = result.host_screen
+            viewport.width, viewport.height = 61, 31
+            factory(category):viewport(mount, viewport)
+            assert.equals(61, result.host_screen.layout_width)
+            assert.equals(31, result.host_screen.layout_height)
+            assert.equals(61, component.frame_body.width)
+            assert.equals(31, component.frame_body.height)
+
             cleanups[2].action()
             cleanups[1].action()
             assert.is_false(result.host_screen.active)
@@ -190,6 +199,7 @@ describe('DwarfSpec mount adapters', function()
             options={
                 initial_pause=true,
                 backing_viewscreen=backing,
+                viewport={width=40, height=20},
             },
         }, function(name, action)
             table.insert(cleanups, {name=name, action=action})
@@ -202,10 +212,20 @@ describe('DwarfSpec mount adapters', function()
             result.host_screen.overlay_controller)
         assert.same({'enable', 'layout'},
             last_overlay_controller.calls)
+        assert.same({width=40, height=20},
+            last_overlay_controller.options.viewport)
+        mount.host_screen = result.host_screen
+        last_overlay_controller.options.viewport.width = 61
+        last_overlay_controller.options.viewport.height = 31
+        factory('overlay'):viewport(mount,
+            last_overlay_controller.options.viewport)
+        assert.equals(61, result.host_screen.layout_width)
+        assert.equals(31, result.host_screen.layout_height)
+        assert.equals('layout', last_overlay_controller.calls[#last_overlay_controller.calls])
         result.host_screen:renderSubviews({})
         result.host_screen:onIdle()
         assert.is_true(result.host_screen:inputToSubviews({SELECT=true}))
-        assert.same({'enable', 'layout', 'render', 'update', 'input'},
+        assert.same({'enable', 'layout', 'layout', 'render', 'update', 'input'},
             last_overlay_controller.calls)
         assert.equals(4, #cleanups)
         assert.matches('restore overlay component state',
@@ -215,7 +235,7 @@ describe('DwarfSpec mount adapters', function()
 
         for index=#cleanups,1,-1 do cleanups[index].action() end
         assert.same({
-            'enable', 'layout', 'render', 'update', 'input',
+            'enable', 'layout', 'layout', 'render', 'update', 'input',
             'disable', 'restore',
         }, last_overlay_controller.calls)
         assert.is_false(result.host_screen.active)
@@ -243,12 +263,13 @@ describe('DwarfSpec mount adapters', function()
         local mount = {id=2, render_tracker=tracker}
         local cleanups = {}
         local backing = {child={}}
+        local viewport = {width=44, height=18}
 
         local result = factory('screen'):mount(mount, {
             component=screen,
             options={
                 backing_viewscreen=backing,
-                viewport={width=44, height=18},
+                viewport=viewport,
             },
         },
             function(_, action) table.insert(cleanups, action) end)
@@ -263,6 +284,11 @@ describe('DwarfSpec mount adapters', function()
         assert.is_true(screen.original_called)
         assert.equals(1, tracker.completions)
         assert.equals(3, #cleanups)
+        mount.host_screen = result.host_screen
+        viewport.width, viewport.height = 61, 31
+        factory('screen'):viewport(mount, viewport)
+        assert.equals(61, screen.layout_width)
+        assert.equals(31, screen.layout_height)
         for index=#cleanups,1,-1 do cleanups[index]() end
         assert.is_false(screen.active)
         assert.equals(original, rawget(screen, 'onRender'))

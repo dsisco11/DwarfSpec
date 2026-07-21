@@ -60,15 +60,19 @@ longer current, and prevent normal commands from accepting unrelated raw
 views or screens.
 
 Ordinary widgets and overlay widgets render inside a DwarfSpec-owned
-instrumented `gui.ZScreen`. The widget adapter lays out the component in the
-owned viewport. The overlay adapter additionally supplies its logical name,
-frame and painter selection, backing viewscreen, enable/update/input/disable
-lifecycle, and mount-local position without registering a script.
+instrumented `gui.ZScreen`. Each mount owns a mutable DF-cell viewport, which
+defaults to 128 by 64 and can be changed with `ds.viewport(width, height)`.
+The widget adapter lays out the component in that viewport. The overlay adapter
+uses the same viewport for layout and painter selection, while additionally
+supplying its logical name, frame, backing viewscreen,
+enable/update/input/disable lifecycle, and mount-local position without
+registering a script.
 
 A complete screen is shown directly instead of being nested inside another
-host. DwarfSpec instruments that screen instance automatically and restores
-its original behavior during cleanup. Render instrumentation remains private
-to DwarfSpec and does not alter the component class.
+host. DwarfSpec instruments that screen instance automatically, forwards the
+mount-owned viewport through reversible resize interception, and restores its
+original behavior during cleanup. Render instrumentation remains private to
+DwarfSpec and does not alter the component class.
 
 Render instrumentation reports successful completed renders to a private
 mount tracker. Mutating commands capture the current generation, perform the

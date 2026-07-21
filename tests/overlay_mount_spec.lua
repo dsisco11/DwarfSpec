@@ -135,4 +135,53 @@ describe('DwarfSpec overlay mount lifecycle', function()
         assert.equals('consumer.overlay', widget.name)
         assert.equals(original_frame, widget.frame)
     end)
+
+    it('uses the current shared viewport for layout and rendering', function()
+        local observed = {}
+        local viewport = {width=40, height=20}
+        local local_factory = overlay_mount.new({
+            gui_module={
+                Painter={new=function(rect) return {rect=rect} end},
+            },
+            get_value=function(value) return value end,
+            get_backing_viewscreen=function() return {} end,
+            get_rects=function(current)
+                table.insert(observed, {width=current.width, height=current.height})
+                return {kind='full', width=current.width, height=current.height},
+                    {kind='scaled', width=current.width,
+                        height=current.height}
+            end,
+        })
+        local widget = {
+            active=true,
+            visible=true,
+            frame={},
+            updateLayout=function(self, rect)
+                self.layout = {kind=rect.kind, width=rect.width,
+                    height=rect.height}
+            end,
+            render=function(self, painter)
+                self.rendered = {kind=painter.rect.kind,
+                    width=painter.rect.width, height=painter.rect.height}
+            end,
+        }
+        local controller = local_factory:create({id=1}, widget,
+            {viewport=viewport})
+
+        controller:enable()
+        controller:render()
+        viewport.width, viewport.height = 61, 31
+        controller:layout()
+        controller:render()
+
+        assert.same({kind='scaled', width=61, height=31}, widget.layout)
+        assert.same({kind='scaled', width=61, height=31}, widget.rendered)
+        assert.same({width=61, height=31}, observed[#observed])
+
+        widget.fullscreen = true
+        controller:layout()
+        controller:render()
+        assert.same({kind='full', width=61, height=31}, widget.layout)
+        assert.same({kind='full', width=61, height=31}, widget.rendered)
+    end)
 end)

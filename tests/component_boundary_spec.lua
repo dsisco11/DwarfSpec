@@ -102,8 +102,9 @@ describe('DwarfSpec component boundary', function()
 
     it('normalizes common harness options and top-level attributes', function()
         local backing_viewscreen = {}
+        local requested_viewport = {width=80, height=25}
         local prepared = boundary:prepare(PlainWidget, {
-            viewport={width=80, height=25},
+            viewport=requested_viewport,
             initial_pause=false,
             backing_viewscreen=backing_viewscreen,
             label='submit',
@@ -114,12 +115,18 @@ describe('DwarfSpec component boundary', function()
             prepared.options.backing_viewscreen)
         assert.same({label='submit'}, prepared.options.attributes)
         assert.equals('submit', prepared.component.label)
+        requested_viewport.width = 1
+        assert.same({width=80, height=25}, prepared.options.viewport)
 
         local defaults = boundary:prepare(TestScreen)
         assert.is_true(defaults.options.initial_pause)
         assert.is_true(defaults.component.initial_pause)
-        assert.is_nil(defaults.options.viewport)
+        assert.same({width=128, height=64}, defaults.options.viewport)
         assert.same({}, defaults.options.attributes)
+
+        local next_defaults = boundary:prepare(TestScreen)
+        next_defaults.options.viewport.width = 1
+        assert.same({width=128, height=64}, defaults.options.viewport)
     end)
 
     it('rejects component attributes for initialized instances', function()
@@ -159,9 +166,22 @@ describe('DwarfSpec component boundary', function()
     end)
 
     it('validates viewport and pause options', function()
-        assert.has_error(function()
-            boundary:prepare(PlainWidget, {viewport={width=0, height=25}})
-        end, 'mount option viewport.width must be a positive integer')
+        for _, case in ipairs({
+            {viewport={width=0, height=25},
+                message='mount option viewport.width must be a positive integer'},
+            {viewport={width=1.5, height=25},
+                message='mount option viewport.width must be a positive integer'},
+            {viewport={width='80', height=25},
+                message='mount option viewport.width must be a positive integer'},
+            {viewport={width=80, height=-1},
+                message='mount option viewport.height must be a positive integer'},
+            {viewport={width=80, height=25.5},
+                message='mount option viewport.height must be a positive integer'},
+        }) do
+            assert.has_error(function()
+                boundary:prepare(PlainWidget, {viewport=case.viewport})
+            end, case.message)
+        end
         assert.has_error(function()
             boundary:prepare(PlainWidget, {initial_pause='yes'})
         end, 'mount option initial_pause must be a boolean')
@@ -188,7 +208,7 @@ describe('DwarfSpec component boundary', function()
     end)
 
     it('reserves the initial mount and subject API names', function()
-        assert.same({'mount', 'root', 'unmount'},
+        assert.same({'mount', 'root', 'unmount', 'viewport'},
             component.PUBLIC_API.mount_context)
         assert.same({
             'click', 'hover', 'move_pointer', 'input', 'type',

@@ -115,6 +115,14 @@ describe('DwarfSpec mount context', function()
                             table.insert(events, 'unmount:' .. screen.name)
                         end
                     end,
+                    viewport=function(_, mount, viewport)
+                        local screen = mount.adapter_screen
+                        screen.width = viewport.width
+                        screen.height = viewport.height
+                        table.insert(events, ('viewport:%d:%d'):format(
+                            viewport.width, viewport.height))
+                        mount.render_tracker:completed()
+                    end,
                     settle=function(_, mount)
                         local screen = mount.adapter_screen
                         table.insert(events, 'settle:' ..
@@ -210,6 +218,43 @@ describe('DwarfSpec mount context', function()
 
         assert.equals('clicked', result)
         assert.equals(2, context.current.render_tracker:generation())
+    end)
+
+    it('owns default and runtime viewport state for the current mount',
+            function()
+        local requested = {width=40, height=20}
+        context:mount(TestWidget, {name='viewport', viewport=requested})
+        local mount = context.current
+        requested.width = 1
+
+        assert.same({width=40, height=20}, mount.options.viewport)
+        context:viewport(60, 30)
+        assert.same({width=60, height=30}, mount.options.viewport)
+        assert.equals(60, screens[1].width)
+        assert.equals(30, screens[1].height)
+        assert.equals('viewport:60:30', events[#events])
+        assert.equals(2, mount.render_tracker:generation())
+
+        context:viewport(61, 31)
+        assert.same({width=61, height=31}, mount.options.viewport)
+        assert.equals(61, screens[1].width)
+        assert.equals(31, screens[1].height)
+        assert.equals('viewport:61:31', events[#events])
+        assert.equals(3, mount.render_tracker:generation())
+
+        assert.has_error(function() context:viewport(0, 30) end,
+            'mount option viewport.width must be a positive integer')
+        assert.has_error(function() context:viewport(60, 30.5) end,
+            'mount option viewport.height must be a positive integer')
+    end)
+
+    it('starts each mount with an independent default viewport', function()
+        context:mount(TestWidget, {name='first'})
+        context:viewport(60, 30)
+        context:unmount()
+        context:mount(TestWidget, {name='second'})
+
+        assert.same({width=128, height=64}, context.current.options.viewport)
     end)
 
     it('rejects duplicate propagated IDs and recovers after tree changes',
@@ -460,5 +505,7 @@ describe('DwarfSpec mount context', function()
             'DwarfSpec get' .. expected)
         assert.has_error(function() context:require_current('interaction') end,
             'DwarfSpec interaction' .. expected)
+        assert.has_error(function() context:viewport(80, 25) end,
+            'DwarfSpec viewport' .. expected)
     end)
 end)
