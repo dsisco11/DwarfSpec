@@ -4,9 +4,10 @@
 2. Add the release notes to `CHANGELOG.md`.
 3. Run the syntax check and full unit suite with Lua 5.3 on `PATH`.
 4. Run `luarocks lint`, then build the source rock with `luarocks pack`.
-5. Build the binary release rock in Linux with LuaRocks configured as
-   `arch = 'all'`. The archive contains only Lua code and the paired Unix and
-   Windows text launchers; it must be named `<package>-<version>.all.rock`.
+5. Run the VS Code `Publish` task, or `tools/Publish.ps1`, to build the binary
+   release rock with LuaRocks configured as `arch = 'all'`. The archive
+   contains only Lua code and the paired Unix and Windows text launchers; it
+   is written to `dist/<package>-<version>.all.rock`.
 6. Inspect the archive manifest and confirm it contains no native library.
 7. Install the binary rock into an empty LuaRocks tree and run command and
    module smoke checks from that tree on Windows and Linux.

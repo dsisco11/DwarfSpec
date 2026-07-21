@@ -5,3 +5,4 @@
 *.rock
 *.src.rock
 /.tmp-luarocks/
+/dist/
