@@ -38,7 +38,7 @@ diagnostics. Multiple matches retain the deterministic order printed by
 ```text
 dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
 dwarfspec run [glob] [options]
-dwarfspec abort RUN_ID [--runner PATH]
+dwarfspec abort RUN_ID [--project-root PATH] [--runner PATH]
 dwarfspec help [command]
 dwarfspec version
 ```
@@ -51,7 +51,8 @@ complete option list.
 
 The runner lookup order is an explicit `--runner`, `DFHACK_RUNNER`,
 `DFHACK_ROOT/dfhack-run`, and finally `PATH`. `DFHACK_ROOT` is the directory
-that directly contains `dfhack-run.exe` or `dfhack-run`.
+that directly contains `dfhack-run.exe` or `dfhack-run`. The process
+environment takes precedence over values loaded from `<project-root>/.env`.
 
 ## Live component commands
 

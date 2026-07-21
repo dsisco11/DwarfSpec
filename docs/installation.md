@@ -35,6 +35,20 @@ The public LuaRocks workflow is identical to the released install command.
 Use `dwarfspec help` after installation to verify that the command resolves
 from the selected rock tree.
 
+## Configure DFHack
+
+Create an ignored `.env` file in the consumer project root and set the absolute
+directory that directly contains `dfhack-run.exe` or `dfhack-run`:
+
+```text
+DFHACK_ROOT=D:\Games\Dwarf Fortress\hack
+```
+
+`dwarfspec run` loads this configuration automatically. A process environment
+variable overrides the project file, and `--runner PATH` overrides both. See
+[consumer configuration](configuration.md#dfhack-runner) for the complete
+lookup contract.
+
 ## Local live automation
 
 Live DFHack specifications are intentionally local-only. From a source
@@ -45,18 +59,15 @@ path:
 DFHACK_ROOT=D:\Games\Dwarf Fortress\hack
 ```
 
-The directory must contain `dfhack-run.exe`. Run the relevant live
-specifications through the project script:
+Run the relevant live specifications through the project script:
 
 ```powershell
 .\tools\Run-AutomationTests.ps1
 ```
 
-Pass normal `dwarfspec run` selectors after the script name. The script sets
-`DFHACK_ROOT` only for that process and restores any existing shell value when
-it exits. With no selectors, it runs the product live specifications under
-`tests/automation/`. The `.env` file is ignored by Git and is not used by
-GitHub Actions.
+Pass normal `dwarfspec run` selectors after the script name. With no selectors,
+it runs the product live specifications under `tests/automation/`. The `.env`
+file is ignored by Git and is not used by GitHub Actions.
 
 The external command uses its installation's Lua version, which does not need
 to match DFHack's embedded Lua version. The host replaces the native `system`

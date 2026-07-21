@@ -2,6 +2,7 @@
 
 local glob = require('dwarfspec.glob')
 local config = require('dwarfspec.config')
+local dotenv = require('dwarfspec.dotenv')
 local project = require('dwarfspec.project')
 local runner = require('dwarfspec.runner')
 
@@ -16,7 +17,7 @@ Usage:
   dwarfspec
   dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
   dwarfspec run [glob] [options]
-  dwarfspec abort RUN_ID [--runner PATH]
+  dwarfspec abort RUN_ID [--project-root PATH] [--runner PATH]
   dwarfspec help [command]
   dwarfspec version
 
@@ -71,18 +72,21 @@ Options:
   --verbose                    Print resolved runner diagnostics
 
 Runner lookup order is --runner, DFHACK_RUNNER, DFHACK_ROOT/dfhack-run,
-then PATH. A run returns zero only when Busted passes and cleanup is confirmed.
+then PATH. Environment values already set in the process override values loaded
+from PROJECT_ROOT/.env. A run returns zero only when Busted passes and cleanup
+is confirmed.
 ]]
 
 local ABORT_HELP = [[
-Usage: dwarfspec abort RUN_ID [--runner PATH] [--verbose]
+Usage: dwarfspec abort RUN_ID [--project-root PATH] [--runner PATH] [--verbose]
 
 Aborts an active DwarfSpec run through dfhack-run. Success requires an aborted
-native report with cleanup_confirmed=true.
+native report with cleanup_confirmed=true. The project root defaults to the
+current directory and supplies the optional .env runner configuration.
 ]]
 
 local LIST_OPTIONS = {['project-root']=true, ['test-glob']=true}
-local ABORT_OPTIONS = {runner=true, verbose=true}
+local ABORT_OPTIONS = {['project-root']=true, runner=true, verbose=true}
 local RUN_OPTIONS = {
     ['project-root']=true,
     ['test-glob']=true,
@@ -280,19 +284,38 @@ local function help(topic, output)
     return 0
 end
 
+---Resolves the project root and overlays its optional dotenv configuration.
+---@param options table
+---@param context table
+---@return table
+local function resolve_project_environment(options, context)
+    local filesystem = context.filesystem or project.filesystem()
+    options.filesystem = filesystem
+    options.project_root = project.resolve_root(options.project_root,
+        context.current_directory or filesystem.currentdir(), filesystem)
+    local environment = context.environment or {getenv=os.getenv}
+    local dotenv_values = dotenv.load(project.join(options.project_root,
+        '.env'), filesystem, context.readfile)
+    local process_runner = environment.getenv('DFHACK_RUNNER')
+    local process_root = environment.getenv('DFHACK_ROOT')
+    if (process_runner ~= nil and process_runner ~= '') or
+            (process_root ~= nil and process_root ~= '') then
+        dotenv_values.DFHACK_RUNNER = nil
+        dotenv_values.DFHACK_ROOT = nil
+    end
+    options.environment = dotenv.overlay(environment, dotenv_values)
+    return filesystem
+end
+
 ---Discovers and optionally filters canonical identities for list or run.
 ---@param options table
 ---@param expression string|nil
 ---@param context table
 ---@return string[]
 local function select_identities(options, expression, context)
-    local filesystem = context.filesystem or project.filesystem()
-    options.filesystem = filesystem
-    options.project_root = project.resolve_root(options.project_root,
-        context.current_directory or filesystem.currentdir(), filesystem)
-    local environment = context.environment or {getenv=os.getenv}
+    local filesystem = resolve_project_environment(options, context)
     options.test_glob = options.test_glob or
-        environment.getenv('DWARFSPEC_TEST_GLOB') or
+        options.environment.getenv('DWARFSPEC_TEST_GLOB') or
         config.load_test_glob(options.project_root, filesystem,
             context.loadfile)
     local identities = project.discover(options.project_root, filesystem,
@@ -340,7 +363,6 @@ function M.main(argv, context)
             options.identities = select_identities(options, positionals[1],
                 context)
             options.emit = function(line) write(output, line) end
-            options.environment = context.environment
             options.host_scripts = context.host_scripts
             options.invoke = context.invoke
             options.system = context.system
@@ -354,7 +376,7 @@ function M.main(argv, context)
             local options, positionals = parse_options(argv, 2, package_root,
                 ABORT_OPTIONS)
             assert(#positionals == 1, 'abort requires exactly one run id')
-            options.environment = context.environment
+            resolve_project_environment(options, context)
             options.host_scripts = context.host_scripts
             options.invoke = context.invoke
             options.decode_json = context.decode_json

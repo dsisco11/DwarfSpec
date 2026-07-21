@@ -50,6 +50,13 @@ describe('DwarfSpec package contract', function()
         assert.is_truthy(read_repository_file('src/dwarfspec/component.lua'))
     end)
 
+    it('publishes project dotenv support for the installed command', function()
+        local rockspec = read_repository_file(ROCKSPEC_PATH)
+        assert.matches('["dwarfspec.dotenv"] = ' ..
+            '"src/dwarfspec/dotenv.lua"', rockspec, 1, true)
+        assert.is_truthy(read_repository_file('src/dwarfspec/dotenv.lua'))
+    end)
+
     it('publishes mount-context and subject modules', function()
         local rockspec = read_repository_file(ROCKSPEC_PATH)
         assert.matches('["dwarfspec.mount_context"] = ' ..

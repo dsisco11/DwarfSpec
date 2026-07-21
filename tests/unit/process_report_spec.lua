@@ -50,20 +50,29 @@ describe('DwarfSpec process bridge', function()
             DFHACK_ROOT=root,
             PATH=path_root,
         }
+        local existing = {
+            [root .. '/dfhack-run']=true,
+            [path_root .. '/dfhack-run']=true,
+        }
         local environment = {
             getenv=function(name) return variables[name] end,
         }
+        local options = {
+            platform='unix',
+            isfile=function(path) return existing[path] == true end,
+        }
 
-        assert.equals(explicit, process.resolve_runner({
-            runner=explicit, platform='unix'}, environment))
-        assert.equals(root .. '/dfhack-run', process.resolve_runner({
-            platform='unix'}, environment))
+        options.runner = explicit
+        assert.equals(explicit, process.resolve_runner(options, environment))
+        options.runner = nil
+        assert.equals(root .. '/dfhack-run',
+            process.resolve_runner(options, environment))
         variables.DFHACK_RUNNER = nil
-        assert.equals(root .. '/dfhack-run', process.resolve_runner({
-            platform='unix'}, environment))
+        assert.equals(root .. '/dfhack-run',
+            process.resolve_runner(options, environment))
         variables.DFHACK_ROOT = nil
-        assert.equals(path_root .. '/dfhack-run', process.resolve_runner({
-            platform='unix'}, environment))
+        assert.equals(path_root .. '/dfhack-run',
+            process.resolve_runner(options, environment))
     end)
 
     it('resolves Windows DFHACK_ROOT and reports an actionable miss', function()
@@ -78,10 +87,8 @@ describe('DwarfSpec process bridge', function()
         local options = {
             platform='windows',
             isfile=function(path)
-                local file = io.open(path:gsub('\\', '/'), 'rb')
-                if not file then return false end
-                file:close()
-                return true
+                return path ==
+                    'tests\\framework\\runner_root\\dfhack-run.exe'
             end,
         }
         assert.equals('tests\\framework\\runner_root\\dfhack-run.exe',

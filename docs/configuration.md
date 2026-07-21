@@ -1,5 +1,29 @@
 # Consumer configuration
 
+## DFHack runner
+
+Create an ignored `.env` file in the consumer project root:
+
+```text
+DFHACK_ROOT=G:\Steam\steamapps\common\Dwarf Fortress\hack
+```
+
+`DFHACK_ROOT` must be the directory that directly contains `dfhack-run.exe` or
+`dfhack-run`. `dwarfspec run` and `dwarfspec abort` load the file as read-only
+configuration. They do not execute it or modify the process environment.
+
+Use `DFHACK_RUNNER` instead when the complete executable path is preferable:
+
+```text
+DFHACK_RUNNER=G:\Steam\steamapps\common\Dwarf Fortress\hack\dfhack-run.exe
+```
+
+Values already present in the process environment override `.env`. An explicit
+`--runner PATH` overrides both. The file supports blank lines, comment lines,
+optional `export`, quoted values, and unquoted values with trailing comments.
+It does not perform shell expansion. Use `--project-root PATH` when invoking a
+project from another directory.
+
 ## Test discovery
 
 The default discovery glob is `*.ds.lua`, matched against every filename found

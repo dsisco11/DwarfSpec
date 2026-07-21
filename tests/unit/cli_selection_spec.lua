@@ -130,7 +130,8 @@ describe('DwarfSpec CLI selection', function()
                     invoked = options
                     return {exit_code=0}
                 end,
-                abort=function()
+                abort=function(options, run_id)
+                    invoked = {options=options, run_id=run_id}
                     return {exit_code=0}
                 end,
             },
@@ -198,6 +199,51 @@ describe('DwarfSpec CLI selection', function()
         assert.equals(0, cli.main({'list'}, context))
         assert.equals('tests/automation/integration/registered_spec.lua\n',
             output.text)
+    end)
+
+    it('loads project dotenv values without replacing process variables',
+            function()
+        files['project/.env'] = true
+        context.readfile = function(path)
+            assert.equals('project/.env', path:gsub('\\', '/'))
+            return 'DFHACK_RUNNER=dotenv/dfhack-run\n' ..
+                'DFHACK_ROOT=dotenv/root\n'
+        end
+        context.environment = {
+            getenv=function(name)
+                if name == 'DFHACK_ROOT' then return 'process/root' end
+                return nil
+            end,
+        }
+        assert.equals(0, cli.main({'run',
+            '--test-glob=tests/automation/*.lua'}, context))
+        assert.is_nil(invoked.environment.getenv('DFHACK_RUNNER'))
+        assert.equals('process/root',
+            invoked.environment.getenv('DFHACK_ROOT'))
+
+        context.environment = {getenv=function() return nil end}
+        assert.equals(0, cli.main({'run',
+            '--test-glob=tests/automation/*.lua'}, context))
+        assert.equals('dotenv/dfhack-run',
+            invoked.environment.getenv('DFHACK_RUNNER'))
+        assert.equals('dotenv/root',
+            invoked.environment.getenv('DFHACK_ROOT'))
+    end)
+
+    it('loads dotenv runner configuration for abort project roots',
+            function()
+        files['project/configured/.env'] = true
+        directories['project/configured'] = {}
+        context.readfile = function(path)
+            assert.equals('project/configured/.env', path:gsub('\\', '/'))
+            return 'DFHACK_ROOT=dotenv/root\n'
+        end
+        assert.equals(0, cli.main({'abort', 'active-run',
+            '--project-root=configured'}, context))
+        assert.equals('active-run', invoked.run_id)
+        assert.equals('dotenv/root',
+            invoked.options.environment.getenv('DFHACK_ROOT'))
+        assert.equals('project/configured', invoked.options.project_root)
     end)
 
     it('returns distinct usage and no-match diagnostics', function()

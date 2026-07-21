@@ -30,6 +30,7 @@ build = {
         ["dwarfspec.cli"] = "src/dwarfspec/cli.lua",
         ["dwarfspec.component"] = "src/dwarfspec/component.lua",
         ["dwarfspec.config"] = "src/dwarfspec/config.lua",
+        ["dwarfspec.dotenv"] = "src/dwarfspec/dotenv.lua",
         ["dwarfspec.glob"] = "src/dwarfspec/glob.lua",
         ["dwarfspec.layout"] = "src/dwarfspec/layout.lua",
         ["dwarfspec.mount_context"] = "src/dwarfspec/mount_context.lua",
