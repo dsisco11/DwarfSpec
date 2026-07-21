@@ -1,2 +1,5 @@
-☐ Add ability to configure the "screen dimensions" for mounted components under test.
+☐ Add ability to configure the "screen dimensions" for mounted components under test, screen size will be specified as an optional parameter passed to the mount method.
 ☐ Set reasonable default for mounted component screen size (e.g., 1024x768).
+☐ Add new `ds.set_screen_size(...)` method to allow changing the screen size for mounted components under test.
+☐ Update `ds.get(...)` to accept and parse hierarchy paths for nested components.
+☐ Update `ds.get(...)` to accept and parse simple CSS-like selector queries.
