@@ -34,9 +34,8 @@ The public LuaRocks workflow is identical to the released install command.
 Use `dwarfspec help` after installation to verify that the command resolves
 from the selected rock tree.
 
-The external command uses its installation's Lua version. For live automation,
-use a Lua and LuaRocks toolchain that matches DFHack's embedded Lua version.
-The host replaces the native `system` and `lfs` modules with DFHack-backed
-adapters before Busted is loaded, so native libraries are never loaded into the
-game process. DwarfSpec does not translate dependency paths between different
-Lua versions within one run.
+The external command uses its installation's Lua version, which does not need
+to match DFHack's embedded Lua version. The host replaces the native `system`
+and `lfs` modules with DFHack-backed adapters before Busted is loaded, so
+native libraries are never loaded into the game process. DwarfSpec does not
+translate dependency paths between different Lua versions within one run.

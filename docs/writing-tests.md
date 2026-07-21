@@ -7,19 +7,19 @@ assertions. Consumers can set `settings.discovery.test_glob` in
 `tests/dwarfspec/config.lua`, use `DWARFSPEC_TEST_GLOB`, or pass `--test-glob`
 when another naming convention is more appropriate.
 
-Fixtures are explicit project-relative imports:
+Component specs mount classes or existing instances directly:
 
 ```lua
-local screen = ds.show_fixture(
-    'tests/tooltip/fixtures/tooltip.fixture.lua')
+ds.mount(TooltipScreen, {initial_pause=false})
+ds.get('tooltip_target'):hover()
 ```
 
-`tests/**/fixtures/*.fixture.lua` is the recommended co-located convention.
-It is not an allowlist or mandatory root. A fixture such as
-`tests/support/shared_screen.lua` remains valid when imported explicitly.
-Screen fixture modules return a table with `new(options)` and produce a DFHack
-screen. DwarfSpec privately instruments successful renders and synchronizes
-fixture interactions without requiring fields or hooks in the fixture class.
+The default `*.ds.lua` discovery glob excludes ordinary support files and
+conventional `*.fixture.lua` files. Reusable factories and data builders can
+remain ordinary Lua helpers, but DwarfSpec does not load them through a
+special fixture protocol. DwarfSpec privately instruments successful renders
+and synchronizes interactions without requiring fields or hooks in consumer
+classes.
 
 ## Component subjects
 
@@ -139,12 +139,13 @@ Normal overlay behavior belongs in isolated component specs named distinctly,
 such as `tooltip_overlay_component_spec.ds.lua`. These specs use `ds.mount()`
 and never copy scripts into `hack/scripts/gui`.
 
-DwarfSpec retains one separately selected
-`overlay_registration_integration_spec.lua` for its own DFHack boundary. It
-proves real `OVERLAY_WIDGETS` discovery, registration, rescan, enablement,
-persisted positioning, focus filtering, and cleanup. Its run-owned staging
-support is internal test infrastructure, not another public mount operation or
-a protocol that consumer component specs must use.
+DwarfSpec retains a separately selected registration integration for the real
+DFHack boundary. It proves `OVERLAY_WIDGETS` discovery, registration, rescan,
+enablement, persisted positioning, focus filtering, and cleanup. Consumers
+with the same integration need can call
+`ds.stage_overlay_registration(source_path, logical_name)` from a distinctly
+named, explicitly selected integration spec. The source is an ordinary Lua
+overlay script, not a component mount or fixture-definition protocol.
 
 The integration support refuses to replace an existing destination or remove
 a staged script whose contents changed. It snapshots `dfhack-config/overlay.json`
@@ -162,11 +163,8 @@ The first-release surface is intentionally small:
 - components: `mount`, `root`, `get`, `unmount`, `resize`;
 - subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
   `text`, and the exceptional `raw` escape hatch;
-- legacy fixture compatibility: `show_fixture`, `dismiss`, and
-  `stage_overlay_fixture`;
-- legacy fixture input: `set_pointer`, `clear_pointer`, and the fixture-target
-  compatibility forms of interaction commands; and
-- evidence: `capture_view_tree`, `capture_screen`.
+- evidence: `capture_view_tree`, `capture_screen`; and
+- real registration integration: `stage_overlay_registration`.
 
 Input commands perform their own required render or frame synchronization.
 Cleanup and render-generation waiting are internal lifecycle details rather

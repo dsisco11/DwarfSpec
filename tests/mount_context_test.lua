@@ -390,11 +390,29 @@ describe('DwarfSpec mount context', function()
         local FailingWidget = make_class(Widget, function()
             error('replacement construction exploded')
         end)
+        local retained
+        context.failure_reporter=function(mount, operation, failure)
+            retained = {
+                mount_id=mount.id,
+                category=mount.category,
+                operation=operation,
+                failure=failure,
+            }
+            return ('reported %s failure for mount %d: %s')
+                :format(operation, mount.id, failure)
+        end
 
         local ok, message = pcall(context.mount, context, FailingWidget)
 
         assert.is_false(ok)
+        assert.matches('reported mount failure for mount 2:',
+            message, 1, true)
         assert.matches('replacement construction exploded', message, 1, true)
+        assert.equals(2, retained.mount_id)
+        assert.equals('widget', retained.category)
+        assert.equals('mount', retained.operation)
+        assert.matches('DwarfSpec mount failed while constructing widget ' ..
+            'component:', retained.failure, 1, true)
         assert.is_nil(context.current)
         assert.is_false(screens[1].active)
         assert.equals(0, cleanup.pending_count(registry))

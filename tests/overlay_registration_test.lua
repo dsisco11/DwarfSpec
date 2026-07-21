@@ -2,8 +2,8 @@
 
 local cleanup = assert(loadfile(
     'tests/automation/support/cleanup.lua'))()
-local overlay_fixture = assert(loadfile(
-    'tests/automation/support/overlay_fixture.lua'))()
+local overlay_registration = assert(loadfile(
+    'tests/automation/support/overlay_registration.lua'))()
 
 describe('DwarfSpec overlay registration integration support', function()
     local files
@@ -25,7 +25,6 @@ describe('DwarfSpec overlay registration integration support', function()
     before_each(function()
         config_path = 'game/dfhack-config/overlay.json'
         files = {
-            ['project/tests/support/probe.definition.lua']='definition',
             ['project/custom/probe_overlay.lua']='OVERLAY_WIDGETS = {}',
             [config_path]='{"existing":{"enabled":true}}\n',
         }
@@ -47,11 +46,6 @@ describe('DwarfSpec overlay registration integration support', function()
             config_path=config_path,
             isfile=function(path)
                 return files[normalize(path)] ~= nil
-            end,
-            loadfile=function()
-                return function()
-                    return {name='probe', source='custom/probe_overlay.lua'}
-                end
             end,
             read_file=function(path)
                 return assert(files[normalize(path)])
@@ -95,8 +89,8 @@ describe('DwarfSpec overlay registration integration support', function()
     it('restores script, registration, enablement, and exact configuration',
             function()
         local registry = cleanup.new({})
-        local staged = overlay_fixture.stage(descriptor,
-            'tests/support/probe.definition.lua', 'run-1', cleanup, registry,
+        local staged = overlay_registration.stage(descriptor,
+            'custom/probe_overlay.lua', 'probe', 'run-1', cleanup, registry,
             services)
         local registered_name = 'gui/dwarfspec_run-1_probe.probe'
 
@@ -129,8 +123,8 @@ describe('DwarfSpec overlay registration integration support', function()
     it('refuses to overwrite an existing staged path', function()
         files['game/hack/scripts/gui/dwarfspec_run-1_probe.lua'] = 'owned'
         assert.has_error(function()
-            overlay_fixture.stage(descriptor,
-                'tests/support/probe.definition.lua', 'run-1', cleanup,
+            overlay_registration.stage(descriptor,
+                'custom/probe_overlay.lua', 'probe', 'run-1', cleanup,
                 cleanup.new({}), services)
         end, 'refusing to overwrite an existing overlay registration ' ..
             'script: game/hack/scripts/gui' .. package.config:sub(1, 1) ..
@@ -140,8 +134,8 @@ describe('DwarfSpec overlay registration integration support', function()
     it('removes a partial stage when the initial rescan fails', function()
         fail_next_rescan = true
         local ok, message = pcall(function()
-            overlay_fixture.stage(descriptor,
-                'tests/support/probe.definition.lua', 'run-1', cleanup,
+            overlay_registration.stage(descriptor,
+                'custom/probe_overlay.lua', 'probe', 'run-1', cleanup,
                 cleanup.new({}), services)
         end)
         assert.is_false(ok)
@@ -157,8 +151,8 @@ describe('DwarfSpec overlay registration integration support', function()
 
     it('does not delete a staged path whose contents changed', function()
         local registry = cleanup.new({})
-        local staged = overlay_fixture.stage(descriptor,
-            'tests/support/probe.definition.lua', 'run-1', cleanup, registry,
+        local staged = overlay_registration.stage(descriptor,
+            'custom/probe_overlay.lua', 'probe', 'run-1', cleanup, registry,
             services)
         files['game/hack/scripts/gui/dwarfspec_run-1_probe.lua'] =
             'replacement contents'
@@ -183,8 +177,8 @@ describe('DwarfSpec overlay registration integration support', function()
             function()
         files[config_path] = nil
         local registry = cleanup.new({})
-        local staged = overlay_fixture.stage(descriptor,
-            'tests/support/probe.definition.lua', 'run-1', cleanup, registry,
+        local staged = overlay_registration.stage(descriptor,
+            'custom/probe_overlay.lua', 'probe', 'run-1', cleanup, registry,
             services)
         files[config_path] = '{"test":"created"}\n'
 

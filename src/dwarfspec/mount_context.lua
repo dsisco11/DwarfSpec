@@ -374,10 +374,25 @@ function M.new(options)
             type(adapter.mount) == 'function',
             'component adapter must provide mount() for ' ..
                 classification.category)
-        local prepared = self.boundary:prepare(component, mount_options)
         self.next_mount_id = self.next_mount_id + 1
-        local mount = {
+        local mount_attempt = {
             id=self.next_mount_id,
+            run=self.run,
+            category=classification.category,
+            input_form=classification.input_form,
+            component_class=classification.class,
+            root=classification.input_form == 'instance' and component or nil,
+            host_screen=nil,
+            command_subject=nil,
+        }
+        local prepare_ok, prepared = xpcall(function()
+            return self.boundary:prepare(component, mount_options)
+        end, debug.traceback)
+        if not prepare_ok then
+            error(self:report_failure(mount_attempt, 'mount', prepared), 2)
+        end
+        local mount = {
+            id=mount_attempt.id,
             run=self.run,
             category=prepared.category,
             input_form=prepared.input_form,

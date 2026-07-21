@@ -1,39 +1,104 @@
--- Live contracts for generic fixture, inspection, pointer, input, and capture APIs.
+-- Live contracts for mounted-component interaction, inspection, and capture.
+
+local widgets = require('gui.widgets')
+
+---@class tests.AutomationInteractionWidget: widgets.Panel
+local AutomationInteractionWidget = defclass(nil, widgets.Panel)
+AutomationInteractionWidget.ATTRS{
+    view_id='interaction_root',
+    frame={w=32, h=8},
+}
+
+---Builds the deterministic mounted widget tree.
+function AutomationInteractionWidget:init()
+    self.click_count = 0
+    self.typed_text = ''
+    self.last_key = nil
+    self.target = widgets.Label{
+        view_id='tooltip_target',
+        frame={l=1, t=1, w=20, h=1},
+        text='Automation target',
+        tooltip='Automation tooltip',
+    }
+    self.input = widgets.Label{
+        view_id='input_echo',
+        frame={l=1, t=3, w=28, h=1},
+        text='Typed: ',
+    }
+    self.clicks = widgets.Label{
+        view_id='click_echo',
+        frame={l=1, t=5, w=28, h=1},
+        text='Clicks: 0',
+    }
+    self:addviews{self.target, self.input, self.clicks}
+end
+
+---Updates test tooltip text before ordinary component rendering.
+---@param dc gui.Painter
+function AutomationInteractionWidget:render(dc)
+    local x, y = dfhack.screen.getMousePos()
+    local body = self.target.frame_body
+    if x and y and body and body:inClipGlobalXY(x, y) then
+        local local_x, local_y = body:localXY(x, y)
+        self.target.tooltip = ('Automation hover %d,%d'):format(
+            local_x, local_y)
+    end
+    AutomationInteractionWidget.super.render(self, dc)
+end
+
+---Handles synthetic input through ordinary mounted-widget dispatch.
+---@param keys table
+---@return boolean
+function AutomationInteractionWidget:onInput(keys)
+    if keys._STRING and keys._STRING ~= 0 then
+        self.typed_text = self.typed_text .. string.char(keys._STRING)
+        self.input:setText('Typed: ' .. self.typed_text)
+        return true
+    end
+    if keys._MOUSE_L then
+        local x, y = dfhack.screen.getMousePos()
+        if self.target.frame_body:inClipGlobalXY(x, y) then
+            self.click_count = self.click_count + 1
+            self.clicks:setText('Clicks: ' .. self.click_count)
+            return true
+        end
+    end
+    for key in pairs(keys) do
+        if type(key) == 'string' and key:match('^CUSTOM_') then
+            self.last_key = key
+            return true
+        end
+    end
+    return AutomationInteractionWidget.super.onInput(self, keys)
+end
 
 describe('automation live interactions', function()
-    local screen
-    local initial_pause_state
-
-    before_each(function()
-        initial_pause_state = df.global.pause_state
-        screen = ds.show_fixture(
-            'tests/automation/fixtures/interaction_screen.lua')
-    end)
-
-    it('shows, finds, inspects, hovers, clicks, types, captures, and dismisses',
+    it('mounts, selects, inspects, interacts, captures, and unmounts',
             function()
-        local target = screen.subviews.tooltip_target
-        local input = screen.subviews.input_echo
+        local initial_pause_state = df.global.pause_state
         local initial_pointer_function = dfhack.screen.getMousePos
+        local root = ds.mount(AutomationInteractionWidget)
+        local target = ds.get('tooltip_target')
+        local input = ds.get('input_echo')
+        local component = root:raw()
 
-        local inspection = ds.inspect(target)
-        local tree = ds.capture_view_tree(screen, 'interaction-tree')
+        local inspection = target:inspect()
+        local tree = ds.capture_view_tree('interaction-tree')
         assert.equals('tooltip_target', inspection.view_id)
         assert.is_true(inspection.visible)
         assert.is_truthy(inspection.body)
-        assert.equals('fixture_root', tree.children[1].view_id)
-        assert.equals(0, screen.click_count)
+        assert.equals('interaction_root', tree.view_id)
+        assert.equals(0, component.click_count)
 
-        ds.move_pointer(target)
-        assert.matches('^Automation hover %d+,%d+$', target.tooltip)
-
-        ds.click(target)
-        assert.equals(1, screen.click_count)
-        ds.type('Hi', screen)
-        assert.equals('Hi', screen.typed_text)
-        assert.equals('Typed: Hi', input.text)
-        ds.input('CUSTOM_A', screen)
-        assert.equals('CUSTOM_A', screen.last_key)
+        target:move_pointer()
+        assert.matches('^Automation hover %d+,%d+$', target:raw().tooltip)
+        target:click()
+        assert.equals(1, component.click_count)
+        root:type('Hi')
+        assert.equals('Hi', component.typed_text)
+        assert.equals('Typed: Hi', input:text())
+        root:input('CUSTOM_A')
+        assert.equals('CUSTOM_A', component.last_key)
 
         local capture = ds.capture_screen('interaction-cells', {
             max_width=8,
@@ -43,10 +108,8 @@ describe('automation live interactions', function()
         assert.equals(4, capture.height)
         assert.equals(4, #capture.cells)
 
-        ds.clear_pointer()
+        ds.unmount()
         assert.equals(initial_pointer_function, dfhack.screen.getMousePos)
-        ds.dismiss(screen)
-        assert.is_false(screen:isActive())
         assert.equals(initial_pause_state, df.global.pause_state)
     end)
 end)

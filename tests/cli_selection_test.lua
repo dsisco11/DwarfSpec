@@ -49,12 +49,15 @@ describe('DwarfSpec canonical selection', function()
             ['project/tests/nested/b_spec.ds.lua']=true,
             ['project/tests/nested/legacy_live_spec.lua']=true,
             ['project/tests/nested/ordinary_spec.lua']=true,
+            ['project/tests/nested/cover.fixture.lua']=true,
+            ['project/tests/support/external_screen.lua']=true,
         }
         local directories = {
             project={'tests'},
-            ['project/tests']={'nested', 'a.ds.lua'},
+            ['project/tests']={'nested', 'a.ds.lua', 'support'},
             ['project/tests/nested']={'ordinary_spec.lua', 'b_spec.ds.lua',
-                'legacy_live_spec.lua'},
+                'legacy_live_spec.lua', 'cover.fixture.lua'},
+            ['project/tests/support']={'external_screen.lua'},
         }
         local filesystem = {
             isfile=function(path) return files[path:gsub('\\', '/')] end,

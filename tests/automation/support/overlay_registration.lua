@@ -2,60 +2,28 @@
 
 local M = {}
 
----Returns the directory portion of one normalized project-relative path.
----@param path string
----@return string
-local function directory_name(path)
-    return path:match('^(.*)/[^/]+$') or ''
-end
-
----Loads and validates one explicitly imported overlay registration definition.
+---Resolves one directly imported overlay registration source module.
 ---@param project table
----@param import_path string
----@param loader function|nil
+---@param source_path string
 ---@return table
-function M.load(project, import_path, loader)
+local function resolve_source(project, source_path)
     local ok, project_module = pcall(require,
         'dwarfspec.automation.project')
     if not ok then
         project_module = assert(loadfile(project.package_root ..
             '/tests/automation/support/project.lua'))()
     end
-    local relative_path = project_module.relative_path(import_path)
+    local relative_path = project_module.relative_path(source_path)
     assert(relative_path:match('%.lua$'),
-        'overlay registration import must name one Lua module: ' ..
+        'overlay registration source must name one Lua module: ' ..
             relative_path)
     local absolute_path = project_module.join(project.project_root,
         relative_path)
     assert(project.filesystem.isfile(absolute_path),
-        'overlay registration definition was not found: ' .. relative_path)
-    local chunk, load_error = (loader or loadfile)(absolute_path)
-    assert(chunk, relative_path .. ': could not load overlay registration: ' ..
-        tostring(load_error))
-    local loaded, definition = xpcall(chunk, debug.traceback)
-    assert(loaded, relative_path .. ': overlay registration failed to load: ' ..
-        tostring(definition))
-    assert(type(definition) == 'table',
-        relative_path .. ': overlay registration must return a table')
-    assert(type(definition.name) == 'string' and
-        definition.name:match('^[a-z][a-z0-9_-]*$'),
-        relative_path .. ': overlay registration name must contain lowercase ' ..
-        'letters, digits, hyphens, or underscores')
-    assert(type(definition.source) == 'string' and definition.source ~= '',
-        relative_path .. ': overlay registration source must be a nonempty ' ..
-        'string')
-    local source_relative = project_module.relative_path(definition.source)
-    local source_path = project_module.join(project.project_root,
-        source_relative)
-    assert(project.filesystem.isfile(source_path),
-        relative_path .. ': overlay registration source was not found: ' ..
-        source_relative)
+        'overlay registration source was not found: ' .. relative_path)
     return {
-        name=definition.name,
-        source=source_relative,
-        source_path=source_path,
-        definition=relative_path,
-        definition_directory=directory_name(relative_path),
+        relative_path=relative_path,
+        absolute_path=absolute_path,
     }
 end
 
@@ -218,14 +186,19 @@ end
 
 ---Stages one real overlay registration and owns exact external restoration.
 ---@param project table
----@param import_path string
+---@param source_path string
+---@param logical_name string
 ---@param run_id string
 ---@param cleanup_module table
 ---@param cleanup_registry table
 ---@param services table|nil
 ---@return table
-function M.stage(project, import_path, run_id, cleanup_module,
+function M.stage(project, source_path, logical_name, run_id, cleanup_module,
         cleanup_registry, services)
+    assert(type(logical_name) == 'string' and
+        logical_name:match('^[a-z][a-z0-9_-]*$'),
+        'overlay registration name must contain lowercase letters, digits, ' ..
+            'hyphens, or underscores')
     assert(type(run_id) == 'string' and run_id:match('^[%w_.-]+$'),
         'overlay staging requires a safe run id')
     services = services or default_services()
@@ -235,28 +208,28 @@ function M.stage(project, import_path, run_id, cleanup_module,
     assert(type(services.config_path) == 'string' and
         services.config_path ~= '',
         'overlay staging requires an overlay configuration path')
-    local definition = M.load(project, import_path, services.loadfile)
-    local leaf = ('dwarfspec_%s_%s.lua'):format(run_id, definition.name)
+    local source = resolve_source(project, source_path)
+    local leaf = ('dwarfspec_%s_%s.lua'):format(run_id, logical_name)
     local separator = package.config:sub(1, 1)
     local destination = services.destination_directory .. separator .. leaf
     assert(not services.isfile(destination),
         'refusing to overwrite an existing overlay registration script: ' ..
             destination)
-    local source_contents = services.read_file(definition.source_path)
+    local source_contents = services.read_file(source.absolute_path)
     local config_existed = services.isfile(services.config_path)
     local config_contents = config_existed and
         services.read_file(services.config_path) or nil
     local staged = {
-        name=definition.name,
+        name=logical_name,
         script_name=leaf:gsub('%.lua$', ''),
         path=destination,
-        source=definition.source,
+        source=source.relative_path,
         registered_names={},
         cleanup_state={complete=false},
     }
     local marker = cleanup_module.mark(cleanup_registry)
     cleanup_module.push(cleanup_registry,
-        'restore overlay registration ' .. definition.name, function()
+        'restore overlay registration ' .. logical_name, function()
             restore(staged, services, source_contents, config_existed,
                 config_contents)
         end)

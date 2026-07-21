@@ -26,13 +26,12 @@ end
 ---@param lua_root string|nil
 ---@return table
 local function load_host(root, lua_root)
-    if lua_root then
-        for name in pairs(package.loaded) do
-            if name == 'dwarfspec.ds' or
-                    name:match('^dwarfspec%.automation%.') then
-                package.loaded[name] = nil
-            end
+    for name in pairs(package.loaded) do
+        if name == 'dwarfspec' or name:match('^dwarfspec%.') then
+            package.loaded[name] = nil
         end
+    end
+    if lua_root then
         local separator = package.config:sub(1, 1)
         return assert(loadfile(root .. separator .. 'dwarfspec' .. separator ..
             'automation' .. separator .. 'host.lua'))()

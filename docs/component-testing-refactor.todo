@@ -693,29 +693,90 @@ Phase 9 evidence (2026-07-20):
 
 ## Phase 10: Remove the fixture protocol and migrate consumers
 
-- [ ] Replace DwarfSpec's `show_fixture` self-tests with direct component
+- [x] Replace DwarfSpec's `show_fixture` self-tests with direct component
   mounts.
-- [ ] Replace `stage_overlay_fixture` behavior tests with overlay component
+- [x] Replace `stage_overlay_fixture` behavior tests with overlay component
   mounts, retaining only the integration coverage identified above.
-- [ ] Migrate DwarfUI live specs to direct mounts and fluent subjects.
-- [ ] Convert reusable fixture modules into ordinary constructors, data
+- [x] Migrate DwarfUI live specs to direct mounts and fluent subjects.
+- [x] Convert reusable fixture modules into ordinary constructors, data
   builders, or product-independent test-support helpers.
-- [ ] Remove manual `render_generation` fields and `on_automation_shown` hooks
+- [x] Remove manual `render_generation` fields and `on_automation_shown` hooks
   from consumer test components.
-- [ ] Remove or formally deprecate `ds.show_fixture`, `ds.dismiss(screen)`, and
+- [x] Remove or formally deprecate `ds.show_fixture`, `ds.dismiss(screen)`, and
   `ds.stage_overlay_fixture` after all in-repository consumers migrate.
-- [ ] Remove fixture-loader and overlay-fixture modules that have no remaining
+- [x] Remove fixture-loader and overlay-fixture modules that have no remaining
   integration responsibility.
-- [ ] Confirm the configurable `*.ds.lua` discovery contract continues to
+- [x] Confirm the configurable `*.ds.lua` discovery contract continues to
   exclude conventional `*.fixture.lua` and support files by default.
 
 Exit evidence:
 
-- [ ] Repository search finds no consumer-authored `render_generation`, no
+- [x] Repository search finds no consumer-authored `render_generation`, no
   normal interaction that passes a root or screen, and no obsolete fixture API
   usage.
-- [ ] DwarfSpec and DwarfUI unit and live suites pass against the same installed
+- [x] DwarfSpec and DwarfUI unit and live suites pass against the same installed
   rock artifact.
+
+Phase 10 evidence (2026-07-20):
+
+- DwarfSpec's interaction, failure, and minimal-project live specs now declare
+  their components directly and use `ds.mount`, implicit `ds.get` lookup, and
+  fluent subjects. The former fixture loader, overlay-fixture staging module,
+  three screen fixtures, and registration-definition fixture were removed.
+  The retained `*.fixture.lua` and support-file sentinels prove default
+  discovery exclusion without defining a DwarfSpec fixture protocol.
+- The public `show_fixture`, `dismiss`, and `stage_overlay_fixture` operations
+  are absent. Real registration tests use the distinctly named
+  `stage_overlay_registration` integration helper and remain outside the
+  normal component-test glob. The packed manifest includes
+  `overlay_registration.lua`, `mount_context.lua`, and `ds.lua`, and contains
+  neither `fixture_loader.lua` nor `overlay_fixture.lua`.
+- DwarfUI's normal tooltip and tooltip-overlay specs mount an inline complete
+  screen and an inline overlay component directly. They use fluent subjects
+  and contain no automation render counter or hook. Its separately selected
+  registration integration uses an ordinary support definition and exercises
+  real discovery, enablement, focus eligibility, disablement, and reversible
+  cleanup.
+- Repository-wide active-code searches in both repositories find no obsolete
+  fixture API call, consumer-authored `render_generation`,
+  `on_automation_shown`, two-argument `ds.get`, or normal raw-target
+  interaction. Remaining `render_generation` matches are negative assertions
+  that prove components are not required to implement it; legacy names occur
+  only in negative export/package assertions and historical planning evidence.
+- The complete DwarfSpec unit suite passes 128 tests with no failures, errors,
+  or pending tests. `tools/Check-Lua.ps1` passes Lua 5.4.6 syntax and formatting
+  checks for 82 files; `luarocks lint dwarfspec-0.1.0-1.rockspec` and
+  `git diff --check` pass. DwarfUI's complete unit suite passes 69 tests with no
+  failures, errors, or pending tests, its production syntax gate passes all 5
+  files with Lua 5.4.6, and the four migrated live/support files pass explicit
+  `luac -p` parsing.
+- Binary rock `dwarfspec-0.1.0-1.win32-x86_64.rock`, SHA-256
+  `B5025DBE398515D4BACB4CEB3AE23D6AF4ACF4843E7089740D0E2C811393D98D`,
+  was built and force-installed into the isolated `.package-phase10` tree.
+  The installed bootstrap hash exactly matches the source bootstrap. Every
+  live run below used that tree's `bin/dwarfspec.bat`, with the external Lua
+  5.4 toolchain handing pure Lua to DFHack's embedded Lua 5.3 runtime.
+- Product-independent run `phase10-artifact-dwarfspec-constructor-final`
+  passes all 19 examples, covering widget, overlay-widget, and complete-screen
+  classes and instances. Run `phase10-artifact-registration-final` separately
+  passes both real overlay-registration examples. Both report
+  `cleanup_confirmed=true`, lifecycle verification true, and zero active
+  screens, subjects, and pointer patches.
+- Consumer run `phase10-artifact-dwarfui-components-final2` passes all four
+  DwarfUI component examples, and separately selected run
+  `phase10-artifact-dwarfui-registration-final2` passes its real registration
+  example. Both use the same installed artifact and report
+  `cleanup_confirmed=true`, lifecycle verification true, and zero active
+  screens, subjects, and pointer patches.
+- Installed-artifact terminal proof `phase10-artifact-failure-final` records
+  one deliberate failed mounted example followed by one successful leak check;
+  `phase10-artifact-timeout-final` terminates an actively mounted wait through
+  the external wall-clock timeout; and
+  `phase10-artifact-explicit-abort-final` terminates another actively mounted
+  wait through the public abort command. The failure run reports
+  `state=failed`; timeout and abort report `state=aborted`. All three report
+  `cleanup_confirmed=true`, lifecycle verification true, and zero active
+  screens, subjects, and pointer patches.
 
 ## Phase 11: Documentation and release proof
 

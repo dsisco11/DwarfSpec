@@ -55,4 +55,14 @@ describe('DwarfSpec package contract', function()
             assert.is_truthy(read_repository_file(path))
         end
     end)
+
+    it('publishes registration integration without fixture loaders', function()
+        local rockspec = read_repository_file('dwarfspec-0.1.0-1.rockspec')
+        assert.matches('dwarfspec.automation.overlay_registration',
+            rockspec, 1, true)
+        assert.is_nil(rockspec:find('fixture_loader', 1, true))
+        assert.is_nil(rockspec:find('overlay_fixture', 1, true))
+        assert.is_truthy(read_repository_file(
+            'tests/automation/support/overlay_registration.lua'))
+    end)
 end)

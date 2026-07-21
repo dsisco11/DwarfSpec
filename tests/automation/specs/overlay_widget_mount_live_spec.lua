@@ -99,8 +99,8 @@ describe('overlay widget component host', function()
         ds.wait_frames(2)
         assert.is_true(instance.update_count > 0)
         assert.equals(backing, instance.last_update_viewscreen)
-        ds.click(ds.get('submit'))
-        assert.equals('saved', ds.inspect(ds.get('status')).text)
+        ds.get('submit'):click()
+        assert.equals('saved', ds.get('status'):inspect().text)
         assert.is_true(instance.input_count > 0)
 
         local updates = instance.update_count

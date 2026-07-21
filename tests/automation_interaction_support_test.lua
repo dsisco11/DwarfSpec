@@ -4,8 +4,6 @@ local cleanup = assert(loadfile(
     'tests/automation/support/cleanup.lua'))()
 local diagnostics = assert(loadfile(
     'tests/automation/support/diagnostics.lua'))()
-local fixture_loader = assert(loadfile(
-    'tests/automation/support/fixture_loader.lua'))()
 local pointer_adapter = assert(loadfile(
     'tests/automation/support/pointer_adapter.lua'))()
 
@@ -31,27 +29,6 @@ describe('automation interaction support', function()
     after_each(function()
         rawset(_G, 'dfhack', original_dfhack)
         rawset(_G, 'df', original_df)
-    end)
-
-    it('imports fixtures explicitly without a library-owned allowlist', function()
-        local descriptor = {
-            project_root='project',
-            package_root='.',
-            filesystem={
-                isfile=function(path)
-                    return path:gsub('\\', '/') ==
-                        'project/custom/location/example.lua'
-                end,
-            },
-        }
-        assert.has_error(function()
-            fixture_loader.load(descriptor, '../outside.lua')
-        end, 'project-relative path must not escape its root: ../outside.lua')
-        local fixture = fixture_loader.load(descriptor,
-            'custom/location/example.lua', function()
-                return function() return {new=function() end} end
-            end)
-        assert.is_function(fixture.new)
     end)
 
     it('captures stable view and screen diagnostics without mutation', function()

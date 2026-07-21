@@ -32,8 +32,8 @@ describe('real overlay registration integration', function()
         config_contents = config_existed and read_file(config_path) or nil
 
         staged = stage(
-            'tests/automation/overlay_integration/' ..
-                'registration_probe.definition.lua')
+            'tests/automation/overlay_integration/registration_probe.lua',
+            'registration_probe')
         broad_name = 'gui/' .. staged.script_name .. '.broad'
         filtered_name = 'gui/' .. staged.script_name .. '.filtered'
         assert.same({broad_name, filtered_name}, staged.registered_names)

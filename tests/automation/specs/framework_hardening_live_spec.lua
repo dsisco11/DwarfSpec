@@ -1,5 +1,15 @@
 -- Live resilience contracts for reusable automation-host infrastructure.
 
+local widgets = require('gui.widgets')
+
+---@class tests.FailingMountWidget: widgets.Panel
+local FailingMountWidget = defclass(nil, widgets.Panel)
+
+---Raises the controlled component-construction failure.
+function FailingMountWidget:init()
+    error('deliberate automation component construction failure')
+end
+
 ---Derives the repository root from this live spec's absolute source path.
 ---@return string
 local function repository_root()
@@ -83,20 +93,17 @@ describe('automation framework live resilience', function()
         scheduler_module.cancel(scheduler, 'test stale-generation cleanup')
     end)
 
-    it('captures injected fixture failures and restores test-owned state',
+    it('captures injected mount failures and restores test-owned state',
             function()
-        local ok, message = pcall(ds.show_fixture,
-            'tests/automation/fixtures/failing_screen.lua')
+        local ok, message = pcall(ds.mount, FailingMountWidget)
         local run = assert(dfhack.dwarfspec.active_run)
 
         assert.is_false(ok)
-        assert.matches('operation="show fixture tests/automation/fixtures/' ..
-            'failing_screen.lua"', message, 1, true)
-        assert.matches('deliberate automation fixture construction failure',
+        assert.matches('DwarfSpec mount failure: operation="mount"',
             message, 1, true)
-        assert.equals('show fixture tests/automation/fixtures/' ..
-            'failing_screen.lua',
-            run.last_interaction_diagnostics.operation)
+        assert.matches('deliberate automation component construction failure',
+            message, 1, true)
+        assert.equals('mount', run.last_mount_diagnostics.operation)
         assert.equals(0, run.cleanup_module.pending_count(
             run.cleanup_registry))
     end)

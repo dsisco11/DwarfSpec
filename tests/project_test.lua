@@ -22,15 +22,19 @@ describe('DwarfSpec project resolution', function()
             ['project/tests/a.ds.lua']=true,
             ['project/tests/nested/z_spec.ds.lua']=true,
             ['project/tests/nested/helper.lua']=true,
+            ['project/tests/nested/cover.fixture.lua']=true,
+            ['project/tests/support/external_screen.lua']=true,
             ['project/tests/dwarfspec/config.lua']=true,
             ['project/tests/dwarfspec/commands.lua']=true,
         }
         directories = {
             project={'tests'},
             ['project/tests']={'nested', 'a.ds.lua', 'ordinary_test.lua',
-                'dwarfspec'},
-            ['project/tests/nested']={'z_spec.ds.lua', 'helper.lua'},
+                'dwarfspec', 'support'},
+            ['project/tests/nested']={'z_spec.ds.lua', 'helper.lua',
+                'cover.fixture.lua'},
             ['project/tests/dwarfspec']={'commands.lua', 'config.lua'},
+            ['project/tests/support']={'external_screen.lua'},
         }
     end)
 
@@ -38,6 +42,14 @@ describe('DwarfSpec project resolution', function()
         local descriptor = project.new('project', 'package', filesystem())
         assert.same({'a.ds.lua', 'nested/z_spec.ds.lua'},
             project.discover_specs(descriptor))
+    end)
+
+    it('excludes conventional fixture and support files by default', function()
+        local descriptor = project.new('project', 'package', filesystem())
+        local discovered = project.discover_specs(descriptor)
+        assert.same({'a.ds.lua', 'nested/z_spec.ds.lua'}, discovered)
+        assert.is_nil(discovered['nested/cover.fixture.lua'])
+        assert.is_nil(discovered['support/external_screen.lua'])
     end)
 
     it('applies custom canonical discovery globs at every depth', function()
