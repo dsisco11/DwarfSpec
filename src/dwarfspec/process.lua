@@ -102,12 +102,10 @@ function M.resolve_runner(options, environment)
         local names = M.is_windows(options.platform) and
             {'dfhack-run.exe', 'dfhack-run'} or {'dfhack-run', 'dfhack-run.exe'}
         for _, name in ipairs(names) do
-            local candidate = dfhack_root .. separator .. 'hack' .. separator ..
-                name
+            local candidate = dfhack_root .. separator .. name
             if file_exists(candidate) then return candidate end
         end
-        error('DFHack runner was not found under DFHACK_ROOT: ' .. dfhack_root,
-            2)
+        error('DFHACK_ROOT does not contain dfhack-run: ' .. dfhack_root, 2)
     end
 
     local path = environment.getenv('PATH') or ''

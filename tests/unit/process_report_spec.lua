@@ -46,7 +46,7 @@ describe('DwarfSpec process bridge', function()
         local path_root = 'tests/framework/runner_path'
         local explicit = path_root .. '/dfhack-run'
         local variables = {
-            DFHACK_RUNNER=root .. '/hack/dfhack-run',
+            DFHACK_RUNNER=root .. '/dfhack-run',
             DFHACK_ROOT=root,
             PATH=path_root,
         }
@@ -56,10 +56,10 @@ describe('DwarfSpec process bridge', function()
 
         assert.equals(explicit, process.resolve_runner({
             runner=explicit, platform='unix'}, environment))
-        assert.equals(root .. '/hack/dfhack-run', process.resolve_runner({
+        assert.equals(root .. '/dfhack-run', process.resolve_runner({
             platform='unix'}, environment))
         variables.DFHACK_RUNNER = nil
-        assert.equals(root .. '/hack/dfhack-run', process.resolve_runner({
+        assert.equals(root .. '/dfhack-run', process.resolve_runner({
             platform='unix'}, environment))
         variables.DFHACK_ROOT = nil
         assert.equals(path_root .. '/dfhack-run', process.resolve_runner({
@@ -84,8 +84,15 @@ describe('DwarfSpec process bridge', function()
                 return true
             end,
         }
-        assert.equals('tests\\framework\\runner_root\\hack\\dfhack-run.exe',
+        assert.equals('tests\\framework\\runner_root\\dfhack-run.exe',
             process.resolve_runner(options, environment))
+        assert.has_error(function()
+            process.resolve_runner({
+                platform='windows',
+                isfile=function() return false end,
+            }, environment)
+        end, 'DFHACK_ROOT does not contain dfhack-run: ' ..
+            'tests\\framework\\runner_root')
         assert.has_error(function()
             process.resolve_runner({platform='unix'}, {
                 getenv=function() return '' end,

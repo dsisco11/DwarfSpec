@@ -50,7 +50,8 @@ result-directory selection, explicit run ids, and verbose runner diagnostics.
 complete option list.
 
 The runner lookup order is an explicit `--runner`, `DFHACK_RUNNER`,
-`DFHACK_ROOT/hack/dfhack-run`, and finally `PATH`.
+`DFHACK_ROOT/dfhack-run`, and finally `PATH`. `DFHACK_ROOT` is the directory
+that directly contains `dfhack-run.exe` or `dfhack-run`.
 
 ## Live component commands
 

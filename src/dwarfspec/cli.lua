@@ -70,7 +70,7 @@ Options:
   --run-id ID                  Safe explicit run identifier
   --verbose                    Print resolved runner diagnostics
 
-Runner lookup order is --runner, DFHACK_RUNNER, DFHACK_ROOT/hack/dfhack-run,
+Runner lookup order is --runner, DFHACK_RUNNER, DFHACK_ROOT/dfhack-run,
 then PATH. A run returns zero only when Busted passes and cleanup is confirmed.
 ]]
 
