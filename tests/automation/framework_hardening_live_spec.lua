@@ -32,6 +32,13 @@ local function competing_options(run_id)
 end
 
 describe('automation framework live resilience', function()
+    it('loads ordinary support modules relative to the project root', function()
+        local fixture = require(
+            'tests.automation.support.project_root_module_fixture')
+
+        assert.equals('project-root module', fixture.value)
+    end)
+
     it('rejects a competing host run without changing the active owner',
             function()
         local root = repository_root()
@@ -104,8 +111,10 @@ describe('automation framework live resilience', function()
         assert.matches('deliberate automation component construction failure',
             message, 1, true)
         assert.equals('mount', run.last_mount_diagnostics.operation)
-        assert.equals(0, run.cleanup_module.pending_count(
+        assert.equals(1, run.cleanup_module.pending_count(
             run.cleanup_registry))
+        assert.equals('project module environment',
+            run.cleanup_registry.entries[1].name)
     end)
 
 end)

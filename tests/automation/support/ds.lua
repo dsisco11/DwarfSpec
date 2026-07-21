@@ -60,6 +60,7 @@ end
 ---@return table
 function M.new(package_root, project, scheduler_module, scheduler,
         cleanup_module, cleanup_registry, extensions, mount_dependencies)
+    local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
 local diagnostics = load_automation_module(package_root,
     'dwarfspec.automation.diagnostics',
     '/tests/automation/support/diagnostics.lua')
@@ -213,8 +214,8 @@ local subject_module = load_automation_module(package_root,
     ---Restores all currently registered test-owned resources.
     local function reset(reason)
         reason = reason or 'automation lifecycle'
-        local ok, failures = cleanup_module.run(cleanup_registry,
-            reason)
+        local ok, failures = cleanup_module.run_from(cleanup_registry,
+            example_cleanup_marker, reason)
         local wait_ok, wait_error = xpcall(function()
             scheduler_module.wait_frames(scheduler, 1, {
                 description='wait for automation cleanup',

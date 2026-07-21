@@ -1,5 +1,26 @@
 # Writing live tests
 
+Live specs can load ordinary consumer-project modules with standard Lua
+`require(...)` names. DwarfSpec adds the project root to the in-process module
+search path for the duration of each run, so this project layout:
+
+```text
+tests/
+  support/
+    fixtures.lua
+  widgets/
+    settings.ds.lua
+```
+
+can be used from `settings.ds.lua` as follows:
+
+```lua
+local fixtures = require('tests.support.fixtures')
+```
+
+Project modules loaded during a run are removed from Lua's module cache during
+cleanup, preventing stale support code from leaking into a later run.
+
 DwarfSpec recursively discovers files whose basenames match `*.ds.lua` beneath
 `tests/` by default. This keeps live tests separate from ordinary Busted unit
 specs while preserving normal Busted `describe`, `it`, hooks, and Luassert

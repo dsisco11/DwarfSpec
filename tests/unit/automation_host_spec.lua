@@ -344,4 +344,60 @@ describe('automation host ownership', function()
         assert.is_nil(loaded.system)
         assert.is_nil(loaded['term.colors'])
     end)
+
+    it('owns project module paths and newly loaded project modules', function()
+        local separator = package.config:sub(1, 1)
+        local project_root = 'consumer-project'
+        local dependency_path = 'dependencies' .. separator .. '?.lua'
+        local original_path = dependency_path .. ';dfhack' .. separator ..
+            '?.lua'
+        local existing = {}
+        local external = {}
+        local runtime_package = {
+            path=original_path,
+            loaded={existing=existing},
+        }
+
+        ---Finds only the fake consumer module in the supplied project paths.
+        ---@param name string
+        ---@param search_path string
+        ---@return string|nil
+        function runtime_package.searchpath(name, search_path)
+            if name == 'support.fixture' and
+                    search_path:find(project_root, 1, true) then
+                return project_root .. separator .. 'support' .. separator ..
+                    'fixture.lua'
+            end
+            if name == 'protected.fixture' and
+                    search_path:find('dependencies', 1, true) then
+                return 'dependencies' .. separator .. 'protected' ..
+                    separator .. 'fixture.lua'
+            end
+            return nil
+        end
+
+        local restore = host.configure_project_modules(project_root,
+            {dependency_path}, runtime_package)
+        assert.equals(table.concat({
+            dependency_path,
+            project_root .. separator .. '?.lua',
+            project_root .. separator .. '?' .. separator .. 'init.lua',
+            'dfhack' .. separator .. '?.lua',
+        }, ';'), runtime_package.path)
+
+        runtime_package.loaded['support.fixture'] = {value='consumer'}
+        runtime_package.loaded['protected.fixture'] = {value='dependency'}
+        runtime_package.loaded.external = external
+        runtime_package.loaded[1] = {value='non-string key'}
+        restore()
+        restore()
+
+        assert.equals(original_path, runtime_package.path)
+        assert.equals(existing, runtime_package.loaded.existing)
+        assert.equals(external, runtime_package.loaded.external)
+        assert.is_nil(runtime_package.loaded['support.fixture'])
+        assert.same({value='dependency'},
+            runtime_package.loaded['protected.fixture'])
+        assert.same({value='non-string key'}, runtime_package.loaded[1])
+    end)
 end)

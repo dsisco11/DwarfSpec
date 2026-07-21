@@ -191,6 +191,7 @@ end
 ---Configures pinned Lua dependencies and DFHack-native adapters.
 ---@param package_root string
 ---@param configured_lua_root string|nil
+---@return string[]
 local function configure_dependencies(package_root, configured_lua_root)
     local separator = package.config:sub(1, 1)
     local lua_root = configured_lua_root or lua_module_root(package_root)
@@ -218,6 +219,65 @@ local function configure_dependencies(package_root, configured_lua_root)
     package.loaded.system = system_adapter
     package.loaded.lfs = lfs_adapter
 
+    return source_entries
+end
+
+---Installs project-root module lookup and returns its idempotent cleanup.
+---@param project_root string
+---@param protected_entries string[]
+---@param runtime_package table|nil
+---@return function
+function M.configure_project_modules(project_root, protected_entries,
+        runtime_package)
+    assert(type(project_root) == 'string' and project_root ~= '',
+        'project root must be a nonempty string')
+    assert(type(protected_entries) == 'table',
+        'protected package paths must be a table')
+    runtime_package = runtime_package or package
+    assert(type(runtime_package.path) == 'string' and
+        type(runtime_package.loaded) == 'table' and
+        type(runtime_package.searchpath) == 'function',
+        'runtime package must provide path, loaded, and searchpath')
+
+    local separator = package.config:sub(1, 1)
+    local project_entries = {
+        project_root .. separator .. '?.lua',
+        project_root .. separator .. '?' .. separator .. 'init.lua',
+    }
+    local original_path = runtime_package.path
+    local previously_loaded = {}
+    for name in pairs(runtime_package.loaded) do
+        previously_loaded[name] = true
+    end
+
+    local reordered = {}
+    local included = {}
+    local function include(entry)
+        if entry ~= '' and not included[entry] then
+            table.insert(reordered, entry)
+            included[entry] = true
+        end
+    end
+    for _, entry in ipairs(protected_entries) do include(entry) end
+    for _, entry in ipairs(project_entries) do include(entry) end
+    for entry in original_path:gmatch('[^;]+') do include(entry) end
+    runtime_package.path = table.concat(reordered, ';')
+
+    local restored = false
+    return function()
+        if restored then return end
+        restored = true
+        local project_path = table.concat(project_entries, ';')
+        local protected_path = table.concat(protected_entries, ';')
+        for name in pairs(runtime_package.loaded) do
+            if type(name) == 'string' and not previously_loaded[name] and
+                    runtime_package.searchpath(name, project_path) and
+                    not runtime_package.searchpath(name, protected_path) then
+                runtime_package.loaded[name] = nil
+            end
+        end
+        runtime_package.path = original_path
+    end
 end
 
 ---Normalizes a caller's optional scalar or dense-list filter value.
@@ -300,7 +360,8 @@ end
 ---@param scheduler table
 local function execute_suite(package_root, project_root, run, scheduler_module,
         scheduler)
-    configure_dependencies(package_root, run.options.lua_module_root)
+    local dependency_entries = configure_dependencies(package_root,
+        run.options.lua_module_root)
     local busted = require('busted.core')()
     require('busted')(busted)
     local project_module = load_automation_module(package_root,
@@ -311,6 +372,10 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local extensions_module = load_automation_module(package_root,
         'dwarfspec.automation.extensions',
         'tests/automation/support/extensions.lua')
+    local restore_project_modules = M.configure_project_modules(project_root,
+        dependency_entries)
+    run.cleanup_module.push(run.cleanup_registry,
+        'project module environment', restore_project_modules)
     local extensions = extensions_module.load(project)
     local specs = run.options.specs or {}
     if #specs == 0 then
