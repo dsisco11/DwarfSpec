@@ -68,8 +68,20 @@ try {
     if ($null -ne $oldLuaCPath) { $luaCPath += ";$oldLuaCPath" }
     Set-Item -LiteralPath Env:LUA_CPATH -Value $luaCPath
 
-    $bustedLauncher = Join-Path $rockTree 'bin\busted'
-    & lua $bustedLauncher @BustedArgs '--no-recursive' $testsRoot
+    $bustedRockDir = & luarocks show busted $bustedVersion `
+        --tree $rockTree `
+        --rock-dir
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($bustedRockDir)) {
+        throw 'LuaRocks failed to locate the installed Busted package.'
+    }
+
+    # The deployed bin launcher is platform-specific; this is Busted's Lua source.
+    $bustedRunner = Join-Path $bustedRockDir.Trim() 'bin/busted'
+    if (-not (Test-Path -LiteralPath $bustedRunner -PathType Leaf)) {
+        throw "Busted's Lua runner was not found at '$bustedRunner'."
+    }
+
+    & lua $bustedRunner @BustedArgs '--no-recursive' $testsRoot
     $testExitCode = $LASTEXITCODE
 }
 finally {
