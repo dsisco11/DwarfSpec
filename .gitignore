@@ -6,3 +6,4 @@
 *.src.rock
 /.tmp-luarocks/
 /dist/
+/.env
