@@ -1,0 +1,125 @@
+# Deterministic component viewport
+
+## Goal
+
+Give every mounted component a deterministic viewport measured in DF cells.
+Tests can select the viewport while mounting a component and can change it
+later through `ds.viewport(...)`. Widgets, overlays, and complete screens must
+all observe the same mount-owned dimensions.
+
+The work is complete when viewport behavior is consistent across all supported
+component categories, documented for test authors, covered by offline unit
+tests, and proven by the applicable live DFHack specifications.
+
+## Decisions
+
+- [x] Continue using `viewport` as the public and internal term.
+- [x] Express viewport dimensions in DF cells, not pixels.
+- [x] Keep the mount option shape
+  `viewport={width=<positive integer>, height=<positive integer>}`.
+- [x] Use `{width=128, height=64}` as the default viewport, approximating a
+  1024 by 768 display when cells are 8 by 12 pixels.
+- [x] Rename the runtime command from `ds.resize(...)` to `ds.viewport(...)`.
+- [x] Remove `ds.resize(...)` instead of retaining a compatibility alias while
+  DwarfSpec is pre-1.0.
+- [x] Keep live DFHack specifications out of GitHub CI; CI runs only offline
+  unit, syntax, packaging, and publication checks.
+
+## Public contract
+
+- [ ] Document `ds.mount(component, {viewport={width, height}})` with the
+  default and explicit-override behavior.
+- [ ] Define `ds.viewport(width, height)` as a command on the implicit current
+  mount.
+- [ ] Require positive integer width and height values for both entry points.
+- [ ] Make `ds.viewport(...)` fail with the standard missing-current-mount
+  diagnostic when no component is mounted.
+- [ ] Make `ds.viewport(...)` wait for the render caused by the viewport
+  change before returning.
+- [ ] Confirm that a new mount starts from its requested viewport or the
+  default and never inherits dimensions from an earlier mount.
+
+## Component boundary and mount state
+
+- [ ] Change viewport normalization so an omitted value produces a fresh
+  `{width=128, height=64}` table.
+- [ ] Preserve viewport as a mount-only option rather than forwarding it as a
+  component constructor attribute.
+- [ ] Store the normalized viewport as mutable state owned by the mount.
+- [ ] Ensure caller-owned viewport tables cannot be mutated by runtime viewport
+  changes.
+- [ ] Add a mount-context operation that validates and applies new dimensions
+  through the active component adapter.
+- [ ] Route failures through existing mount diagnostics and cleanup ownership.
+
+## Adapter behavior
+
+- [ ] Define an adapter viewport-update contract shared by widgets, overlays,
+  and complete screens.
+- [ ] Update the DwarfSpec widget host viewport before invoking its resize and
+  layout behavior.
+- [ ] Make ordinary widget layout use the current mount-owned viewport.
+- [ ] Make overlay layout and painter rectangles use the current mount-owned
+  viewport.
+- [ ] Verify both fullscreen and scaled-interface overlay painter paths after a
+  runtime viewport change.
+- [ ] Make complete-screen resize interception read the current mutable
+  viewport instead of dimensions captured during mounting.
+- [ ] Preserve reversible instance interception for complete screens.
+- [ ] Preserve existing render instrumentation, backing viewscreen, pause, and
+  cleanup behavior for every adapter.
+
+## API migration
+
+- [ ] Export `ds.viewport(width, height)` from the live interaction namespace.
+- [ ] Remove `ds.resize(width, height)` from the exported API.
+- [ ] Replace every DwarfSpec specification call to `ds.resize(...)` with
+  `ds.viewport(...)`.
+- [ ] Update API export assertions for the renamed command.
+- [ ] Search source, tests, examples, and active documentation for stale
+  `ds.resize` references.
+
+## Offline unit coverage
+
+- [ ] Prove that omitted mount options normalize to `{width=128, height=64}`.
+- [ ] Prove that explicit viewport dimensions override the default.
+- [ ] Prove rejection of missing, fractional, zero, negative, and nonnumeric
+  dimensions where applicable.
+- [ ] Prove that normalization copies caller-owned viewport tables.
+- [ ] Prove default and explicit widget-host layout dimensions.
+- [ ] Prove runtime widget viewport changes and repeated changes.
+- [ ] Prove overlay layout and painter dimensions follow runtime changes.
+- [ ] Prove complete screens follow runtime changes while their original
+  resize method remains recoverable.
+- [ ] Prove viewport state is isolated between sequential mounts.
+- [ ] Prove unmount and failed-mount cleanup restore all intercepted methods and
+  leave no active mount resources.
+
+## Live DFHack proof
+
+- [ ] Prove an ordinary widget receives the default viewport on its first
+  completed render.
+- [ ] Prove an ordinary widget receives an explicit mount-time viewport.
+- [ ] Prove `ds.viewport(...)` changes an ordinary widget's live parent frame.
+- [ ] Prove an overlay receives matching layout and painter dimensions at mount
+  time and after a runtime change.
+- [ ] Prove a complete screen receives default, explicit, and runtime viewport
+  dimensions without replacing its native behavior permanently.
+- [ ] Prove cleanup after each live case leaves no active DwarfSpec-owned
+  screen, subject, or interception.
+- [ ] Record live proof separately from offline CI results.
+
+## Documentation and release checks
+
+- [ ] Update the command table and authoring examples to use `ds.viewport(...)`.
+- [ ] Explain that viewport dimensions are DF cells and document the 128 by 64
+  default and its 8 by 12 cell assumption.
+- [ ] Update architecture documentation to describe mutable mount-owned
+  viewport state and adapter propagation.
+- [ ] Add an entry to the changelog describing the deterministic default and
+  command rename.
+- [ ] Run the full offline Busted suite.
+- [ ] Run Lua syntax and formatting checks.
+- [ ] Run package verification and confirm the LuaRock includes updated source
+  and documentation.
+- [ ] Run `git diff --check` and review the final diff for unrelated changes.
