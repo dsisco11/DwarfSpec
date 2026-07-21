@@ -36,9 +36,11 @@ jobs:
         shell: pwsh
         run: ./tools/Check-Lua.ps1
 
+      - name: Install project dependencies
+        run: luarocks install --deps-only dwarfspec.rockspec
+
       - name: Run offline unit tests
-        shell: pwsh
-        run: ./tools/Run-UnitTests.ps1
+        run: busted --no-recursive tests/unit
 
       - name: Build and validate LuaRock
         shell: pwsh
