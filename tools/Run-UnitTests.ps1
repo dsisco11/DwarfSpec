@@ -81,7 +81,8 @@ try {
         throw "Busted's Lua runner was not found at '$bustedRunner'."
     }
 
-    & lua $bustedRunner @BustedArgs '--no-recursive' $testsRoot
+    & lua $bustedRunner '--defer-print' '-o' 'plainTerminal' `
+        @BustedArgs '--no-recursive' $testsRoot
     $testExitCode = $LASTEXITCODE
 }
 finally {
