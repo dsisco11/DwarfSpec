@@ -17,19 +17,31 @@ local SettingsPanel = defclass(nil, widgets.Panel)
 
 ---Builds the settings controls under test.
 function SettingsPanel:init()
-    self:addviews{widgets.ToggleHotkeyLabel{
-        view_id='notifications',
-        frame={l=0, t=0},
-        label='Notifications',
-        initial_option=false,
-    }}
+    self:addviews{
+        widgets.HotkeyLabel{
+            view_id='notifications',
+            frame={l=0, t=0},
+            label='Enable notifications',
+            on_activate=self:callback('enable_notifications'),
+        },
+        widgets.Label{
+            view_id='status',
+            frame={l=0, t=2},
+            text='disabled',
+        },
+    }
+end
+
+---Updates the visible settings state.
+function SettingsPanel:enable_notifications()
+    self.subviews.status:setText('enabled')
 end
 
 describe('settings screen', function()
     it('enables notifications', function()
         ds.mount(SettingsPanel)
         ds.get('notifications'):click()
-        assert.is_true(ds.get('notifications'):raw():getOptionValue())
+        assert.equals('enabled', ds.get('status'):text())
     end)
 end)
 ```
@@ -122,16 +134,15 @@ end)
 DwarfSpec accepts `widgets.Widget`, `overlay.OverlayWidget`, and `gui.ZScreen`
 classes or instances through the same entry point. It owns the host,
 instruments successful renders automatically, and cleans up the current mount
-after each example. Reusable factories remain ordinary Lua helpers; DwarfSpec
-does not require a fixture-module protocol.
+after each example. Reusable factories remain ordinary Lua helpers.
 
 ```lua
 local gui = require('gui')
 
----@class tests.SearchFixture: gui.ZScreen
-local SearchFixture = defclass(nil, gui.ZScreen)
+---@class tests.SearchScreen: gui.ZScreen
+local SearchScreen = defclass(nil, gui.ZScreen)
 
-ds.mount(SearchFixture, {initial_pause=false})
+ds.mount(SearchScreen, {initial_pause=false})
 ```
 
 Mounts are automatically removed after each example, even when an assertion
@@ -210,14 +221,15 @@ commands to `ds`:
 ```lua
 return {
     commands={
-        selected_text=function(ds, view)
-            return ds.inspect(view).text
+        selected_text=function(_, subject)
+            return subject:text()
         end,
     },
 }
 ```
 
-The command is then available as `ds.selected_text(view)` in every live spec.
+The command is then available as `ds.selected_text(ds.get('status'))` in every
+live spec.
 Keep module top-level code portable and make DFHack-only calls inside command
 callbacks. See [Consumer configuration](docs/configuration.md) for discovery
 overrides and extension rules.
@@ -247,6 +259,7 @@ selection, abort behavior, and exit codes.
 - [Writing live tests](docs/writing-tests.md)
 - [Configuration](docs/configuration.md)
 - [Command-line reference](docs/command-line.md)
+- [Architecture](docs/architecture.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## License

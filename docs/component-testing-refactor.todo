@@ -780,38 +780,99 @@ Phase 10 evidence (2026-07-20):
 
 ## Phase 11: Documentation and release proof
 
-- [ ] Rewrite the writing guide around `ds.mount()` and fluent subjects.
-- [ ] Document constructor, instance, ordinary-widget, overlay-widget, and
+- [x] Rewrite the writing guide around `ds.mount()` and fluent subjects.
+- [x] Document constructor, instance, ordinary-widget, overlay-widget, and
   complete-screen examples.
-- [ ] Document component-test isolation versus real overlay-plugin integration.
-- [ ] Update the architecture document to replace fixture ownership with mount
+- [x] Document component-test isolation versus real overlay-plugin integration.
+- [x] Update the architecture document to replace fixture ownership with mount
   context and adapter ownership.
-- [ ] Update the command reference and changelog for removed or deprecated
-  methods.
-- [ ] Run Lua 5.3 and Lua 5.4 syntax checks and the complete DwarfSpec unit
+- [x] Update the command reference and changelog to present the initial public
+  component-testing contract without pre-release implementation history.
+- [x] Run Lua 5.3 and Lua 5.4 syntax checks and the complete DwarfSpec unit
   suite.
-- [ ] Run rockspec lint, pack the rock, inspect its manifest, and install it into
+- [x] Run rockspec lint, pack the rock, inspect its manifest, and install it into
   an empty LuaRocks tree.
-- [ ] Run DwarfSpec's product-independent live component matrix from the
+- [x] Run DwarfSpec's product-independent live component matrix from the
   installed rock.
-- [ ] Run the migrated DwarfUI live suite from that exact installed artifact.
-- [ ] Verify deterministic JSON reports and `cleanup_confirmed=true` for pass,
+- [x] Run the migrated DwarfUI live suite from that exact installed artifact.
+- [x] Verify deterministic JSON reports and `cleanup_confirmed=true` for pass,
   failure, timeout, and abort runs.
 
 Exit evidence:
 
-- [ ] All public documentation presents one component-testing model centered
+- [x] All public documentation presents one component-testing model centered
   on `ds.mount()`.
-- [ ] Installed-package tests prove ordinary widgets, overlay widgets, and
+- [x] Installed-package tests prove ordinary widgets, overlay widgets, and
   complete screens through identical author-facing commands.
+
+Phase 11 evidence (2026-07-21):
+
+- `README.md` and `docs/writing-tests.md` now lead with `ds.mount(component,
+  options)`, implicit `ds.get(view_id)`, and fluent subjects. The writing guide
+  contains explicit ordinary-widget, overlay-widget, and complete-screen
+  examples and shows both constructor and existing-instance input forms. It
+  distinguishes isolated overlay component behavior from the distinctly
+  named and separately selected real registration integration.
+- `docs/architecture.md` assigns the host screen, mount identity, view index,
+  weak subject ownership, render instrumentation and tracking, diagnostics,
+  adapters, synchronization, and LIFO cleanup to DwarfSpec. It documents the
+  ordinary-widget, overlay lifecycle, and direct complete-screen adapter
+  boundaries and states that render instrumentation remains private to
+  DwarfSpec without altering component classes.
+- `docs/command-line.md` presents only the current mount and registration
+  commands. `CHANGELOG.md` describes the initial unreleased API without a
+  migration, changed, or removed section. Installation, configuration,
+  contributing, and release guidance use the same current model and toolchain
+  contract.
+- The complete DwarfSpec unit suite passes 129 tests with no failures, errors,
+  or pending tests. Local Lua 5.4.6 parses and formatting-checks all 82 Lua
+  files; a single compile-only DFHack invocation parses the same 82 files with
+  embedded Lua 5.3. `git diff --check` passes. DwarfUI's complete unit suite
+  passes 69 tests, its Lua 5.4.6 production syntax gate passes all 5 files, and
+  its four migrated live/support files pass explicit `luac -p` parsing.
+- The committed VS Code `Publish` task runs `tools/Publish.ps1`, which creates
+  a temporary correctly versioned rockspec, passes `luarocks lint`, and packs
+  `dist/dwarfspec-0.1.0-1.all.rock`. SHA-256
+  `9C18B61E62789AC75C5B2169D1CE3C88783BA9FDF7AEC35100211A7B4DB70E99`
+  identifies the exact release artifact used below. Its 39-entry manifest
+  contains the paired launchers, `ds`, mount-context, component-adapter, and
+  registration modules and contains no native library.
+- A previously absent `.package-release` tree received the declared pinned
+  LuaRocks dependencies and that exact `.all.rock`. The installed
+  `dwarfspec version` command reports `DwarfSpec 0.1.0`; installed
+  `dwarfspec.ds` and `dwarfspec.component` module smoke checks pass. LuaRocks
+  lists DwarfSpec 0.1.0-1, Busted 2.3.0-1, and LuaSystem 0.3.0-2 in that tree.
+- Installed-artifact run `release-final-components-v3` passes all 19
+  product-independent examples, covering ordinary widgets, overlay widgets,
+  and complete screens as both constructors and existing instances through
+  the same author-facing mount and subject commands. Separately selected run
+  `release-final-registration-v4` passes both real registration and
+  restoration examples.
+- The same `.package-release/bin/dwarfspec.bat` runs DwarfUI without a source
+  checkout dependency. Run `release-final-dwarfui-components-v6` passes all
+  four normal component examples; separately selected run
+  `release-final-dwarfui-registration-v7` passes the real overlay discovery,
+  enablement, focus, disablement, and cleanup example.
+- Installed-artifact terminal runs preserve their expected external result:
+  `release-failure-final-v4` returns test exit code 6 with one deliberate
+  failure followed by one successful leak check; `release-timeout-final-v3`
+  returns timeout exit code 7; and the public abort command returns zero while
+  `release-explicit-abort-final-v3` returns aborted-run exit code 8. Timeout
+  and abort reports have `state=aborted`; the failure report has
+  `state=failed`.
+- The four passing reports and the failure, timeout, and abort reports all use
+  schema `dwarfspec.run.v1`, protocol 1, deterministically sorted one-line JSON
+  plus one terminal newline, and their exact requested run IDs. Every report
+  has `cleanup_confirmed=true`, lifecycle verification true, zero active owned
+  screens, zero subjects, and no pointer patch.
 
 ## Completion checklist
 
-- [ ] One `ds.mount()` operation supports all three component categories.
-- [ ] No consumer implements DwarfSpec render counters.
-- [ ] Normal commands infer the current mount and use fluent subjects.
-- [ ] Busted remains the only test and assertion framework.
-- [ ] Component tests do not install overlay scripts.
-- [ ] Overlay registration integration remains testable and reversible.
-- [ ] Every live terminal path confirms cleanup.
-- [ ] DwarfSpec and DwarfUI pass locally and against the same installed rock.
+- [x] One `ds.mount()` operation supports all three component categories.
+- [x] No consumer implements DwarfSpec render counters.
+- [x] Normal commands infer the current mount and use fluent subjects.
+- [x] Busted remains the only test and assertion framework.
+- [x] Component tests do not install overlay scripts.
+- [x] Overlay registration integration remains testable and reversible.
+- [x] Every live terminal path confirms cleanup.
+- [x] DwarfSpec and DwarfUI pass locally and against the same installed rock.

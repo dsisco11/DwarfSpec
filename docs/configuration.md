@@ -53,8 +53,8 @@ Any module in this directory may declare custom commands:
 ```lua
 return {
     commands={
-        selected_text=function(ds, view)
-            return ds.inspect(view).text
+        selected_text=function(_, subject)
+            return subject:text()
         end,
         tooltip_state=function(ds, service)
             return service:get_diagnostics()

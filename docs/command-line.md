@@ -52,6 +52,20 @@ complete option list.
 The runner lookup order is an explicit `--runner`, `DFHACK_RUNNER`,
 `DFHACK_ROOT/hack/dfhack-run`, and finally `PATH`.
 
+## Live component commands
+
+Every supported component category uses `ds.mount(component, options)` inside
+the live Busted coroutine. `ds.get(view_id)` searches the one implicit current
+mount and returns a fluent subject; `ds.unmount()` removes that mount early
+when a test needs explicit teardown. Normal interaction commands do not take a
+fixture root, screen, or raw view.
+
+`ds.mount` supports ordinary widgets, overlay widgets, and complete screens.
+`ds.stage_overlay_registration` is reserved for distinctly named and
+explicitly selected tests of real DFHack overlay discovery and persisted
+configuration. See [Writing live tests](writing-tests.md) for the complete
+component API.
+
 ## Results and exit status
 
 The default result directory is `.test-results/dwarfspec/` beneath the

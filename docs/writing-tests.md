@@ -7,19 +7,86 @@ assertions. Consumers can set `settings.discovery.test_glob` in
 `tests/dwarfspec/config.lua`, use `DWARFSPEC_TEST_GLOB`, or pass `--test-glob`
 when another naming convention is more appropriate.
 
-Component specs mount classes or existing instances directly:
+The default `*.ds.lua` discovery glob selects live specs only. Reusable
+factories and data builders remain ordinary Lua modules that tests import
+explicitly. DwarfSpec privately instruments successful renders and
+synchronizes interactions across live DFHack frames.
+
+## Ordinary widget components
+
+Pass a `widgets.Widget` constructor to `ds.mount` when DwarfSpec should create
+the component. Non-reserved mount options become constructor attributes. A
+live spec imports the component from its production module and runs DwarfSpec
+commands inside normal Busted examples.
+
+For example, `tests/components/save_panel_spec.ds.lua` contains the test:
 
 ```lua
-ds.mount(TooltipScreen, {initial_pause=false})
-ds.get('tooltip_target'):hover()
+local SavePanel = require('my_plugin.save_panel')
+
+describe('SavePanel', function()
+    it('copies the edited value into the visible status', function()
+        ds.mount(SavePanel, {value='draft'})
+        ds.get('editor'):click():type('saved')
+        ds.get('submit'):click()
+
+        assert.equals('saved', ds.get('status'):text())
+    end)
+
+    it('accepts an already-created component instance', function()
+        local panel = SavePanel{value='ready'}
+        local root = ds.mount(panel, {
+            viewport={width=60, height=20},
+        })
+
+        assert.equals(panel, root:raw())
+    end)
+end)
 ```
 
-The default `*.ds.lua` discovery glob excludes ordinary support files and
-conventional `*.fixture.lua` files. Reusable factories and data builders can
-remain ordinary Lua helpers, but DwarfSpec does not load them through a
-special fixture protocol. DwarfSpec privately instruments successful renders
-and synchronizes interactions without requiring fields or hooks in consumer
-classes.
+The component remains in its own production file,
+`src/my_plugin/save_panel.lua`:
+
+```lua
+local widgets = require('gui.widgets')
+
+---@class my_plugin.SavePanel: gui.widgets.Panel
+local SavePanel = defclass(nil, widgets.Panel)
+SavePanel.ATTRS{value=DEFAULT_NIL}
+
+---Builds the editable value and save status.
+function SavePanel:init()
+    self:addviews{
+        widgets.EditField{
+            view_id='editor',
+            frame={l=0, t=0, w=24},
+            text=self.value or '',
+        },
+        widgets.HotkeyLabel{
+            view_id='submit',
+            frame={l=0, t=2, w=12},
+            label='Save',
+            on_activate=self:callback('save'),
+        },
+        widgets.Label{
+            view_id='status',
+            frame={l=0, t=4, w=30},
+            text='pending',
+        },
+    }
+end
+
+---Copies the current editor value into the visible status.
+function SavePanel:save()
+    self.subviews.status:setText(self.subviews.editor.text)
+end
+
+return SavePanel
+```
+
+Pass an already-created instance when setup outside the mount is itself part
+of the test. Component attributes cannot be supplied again for an instance;
+mount-only options such as the `viewport` shown above remain available.
 
 ## Component subjects
 
@@ -87,6 +154,16 @@ local root = ds.mount(MyOverlayWidget, {
 })
 ```
 
+An existing overlay instance uses the same operation:
+
+```lua
+local overlay_component = MyOverlayWidget{}
+ds.mount(overlay_component, {
+    backing_viewscreen=dfhack.gui.getCurViewscreen(true),
+    overlay_position={x=4, y=-2},
+})
+```
+
 `overlay_position` uses DFHack's one-based overlay coordinates. Positive
 values anchor from the left or top, while negative values anchor from the
 right or bottom. The position is local to the mount and is never read from or
@@ -118,6 +195,15 @@ local root = ds.mount(MyScreen, {
 
 ds.get('submit'):click()
 assert.equals('saved', ds.get('status'):text())
+```
+
+An existing complete screen also uses the same operation and lifecycle:
+
+```lua
+local screen = MyScreen{initial_pause=false}
+ds.mount(screen, {
+    backing_viewscreen=dfhack.gui.getCurViewscreen(true),
+})
 ```
 
 DwarfSpec shows the supplied screen directly and installs reversible render

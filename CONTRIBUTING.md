@@ -9,8 +9,9 @@ Before submitting a change:
    `PATH`.
 2. Confirm `lua` and `luarocks config lua_version` report the same major and
    minor version, then run `tools/Run-UnitTests.ps1`.
-3. Run any additional supported-version compatibility checks required by the
-   release checklist.
+3. Compile the same repository Lua files with Lua 5.3. DFHack's embedded Lua
+   5.3 is an acceptable compatibility compiler; the external Lua and LuaRocks
+   toolchain does not need to match it.
 4. Run the relevant live DFHack specifications when host behavior changes.
 5. Document every Lua module and function with triple-dash LuaDoc prose.
 
