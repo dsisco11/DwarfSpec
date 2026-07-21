@@ -37,9 +37,9 @@ describe('DwarfSpec discovery configuration', function()
         local path = 'project/tests/dwarfspec/config.lua'
         files[path] = true
         modules[path] = {
-            settings={discovery={test_glob='tests/live/**/*_test.lua'}},
+            settings={discovery={test_glob='tests/live/**/*_spec.lua'}},
         }
-        assert.equals('tests/live/**/*_test.lua',
+        assert.equals('tests/live/**/*_spec.lua',
             config.load_test_glob('project', filesystem, loader))
     end)
 

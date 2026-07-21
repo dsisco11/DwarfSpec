@@ -318,7 +318,7 @@ describe('DwarfSpec external runner', function()
             function()
         local run_options = options('write-failure')
         run_options.result_directory = require('lfs').currentdir() ..
-            '/tests/runner_test.lua'
+            '/tests/runner_spec.lua'
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={

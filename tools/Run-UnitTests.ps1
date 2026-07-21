@@ -51,25 +51,34 @@ if ($LASTEXITCODE -ne 0) {
 
 $testFiles = @(
     Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Recurse -File |
-        Where-Object { $_.Name -match '(^test_.*|.*_test)\.lua$' } |
+        Where-Object {
+            $_.Name -match '_spec\.lua$' -and
+            $_.FullName -notmatch
+                '[\\/]tests[\\/]automation[\\/]specs[\\/]' -and
+            $_.FullName -notmatch
+                '[\\/]tests[\\/]framework[\\/].*[\\/]tests[\\/]live[\\/]'
+        } |
         Sort-Object FullName |
         ForEach-Object FullName
 )
 if ($testFiles.Count -eq 0) {
-    throw 'No unit-test files were found.'
+    throw 'No standalone Busted spec files were found.'
 }
 
 $oldLuaPath = [Environment]::GetEnvironmentVariable('LUA_PATH', 'Process')
 $oldLuaCPath = [Environment]::GetEnvironmentVariable('LUA_CPATH', 'Process')
 try {
-    $luaPath = @(
-        (Join-Path $rockTree "share\lua\$luaVersion\?.lua"),
-        (Join-Path $rockTree "share\lua\$luaVersion\?\init.lua")
-    ) -join ';'
+    $luaPath = & luarocks path --tree $rockTree --lr-path
+    if ($LASTEXITCODE -ne 0) {
+        throw 'LuaRocks failed to calculate LUA_PATH.'
+    }
     if ($null -ne $oldLuaPath) { $luaPath += ";$oldLuaPath" }
     Set-Item -LiteralPath Env:LUA_PATH -Value $luaPath
 
-    $luaCPath = Join-Path $rockTree "lib\lua\$luaVersion\?.dll"
+    $luaCPath = & luarocks path --tree $rockTree --lr-cpath
+    if ($LASTEXITCODE -ne 0) {
+        throw 'LuaRocks failed to calculate LUA_CPATH.'
+    }
     if ($null -ne $oldLuaCPath) { $luaCPath += ";$oldLuaCPath" }
     Set-Item -LiteralPath Env:LUA_CPATH -Value $luaCPath
 
