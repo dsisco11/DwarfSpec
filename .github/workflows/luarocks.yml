@@ -1,0 +1,108 @@
+name: LuaRocks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: luarocks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
+jobs:
+  verify:
+    name: Verify offline package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Lua 5.4
+        uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "5.4"
+
+      - name: Install LuaRocks
+        uses: leafo/gh-actions-luarocks@v6
+
+      - name: Check Lua sources
+        shell: pwsh
+        run: ./tools/Check-Lua.ps1
+
+      - name: Run offline unit tests
+        shell: pwsh
+        run: ./tools/Run-UnitTests.ps1
+
+      - name: Build and validate LuaRock
+        shell: pwsh
+        run: ./tools/Publish.ps1
+
+  publish:
+    name: Publish LuaRock
+    if: github.event_name == 'release'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: luarocks
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install Lua 5.4
+        uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "5.4"
+
+      - name: Install LuaRocks
+        uses: leafo/gh-actions-luarocks@v6
+
+      - name: Prepare release rockspec
+        id: rockspec
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $content = Get-Content -LiteralPath dwarfspec.rockspec -Raw
+          $packageMatch = [regex]::Match(
+              $content, '(?m)^\s*package\s*=\s*["'']([^"'']+)["'']\s*$')
+          $versionMatch = [regex]::Match(
+              $content, '(?m)^\s*version\s*=\s*["''](\d+\.\d+\.\d+)-(\d+)["'']\s*$')
+          if (-not $packageMatch.Success -or -not $versionMatch.Success) {
+              throw 'The rockspec must declare literal package and semantic version values.'
+          }
+
+          $expectedTag = "v$($versionMatch.Groups[1].Value)"
+          if ($env:RELEASE_TAG -ne $expectedTag) {
+              throw "Release tag '$env:RELEASE_TAG' must match rockspec tag '$expectedTag'."
+          }
+
+          $package = $packageMatch.Groups[1].Value
+          $version = "$($versionMatch.Groups[1].Value)-$($versionMatch.Groups[2].Value)"
+          $path = "$package-$version.rockspec"
+          Copy-Item -LiteralPath dwarfspec.rockspec -Destination $path
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Build source rock
+        env:
+          ROCKSPEC: ${{ steps.rockspec.outputs.path }}
+        run: |
+          luarocks lint "$ROCKSPEC"
+          luarocks pack "$ROCKSPEC"
+
+      - name: Upload to LuaRocks.org
+        env:
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+          ROCKSPEC: ${{ steps.rockspec.outputs.path }}
+        run: |
+          test -n "$LUAROCKS_API_KEY"
+          luarocks upload "$ROCKSPEC" --api-key="$LUAROCKS_API_KEY"

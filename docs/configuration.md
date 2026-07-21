@@ -11,7 +11,7 @@ Set a project-wide glob in `tests/dwarfspec/config.lua`:
 ```lua
 return {
     settings={
-        discovery={test_glob='tests/live/**/*_test.lua'},
+        discovery={test_glob='tests/live/**/*_spec.lua'},
     },
 }
 ```

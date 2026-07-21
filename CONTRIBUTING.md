@@ -15,6 +15,11 @@ Before submitting a change:
 4. Run the relevant live DFHack specifications when host behavior changes.
 5. Document every Lua module and function with triple-dash LuaDoc prose.
 
+Standalone Busted unit specs live under `tests/` and use the conventional
+`*_spec.lua` suffix. Live DFHack specs remain in their dedicated live-spec
+directories and are not executed by `tools/Run-UnitTests.ps1` or GitHub
+Actions.
+
 Use four spaces for indentation, LF line endings, no tabs, no trailing
 whitespace, and a final newline. Production framework modules ultimately live
 under `src/dwarfspec/`; unit and generic live framework coverage live under

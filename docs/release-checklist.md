@@ -13,8 +13,10 @@
 6. Install the binary rock into an empty LuaRocks tree and run command and
    module smoke checks from that tree on Windows and Linux.
 7. Run the live DFHack package proof with the installed command.
-8. Tag the exact release commit as `v<version>`.
-9. Copy `dwarfspec.rockspec` to its versioned release filename, build the
-   source rock with `luarocks pack`, and verify that it resolves the new tag.
-10. Upload the validated source rock to LuaRocks.
-11. Install the uploaded rock into a new empty tree and repeat the smoke check.
+8. Configure the `luarocks` GitHub environment with a `LUAROCKS_API_KEY`
+   secret.
+9. Tag the exact release commit as `v<version>` and publish its GitHub release.
+   The `LuaRocks` workflow repeats the offline checks, verifies that the tag
+   matches `dwarfspec.rockspec`, builds the source rock, and uploads it to
+   LuaRocks.org. GitHub Actions does not run the live DFHack package proof.
+10. Install the uploaded rock into a new empty tree and repeat the smoke check.
