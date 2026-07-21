@@ -49,10 +49,12 @@ result-directory selection, explicit run ids, and verbose runner diagnostics.
 `dwarfspec help run` prints the
 complete option list.
 
-The runner lookup order is an explicit `--runner`, `DFHACK_RUNNER`,
-`DFHACK_ROOT/dfhack-run`, and finally `PATH`. `DFHACK_ROOT` is the directory
-that directly contains `dfhack-run.exe` or `dfhack-run`. The process
-environment takes precedence over values loaded from `<project-root>/.env`.
+The recommended runner configuration is `DFHACK_ROOT` in
+`<project-root>/.env`; its value is the directory that directly contains
+`dfhack-run.exe` or `dfhack-run`. DwarfSpec loads the project file
+automatically. Process-environment values override `.env`, an explicit
+`--runner` overrides both, and `PATH` is the final fallback. `DFHACK_RUNNER`
+can identify the complete executable path instead of its containing directory.
 
 ## Live component commands
 

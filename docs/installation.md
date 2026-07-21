@@ -37,15 +37,19 @@ from the selected rock tree.
 
 ## Configure DFHack
 
-Create an ignored `.env` file in the consumer project root and set the absolute
-directory that directly contains `dfhack-run.exe` or `dfhack-run`:
+Use a project-local `.env` file as the primary DFHack configuration. Add `.env`
+to the consumer project's `.gitignore`, create the file in the project root,
+and set the absolute directory that directly contains `dfhack-run.exe` or
+`dfhack-run`:
 
 ```text
 DFHACK_ROOT=D:\Games\Dwarf Fortress\hack
 ```
 
-`dwarfspec run` loads this configuration automatically. A process environment
-variable overrides the project file, and `--runner PATH` overrides both. See
+DwarfSpec loads this configuration automatically. It is local to the project
+and prevents machine-specific installation paths from entering scripts or
+source control. A process environment variable can temporarily override the
+project file, and `--runner PATH` can override both for one invocation. See
 [consumer configuration](configuration.md#dfhack-runner) for the complete
 lookup contract.
 

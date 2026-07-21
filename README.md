@@ -51,7 +51,8 @@ end)
 - Dwarf Fortress with DFHack installed and running;
 - Lua 5.3 or newer;
 - LuaRocks for the selected Lua installation; and
-- `dfhack-run` available through `DFHACK_ROOT`, `DFHACK_RUNNER`, or `PATH`.
+- access to `dfhack-run`, preferably through a project-local `.env` file whose
+  `DFHACK_ROOT` points to the directory containing the runner.
 
 The external Lua toolchain does not need to match DFHack's embedded Lua
 version. DwarfSpec sends pure-Lua dependencies to the live host, which loads
@@ -68,15 +69,20 @@ dwarfspec version
 ```
 
 If the command is not found, add the selected LuaRocks tree's `bin` directory
-to `PATH`. In the consumer project root, create an ignored `.env` file that
-points DwarfSpec at the directory containing `dfhack-run.exe`:
+to `PATH`.
+
+The recommended DFHack configuration is a `.env` file in the consumer project
+root. Add `.env` to the project's `.gitignore`, then set `DFHACK_ROOT` to the
+directory containing `dfhack-run.exe` or `dfhack-run`:
 
 ```text
 DFHACK_ROOT=C:\Games\Dwarf Fortress\hack
 ```
 
-`dwarfspec run` loads this file automatically. Existing process environment
-variables and `--runner` override the project file.
+DwarfSpec loads this file automatically when invoked for the project. This
+keeps the machine-specific DFHack installation path out of commands and source
+control. Existing process environment variables override the project file;
+use `--runner` only when one invocation needs a different executable.
 
 See [the installation guide](docs/installation.md) for local rocks, custom
 LuaRocks trees, and development servers.
