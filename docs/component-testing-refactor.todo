@@ -623,21 +623,73 @@ Phase 8 evidence (2026-07-20):
 
 ## Phase 9: Separate component and overlay-integration coverage
 
-- [ ] Migrate overlay behavior tests to `ds.mount(OverlayWidget, options)`.
-- [ ] Retain a minimal integration test for real `OVERLAY_WIDGETS` discovery,
+- [x] Migrate overlay behavior tests to `ds.mount(OverlayWidget, options)`.
+- [x] Retain a minimal integration test for real `OVERLAY_WIDGETS` discovery,
   registration, rescan, enablement, positioning, focus filtering, and cleanup.
-- [ ] Keep any run-owned script staging helper internal unless consumers have a
+- [x] Keep any run-owned script staging helper internal unless consumers have a
   demonstrated need to author registration integration tests.
-- [ ] Ensure an integration helper cannot overwrite product scripts or persist
+- [x] Ensure an integration helper cannot overwrite product scripts or persist
   configuration changes.
-- [ ] Name and document integration tests distinctly from component tests.
+- [x] Name and document integration tests distinctly from component tests.
 
 Exit evidence:
 
-- [ ] Overlay component behavior is proven without copying files into
+- [x] Overlay component behavior is proven without copying files into
   `hack/scripts/gui`.
-- [ ] The smaller integration suite proves the DFHack overlay boundary and
+- [x] The smaller integration suite proves the DFHack overlay boundary and
   restores every modified external artifact.
+
+Phase 9 evidence (2026-07-20):
+
+- Product-independent overlay behavior remains in
+  `tests/automation/specs/overlay_widget_mount_live_spec.lua`. Both its class
+  and existing-instance examples use `ds.mount`, implicit `ds.get` subjects,
+  interaction, inspection, synchronization, unmount, and automatic cleanup.
+  Dedicated run `phase9-overlay-component` passes both examples with
+  `cleanup_confirmed=true`, zero active owned screens, zero subjects, and no
+  pointer patch. It does not stage or discover a script.
+- The obsolete command-project `overlay_spec.ds.lua` and its two runner-probe
+  fixture files were removed. The remaining real boundary is explicitly named
+  `overlay_registration_integration_spec.lua`; its filename does not match the
+  normal `*_live_spec.lua` component glob and it is selected separately.
+- The registration suite uses an internal function stored on the active run,
+  not another public mount operation. The pre-existing
+  `ds.stage_overlay_fixture` compatibility entry delegates to the hardened
+  implementation only while DwarfUI's demonstrated registration-oriented
+  caller awaits the consumer migration below; the new DwarfSpec component and
+  integration specs do not depend on that public fixture protocol.
+- Registration staging accepts only a project-relative imported definition,
+  derives a run-unique `dwarfspec_*` destination, refuses any existing target,
+  and registers cleanup before writing or rescanning. Cleanup disables every
+  discovered staged widget, refuses to delete changed script contents,
+  restores the prior `dfhack-config/overlay.json` artifact exactly (including
+  restoring absence), removes the unchanged run-owned script, rescans, and
+  verifies that its database registrations are gone. Cleanup attempts every
+  restoration step and aggregates failures instead of abandoning later work.
+- Five focused unit contracts prove exact script/config/registration cleanup,
+  collision refusal, partial-rescan rollback, preservation of a changed staged
+  path, and removal of a configuration file created during a run. The complete
+  unit suite passes 127 tests with no failures, errors, or pending tests;
+  `tools/Check-Lua.ps1` passes Lua 5.4.6 syntax and formatting checks for 87
+  files; and `luarocks lint dwarfspec-0.1.0-1.rockspec` passes.
+- Dedicated embedded-Lua-5.3 run `phase9-overlay-registration-final` passes two
+  integration examples. The first proves real `OVERLAY_WIDGETS` discovery and
+  database registration, default-disabled state, framework enable callbacks,
+  persisted position `{x=7,y=-4}` and matching frame anchors, a broad
+  `dwarfmode` update, and rejection of a deliberately nonmatching focus
+  string. The following example proves both disable callbacks ran, the staged
+  script is absent, both database entries are absent, and the configuration
+  bytes equal their pre-run snapshot. Its terminal report records
+  `cleanup_confirmed=true` and a verified empty mount lifecycle.
+- An independent filesystem comparison measured overlay configuration SHA-256
+  `41A90CBF90ABB9CDECD1468AFC1734DB924310F9F50B85B4B4B9BC6F243B9F15`
+  both before and after the registration run; the run-specific staged path was
+  absent before and after. The complete normal live matrix subsequently passes
+  19 examples in `phase9-full-live-final` with no failures or errors,
+  `cleanup_confirmed=true`, zero active screens, zero subjects, and no pointer
+  patch. An earlier matrix attempt encountered the existing documented focus
+  precondition as `dwarfmode/Building/Placement`; after the game returned to
+  `dwarfmode/Default`, the unchanged suite passed.
 
 ## Phase 10: Remove the fixture protocol and migrate consumers
 

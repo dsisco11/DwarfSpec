@@ -224,6 +224,15 @@ local subject_module = load_automation_module(package_root,
         state.pointer_active = context.pointer.patched_get_mouse_pos ~= nil
         return state
     end
+    ---Stages real overlay registration only for DwarfSpec integration specs.
+    ---@param import_path string
+    ---@return table
+    local function stage_overlay_registration_integration(import_path)
+        return overlay_fixture.stage(project, import_path, context.run.run_id,
+            cleanup_module, cleanup_registry)
+    end
+    context.run.overlay_registration_integration =
+        stage_overlay_registration_integration
     local ds = {
         protocol_version=1,
     }
@@ -674,8 +683,7 @@ local subject_module = load_automation_module(package_root,
     ---@param import_path string
     ---@return table
     function ds.stage_overlay_fixture(import_path)
-        return overlay_fixture.stage(project, import_path, context.run.run_id,
-            cleanup_module, cleanup_registry)
+        return stage_overlay_registration_integration(import_path)
     end
 
     for name, command in pairs(extensions.commands) do

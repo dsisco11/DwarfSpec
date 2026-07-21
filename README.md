@@ -173,7 +173,7 @@ frames is itself part of the behavior being tested.
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
 | `ds.show_fixture(path, options)` | Create and show a test-owned screen. |
 | `ds.dismiss(screen)` | Dismiss a test-owned screen early. |
-| `ds.stage_overlay_fixture(path)` | Stage a test-owned DFHack overlay. |
+| `ds.stage_overlay_fixture(path)` | Legacy compatibility for registration-oriented fixture tests. |
 | `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject. |
 | `ds.root()` | Return a subject for the implicit current mount root. |
 | `ds.get(view_id)` | Select a unique propagated ID from the implicit current mount. |

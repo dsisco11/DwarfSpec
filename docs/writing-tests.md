@@ -133,20 +133,26 @@ not change: `ds.root()` and `ds.get(view_id)` continue to refer only to the
 original mounted screen and its view descendants. A view that exists only in
 an unowned child screen is therefore not selected into the current mount.
 
-Overlay fixture definitions are also explicit imports. A definition returns a
-safe logical name and a project-relative source file:
+## Real overlay registration integration
 
-```lua
-return {
-    name='tooltip_probe',
-    source='tests/tooltip/fixtures/tooltip_overlay.lua',
-}
-```
+Normal overlay behavior belongs in isolated component specs named distinctly,
+such as `tooltip_overlay_component_spec.ds.lua`. These specs use `ds.mount()`
+and never copy scripts into `hack/scripts/gui`.
 
-`ds.stage_overlay_fixture(definition_path)` copies the source to a unique
-run-owned GUI script name, rescans overlays, and guarantees exact removal and a
-final rescan through automatic cleanup. Stage overlays from the spec itself;
-the external command has no separate overlay-fixture option.
+DwarfSpec retains one separately selected
+`overlay_registration_integration_spec.lua` for its own DFHack boundary. It
+proves real `OVERLAY_WIDGETS` discovery, registration, rescan, enablement,
+persisted positioning, focus filtering, and cleanup. Its run-owned staging
+support is internal test infrastructure, not another public mount operation or
+a protocol that consumer component specs must use.
+
+The integration support refuses to replace an existing destination or remove
+a staged script whose contents changed. It snapshots `dfhack-config/overlay.json`
+before registration, disables the staged widgets during cleanup, restores the
+configuration artifact byte for byte, removes only its unchanged run-owned
+script, performs a final rescan, and verifies that no staged registration
+remains. The integration spec is excluded from the normal component-test glob
+and must be selected explicitly when validating the DFHack overlay boundary.
 
 ## Public commands
 
@@ -156,7 +162,8 @@ The first-release surface is intentionally small:
 - components: `mount`, `root`, `get`, `unmount`, `resize`;
 - subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
   `text`, and the exceptional `raw` escape hatch;
-- fixtures: `show_fixture`, `dismiss`, `stage_overlay_fixture`;
+- legacy fixture compatibility: `show_fixture`, `dismiss`, and
+  `stage_overlay_fixture`;
 - legacy fixture input: `set_pointer`, `clear_pointer`, and the fixture-target
   compatibility forms of interaction commands; and
 - evidence: `capture_view_tree`, `capture_screen`.

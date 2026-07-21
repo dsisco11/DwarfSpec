@@ -41,7 +41,15 @@ globals but retain their own global writes. Their commands are bound only onto
 the run-scoped `ds` object, so product-specific inspection remains outside the
 library.
 
-Screen fixtures and overlay fixture definitions are explicit imports. Paths
-are project-relative and cannot escape the project root. Overlay files receive
-run-unique `dwarfspec_*` names, cannot overwrite existing files, and register
-exact removal plus a final overlay rescan in the run's LIFO cleanup registry.
+Screen fixtures remain explicit project-relative imports while compatibility
+callers migrate to component mounts.
+
+Overlay behavior tests mount `overlay.OverlayWidget` classes or instances into
+the DwarfSpec-owned host. They do not install scripts, touch persisted overlay
+configuration, or depend on DFHack registration. A separately named and
+selected DwarfSpec integration spec owns the real registration boundary. Its
+internal helper stages a run-unique `dwarfspec_*` script only when the exact
+destination is absent, registers cleanup before discovery, disables the
+discovered widgets, removes only unchanged staged contents, restores the exact
+pre-run overlay configuration artifact, performs a final rescan, and verifies
+that its registrations are gone.
