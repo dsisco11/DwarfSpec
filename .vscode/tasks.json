@@ -2,6 +2,26 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Unit Test",
+            "type": "process",
+            "command": "pwsh.exe",
+            "args": [
+                "-NoLogo",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\tools\\Run-UnitTests.ps1"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Publish",
             "type": "process",
             "command": "pwsh.exe",
