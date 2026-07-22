@@ -24,6 +24,15 @@ dependencies = {
     "busted == 2.3.0-1",
 }
 
+
+test_dependencies = {
+    "busted >= 2.0",
+}
+
+test = {
+    type = "busted",
+}
+
 build = {
     type = "builtin",
     modules = {
