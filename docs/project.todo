@@ -3,7 +3,7 @@
 ✘ Add new `ds.screenshot(...)` method to allow taking screenshots of mounted components under test. @cancelled(26-07-21 05:12)
 
 Backend:
-    ☐ Evaluate migrating to an RPC server for the test runner to allow for more complex test scenarios, such as running tests in parallel or on remote devices.
+    ✔ Evaluate migrating to an RPC server for the test runner. The accepted design keeps `dfhack-run`, introduces an in-process automation service and structured events for the in-game UI, serializes live runs per DFHack process, and defers remote execution. See `docs/test-runner-service-design.md`. @done(26-07-22 02:49)
 
 Frontend:
     ☐ Create a test-runner UI for running and debugging tests, including a test results panel and test command logs.
