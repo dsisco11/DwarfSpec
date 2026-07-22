@@ -1,0 +1,512 @@
+# Multi-project test runner service implementation
+
+Status: proposed
+
+Source design: `docs/test-runner-service-design.md`
+
+## Purpose
+
+Implement the multi-project DwarfSpec automation service described by the
+source design. Multiple projects may submit and manage runs concurrently
+against one DFHack instance, while one service-owned executor runs live Busted
+suites serially.
+
+This checklist is the implementation completion contract. A phase is complete
+only when every subtask and exit-gate item in that phase is checked and its
+evidence is recorded below. Focused tests are useful diagnostics but do not
+replace a phase's full required verification.
+
+Execute phases in numeric order. Later-phase test scaffolding may be prepared
+early, but no later phase can be marked complete before every earlier exit gate
+is satisfied.
+
+## Scope boundary
+
+Included:
+
+- the process-wide multi-project automation service;
+- project registration and compatibility;
+- structured events, snapshots, scheduling, leases, and cleanup;
+- `dfhack-run` transport adapters and external CLI orchestration;
+- per-project latest-result persistence;
+- offline, live DFHack, packaging, and documentation verification.
+
+Excluded:
+
+- designing or implementing the in-game runner UI;
+- UI modules, widgets, navigation, input handling, or UI-specific tests;
+- overlapping live Busted execution within one DFHack process;
+- localhost sockets, a replacement external transport, or remote execution;
+- persistent per-run result history.
+
+A future in-game runner UI is a direct consumer of the public service API, but
+it is a separate design and implementation effort.
+
+## Locked implementation contract
+
+☐ Keep one compatible DwarfSpec service runtime and package root per DFHack
+  process.
+☐ Allow multiple canonical project roots to register concurrently.
+☐ Allow different projects to submit while another project is queued or
+  active.
+☐ Keep at most one outstanding run per project.
+☐ Admit runs to one deterministic global FIFO queue.
+☐ Allow exactly one run to own the live executor at a time.
+☐ Activate the next run only after cleanup of the previous execution is
+  confirmed.
+☐ Block only the owning project for persistence or acknowledgement failure.
+☐ Quarantine the shared executor for unconfirmed cleanup.
+☐ Keep `dfhack-run` as the only external transport.
+☐ Publish versioned, ordered, immutable, JSON-safe structured events.
+☐ Validate service, project, run, generation, and owner identity before every
+  mutation.
+☐ Use `<project-root>/tests/.test-results/dwarfspec/results.json` as the default
+  result file.
+☐ Replace the same result file for each invocation instead of accumulating
+  run-named files.
+☐ Treat `--results PATH` as an exact file and preserve `--no-results`.
+☐ Keep consumer module paths and newly loaded consumer modules run-scoped.
+☐ Preserve generation guards, lease expiry, strict LIFO cleanup, and explicit
+  cleanup confirmation.
+☐ Keep all service APIs presentation-neutral and free of UI state.
+
+## Global engineering rules
+
+☐ Put authoritative production automation modules under
+  `src/dwarfspec/automation/`; keep fixtures and test-only adapters under
+  `tests/`.
+☐ Do not create duplicate stateful service modules that can be loaded from both
+  `src/` and `tests/`.
+☐ Add LuaDoc comments to every new or changed Lua function, method, and
+  class-like module or table, including private functions, with parameters,
+  returns, ownership, and mutation behavior where applicable.
+☐ Add comment-based help to every new or changed PowerShell function.
+☐ Keep service requests, responses, snapshots, events, and persisted results
+  free of userdata, functions, coroutines, cyclic tables, and owner
+  capabilities.
+☐ Preserve unrelated worktree changes and update this checklist only from
+  verified evidence.
+
+## Phase 0: Baseline and contract fixtures
+
+Goal: establish reproducible evidence and characterize behavior that the
+service migration must preserve.
+
+☐ Confirm the workspace is the DwarfSpec repository and its `origin` points to
+  the intended DwarfSpec remote before editing implementation files.
+☐ Record the current Lua syntax-check result from `tools/Check-Lua.ps1`.
+☐ Record the current full unit-test result from `tools/Run-UnitTests.ps1`.
+☐ Record the current full live result from `tools/Run-AutomationTests.ps1`, or
+  record the exact environmental blocker before implementation begins.
+☐ Add distinct fixture projects for multi-project tests, including stable
+  canonical roots and independent `.test-results` locations.
+☐ Include at least one project path containing spaces and one pair of projects
+  with identically named specs to prove project identity is not display-name or
+  spec-name based.
+☐ Characterize the current `dfhack.dwarfspec` registry, version 1 bootstrap,
+  status, abort, lease, cleanup, report parsing, exit-code, and result-directory
+  behaviors in tests before replacing them.
+☐ Add reusable test builders for service registries, project records, run
+  records, fake clocks, fake schedulers, and deterministic identifiers.
+☐ Add checked-in schema fixtures for representative queued, active, passed,
+  failed, aborted, cancelled, quarantined, and pre-execution-failure outcomes.
+☐ Map every existing exit-code meaning to its version 2 invocation state and
+  record the mapping in a test fixture.
+
+Phase 0 exit gate:
+
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes without reducing existing coverage.
+☐ The baseline live result or exact live-environment blocker is recorded in the
+  evidence ledger.
+☐ Contract fixtures contain no UI assumptions or implementation work.
+
+## Phase 1: Service runtime and project registry
+
+Goal: replace implicit singleton host ownership with an explicit compatible
+service and independently registered project sessions.
+
+☐ Add `dwarfspec.automation.service` as the only public mutation boundary over
+  project, run, scheduler, and terminal state.
+☐ Add `dwarfspec.automation.projects` for canonical project identity,
+  registration, refresh, lookup, and unregister operations.
+☐ Define the process-wide registry with protocol version, service instance ID,
+  package root, package version, generation counter, projects, runs, queue,
+  active run, quarantine, and latest terminal results.
+☐ Make first bootstrap establish the service package root and compatibility
+  contract without loading consumer test modules.
+☐ Return the same project session when the same canonical root registers with
+  compatible configuration.
+☐ Reject reuse of a project ID for a different canonical root.
+☐ Reject incompatible protocol or package requirements without mutating the
+  existing service, projects, queue, active run, or retained results.
+☐ Prevent adapter reloads from clearing compatible service state.
+☐ Allow unregister only when the project has no outstanding run.
+☐ Return copied, immutable, JSON-safe project and service summaries instead of
+  internal records.
+☐ Establish `src/dwarfspec/automation/` as the authoritative source location
+  and update module loading without changing live behavior yet.
+☐ Add all new production modules to the current rockspec.
+
+Phase 1 exit gate:
+
+☐ Unit tests cover registration, canonicalization, refresh, unregister,
+  incompatible clients, adapter reload, and immutable summaries.
+☐ Unit tests prove two registered project roots retain independent
+  configuration and result policies.
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes.
+
+## Phase 2: Structured events, snapshots, and schemas
+
+Goal: introduce the presentation-neutral data contracts before changing live
+execution ownership.
+
+☐ Add `dwarfspec.automation.events` for event construction, defensive copying,
+  sequencing, validation, retention, and cursor reads.
+☐ Emit the required envelope fields: schema, service instance ID, project ID,
+  run ID, generation, sequence, elapsed time, type, and payload.
+☐ Implement the initial scheduler, run, repeat, test, problem, command,
+  diagnostic, cleanup, abort, and terminal event types from the design.
+☐ Ensure every admitted run starts at sequence one and publishes contiguous,
+  immutable events.
+☐ Make repeated cursor reads deterministic and non-mutating.
+☐ Add bounded JSON-safe copying that rejects or classifies unsupported and
+  cyclic values.
+☐ Define version 2 service, scheduler, run-snapshot, transport, event, and
+  result validators.
+☐ Add immutable run snapshots with queue, activation, execution, count, lease,
+  cleanup, host-error, and failure-summary fields.
+☐ Add immutable scheduler snapshots with service compatibility, registered
+  projects, FIFO order, active ownership, and quarantine state.
+☐ Refactor the Busted output handler behind an event-publisher interface while
+  retaining temporary version 1 compatibility output.
+☐ Extend `dwarfspec.report` to validate version 2 identities and schemas while
+  accepting the explicitly supported version 1 transition input.
+☐ Prove owner capabilities and live DFHack objects cannot enter events,
+  snapshots, terminal output, or results.
+
+Phase 2 exit gate:
+
+☐ Unit tests cover every initial event type and every terminal state.
+☐ Unit tests cover cursor retry, empty reads, stale cursors, defensive copying,
+  malformed data, and sequence discontinuity.
+☐ Checked-in schema fixtures validate against the new readers.
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes.
+
+## Phase 3: Multi-project admission and FIFO scheduling
+
+Goal: accept concurrent project requests while preserving one serialized live
+executor.
+
+☐ Add `dwarfspec.automation.scheduler` ownership of the global FIFO queue,
+  active executor slot, and quarantine state.
+☐ Make `submit(project_id, request)` validate the entire request before
+  modifying service state.
+☐ Assign authoritative run IDs, generations, and opaque owner capabilities at
+  admission.
+☐ Support high-entropy project-scoped request keys so retries return the same
+  run and capability without duplicate queue entries.
+☐ Return `project_busy` and the existing identity for a second outstanding run
+  from the same project.
+☐ Reserve canonical file-backed result paths and return `result_path_busy` when
+  another outstanding run owns the same path.
+☐ Admit a different project's run while another project is queued, active, or
+  waiting for terminal acknowledgement.
+☐ Derive queue positions from current FIFO state without publishing an event
+  for every position change.
+☐ Revalidate project registration, compatibility, selection, and paths before
+  activation.
+☐ Cancel a queued run without invoking native cleanup and publish its complete
+  terminal event sequence.
+☐ Release the executor after confirmed cleanup even when the previous project
+  still has an unacknowledged terminal result.
+☐ Quarantine all activation after unconfirmed cleanup while keeping queued runs
+  observable and cancellable.
+☐ Require explicit clean-state proof before `recover_executor` clears
+  quarantine.
+
+Phase 3 exit gate:
+
+☐ Unit tests prove FIFO ordering across at least three projects.
+☐ Unit tests prove one project cannot flood or reorder the queue.
+☐ Unit tests prove idempotent retry, same-project rejection, cross-project
+  admission, result-path collision, cancellation, and quarantine behavior.
+☐ Unit tests prove at most one run owns the executor in every transition.
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes.
+
+## Phase 4: Service-owned host execution and cleanup
+
+Goal: move live Busted execution under scheduler-controlled run records without
+weakening lifecycle guarantees.
+
+☐ Replace the host's `active_run` and `last_completed` singleton policy with
+  service-owned project and run records.
+☐ Make the scheduler grant the executor to exactly one queued generation.
+☐ Install only the activated project's configuration, selection, module paths,
+  commands, fixtures, and support modules.
+☐ Preserve pinned dependencies before project-local module paths.
+☐ Restore the exact original `package.path` and evict newly loaded consumer
+  modules before another project activates.
+☐ Drive `queued`, `starting`, `running`, `cleaning`, and terminal transitions
+  through the service state machine.
+☐ Publish structured events from real Busted callbacks instead of storing
+  formatted progress lines as the primary protocol.
+☐ Preserve repeat behavior, result counts, test identities, problems, command
+  diagnostics, and host-error classification.
+☐ Preserve generation checks on scheduled execution, Busted callbacks,
+  cleanup callbacks, and terminal publication.
+☐ Drain run-owned resources in strict LIFO order for success, assertion
+  failure, host error, timeout, abort, and early unmount.
+☐ Confirm no active mount, screen, subject, wait, pointer, timeout, scheduler,
+  project module path, or evictable consumer module remains before executor
+  release.
+☐ Publish cleanup failure without hiding the original run failure.
+☐ Enter scheduler quarantine when the cleanup probe is not confirmed.
+
+Phase 4 exit gate:
+
+☐ Host, output-handler, cleanup, scheduler, and stale-callback unit tests pass.
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes.
+☐ The full live automation suite passes for one project through the new service
+  boundary.
+☐ Live evidence confirms exact module-path restoration and no lifecycle leaks.
+
+## Phase 5: Ownership, leases, terminal retention, and recovery
+
+Goal: make abandoned callers recover safely without allowing consumers to
+mutate one another's runs.
+
+☐ Generate opaque owner capabilities with enough entropy for concurrent local
+  callers.
+☐ Require the owner capability for lease renewal, normal cancel, normal abort,
+  and acknowledgement.
+☐ Permit read-only snapshots and event reads without renewing or transferring
+  ownership.
+☐ Implement distinct queue and execution leases with independent timestamps,
+  timers, and expiry behavior.
+☐ Renew an external lease only from a valid owner status request.
+☐ On queue-lease expiry, cancel without native cleanup and retain the terminal
+  snapshot and journal.
+☐ On execution-lease expiry, abort the active generation, run emergency
+  cleanup, and retain the terminal snapshot and journal.
+☐ Support service-owned heartbeats for direct in-process clients without tying
+  ownership to a presentation object's lifetime.
+☐ Acknowledge only the exact terminal project, run, generation, and owner after
+  its persistence policy succeeds.
+☐ Implement explicit operator discard with a bounded reason and audit event.
+☐ Keep an unacknowledged terminal result addressable and block only its owning
+  project.
+☐ Reject stale, mismatched, cross-project, cross-service, and unauthorized
+  mutations without changing leases or state.
+☐ Ensure acknowledgement or discard cannot clear executor quarantine.
+
+Phase 5 exit gate:
+
+☐ Unit tests cover valid ownership, observation without renewal, wrong owner,
+  stale generation, expired queue owner, expired active owner, acknowledgement,
+  discard, and quarantine separation.
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes.
+☐ The full live automation suite passes.
+☐ Live evidence confirms lost queued and active external callers take their
+  distinct terminal paths and do not block clean runs from other projects.
+
+## Phase 6: Per-project latest-result persistence
+
+Goal: implement the stable result-file contract and couple acknowledgement to
+successful persistence.
+
+☐ Add `dwarfspec.automation.result_store` for version 2 result construction,
+  validation, and safe replacement writes.
+☐ Change the default from a root-level result directory to the exact file
+  `<project-root>/tests/.test-results/dwarfspec/results.json`.
+☐ Change `--results PATH` from directory semantics to exact-file semantics and
+  resolve relative paths beneath the owning project root.
+☐ Keep `--no-results` as an explicit successful no-write policy.
+☐ Write the queued invocation document after successful admission.
+☐ Replace it with activation data when the executor starts the run.
+☐ Replace it with the complete terminal invocation result for passed, failed,
+  aborted, cancelled, timeout, interruption, dependency, connection,
+  registration, queue-timeout, transport, and host outcomes.
+☐ Use a temporary sibling only for safe replacement and remove it after
+  success or classified failure.
+☐ Never create run-ID-named result history by default.
+☐ Keep independent project result files writable concurrently.
+☐ Prevent two outstanding file-backed runs from owning one canonical explicit
+  result path.
+☐ Acknowledge terminal state only after the configured write succeeds or the
+  no-results policy receives the complete terminal data.
+☐ On write failure, report the persistence failure, retain terminal service
+  state, and leave other projects schedulable.
+☐ Update `.gitignore`, fixtures, and documentation so the standard generated
+  directory is ignored recursively without checking generated run files in.
+
+Phase 6 exit gate:
+
+☐ Unit tests cover default, absolute, relative, space-containing, colliding,
+  no-results, safe-replacement, and write-failure paths.
+☐ Two sequential runs from one project leave exactly one default result file
+  containing the second invocation.
+☐ Two projects leave independent default result files beneath their own roots.
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes.
+☐ The full live automation suite passes and leaves no unplanned result history.
+
+## Phase 7: Version 2 `dfhack-run` transport and external CLI
+
+Goal: expose the service safely through the supported external transport and
+make the CLI queue-aware.
+
+☐ Replace bootstrap, status, cancel, abort, and acknowledgement scripts with
+  thin adapters over the public service API.
+☐ Add any required registration, event-read, discard, scheduler-status, and
+  recovery adapter operations without placing policy in the adapters.
+☐ Emit one canonical `DWARFSPEC_JSON` line using
+  `dwarfspec.transport.v2` from every adapter response.
+☐ Include and validate protocol, service instance, project, run, generation,
+  snapshot, events, and last-sequence fields.
+☐ Preserve formatted version 1 lines only as temporary diagnostics during the
+  migration and remove parser dependence on them.
+☐ Reject malformed, missing, mismatched, stale, duplicated, or discontinuous
+  transport data before exposing it to the runner.
+☐ Refactor `dwarfspec.runner` to register, submit idempotently, poll by cursor,
+  renew the applicable lease, format events, persist results, and acknowledge.
+☐ Add `--queue-timeout` and start the existing `--timeout` budget only after
+  `run.activated`.
+☐ On interruption, queue timeout, execution timeout, or malformed transport,
+  choose cancel or abort from the authoritative current state.
+☐ Preserve the original failure when recovery cancel or abort also fails.
+☐ Preserve established CLI command names and exit-code meanings while adding
+  distinct queue-cancel and queue-timeout classifications.
+☐ Update CLI help for concurrent project waiting, execution timeout, lease
+  behavior, exact result-file semantics, and no-results behavior.
+
+Phase 7 exit gate:
+
+☐ Runner, report, process, CLI, and adapter unit tests cover every response and
+  recovery classification.
+☐ Unit tests prove queue time never consumes execution timeout.
+☐ Unit tests prove retry after an ambiguous submit does not enqueue a duplicate
+  run.
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes.
+☐ The full live automation suite passes through version 2 transport.
+
+## Phase 8: Multi-project live hardening
+
+Goal: prove the supported concurrency contract against one real DFHack game
+instance.
+
+☐ Add a repeatable integration harness that can launch multiple project-local
+  `dwarfspec run` commands against the same `dfhack-run` target.
+☐ Submit at least three projects concurrently and prove deterministic FIFO
+  activation with no overlapping executor ownership.
+☐ Prove queued projects remain observable while another project is active.
+☐ Prove cancelling a queued project does not alter the active project.
+☐ Prove an unacknowledged or persistence-blocked terminal project does not stop
+  another clean project's activation.
+☐ Prove cleanup failure quarantines activation for every project until explicit
+  clean-state recovery.
+☐ Prove queue-lease expiry and execution-lease expiry take their distinct
+  cancellation and abort paths.
+☐ Prove timeout, interruption, explicit abort, assertion failure, combined
+  test-and-cleanup failure, and transport failure preserve their original
+  classifications and cleanup guarantees.
+☐ Prove project configuration, spec selection, custom commands, fixtures,
+  module paths, `package.loaded`, screens, pointers, pause state, waits, and
+  timers do not leak between consecutive projects.
+☐ Prove compatible adapter reload preserves registered, queued, active, and
+  retained state.
+☐ Prove an incompatible package or protocol client cannot replace the running
+  service.
+☐ Prove each project receives the correct stable result file and event journal
+  when spec names overlap.
+☐ Capture bounded diagnostics for any live failure before changing behavior or
+  retrying a fix.
+
+Phase 8 exit gate:
+
+☐ The multi-project integration harness passes repeatedly without ordering or
+  ownership flakes.
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes.
+☐ The full live automation suite passes.
+☐ Multi-project, lost-owner, quarantine, persistence-isolation, and module-
+  isolation evidence is recorded separately in the evidence ledger.
+
+## Phase 9: Packaging, documentation, and release readiness
+
+Goal: ship identical service behavior from the source checkout and installed
+rock with an accurate public contract.
+
+☐ Include every service, project, scheduler, event, host, result-store, and
+  adapter module in the rockspec.
+☐ Remove obsolete packaged paths only after all callers use their authoritative
+  `src/dwarfspec/automation/` replacements.
+☐ Verify the source launcher and installed rock load the same service protocol
+  and enforce the same compatibility rules.
+☐ Verify package installation does not depend on repository-only test paths or
+  generated result files.
+☐ Update README and technical documentation for concurrent projects,
+  serialized execution, queue and execution timeouts, ownership, quarantine,
+  exact result paths, and structured events.
+☐ State explicitly that runner UI design and implementation are separate from
+  the service and are not release criteria for this checklist.
+☐ Document version 1 compatibility duration and removal criteria.
+☐ Update the changelog and package version only when the release boundary is
+  chosen.
+☐ Run `luarocks lint` against the release rockspec.
+☐ Build and install the rock into an isolated tree and run its supported CLI
+  and live smoke paths from outside the source checkout.
+☐ Confirm no default test run creates persistent per-run history.
+☐ Update `docs/project.todo` only after all service gates are satisfied.
+
+Phase 9 exit gate:
+
+☐ Lua syntax and formatting checks pass.
+☐ The full unit suite passes from the source checkout.
+☐ The full live automation suite passes from the source checkout.
+☐ Rockspec lint, isolated package build, and installed-rock checks pass.
+☐ The installed-rock multi-project live smoke test passes against one DFHack
+  instance.
+☐ Documentation matches the implemented schemas, defaults, commands, and
+  lifecycle behavior.
+☐ No runner UI source, UI test, or UI completion claim is required or included.
+☐ Every earlier phase and locked-contract item is checked from recorded
+  evidence.
+
+## Execution evidence ledger
+
+Record exact commands, dates, results, and relevant artifact paths. Do not use
+one evidence category as a substitute for another.
+
+| Phase | Lua syntax and formatting | Full unit suite | Live DFHack | Packaging or installed rock | Notes and artifacts |
+|---|---|---|---|---|---|
+| 0 | pending | pending | pending | not required | |
+| 1 | pending | pending | not required | module list only | |
+| 2 | pending | pending | not required | schema fixtures | |
+| 3 | pending | pending | not required | not required | |
+| 4 | pending | pending | pending | not required | |
+| 5 | pending | pending | pending | not required | |
+| 6 | pending | pending | pending | not required | |
+| 7 | pending | pending | pending | not required | |
+| 8 | pending | pending | pending | not required | |
+| 9 | pending | pending | pending | pending | |
+
+## Final acceptance
+
+☐ Multiple projects can concurrently submit, observe, cancel, and recover runs
+  against one DFHack instance.
+☐ Live Busted execution remains strictly serialized and cleanup-gated.
+☐ Structured version 2 events and snapshots are the authoritative feedback
+  contract.
+☐ Each project defaults to one replaceable result file beneath
+  `tests/.test-results/dwarfspec/`.
+☐ Persistence failure is project-local and cleanup failure is executor-global.
+☐ Source and packaged behavior match.
+☐ Remote execution and runner UI work remain explicitly outside this completed
+  implementation scope.
