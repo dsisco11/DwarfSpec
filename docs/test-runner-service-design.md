@@ -11,15 +11,16 @@ Fortress game instance. The service queues those runs and executes one live
 Busted suite at a time.
 
 The external command will continue to communicate with DFHack through
-`dfhack-run`. The in-game test runner will call the same service directly and
-will not require a browser, a localhost listener, or a second transport
-protocol.
+`dfhack-run`. A future in-game test runner can call the same service directly
+without requiring a browser, a localhost listener, or a second transport
+protocol. Designing and implementing that UI is separate work and is not part
+of this service implementation.
 
 The service will replace line-oriented runner feedback with ordered structured
-events. Both consumers will use cursor-based reads over each run's event
-journal. The external command will format events for a terminal, while the
-in-game screen will render project state, queue state, test results, command
-logs, failures, and diagnostic snapshots.
+events and cursor-based reads over each run's event journal. The external
+command will format events for a terminal. Future consumers, including the
+separately designed in-game UI, can build their own presentation from the same
+service data.
 
 Each project will store its latest invocation result at the stable default
 path:
@@ -36,9 +37,9 @@ selects a different output path.
 
 - Support concurrent run submissions from multiple projects against one
   running DFHack instance.
-- Serialize live execution so shared game, UI, scheduler, and Lua state remain
-  deterministic.
-- Give the external command and the in-game test runner one authoritative
+- Serialize live execution so shared game, screen, scheduler, and Lua state
+  remain deterministic.
+- Give the external command and future in-process clients one authoritative
   service API.
 - Continue using `dfhack-run` for all external-to-DFHack communication.
 - Represent runner and scheduler feedback as versioned, ordered, JSON-safe
@@ -47,8 +48,8 @@ selects a different output path.
   leases, and terminal acknowledgement.
 - Preserve generation ownership, lease expiry, explicit cancellation or
   abort, and confirmed LIFO cleanup.
-- Allow the in-game test runner to register projects and run, observe, cancel,
-  abort, and rerun tests without using a network client.
+- Provide a presentation-neutral API suitable for a separately implemented
+  in-game test runner.
 - Store only the latest result per project by default in an ignored directory
   under that project's test tree.
 - Represent every invocation outcome for which a project result path can be
@@ -66,7 +67,8 @@ selects a different output path.
 - DwarfSpec will not persist default per-run history.
 - DwarfSpec will not accept more than one outstanding run from the same
   project.
-- DwarfSpec will not define the visual layout of the in-game test runner here.
+- DwarfSpec will not design or implement the in-game test runner UI as part of
+  this work.
 - DwarfSpec will not replace Busted's discovery, hooks, assertions, or result
   classification.
 
@@ -85,7 +87,8 @@ selects a different output path.
 10. Unacknowledged terminal state blocks only its owning project.
 11. Unconfirmed cleanup quarantines the entire service executor.
 12. `dfhack-run` remains the only external transport.
-13. The in-game test runner calls the service directly.
+13. A future in-game test runner will be a direct service client, but its
+    design and implementation are separate from this service work.
 14. Consumers never mutate `dfhack.dwarfspec`, project records, run records, or
     scheduler state directly.
 15. Runner feedback is a structured event journal, not formatted output lines.
@@ -108,8 +111,8 @@ selects a different output path.
 
 `dfhack-run` already supplies DwarfSpec's supported external connection to a
 running DFHack process. Replacing it would add protocol and compatibility work
-without improving the in-game screen, which already shares the host Lua
-context with the test runner.
+without benefiting a future in-game screen, which will already share the host
+Lua context with the test runner.
 
 The missing abstraction is therefore not another server. It is a multi-project
 service that separates registration, scheduling, run policy, and run state
@@ -134,7 +137,7 @@ flowchart LR
     project_b[Project B external command] -->|dfhack-run| adapters
     project_c[Project C external command] -->|dfhack-run| adapters
     adapters --> service_api
-    game_ui[In-game test runner] -->|Direct service calls| service_api
+    future_ui[Future in-game runner UI - separate work] -. Direct service calls .-> service_api
 
     subgraph service[Multi-project service in DFHack core Lua context]
         direction TB
@@ -148,9 +151,8 @@ flowchart LR
 ```
 
 The adapters translate process arguments and JSON output. They contain no
-scheduler or run policy. The in-game screen translates player actions into
-service calls and service data into views. It also contains no scheduler or
-run policy.
+scheduler or run policy. The dashed UI edge documents only the future
+integration boundary; no UI component is delivered by this design.
 
 ## Terminology
 
@@ -185,12 +187,14 @@ The consumer that submits a run owns its queue and execution leases, result
 persistence, normal cancellation or abort, and terminal acknowledgement. The
 service returns an opaque owner capability to that consumer. Read-only
 observation requires the run identity but not the capability; lease renewal and
-normal mutations require both. The in-game service client keeps its capability
-in process. An external command keeps it only for the lifetime of that command.
+normal mutations require both. An in-process client keeps its capability in
+the service process. An external command keeps it only for the lifetime of that
+command.
 
-An authorized in-game operator may force abort or explicitly discard a
-retained result for recovery. Operator recovery is recorded as an event and
-does not silently impersonate the original persistence owner.
+An authorized operator client may force abort or explicitly discard a retained
+result for recovery. Operator recovery is recorded as an event and does not
+silently impersonate the original persistence owner. How an in-game UI exposes
+that authority belongs to its separate design.
 
 ### Outstanding run
 
@@ -207,8 +211,8 @@ time.
 ## Runtime and compatibility boundary
 
 The service owns one `package_root`. That root supplies DwarfSpec, Busted,
-adapters, the scheduler, cleanup, reporting, the component driver, and the
-in-game test runner implementation.
+adapters, the scheduler, cleanup, reporting, and the component driver. The
+runner UI is not an implementation component of this service design.
 
 Each project session owns one `project_root`. That root supplies project
 configuration, selected live specs, custom commands, support modules, and
@@ -254,9 +258,9 @@ Registration never loads test files or consumer modules. Catalog and run
 operations use the registered project record and perform their work in a
 bounded request or activated run scope.
 
-A project may be unregistered only when it has no outstanding run. Closing an
-in-game view or terminating one external command does not unregister project
-sessions belonging to other consumers.
+A project may be unregistered only when it has no outstanding run.
+Disconnecting or releasing one consumer does not unregister project sessions
+belonging to other consumers.
 
 ## Automation service
 
@@ -572,9 +576,10 @@ and acknowledge the cancellation; otherwise an operator can explicitly
 discard it. Until then, only that project remains blocked; other projects
 continue normally.
 
-An in-game-owned queued run is attached to its project session rather than the
-visibility of one screen. Closing the screen does not cancel the run. An
-explicit cancel action or project unregistration request owns cancellation.
+An in-process-owned queued run is attached to its project session rather than
+the lifetime of a presentation object. Releasing a view does not cancel the
+run. An explicit cancel action or project unregistration request owns
+cancellation.
 
 ### Execution lease
 
@@ -582,8 +587,8 @@ The execution lease begins when the scheduler activates the run. An external
 status request carrying the owner capability renews it. If the external owner
 disappears, lease expiry aborts the active run and performs cleanup.
 
-An in-game-owned active run uses a service-owned execution heartbeat that is
-independent of whether its screen is visible.
+An in-process-owned active run uses a service-owned execution heartbeat that is
+independent of any presentation object's lifetime.
 
 ### Timeouts
 
@@ -601,8 +606,9 @@ run according to current state.
 
 ## `dfhack-run` transport adapters
 
-Project registration, bootstrap, status, cancel, abort, acknowledgement, and
-UI loading use thin `dfhack-run` adapters over the service.
+Project registration, bootstrap, status, cancel, abort, and acknowledgement use
+thin `dfhack-run` adapters over the service. UI loading is outside this
+transport and outside this implementation scope.
 
 The bootstrap adapter registers or refreshes its project, then submits a run.
 It does not fail merely because another project is active. The status adapter
@@ -671,39 +677,20 @@ acknowledge the terminal generation. The failed project cannot submit another
 run until persistence is retried or the result is explicitly discarded. Other
 projects continue to queue and execute when cleanup was confirmed.
 
-## In-game test runner
+## UI integration boundary
 
-The in-game screen is a direct multi-project service client. It does not parse
-transport lines and does not shell out to `dfhack-run`.
+The runner UI will be designed and implemented independently from this service.
+This document commits only to the boundary it can consume:
 
-The external `dwarfspec ui` entry point registers or refreshes its project,
-then loads or focuses the shared in-game runner. Opening it from another
-project adds or focuses that project; it does not replace existing project
-sessions or interrupt their runs.
+- the UI will run in-game and call the automation service directly;
+- it will not parse `dfhack-run` transport lines or require a browser;
+- service requests, snapshots, events, catalogs, and results remain
+  presentation-neutral;
+- the service contains no widgets, navigation, layout, or other UI state;
+- UI lifecycle events do not implicitly cancel or abort service-owned work.
 
-The screen will be able to:
-
-- display all registered projects and service compatibility;
-- display the active project and run;
-- display queued projects in scheduler order;
-- display quarantine and cleanup failures;
-- list deterministic specs for a selected project;
-- configure supported name, tag, and category filters;
-- submit one run for an idle project;
-- observe any queued, active, or retained terminal run;
-- cancel a selected queued run;
-- abort the active run when authorized;
-- rerun a project's previous request or previously failed test names after
-  acknowledgement;
-- show per-project failure details and command logs;
-- show diagnostic snapshots associated with command events;
-- load each project's stable latest result after an in-memory result is no
-  longer retained.
-
-The screen maintains only presentation state and event cursors. It does not
-own cleanup actions, generations, Busted objects, queue mutation, or another
-project's leases. Closing the screen leaves queued and active runs under their
-existing owners.
+The UI's features, interaction model, project navigation, command entry point,
+rendering, and UI-specific verification will be defined by a separate design.
 
 ## Result storage
 
@@ -799,7 +786,7 @@ Exactly one component owns result writes for an invocation:
 
 - for `dwarfspec run`, its external command owns queued, activation, and
   terminal writes;
-- for a run submitted from the in-game screen, the in-process service owns
+- for a direct in-process client, the service-side client integration owns
   those writes;
 - transport adapters never write results independently.
 
@@ -911,13 +898,14 @@ The implementation is expected to converge on boundaries similar to:
 | `dwarfspec.automation.host` | Busted execution, native state transitions, and cleanup. |
 | `dwarfspec.automation.output_handler` | Translation from Busted callbacks into service events. |
 | `dwarfspec.automation.result_store` | Per-project result schema and safe replacement writes. |
-| `dwarfspec.automation.ui` | In-game multi-project runner presentation and input handling. |
 | command adapters | `dfhack-run` argument and JSON transport translation. |
 | `dwarfspec.runner` | External registration, submission, polling, formatting, recovery, and exit classification. |
 | `dwarfspec.report` | Transport/result schema validation and external persistence support. |
 
 Exact filenames may change, but projects, scheduling, events, host execution,
-UI, transport, and persistence must remain separate responsibilities.
+transport, and persistence must remain separate responsibilities. UI modules
+belong to the separate runner UI implementation and consume only the public
+service boundary.
 
 ## Verification requirements
 
@@ -987,36 +975,27 @@ UI, transport, and persistence must remain separate responsibilities.
   native cleanup.
 - The external command streams formatted version 2 events through
   `dfhack-run` and returns the established exit codes.
-- Repeated `dwarfspec ui` calls register or focus multiple projects without
-  replacing other sessions.
-- The in-game screen displays registered, queued, active, blocked, and terminal
-  projects from the same service.
-- A screen-submitted run queues behind another project and later executes,
-  persists its own stable result, and confirms cleanup.
-- Closing the screen does not leak or cancel correctly owned queued or active
-  runs.
 - Timeout, interruption, explicit abort, assertion failure, host error, and
   cleanup failure retain their cleanup guarantees.
 
 ### Packaging and documentation contracts
 
-- All new project, scheduler, service, event, result-store, UI, and adapter
-  modules are included in the rockspec.
+- All new project, scheduler, service, event, result-store, and adapter modules
+  are included in the rockspec.
 - The source checkout and installed rock enforce the same single-runtime
   compatibility rules.
 - CLI help documents queue waiting, execution timeout, and exact result-file
   semantics.
 - User documentation describes concurrent project submission and serialized
   live execution explicitly.
-- User documentation describes the in-game runner as an in-process client, not
-  a localhost service.
+- Service documentation identifies the future in-game runner as a separate
+  in-process client, not part of the service implementation.
 - The default result directory is documented as generated and ignored.
 
 ## Deferred decisions
 
 The following details require separate focused designs:
 
-- the in-game screen layout and navigation model;
 - the component-tree snapshot schema and size limits;
 - whether command snapshots are embedded or referenced within the latest
   result;
