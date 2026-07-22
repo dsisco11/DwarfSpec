@@ -1,5 +1,20 @@
 ✔ Complete the deterministic DF-cell viewport work in `docs/viewport.todo`, including the mount option, 128 by 64 default, and `ds.viewport(width, height)` command. @done(26-07-21 04:57)
 ✔ Update `ds.get(...)` to accept and parse hierarchy paths for nested components. @done(26-07-21 04:57)
 ✘ Add new `ds.screenshot(...)` method to allow taking screenshots of mounted components under test. @cancelled(26-07-21 05:12)
-☐ Create a list of possible useful commands that can be added for non-ui (behavioral) game logic testing, such as `ds.get_state(...)`, `ds.set_state(...)`, `ds.spy(...)` (for DF game events), `ds.trigger_event(...)`, etc.
-☐ Update `ds.get(...)` to accept and parse simple CSS-like selector queries.
+
+Backend:
+    ☐ Evaluate migrating to an RPC server for the test runner to allow for more complex test scenarios, such as running tests in parallel or on remote devices.
+
+Frontend:
+    ☐ Create a test-runner UI for running and debugging tests, including a test results panel and test command logs.
+    ☐ test-runner UI should have the ability to re-run failed tests.
+    ☐ test-runner UI should have the ability to filter tests by tags or categories.
+    ☐ test-runner UI should have the ability to click through command log items and see the snapshots of the component tree at that point in time.
+
+Testing Features:
+    ☐ Refactor `ds.get()` so it is more like a Cypress get assertion, returning a `DSQuery` object that can be chained with `.should(...)` and `.find(...)` methods.
+        - get method will become more of an async query with a timeout.
+        - get method acts as an implicit assertion.
+        - allows for more complex queries and assertions on the component tree.
+    ☐ Update `ds.get(...)` to accept and parse simple CSS-like selector queries.
+    ☐ Evaluate possible useful commands that can be added for non-ui (behavioral) game logic testing, such as `ds.get_state(...)`, `ds.set_state(...)`, `ds.spy(...)` (for DF game events), `ds.trigger_event(...)`, etc.
