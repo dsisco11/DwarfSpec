@@ -929,7 +929,7 @@ The implementation is expected to converge on boundaries similar to:
 | command adapters | `dfhack-run` argument and JSON transport translation. |
 | `dwarfspec.runner` | External registration, submission, polling, formatting, recovery, and exit classification. |
 | `dwarfspec.runner_failure_kinds` | Immutable runner failure-classification identifiers. |
-| `dwarfspec.report` | Transport/result schema validation and external persistence support. |
+| `dwarfspec.report` | Native and service transport parsing and validation. |
 
 Exact filenames may change, but projects, scheduling, events, host execution,
 transport, and persistence must remain separate responsibilities. UI modules
@@ -1019,7 +1019,7 @@ service boundary.
   live execution explicitly.
 - Service documentation identifies the future in-game runner as a separate
   in-process client, not part of the service implementation.
-- The default result directory is documented as generated and ignored.
+- The default result path is documented as generated and ignored.
 
 ## Deferred decisions
 

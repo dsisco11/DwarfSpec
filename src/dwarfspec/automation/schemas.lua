@@ -43,7 +43,7 @@ local RESULT_STATE_METADATA = {
     [ResultState.HOST_ERROR]={terminal=true, identity_optional=true},
     [ResultState.TIMEOUT]={terminal=true, identity_optional=false},
     [ResultState.INTERRUPTED]={terminal=true, identity_optional=false},
-    [ResultState.PERSISTENCE_ERROR]={terminal=true, identity_optional=false},
+    [ResultState.PERSISTENCE_ERROR]={terminal=true, identity_optional=true},
 }
 
 ---Returns whether a value is a nonnegative integer.
@@ -365,6 +365,9 @@ function M.validate_result(value)
         'automation result terminal flag must be boolean')
     assert(value.terminal == state.terminal,
         'automation result terminal flag does not match state')
+    if value.exit_code ~= nil then
+        require_integer(value, 'exit_code', 'automation result')
+    end
     require_string(value, 'project_root', 'automation result')
     require_table(value, 'selection', 'automation result')
     require_table(value, 'events', 'automation result')
@@ -379,6 +382,18 @@ function M.validate_result(value)
             'automation result error must be a table')
         require_string(value.error, 'kind', 'automation result error')
         require_string(value.error, 'message', 'automation result error')
+    end
+    for _, field in ipairs({
+            'submitted_at', 'activated_at', 'finished_at'}) do
+        if value[field] ~= nil then
+            require_string(value, field, 'automation result')
+        end
+    end
+    if value.queue_wait_ms ~= nil then
+        require_integer(value, 'queue_wait_ms', 'automation result')
+    end
+    if value.host_report ~= nil then
+        require_table(value, 'host_report', 'automation result')
     end
 
     local identity_fields = {

@@ -240,6 +240,7 @@ describe('automation version 2 schemas and snapshots', function()
                 project_id='project-schema-1',
                 run_id='run-schema-1',
                 generation=3,
+                exit_code=0,
                 project_root='D:/Clients/Schema',
                 selection={identities={}},
                 events={},

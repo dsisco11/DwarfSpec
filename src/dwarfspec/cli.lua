@@ -4,6 +4,8 @@ local glob = require('dwarfspec.glob')
 local config = require('dwarfspec.config')
 local dotenv = require('dwarfspec.dotenv')
 local project = require('dwarfspec.project')
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+local result_store = require('dwarfspec.automation.result_store')
 local runner = require('dwarfspec.runner')
 
 local M = {
@@ -65,8 +67,9 @@ Options:
   --startup-delay-frames N     Frames before starting Busted (default: 1)
   --lease-timeout-ms MS        Lost-runner lease timeout (default: 5000)
   --lease-check-frames N       Lease check interval (default: 30)
-  --results PATH               JSON result directory relative to project root
-                               (default: .test-results/dwarfspec)
+  --results PATH               Exact JSON result file; relative paths are
+                               beneath the project root
+                               (default: tests/.test-results/dwarfspec/results.json)
   --no-results                 Do not persist a JSON run report
   --run-id ID                  Safe explicit run identifier
   --verbose                    Print resolved runner diagnostics
@@ -166,7 +169,7 @@ local function defaults(package_root)
         startup_delay_frames=1,
         lease_timeout_ms=5000,
         lease_check_frames=30,
-        result_directory='.test-results/dwarfspec',
+        result_path=result_store.default_relative_path,
         run_id=nil,
         verbose=false,
     }
@@ -215,7 +218,7 @@ local function parse_options(argv, start_index, package_root, allowed)
             elseif name == 'no-results' then
                 assert(inline_value == nil,
                     '--no-results does not take a value')
-                options.result_directory = false
+                options.result_path = false
             else
                 local value
                 value, index = option_value(argv, index, inline_value, name)
@@ -250,7 +253,7 @@ local function parse_options(argv, start_index, package_root, allowed)
                 elseif name == 'lease-check-frames' then
                     options.lease_check_frames = positive_integer(name, value)
                 elseif name == 'results' then
-                    options.result_directory = value
+                    options.result_path = value
                 elseif name == 'run-id' then
                     assert(value:match('^[%w_.-]+$'),
                         '--run-id contains unsupported characters')
@@ -293,6 +296,10 @@ local function resolve_project_environment(options, context)
     options.filesystem = filesystem
     options.project_root = project.resolve_root(options.project_root,
         context.current_directory or filesystem.currentdir(), filesystem)
+    options.result_policy = options.result_path == false and
+        ResultPolicy.NONE or ResultPolicy.FILE
+    options.result_path = result_store.resolve_path(options.project_root,
+        options.result_path, filesystem)
     local environment = context.environment or {getenv=os.getenv}
     local dotenv_values = dotenv.load(project.join(options.project_root,
         '.env'), filesystem, context.readfile)

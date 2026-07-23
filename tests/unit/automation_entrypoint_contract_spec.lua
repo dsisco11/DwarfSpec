@@ -111,13 +111,14 @@ describe('legacy automation entrypoint contract', function()
         assert.equals(4, run.options.lease_check_frames)
         assert.equals('tests/live/*.ds.lua', run.options.test_glob)
         assert.same({'live/shared_spec.ds.lua'}, run.options.specs)
+        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[1])
         assert.matches('DWARFSPEC protocol=1 ' ..
             'run_id=entrypoint-contract state=starting generation=1',
-            lines[1], 1, true)
-        assert.matches('DWARFSPEC_OWNER owner-', lines[2], 1, true)
-        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[3])
-        assert.equals('dwarfspec.run.v1', encoded[1].schema)
-        assert.equals(1, encoded[1].protocol)
+            lines[2], 1, true)
+        assert.matches('DWARFSPEC_OWNER owner-', lines[3], 1, true)
+        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[4])
+        assert.equals('dwarfspec.run.v1', encoded[2].schema)
+        assert.equals(1, encoded[2].protocol)
 
         lines = {}
         assert(loadfile(root .. '/tests/automation/support/abort.lua'))(
@@ -135,8 +136,8 @@ describe('legacy automation entrypoint contract', function()
             'run_id=entrypoint-contract state=aborted generation=1',
             lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[2])
-        assert.equals('dwarfspec.run.v1', encoded[2].schema)
-        assert.equals(1, encoded[2].protocol)
+        assert.equals('dwarfspec.run.v1', encoded[3].schema)
+        assert.equals(1, encoded[3].protocol)
 
         lines = {}
         assert(loadfile(root ..
@@ -147,6 +148,6 @@ describe('legacy automation entrypoint contract', function()
         assert.is_nil(registry.projects[run.project_id].outstanding_run_id)
         assert.matches('acknowledged=true', lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[2])
-        assert.equals('dwarfspec.run.v1', encoded[3].schema)
+        assert.equals('dwarfspec.run.v1', encoded[4].schema)
     end)
 end)

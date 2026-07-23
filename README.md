@@ -262,16 +262,18 @@ overrides and extension rules.
 The terminal shows each example as it starts and finishes. A run succeeds only
 when all Busted examples pass and DwarfSpec confirms cleanup.
 
-By default, the final DFHack-generated report is written to:
+By default, the latest invocation result is written to:
 
 ```text
-.test-results/dwarfspec/<run-id>.json
+tests/.test-results/dwarfspec/results.json
 ```
 
-Use `--results PATH` to choose another project-relative directory or
-`--no-results` to disable report files. The JSON document uses the
-`dwarfspec.run.v1` schema and includes totals, failures, run state, and cleanup
-status.
+Each invocation safely replaces that one project-local file; normal runs do
+not accumulate run-ID-named history. Use `--results PATH` to choose an exact
+file, with relative paths resolved beneath the project root, or `--no-results`
+to disable file writes. The `dwarfspec.result.v2` document includes the whole
+invocation state, classified errors, native host report, structured events,
+and cleanup status.
 
 See the [command-line reference](docs/command-line.md) for glob syntax, runner
 selection, abort behavior, and exit codes.

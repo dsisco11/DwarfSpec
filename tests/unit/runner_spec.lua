@@ -2,6 +2,7 @@
 
 local json = require('dkjson')
 local runner = require('dwarfspec.runner')
+local ResultState = require('dwarfspec.automation.result_states')
 local RunState = require('dwarfspec.automation.run_states')
 
 local RUN_STATE_TERMINAL = {
@@ -28,13 +29,16 @@ local function report_lines(run_id, state, cleanup_confirmed, output_count)
         'fixture state must be a RunState')
     local lines = {}
     if output_count then table.insert(lines, 'OUTPUT 1 progress line') end
-    table.insert(lines, 'DWARFSPEC_JSON ' .. json.encode({
+    local report = {
             schema='dwarfspec.run.v1',
             protocol=1,
+            service_instance_id='service-runner-fixture',
+            project_id='project-runner-fixture',
             run_id=run_id,
             state=state,
             terminal=RUN_STATE_TERMINAL[state],
             generation=1,
+            events={},
             counts={successes=state == RunState.PASSED and 1 or 0,
                 failures=state == RunState.FAILED and 1 or 0,
                 errors=0, pending=0},
@@ -44,7 +48,12 @@ local function report_lines(run_id, state, cleanup_confirmed, output_count)
             output_count=output_count or 0,
             cleanup_confirmed=cleanup_confirmed,
             failures={},
-        }))
+        }
+    if state ~= RunState.QUEUED and state ~= RunState.CANCELLED then
+        report.activated_at_ms = 101
+        report.queue_wait_ms = 1
+    end
+    table.insert(lines, 'DWARFSPEC_JSON ' .. json.encode(report))
     return lines
 end
 
@@ -60,6 +69,21 @@ local function transport_lines(arguments, run_id, state, cleanup_confirmed,
     local lines = report_lines(run_id, state, cleanup_confirmed, output_count)
     if arguments[3]:match('bootstrap%.lua$') then
         table.insert(lines, 1, 'DWARFSPEC_OWNER ' .. OWNER_CAPABILITY)
+    end
+    return lines
+end
+
+---Builds bootstrap output containing queued and activated observations.
+---@param run_id string
+---@return string[]
+local function bootstrap_sequence(run_id)
+    local lines = {
+        'DWARFSPEC_OWNER ' .. OWNER_CAPABILITY,
+    }
+    for _, state in ipairs({RunState.QUEUED, RunState.STARTING}) do
+        for _, line in ipairs(report_lines(run_id, state, false)) do
+            table.insert(lines, line)
+        end
     end
     return lines
 end
@@ -81,7 +105,7 @@ local function options(run_id)
         startup_delay_frames=1,
         lease_timeout_ms=5000,
         lease_check_frames=30,
-        result_directory=false,
+        result_path=false,
         run_id=run_id,
         verbose=false,
         system={monotime=function() return 0 end, sleep=function() end},
@@ -115,10 +139,14 @@ describe('DwarfSpec external runner', function()
 
         assert.equals(0, outcome.exit_code)
         assert.equals(RunState.PASSED, outcome.report.state)
+        assert.equals(ResultState.PASSED, outcome.result.state)
+        assert.equals('dwarfspec.result.v2', outcome.result.schema)
         assert.same({'progress line'}, emitted)
         assert.equals(4, calls)
         local test_glob_found = false
         local lua_module_root_found = false
+        local no_results_policy_found = false
+        local result_path_found = false
         for _, argument in ipairs(bootstrap_arguments) do
             if argument == '--test-glob=tests/automation/*.lua' then
                 test_glob_found = true
@@ -126,9 +154,62 @@ describe('DwarfSpec external runner', function()
             if argument:match('^%-%-lua%-module%-root=') then
                 lua_module_root_found = true
             end
+            if argument == '--result-policy=none' then
+                no_results_policy_found = true
+            end
+            if argument:match('^%-%-result%-path=') then
+                result_path_found = true
+            end
         end
         assert.is_true(test_glob_found)
         assert.is_true(lua_module_root_found)
+        assert.is_true(no_results_policy_found)
+        assert.is_false(result_path_found)
+    end)
+
+    it('persists queued, activation, and complete terminal documents in order',
+            function()
+        local states = {}
+        local result_paths = {}
+        local bootstrap_arguments_seen
+        local run_options = options('state-transitions')
+        run_options.result_path = 'D:/results with spaces/results.json'
+        run_options.result_store = {
+            write=function(path, result)
+                table.insert(result_paths, path)
+                table.insert(states, result.state)
+            end,
+        }
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                bootstrap_arguments_seen = arguments
+                return {exit_code=0,
+                    lines=bootstrap_sequence('state-transitions')}
+            end
+            return {exit_code=0,
+                lines=report_lines(
+                    'state-transitions', RunState.PASSED, true)}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(0, outcome.exit_code)
+        assert.same({
+            ResultState.QUEUED,
+            ResultState.STARTING,
+            ResultState.PASSED,
+            ResultState.PASSED,
+        }, states)
+        for _, path in ipairs(result_paths) do
+            assert.equals(run_options.result_path, path)
+        end
+        local bootstrap_text = table.concat(bootstrap_arguments_seen, '\n')
+        assert.is_not_nil(bootstrap_text:match('%-%-result%-policy=file'))
+        assert.is_not_nil(bootstrap_text:match(
+            '%-%-result%-path=D:/results with spaces/results.json'))
     end)
 
     it('propagates Busted failures without issuing a recovery abort', function()
@@ -147,6 +228,7 @@ describe('DwarfSpec external runner', function()
         local outcome = runner.run(run_options)
         assert.equals(runner.exit_codes[runner.failure_kinds.TEST],
             outcome.exit_code)
+        assert.equals(ResultState.FAILED, outcome.result.state)
         assert.matches('finished with state failed', outcome.error.message,
             1, true)
         assert.equals(3, #calls)
@@ -180,7 +262,59 @@ describe('DwarfSpec external runner', function()
             outcome.exit_code)
         assert.equals(RunState.ABORTED,
             outcome.report.state)
+        assert.equals(ResultState.TIMEOUT, outcome.result.state)
         assert.is_true(table.concat(calls, '\n'):match('abort%.lua') ~= nil)
+    end)
+
+    it('classifies a queued external timeout separately from active timeout',
+            function()
+        local clock = 0
+        local run_options = options('queue-timeout')
+        run_options.timeout_seconds = 1
+        run_options.now = function()
+            clock = clock + 1
+            return clock
+        end
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0,
+                    lines=transport_lines(arguments,
+                        'queue-timeout', RunState.QUEUED, false)}
+            end
+            return {exit_code=0,
+                lines=report_lines(
+                    'queue-timeout', RunState.ABORTED, true)}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(runner.exit_codes[runner.failure_kinds.TIMEOUT],
+            outcome.exit_code)
+        assert.equals(ResultState.QUEUE_TIMEOUT, outcome.result.state)
+    end)
+
+    it('persists cancellation before native execution without a host report',
+            function()
+        local run_options = options('cancelled-run')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            end
+            return {exit_code=0,
+                lines=transport_lines(arguments,
+                    'cancelled-run', RunState.CANCELLED, true)}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(runner.exit_codes[runner.failure_kinds.TEST],
+            outcome.exit_code)
+        assert.equals(ResultState.CANCELLED, outcome.result.state)
+        assert.is_nil(outcome.result.host_report)
     end)
 
     it('recovers after a malformed status report', function()
@@ -208,6 +342,7 @@ describe('DwarfSpec external runner', function()
             outcome.exit_code)
         assert.equals(RunState.ABORTED,
             outcome.report.state)
+        assert.equals(ResultState.HOST_ERROR, outcome.result.state)
         assert.matches('did not contain a DWARFSPEC_JSON report',
             outcome.error.message, 1, true)
     end)
@@ -220,6 +355,7 @@ describe('DwarfSpec external runner', function()
         local outcome = runner.run(run_options)
         assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
             outcome.exit_code)
+        assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state)
         assert.matches('DFHack is not running', outcome.error.message,
             1, true)
         assert.is_nil(outcome.report)
@@ -229,9 +365,19 @@ describe('DwarfSpec external runner', function()
             function()
         local run_options = options('missing-runner')
         run_options.runner = 'tests/framework/runner_path/missing'
+        local persisted
+        run_options.result_path = 'D:/results/dependency.json'
+        run_options.result_store = {
+            write=function(_, result)
+                persisted = result
+            end,
+        }
         local outcome = runner.run(run_options)
         assert.equals(runner.exit_codes[runner.failure_kinds.DEPENDENCY],
             outcome.exit_code)
+        assert.equals(ResultState.DEPENDENCY_ERROR, outcome.result.state)
+        assert.equals(ResultState.DEPENDENCY_ERROR, persisted.state)
+        assert.is_nil(persisted.run_id)
         assert.matches('configured DFHack runner was not found',
             outcome.error.message, 1, true)
     end)
@@ -245,6 +391,7 @@ describe('DwarfSpec external runner', function()
         local outcome = runner.run(run_options)
         assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
             outcome.exit_code)
+        assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state)
         assert.matches('could not contact DFHack through',
             outcome.error.message, 1, true)
     end)
@@ -271,6 +418,7 @@ describe('DwarfSpec external runner', function()
         assert.equals('DwarfSpec run interrupted', outcome.error.message)
         assert.equals(RunState.ABORTED,
             outcome.report.state)
+        assert.equals(ResultState.INTERRUPTED, outcome.result.state)
         assert.is_true(outcome.report.cleanup_confirmed)
     end)
 
@@ -288,6 +436,7 @@ describe('DwarfSpec external runner', function()
         local outcome = runner.run(run_options)
         assert.equals(runner.exit_codes[runner.failure_kinds.TEST],
             outcome.exit_code)
+        assert.equals(ResultState.FAILED, outcome.result.state)
         assert.matches('without confirmed cleanup', outcome.error.message,
             1, true)
     end)
@@ -328,6 +477,7 @@ describe('DwarfSpec external runner', function()
         local outcome = runner.run(run_options)
         assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
             outcome.exit_code)
+        assert.equals(ResultState.REGISTRATION_ERROR, outcome.result.state)
         assert.matches('bootstrap exited with 9', outcome.error.message,
             1, true)
         assert.equals(RunState.ABORTED,
@@ -358,6 +508,7 @@ describe('DwarfSpec external runner', function()
             1, true)
         assert.equals(RunState.ABORTED,
             outcome.report.state)
+        assert.equals(ResultState.HOST_ERROR, outcome.result.state)
     end)
 
     it('propagates a host-reported abort with its stable exit code', function()
@@ -374,6 +525,7 @@ describe('DwarfSpec external runner', function()
         local outcome = runner.run(run_options)
         assert.equals(runner.exit_codes[runner.failure_kinds.ABORTED],
             outcome.exit_code)
+        assert.equals(ResultState.ABORTED, outcome.result.state)
         assert.equals(RunState.ABORTED,
             outcome.report.state)
     end)
@@ -381,9 +533,11 @@ describe('DwarfSpec external runner', function()
     it('reports result persistence failures after a passing native run',
             function()
         local run_options = options('write-failure')
-        run_options.result_directory = require('lfs').currentdir() ..
-            '/tests/unit/runner_spec.lua'
+        local calls = {}
+        run_options.result_path = require('lfs').currentdir() ..
+            '/tests/unit/runner_spec.lua/results.json'
         run_options.invoke = function(_, arguments)
+            table.insert(calls, arguments[3])
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
@@ -395,22 +549,24 @@ describe('DwarfSpec external runner', function()
         local outcome = runner.run(run_options)
         assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
             outcome.exit_code)
+        assert.equals(ResultState.PERSISTENCE_ERROR, outcome.result.state)
         assert.matches('could not create directory', outcome.error.message,
             1, true)
+        assert.is_nil(table.concat(calls, '\n'):match('acknowledge%.lua'))
     end)
 
-    it('writes the version 1 report under a run-named directory result',
+    it('writes one stable version 2 latest-result file',
             function()
         local lfs = require('lfs')
         local result_directory = lfs.currentdir() ..
             '/tests/framework/command_project/' ..
-            '.test-results/legacy-result-contract'
-        local result_path = result_directory .. '/legacy-result.json'
+            '.test-results/stable-result-contract'
+        local result_path = result_directory .. '/results.json'
         os.remove(result_path)
         lfs.rmdir(result_directory)
 
-        local run_options = options('legacy-result')
-        run_options.result_directory = result_directory
+        local run_options = options('stable-result')
+        run_options.result_path = result_path
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
@@ -418,7 +574,7 @@ describe('DwarfSpec external runner', function()
             end
             return {exit_code=0,
                 lines=transport_lines(arguments,
-                    'legacy-result', RunState.PASSED, true)}
+                    'stable-result', RunState.PASSED, true)}
         end
 
         local outcome = runner.run(run_options)
@@ -431,8 +587,8 @@ describe('DwarfSpec external runner', function()
 
         assert.equals(runner.exit_codes[runner.failure_kinds.SUCCESS],
             outcome.exit_code)
-        assert.equals('dwarfspec.run.v1', persisted.schema)
-        assert.equals('legacy-result', persisted.run_id)
+        assert.equals('dwarfspec.result.v2', persisted.schema)
+        assert.equals('stable-result', persisted.run_id)
         assert.equals(RunState.PASSED, persisted.state)
     end)
 end)

@@ -871,7 +871,8 @@ function M.start(package_root, project_root, options)
     local project = service.register_project({
         project_root=project_root,
         normalized_configuration=options,
-        result_policy=ResultPolicy.NONE,
+        result_policy=options.result_policy or ResultPolicy.NONE,
+        result_path=options.result_path,
         client_compatibility={
             protocol=M.service_protocol_version,
             package_version=M.package_version,
@@ -902,7 +903,7 @@ function M.start(package_root, project_root, options)
     run.owner_capability = outcome.owner_capability
     initialize_runtime(run, registry.package_root,
         project.normalized_project_root, options)
-    M.activate_next()
+    if not options.defer_activation then M.activate_next() end
     return run
 end
 
@@ -1040,10 +1041,19 @@ function M.report_data(run)
     return {
         schema='dwarfspec.run.v1',
         protocol=run.protocol_version,
+        service_instance_id=run.service_instance_id,
+        project_id=run.project_id,
         run_id=run.run_id,
         state=run.state,
         terminal=M.is_terminal(run),
         generation=run.generation,
+        project_root=run.project_root,
+        selection=run.selection,
+        submitted_at_ms=run.submitted_at_ms,
+        activated_at_ms=run.activated_at_ms or JSON_NULL,
+        finished_at_ms=run.finished_at_ms or JSON_NULL,
+        queue_wait_ms=run.queue_wait_ms or JSON_NULL,
+        events=run.event_journal and run.event_journal.events or {},
         counts=run.counts,
         totals=run.totals,
         current_test=run.current_test or JSON_NULL,

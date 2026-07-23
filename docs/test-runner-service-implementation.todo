@@ -365,41 +365,54 @@ Phase 5 exit gate:
 Goal: implement the stable result-file contract and couple acknowledgement to
 successful persistence.
 
-☐ Add `dwarfspec.automation.result_store` for version 2 result construction,
-  validation, and safe replacement writes.
-☐ Change the default from a root-level result directory to the exact file
+✔ Add `dwarfspec.automation.result_store` for version 2 result construction,
+  validation, and safe replacement writes. @done(26-07-23 12:17)
+✔ Change the default from a root-level result directory to the exact file
   `<project-root>/tests/.test-results/dwarfspec/results.json`.
-☐ Change `--results PATH` from directory semantics to exact-file semantics and
+  @done(26-07-23 12:17)
+✔ Change `--results PATH` from directory semantics to exact-file semantics and
   resolve relative paths beneath the owning project root.
-☐ Keep `--no-results` as an explicit successful no-write policy.
-☐ Write the queued invocation document after successful admission.
-☐ Replace it with activation data when the executor starts the run.
-☐ Replace it with the complete terminal invocation result for passed, failed,
+  @done(26-07-23 12:17)
+✔ Keep `--no-results` as an explicit successful no-write policy.
+  @done(26-07-23 12:17)
+✔ Write the queued invocation document after successful admission.
+  @done(26-07-23 12:17)
+✔ Replace it with activation data when the executor starts the run.
+  @done(26-07-23 12:17)
+✔ Replace it with the complete terminal invocation result for passed, failed,
   aborted, cancelled, timeout, interruption, dependency, connection,
   registration, queue-timeout, transport, and host outcomes.
-☐ Use a temporary sibling only for safe replacement and remove it after
-  success or classified failure.
-☐ Never create run-ID-named result history by default.
-☐ Keep independent project result files writable concurrently.
-☐ Prevent two outstanding file-backed runs from owning one canonical explicit
-  result path.
-☐ Acknowledge terminal state only after the configured write succeeds or the
+  @done(26-07-23 12:17)
+✔ Use a temporary sibling only for safe replacement and remove it after
+  success or classified failure. @done(26-07-23 12:17)
+✔ Never create run-ID-named result history by default.
+  @done(26-07-23 12:17)
+✔ Keep independent project result files writable concurrently.
+  @done(26-07-23 12:17)
+✔ Prevent two outstanding file-backed runs from owning one canonical explicit
+  result path. @done(26-07-23 12:17)
+✔ Acknowledge terminal state only after the configured write succeeds or the
   no-results policy receives the complete terminal data.
-☐ On write failure, report the persistence failure, retain terminal service
-  state, and leave other projects schedulable.
-☐ Update `.gitignore`, fixtures, and documentation so the standard generated
+  @done(26-07-23 12:17)
+✔ On write failure, report the persistence failure, retain terminal service
+  state, and leave other projects schedulable. @done(26-07-23 12:17)
+✔ Update `.gitignore`, fixtures, and documentation so the standard generated
   directory is ignored recursively without checking generated run files in.
+  @done(26-07-23 12:17)
 
 Phase 6 exit gate:
 
-☐ Unit tests cover default, absolute, relative, space-containing, colliding,
+✔ Unit tests cover default, absolute, relative, space-containing, colliding,
   no-results, safe-replacement, and write-failure paths.
-☐ Two sequential runs from one project leave exactly one default result file
-  containing the second invocation.
-☐ Two projects leave independent default result files beneath their own roots.
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes.
-☐ The full live automation suite passes and leaves no unplanned result history.
+  @done(26-07-23 12:17)
+✔ Two sequential runs from one project leave exactly one default result file
+  containing the second invocation. @done(26-07-23 12:17)
+✔ Two projects leave independent default result files beneath their own roots.
+  @done(26-07-23 12:17)
+✔ Lua syntax and formatting checks pass. @done(26-07-23 12:17)
+✔ The full unit suite passes. @done(26-07-23 12:17)
+✔ The full live automation suite passes and leaves no unplanned result history.
+  @done(26-07-23 12:17)
 
 ## Phase 7: Version 2 `dfhack-run` transport and external CLI
 

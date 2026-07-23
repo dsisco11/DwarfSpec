@@ -1,5 +1,6 @@
 /.luarocks/
 /.package-*/
+# Generated DwarfSpec latest-result directories, including consumer fixtures.
 /.test-results/
 **/.test-results/
 *.rock

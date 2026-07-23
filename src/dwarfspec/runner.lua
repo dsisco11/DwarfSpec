@@ -3,6 +3,9 @@
 local process = require('dwarfspec.process')
 local project = require('dwarfspec.project')
 local reports = require('dwarfspec.report')
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+local ResultState = require('dwarfspec.automation.result_states')
+local result_store = require('dwarfspec.automation.result_store')
 local RunState = require('dwarfspec.automation.run_states')
 local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
 
@@ -145,6 +148,8 @@ end
 ---@param run_id string
 ---@return string[]
 local function bootstrap_arguments(options, run_id)
+    local result_policy = options.result_path and
+        ResultPolicy.FILE or ResultPolicy.NONE
     local arguments = {
         'lua', '-f', host_script(options, 'bootstrap'),
         run_id,
@@ -155,7 +160,11 @@ local function bootstrap_arguments(options, run_id)
         '--lease-check-frames=' .. tostring(options.lease_check_frames),
         '--test-glob=' .. tostring(options.test_glob or '*.ds.lua'),
         '--lua-module-root=' .. lua_module_root(options.package_root),
+        '--result-policy=' .. result_policy,
     }
+    if options.result_path then
+        table.insert(arguments, '--result-path=' .. options.result_path)
+    end
     append_values(arguments, 'filter', options.filters)
     append_values(arguments, 'filter-out', options.filter_out)
     append_values(arguments, 'name', options.names)
@@ -204,20 +213,105 @@ local function emit_progress(lines, emit)
     for _, line in ipairs(reports.progress(lines)) do emit(line) end
 end
 
----Writes the final DFHack-encoded run report when persistence is enabled.
+---Returns one UTC timestamp for a persisted state transition.
 ---@param options table
----@param run_id string
----@param native_json string|nil
-local function write_result(options, run_id, native_json)
-    if options.result_directory == false then return end
-    if not native_json then return end
-    local filesystem = options.filesystem or project.filesystem()
-    local directory = options.result_directory
-    if not project.is_absolute(directory) then
-        directory = project.join(options.project_root, directory)
+---@return string
+local function timestamp(options)
+    if options.timestamp then return options.timestamp() end
+    return os.date('!%Y-%m-%dT%H:%M:%SZ')
+end
+
+---Maps a classified runner failure to its persisted invocation state.
+---@param runner_error table
+---@param native_report table|nil
+---@param interrupted boolean
+---@param registration_failed boolean
+---@param queue_timeout boolean
+---@return DwarfSpecResultState
+local function failure_result_state(runner_error, native_report, interrupted,
+        registration_failed, queue_timeout)
+    if interrupted then return ResultState.INTERRUPTED end
+    if runner_error.kind == RunnerFailureKind.DEPENDENCY then
+        return ResultState.DEPENDENCY_ERROR
+    elseif runner_error.kind == RunnerFailureKind.CONNECTION then
+        return ResultState.CONNECTION_ERROR
+    elseif runner_error.kind == RunnerFailureKind.TIMEOUT then
+        if queue_timeout then return ResultState.QUEUE_TIMEOUT end
+        return ResultState.TIMEOUT
+    elseif registration_failed then
+        return ResultState.REGISTRATION_ERROR
+    elseif runner_error.kind == RunnerFailureKind.ABORTED and
+            native_report and native_report.state == RunState.ABORTED then
+        return ResultState.ABORTED
+    elseif runner_error.kind == RunnerFailureKind.TEST and native_report then
+        if native_report.state == RunState.PASSED then
+            return ResultState.FAILED
+        end
+        return native_report.state
     end
-    project.mkdir_p(directory, filesystem)
-    reports.write(project.join(directory, run_id .. '.json'), native_json)
+    return ResultState.HOST_ERROR
+end
+
+---Returns whether a native report has entered the executor.
+---@param report table
+---@return boolean
+local function entered_executor(report)
+    return report.state ~= RunState.QUEUED and
+        report.activated_at_ms ~= nil
+end
+
+---Constructs one persisted invocation view from current runner state.
+---@param options table
+---@param native_report table|nil
+---@param state DwarfSpecResultState
+---@param terminal boolean
+---@param exit_code integer|nil
+---@param submitted_at string
+---@param activated_at string|nil
+---@param finished_at string|nil
+---@param runner_error table|nil
+---@return table
+local function invocation_result(options, native_report, state, terminal,
+        exit_code, submitted_at, activated_at, finished_at, runner_error)
+    local identity = native_report and native_report.service_instance_id ~= nil
+    return result_store.build({
+        service_instance_id=identity and
+            native_report.service_instance_id or nil,
+        project_id=identity and native_report.project_id or nil,
+        run_id=identity and native_report.run_id or nil,
+        generation=identity and native_report.generation or nil,
+        state=state,
+        terminal=terminal,
+        exit_code=exit_code,
+        project_root=project.normalize(options.project_root),
+        selection={identities=options.identities},
+        submitted_at=submitted_at,
+        activated_at=activated_at,
+        finished_at=finished_at,
+        queue_wait_ms=native_report and native_report.queue_wait_ms or nil,
+        error=runner_error and {
+            kind=runner_error.kind,
+            message=runner_error.message,
+        } or nil,
+        host_report=native_report and entered_executor(native_report) and
+            native_report or nil,
+        events=native_report and native_report.events or {},
+    })
+end
+
+---Validates and optionally replaces the configured latest-result file.
+---@param options table
+---@param result table
+local function persist_result(options, result)
+    if not options.result_path then return end
+    local store = options.result_store or result_store
+    store.write(options.result_path, result, {
+        filesystem=options.filesystem,
+        open_file=options.open_result_file,
+        remove_file=options.remove_result_file,
+        replace_file=options.replace_result_file,
+        encode=options.encode_result,
+    })
 end
 
 ---Attempts recovery abort without replacing the original runner failure.
@@ -277,13 +371,43 @@ function M.run(options)
     local now = options.now or system.monotime
     local sleep = options.sleep or system.sleep
     local started_at = now()
+    local submitted_at = timestamp(options)
     local run_id = options.run_id or generate_run_id(started_at)
+    local configured_policy = options.result_policy or
+        (options.result_path == false and ResultPolicy.NONE or
+            ResultPolicy.FILE)
+    options.result_policy = configured_policy
+    options.result_path = configured_policy == ResultPolicy.FILE and
+        result_store.resolve_path(options.project_root, options.result_path,
+            options.filesystem) or nil
     local runner
     local native_report
     local native_json
+    local persisted_result
     local owner_capability
     local runner_error
     local bootstrap_attempted = false
+    local registration_failed = false
+    local interrupted = false
+    local queue_timeout = false
+    local activated_at
+
+    ---Persists one observed native state before continuing orchestration.
+    ---@param report table
+    local function persist_observation(report)
+        if activated_at == nil and entered_executor(report) then
+            activated_at = timestamp(options)
+        end
+        local observed = invocation_result(options, report, report.state,
+            report.terminal, report.terminal and
+                (report.state == RunState.PASSED and
+                    exit_codes[RunnerFailureKind.SUCCESS] or
+                    exit_codes[RunnerFailureKind.TEST]) or nil,
+            submitted_at, activated_at,
+            report.terminal and timestamp(options) or nil, nil)
+        persist_result(options, observed)
+        persisted_result = observed
+    end
 
     local ok, caught = xpcall(function()
         validate_dependencies(options)
@@ -302,17 +426,24 @@ function M.run(options)
         bootstrap_attempted = true
         local start = invoke(runner, bootstrap_arguments(options, run_id))
         if start.exit_code ~= 0 then
+            registration_failed = true
             fail(RunnerFailureKind.HOST,
                 'DwarfSpec bootstrap exited with ' .. start.exit_code)
         end
         owner_capability = reports.owner_capability(start.lines)
-        native_report, native_json = reports.parse(start.lines, run_id,
+        local bootstrap_reports = reports.parse_all(start.lines, run_id,
             options.decode_json)
+        for _, parsed in ipairs(bootstrap_reports) do
+            native_report = parsed.report
+            native_json = parsed.payload
+            persist_observation(native_report)
+        end
         local output_offset = native_report.output_count
         emit_progress(start.lines, emit)
 
         while not native_report.terminal do
             if now() - started_at >= options.timeout_seconds then
+                queue_timeout = native_report.state == RunState.QUEUED
                 fail(RunnerFailureKind.TIMEOUT,
                     ('DwarfSpec run timed out after %s seconds')
                         :format(options.timeout_seconds))
@@ -328,6 +459,7 @@ function M.run(options)
             end
             native_report, native_json = reports.parse(status.lines, run_id,
                 options.decode_json)
+            persist_observation(native_report)
             emit_progress(status.lines, emit)
             output_offset = native_report.output_count
         end
@@ -351,6 +483,7 @@ function M.run(options)
         if type(caught) == 'table' and caught.exit_code then
             runner_error = caught
         elseif clean_message(caught):lower():match('interrupt') then
+            interrupted = true
             runner_error = failure(RunnerFailureKind.ABORTED,
                 'DwarfSpec run interrupted')
         else
@@ -372,14 +505,29 @@ function M.run(options)
         end
     end
 
-    local write_ok, write_error = pcall(write_result, options, run_id,
-        native_json)
-    if not write_ok and not runner_error then
+    local final_exit_code = runner_error and runner_error.exit_code or
+        exit_codes[RunnerFailureKind.SUCCESS]
+    local final_state = runner_error and failure_result_state(
+        runner_error, native_report, interrupted, registration_failed,
+        queue_timeout) or native_report.state
+    local final_result = invocation_result(options, native_report,
+        final_state, true, final_exit_code, submitted_at, activated_at,
+        timestamp(options), runner_error)
+    local write_ok, write_error = pcall(persist_result, options, final_result)
+    if write_ok then
+        persisted_result = final_result
+    else
+        local persistence_message = 'could not write result report: ' ..
+            tostring(write_error)
+        if runner_error then
+            persistence_message = runner_error.message .. '; ' ..
+                persistence_message
+        end
         runner_error = failure(RunnerFailureKind.HOST,
-            tostring(write_error))
-    elseif not write_ok then
-        runner_error.message = runner_error.message ..
-            '; could not write result report: ' .. tostring(write_error)
+            persistence_message)
+        persisted_result = invocation_result(options, native_report,
+            ResultState.PERSISTENCE_ERROR, true, runner_error.exit_code,
+            submitted_at, activated_at, timestamp(options), runner_error)
     end
 
     if write_ok and native_report and native_report.terminal and
@@ -403,6 +551,8 @@ function M.run(options)
         run_id=run_id,
         runner=runner,
         report=native_report,
+        result=persisted_result,
+        result_path=options.result_path,
         error=runner_error,
     }
 end

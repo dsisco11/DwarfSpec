@@ -3,6 +3,7 @@
 local cli = require('dwarfspec.cli')
 local glob = require('dwarfspec.glob')
 local project = require('dwarfspec.project')
+local ResultPolicy = require('dwarfspec.automation.result_policies')
 
 ---Creates one append-only stream compatible with the CLI writer.
 ---@return table
@@ -155,6 +156,8 @@ describe('DwarfSpec CLI selection', function()
             '--test-glob=tests/automation/*.lua', '--no-results'}, context))
         assert.same({'tests/automation/a_spec.lua',
             'tests/automation/ordinary_spec.lua'}, invoked.identities)
+        assert.equals(ResultPolicy.NONE, invoked.result_policy)
+        assert.is_nil(invoked.result_path)
         assert.equals('tests/automation/a_spec.lua\n' ..
             'tests/automation/ordinary_spec.lua\n', listed)
     end)
@@ -199,6 +202,18 @@ describe('DwarfSpec CLI selection', function()
         assert.equals(0, cli.main({'list'}, context))
         assert.equals('tests/automation/integration/registered_spec.lua\n',
             output.text)
+    end)
+
+    it('resolves the default latest-result file beneath the project root',
+            function()
+        assert.equals(0, cli.main({
+            'run', '--test-glob=tests/automation/*.lua',
+        }, context))
+
+        assert.equals(ResultPolicy.FILE, invoked.result_policy)
+        assert.equals(
+            'project/tests/.test-results/dwarfspec/results.json',
+            invoked.result_path)
     end)
 
     it('loads project dotenv values without replacing process variables',
@@ -276,7 +291,7 @@ describe('DwarfSpec CLI selection', function()
         assert.same({'slow'}, invoked.exclude_tags)
         assert.equals(2, invoked.repeat_count)
         assert.equals(12.5, invoked.timeout_seconds)
-        assert.equals('result directory', invoked.result_directory)
+        assert.equals('project/result directory', invoked.result_path)
         assert.equals('quoted-run', invoked.run_id)
         assert.is_true(invoked.verbose)
     end)

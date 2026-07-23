@@ -55,8 +55,9 @@ end
 
 ---Parses the intentionally small bootstrap option surface.
 ---@param args string[]
+---@param ResultPolicy table
 ---@return table
-local function parse_options(args)
+local function parse_options(args, ResultPolicy)
     local options = {
         run_id=assert(args[1], 'run id argument is required'),
         filters={},
@@ -119,6 +120,15 @@ local function parse_options(args)
                 error('--lua-module-root must not be empty')
             end
             options.lua_module_root = value
+        elseif name == 'result-policy' then
+            if value ~= ResultPolicy.FILE and
+                    value ~= ResultPolicy.NONE then
+                error('--result-policy must be file or none')
+            end
+            options.result_policy = value
+        elseif name == 'result-path' then
+            if value == '' then error('--result-path must not be empty') end
+            options.result_path = value
         else
             error('unknown automation option: --' .. name)
         end
@@ -127,9 +137,13 @@ local function parse_options(args)
 end
 
 local root, lua_root = package_root()
-local options = parse_options(arguments)
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+local options = parse_options(arguments, ResultPolicy)
 local host = load_host(root, lua_root)
-local run = host.start(root, options.project_root, options)
+options.defer_activation = true
+local queued = host.start(root, options.project_root, options)
+print('DWARFSPEC_JSON ' .. host.encode_report(queued))
+local run = host.activate_next() or queued
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))
 print('DWARFSPEC_OWNER ' .. run.owner_capability)

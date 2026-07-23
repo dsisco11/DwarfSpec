@@ -45,7 +45,7 @@ dwarfspec version
 
 `run` supports project-root and discovery-glob configuration, Busted filters
 and tags, repeat count, external timeout and polling controls, lease controls,
-result-directory selection, explicit run ids, and verbose runner diagnostics.
+exact result-file selection, explicit run ids, and verbose runner diagnostics.
 `dwarfspec help run` prints the
 complete option list.
 
@@ -72,18 +72,24 @@ component API.
 
 ## Results and exit status
 
-The default result directory is `.test-results/dwarfspec/` beneath the
-consumer project. Once the native host has produced a report, the command
-writes its exact DFHack-encoded JSON payload to `<run-id>.json`. The payload
-has schema `dwarfspec.run.v1` and includes the run state, Busted totals,
-failure details, output position, and cleanup confirmation. Terminal runs that
-initialized the component driver also include `mount_cleanup_state`: whether
-lifecycle verification passed, counts of active owned screens and live
-subjects, the tracked-screen count, and whether the virtual pointer remained
-installed. The external command does not re-encode it. `--results PATH`
-selects another directory;
-`--no-results` disables persistence. Failures before a native report exists
-do not create a result file.
+The default result file is
+`tests/.test-results/dwarfspec/results.json` beneath the consumer project.
+Admission writes a `queued` invocation, activation replaces it with current
+execution data, and completion replaces it with the terminal result. Two
+sequential invocations therefore leave one file containing only the latest
+invocation.
+
+The document uses `dwarfspec.result.v2` and includes selection, classified
+state, timestamps, the native host report when execution started, the complete
+structured event journal, and cleanup confirmation. Dependency, connection,
+registration, timeout, interruption, transport, and host failures are written
+even when no native report is available.
+
+`--results PATH` names an exact file. Relative paths resolve beneath the
+project root; absolute paths remain explicit. `--no-results` validates the
+complete terminal result without writing a file. A terminal service generation
+is acknowledged only after its file replacement succeeds, or after successful
+no-results validation.
 
 Exit codes are stable:
 

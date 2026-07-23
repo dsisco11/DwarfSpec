@@ -59,6 +59,21 @@ local function validate_version_one(report, expected)
     return report
 end
 
+---Returns every machine-readable report payload in output order.
+---@param lines string[]
+---@return string[]
+local function report_payloads(lines)
+    local payloads = {}
+    for _, line in ipairs(lines) do
+        if line:sub(1, #PREFIX) == PREFIX then
+            table.insert(payloads, line:sub(#PREFIX + 1))
+        end
+    end
+    assert(#payloads > 0,
+        'DFHack output did not contain a DWARFSPEC_JSON report')
+    return payloads
+end
+
 ---Returns the one bootstrap-only owner capability from process output.
 ---@param lines string[]
 ---@return string
@@ -111,6 +126,28 @@ function M.parse(lines, expected, decoder)
     return M.validate(report, expected), payload
 end
 
+---Decodes every native DwarfSpec report in transport order.
+---@param lines string[]
+---@param expected table|string|nil
+---@param decoder function|nil
+---@return table[]
+function M.parse_all(lines, expected, decoder)
+    local decode = decoder or function(text)
+        return require('dkjson').decode(text, 1, nil)
+    end
+    local parsed = {}
+    for _, payload in ipairs(report_payloads(lines)) do
+        local report, _, decode_error = decode(payload)
+        assert(report, 'DFHack emitted invalid DwarfSpec JSON: ' ..
+            tostring(decode_error))
+        table.insert(parsed, {
+            report=M.validate(report, expected),
+            payload=payload,
+        })
+    end
+    return parsed
+end
+
 ---Validates one version 2 persisted result document.
 ---@param result table
 ---@return table
@@ -128,19 +165,6 @@ function M.progress(lines)
         if text then table.insert(progress, text) end
     end
     return progress
-end
-
----Writes one DFHack-encoded JSON report to a caller-selected result path.
----@param path string
----@param contents string
-function M.write(path, contents)
-    assert(type(contents) == 'string' and contents ~= '',
-        'native JSON report was not available for persistence')
-    local file, open_error = io.open(path, 'wb')
-    assert(file, 'could not open result report: ' .. tostring(open_error))
-    local ok, write_error = file:write(contents, '\n')
-    file:close()
-    assert(ok, 'could not write result report: ' .. tostring(write_error))
 end
 
 return M

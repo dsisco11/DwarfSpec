@@ -64,6 +64,8 @@ build = {
             "src/dwarfspec/automation/event_types.lua",
         ["dwarfspec.automation.result_policies"] =
             "src/dwarfspec/automation/result_policies.lua",
+        ["dwarfspec.automation.result_store"] =
+            "src/dwarfspec/automation/result_store.lua",
         ["dwarfspec.automation.result_states"] =
             "src/dwarfspec/automation/result_states.lua",
         ["dwarfspec.automation.run_states"] =
