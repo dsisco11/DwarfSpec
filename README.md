@@ -262,6 +262,13 @@ overrides and extension rules.
 The terminal shows each example as it starts and finishes. A run succeeds only
 when all Busted examples pass and DwarfSpec confirms cleanup.
 
+Concurrent projects can submit to the same DFHack instance. Runs wait in one
+FIFO and execute one at a time. `--queue-timeout` controls the wait for
+activation and defaults to `unlimited`; the existing `--timeout` begins only
+after activation. Cursor-based status polling renews the applicable queue or
+execution lease and formats the structured service events shown in the
+terminal.
+
 By default, the latest invocation result is written to:
 
 ```text

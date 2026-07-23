@@ -435,6 +435,35 @@ function M.events(run_id, after_sequence, dependencies)
     return events.read(run.event_journal, after_sequence)
 end
 
+---Returns one canonical version 2 run transport response after a cursor.
+---@param run_id string
+---@param after_sequence integer
+---@param dependencies table|nil
+---@return table
+function M.transport(run_id, after_sequence, dependencies)
+    local snapshot = M.snapshot(run_id, dependencies)
+    local journal = M.events(run_id, after_sequence, dependencies)
+    local response = {
+        schema='dwarfspec.transport.v2',
+        protocol=M.protocol_version,
+        service_instance_id=snapshot.service_instance_id,
+        project_id=snapshot.project_id,
+        run_id=snapshot.run_id,
+        generation=snapshot.generation,
+        snapshot=snapshot,
+        events=journal.events,
+        last_sequence=journal.last_sequence,
+    }
+    schemas.validate_transport(response, {
+        service_instance_id=response.service_instance_id,
+        project_id=response.project_id,
+        run_id=response.run_id,
+        generation=response.generation,
+        after_sequence=after_sequence,
+    })
+    return events.copy_json(response, 'automation transport')
+end
+
 ---Returns one detached immutable scheduler snapshot.
 ---@param dependencies table|nil
 ---@return table

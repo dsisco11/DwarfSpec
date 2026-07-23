@@ -1,4 +1,4 @@
--- Unit contracts for the text and JSON status reporter without DFHack I/O.
+-- Unit contracts for the cursor-based status transport adapter.
 
 describe('automation status formatting', function()
     local original_dfhack
@@ -85,7 +85,7 @@ describe('automation status formatting', function()
         }
     end
 
-    it('emits escaped progress and one canonical native JSON status report',
+    it('emits diagnostics and one canonical version 2 transport response',
             function()
         local run = host.start('.', '.', options())
         run.output_lines = {'line one\nline two'}
@@ -93,10 +93,9 @@ describe('automation status formatting', function()
         assert(loadfile('./tests/automation/support/status.lua'))('status-run',
             run.owner_capability, '0')
 
-        assert.matches('DWARFSPEC protocol=1 run_id=status-run ' ..
+        assert.matches('DWARFSPEC protocol=2 run_id=status-run ' ..
             'state=starting generation=1', lines[1], 1, true)
-        assert.equals('OUTPUT 1 line one\\nline two', lines[2])
-        assert.equals('DWARFSPEC_JSON {"native":true}', lines[3])
+        assert.equals('DWARFSPEC_JSON {"native":true}', lines[2])
         assert.equals(run, host.find('status-run'))
         host.abort('status-run', run.owner_capability)
     end)

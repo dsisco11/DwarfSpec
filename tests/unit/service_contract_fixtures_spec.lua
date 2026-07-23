@@ -198,13 +198,10 @@ describe('multi-project service contract fixtures', function()
     it('maps every existing exit code to version 2 states', function()
         local fixture = read_fixture('exit_code_map.json')
         local by_kind = {}
-        local by_code = {}
         for _, mapping in ipairs(fixture.mappings) do
             assert.is_nil(by_kind[mapping.kind])
-            assert.is_nil(by_code[mapping.exit_code])
             assert.is_true(#mapping.states >= 1)
             by_kind[mapping.kind] = mapping
-            by_code[mapping.exit_code] = mapping
         end
 
         local count = 0

@@ -419,40 +419,49 @@ Phase 6 exit gate:
 Goal: expose the service safely through the supported external transport and
 make the CLI queue-aware.
 
-☐ Replace bootstrap, status, cancel, abort, and acknowledgement scripts with
-  thin adapters over the public service API.
-☐ Add any required registration, event-read, discard, scheduler-status, and
+✔ Replace bootstrap, status, cancel, abort, and acknowledgement scripts with
+  thin adapters over the public service API. @done(26-07-23 12:43)
+✔ Add any required registration, event-read, discard, scheduler-status, and
   recovery adapter operations without placing policy in the adapters.
-☐ Emit one canonical `DWARFSPEC_JSON` line using
+  @done(26-07-23 12:43)
+✔ Emit one canonical `DWARFSPEC_JSON` line using
   `dwarfspec.transport.v2` from every adapter response.
-☐ Include and validate protocol, service instance, project, run, generation,
-  snapshot, events, and last-sequence fields.
-☐ Preserve formatted version 1 lines only as temporary diagnostics during the
-  migration and remove parser dependence on them.
-☐ Reject malformed, missing, mismatched, stale, duplicated, or discontinuous
-  transport data before exposing it to the runner.
-☐ Refactor `dwarfspec.runner` to register, submit idempotently, poll by cursor,
+  @done(26-07-23 12:43)
+✔ Include and validate protocol, service instance, project, run, generation,
+  snapshot, events, and last-sequence fields. @done(26-07-23 12:43)
+✔ Preserve formatted version 1 lines only as temporary diagnostics during the
+  migration and remove parser dependence on them. @done(26-07-23 12:43)
+✔ Reject malformed, missing, mismatched, stale, duplicated, or discontinuous
+  transport data before exposing it to the runner. @done(26-07-23 12:43)
+✔ Refactor `dwarfspec.runner` to register, submit idempotently, poll by cursor,
   renew the applicable lease, format events, persist results, and acknowledge.
-☐ Add `--queue-timeout` and start the existing `--timeout` budget only after
-  `run.activated`.
-☐ On interruption, queue timeout, execution timeout, or malformed transport,
+  @done(26-07-23 12:43)
+✔ Add `--queue-timeout` and start the existing `--timeout` budget only after
+  `run.activated`. @done(26-07-23 12:43)
+✔ On interruption, queue timeout, execution timeout, or malformed transport,
   choose cancel or abort from the authoritative current state.
-☐ Preserve the original failure when recovery cancel or abort also fails.
-☐ Preserve established CLI command names and exit-code meanings while adding
+  @done(26-07-23 12:43)
+✔ Preserve the original failure when recovery cancel or abort also fails.
+  @done(26-07-23 12:43)
+✔ Preserve established CLI command names and exit-code meanings while adding
   distinct queue-cancel and queue-timeout classifications.
-☐ Update CLI help for concurrent project waiting, execution timeout, lease
+  @done(26-07-23 12:43)
+✔ Update CLI help for concurrent project waiting, execution timeout, lease
   behavior, exact result-file semantics, and no-results behavior.
+  @done(26-07-23 12:43)
 
 Phase 7 exit gate:
 
-☐ Runner, report, process, CLI, and adapter unit tests cover every response and
-  recovery classification.
-☐ Unit tests prove queue time never consumes execution timeout.
-☐ Unit tests prove retry after an ambiguous submit does not enqueue a duplicate
-  run.
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes.
-☐ The full live automation suite passes through version 2 transport.
+✔ Runner, report, process, CLI, and adapter unit tests cover every response and
+  recovery classification. @done(26-07-23 12:43)
+✔ Unit tests prove queue time never consumes execution timeout.
+  @done(26-07-23 12:43)
+✔ Unit tests prove retry after an ambiguous submit does not enqueue a duplicate
+  run. @done(26-07-23 12:43)
+✔ Lua syntax and formatting checks pass. @done(26-07-23 12:43)
+✔ The full unit suite passes. @done(26-07-23 12:43)
+✔ The full live automation suite passes through version 2 transport.
+  @done(26-07-23 12:43)
 
 ## Phase 8: Multi-project live hardening
 
@@ -551,7 +560,7 @@ one evidence category as a substitute for another.
 | 4 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 111 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 201 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; 21 successes/0 failures/0 errors/0 pending through service v2, cleanup confirmed | not required; authoritative host, cleanup, and coroutine scheduler module contracts passed | Run `dwarfspec-112644906-02f5f9ce`, generation 7; 114 structured events; 32 command pairs; exact module-path restoration; zero pending cleanup, mounts, subjects, waits, timeouts, schedulers, or pointers; executor idle and not quarantined; native compatibility result `.test-results/dwarfspec/dwarfspec-112644906-02f5f9ce.json` |
 | 5 | pending | pending | pending | not required | |
 | 6 | pending | pending | pending | not required | |
-| 7 | pending | pending | pending | not required | |
+| 7 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 120 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 224 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; 21 successes/0 failures/0 errors/0 pending through `dwarfspec.transport.v2`, cleanup confirmed | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; all transport adapters present in module-list contract | Stable `tests/.test-results/dwarfspec/results.json`; `dwarfspec.result.v2`, 114 contiguous events from `run.queued` through `run.finished`, `dwarfspec.run.v2` host snapshot |
 | 8 | pending | pending | pending | not required | |
 | 9 | pending | pending | pending | pending | |
 
@@ -678,6 +687,46 @@ Phase 4 service-host evidence:
   disabled, zero pending cleanup actions, no coroutine, scheduler, wait, lease
   timer, scheduled timer, mount, subject, or pointer, and exact project module
   path restoration.
+
+Phase 7 transport and CLI evidence:
+
+- `dwarfspec.automation.service.transport` constructs detached
+  `dwarfspec.transport.v2` envelopes from one immutable snapshot and one
+  cursor read, then validates the complete identity and sequence contract
+  before returning it.
+- Bootstrap, status, cancel, abort, acknowledgement, event-read, discard,
+  scheduler-status, and recovery adapters emit exactly one canonical
+  `DWARFSPEC_JSON` response. Bootstrap owns registration and idempotent
+  submission; status owns lease renewal and cursor reads; adapters contain no
+  runner timeout, persistence, or presentation policy.
+- `dwarfspec.report.parse_transport` rejects missing or duplicated canonical
+  lines, invalid JSON, unknown schemas or protocols, identity mismatches,
+  stale generations, snapshot mismatches, and discontinuous event sequences.
+  The external runner uses only this version 2 reader; version 1 parsing
+  remains an isolated transition path.
+- `runner_spec.lua` covers passing, failed, aborted, cancelled, connection,
+  dependency, registration, queue-timeout, execution-timeout, interruption,
+  malformed transport, status failure, persistence failure, acknowledgement,
+  active and queued recovery, recovery failure, structured event persistence,
+  and stable result-file behavior.
+- The runner timeout test advances its synthetic clock by 100 seconds while
+  queued with a one-second execution timeout, then activates and passes. The
+  ambiguous-submit test loses the first response and proves the retry carries
+  byte-identical bootstrap arguments; scheduler coverage proves the matching
+  request key returns the same run and capability without another queue entry.
+- `automation_entrypoint_contract_spec.lua` executes every mutation and
+  observation adapter against one real in-memory host registry.
+  `automation_service_scheduler_spec.lua`, `automation_schemas_spec.lua`, and
+  `process_report_spec.lua` cover detached cursor reads, stale cursors,
+  identity continuity, one-line framing, and transitional-reader isolation.
+- The immutable event, lifecycle, result, test, persistence, scheduler,
+  ownership, and runner classifications all use the shared
+  `immutable_enum.define(values)` constructor with duplicate-value rejection,
+  protected metatables, ordinary iteration, and mutation rejection.
+- The final live source run passed all 21 examples through version 2 transport.
+  Its stable result contained one `dwarfspec.run.v2` host snapshot and 114
+  contiguous single-generation events from `run.queued` through
+  `run.finished`, with cleanup confirmed.
 
 ## Final acceptance
 

@@ -97,6 +97,13 @@ build = {
             "tests/automation/support/acknowledge.lua",
         ["dwarfspec.automation.abort"] = "tests/automation/support/abort.lua",
         ["dwarfspec.automation.bootstrap"] = "tests/automation/support/bootstrap.lua",
+        ["dwarfspec.automation.cancel"] = "tests/automation/support/cancel.lua",
+        ["dwarfspec.automation.discard"] = "tests/automation/support/discard.lua",
+        ["dwarfspec.automation.event_read"] =
+            "tests/automation/support/events.lua",
+        ["dwarfspec.automation.recover"] = "tests/automation/support/recover.lua",
+        ["dwarfspec.automation.scheduler_status"] =
+            "tests/automation/support/scheduler_status.lua",
         ["dwarfspec.automation.probe"] = "tests/automation/support/probe.lua",
         ["dwarfspec.automation.status"] = "tests/automation/support/status.lua",
         ["dwarfspec.automation.diagnostics"] = "tests/automation/support/diagnostics.lua",

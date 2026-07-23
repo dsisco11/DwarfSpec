@@ -2,6 +2,7 @@
 
 local json = require('dkjson')
 local runner = require('dwarfspec.runner')
+local EventType = require('dwarfspec.automation.event_types')
 local ResultState = require('dwarfspec.automation.result_states')
 local RunState = require('dwarfspec.automation.run_states')
 
@@ -18,43 +19,85 @@ local RUN_STATE_TERMINAL = {
 
 local OWNER_CAPABILITY = 'runner-owner-capability-000000000001'
 
----Builds one canonical native report output line.
+---Returns the cursor argument used by one transport adapter invocation.
+---@param arguments string[]
+---@return integer
+local function transport_cursor(arguments)
+    local script = arguments[3]
+    if script:match('acknowledge%.lua$') then
+        return tonumber(arguments[7]) or 0
+    end
+    return tonumber(arguments[6]) or 0
+end
+
+---Builds one canonical version 2 transport output line.
 ---@param run_id string
 ---@param state DwarfSpecRunState
 ---@param cleanup_confirmed boolean
 ---@param output_count integer|nil
+---@param after_sequence integer|nil
 ---@return string[]
-local function report_lines(run_id, state, cleanup_confirmed, output_count)
+local function report_lines(run_id, state, cleanup_confirmed, output_count,
+        after_sequence)
     assert(RUN_STATE_TERMINAL[state] ~= nil,
         'fixture state must be a RunState')
-    local lines = {}
-    if output_count then table.insert(lines, 'OUTPUT 1 progress line') end
-    local report = {
-            schema='dwarfspec.run.v1',
-            protocol=1,
+    after_sequence = after_sequence or 0
+    local transport_events = {}
+    if output_count then
+        table.insert(transport_events, {
+            schema='dwarfspec.event.v1',
             service_instance_id='service-runner-fixture',
             project_id='project-runner-fixture',
             run_id=run_id,
-            state=state,
-            terminal=RUN_STATE_TERMINAL[state],
             generation=1,
-            events={},
-            counts={successes=state == RunState.PASSED and 1 or 0,
-                failures=state == RunState.FAILED and 1 or 0,
-                errors=0, pending=0},
-            totals={successes=state == RunState.PASSED and 1 or 0,
-                failures=state == RunState.FAILED and 1 or 0,
-                errors=0, pending=0},
-            output_count=output_count or 0,
-            cleanup_confirmed=cleanup_confirmed,
-            failures={},
-        }
-    if state ~= RunState.QUEUED and state ~= RunState.CANCELLED then
-        report.activated_at_ms = 101
-        report.queue_wait_ms = 1
+            sequence=after_sequence + 1,
+            type=EventType.TEST_STARTED,
+            elapsed_ms=1,
+            payload={name='progress line'},
+        })
     end
-    table.insert(lines, 'DWARFSPEC_JSON ' .. json.encode(report))
-    return lines
+    local last_sequence = after_sequence + #transport_events
+    local snapshot = {
+        schema='dwarfspec.run.v2',
+        protocol_version=2,
+        service_instance_id='service-runner-fixture',
+        project_id='project-runner-fixture',
+        run_id=run_id,
+        state=state,
+        terminal=RUN_STATE_TERMINAL[state],
+        generation=1,
+        submitted_at_ms=100,
+        last_sequence=last_sequence,
+        owner_kind='external',
+        counts={successes=state == RunState.PASSED and 1 or 0,
+            failures=state == RunState.FAILED and 1 or 0,
+            errors=0, pending=0},
+        totals={successes=state == RunState.PASSED and 1 or 0,
+            failures=state == RunState.FAILED and 1 or 0,
+            errors=0, pending=0},
+        queue_lease={active=state == RunState.QUEUED},
+        execution_lease={active=not RUN_STATE_TERMINAL[state] and
+            state ~= RunState.QUEUED},
+        cleanup_confirmed=cleanup_confirmed,
+        mount_cleanup_verified=cleanup_confirmed,
+        failures={},
+    }
+    if state ~= RunState.QUEUED and state ~= RunState.CANCELLED then
+        snapshot.activated_at_ms = 101
+        snapshot.queue_wait_ms = 1
+    end
+    local transport = {
+        schema='dwarfspec.transport.v2',
+        protocol=2,
+        service_instance_id=snapshot.service_instance_id,
+        project_id=snapshot.project_id,
+        run_id=run_id,
+        generation=1,
+        snapshot=snapshot,
+        events=transport_events,
+        last_sequence=last_sequence,
+    }
+    return {'DWARFSPEC_JSON ' .. json.encode(transport)}
 end
 
 ---Builds transport output, including the bootstrap-only owner capability.
@@ -66,25 +109,21 @@ end
 ---@return string[]
 local function transport_lines(arguments, run_id, state, cleanup_confirmed,
         output_count)
-    local lines = report_lines(run_id, state, cleanup_confirmed, output_count)
+    local after_sequence = transport_cursor(arguments)
+    local lines = report_lines(run_id, state, cleanup_confirmed, output_count,
+        after_sequence)
     if arguments[3]:match('bootstrap%.lua$') then
         table.insert(lines, 1, 'DWARFSPEC_OWNER ' .. OWNER_CAPABILITY)
     end
     return lines
 end
 
----Builds bootstrap output containing queued and activated observations.
+---Builds one queued bootstrap transport response.
 ---@param run_id string
 ---@return string[]
 local function bootstrap_sequence(run_id)
-    local lines = {
-        'DWARFSPEC_OWNER ' .. OWNER_CAPABILITY,
-    }
-    for _, state in ipairs({RunState.QUEUED, RunState.STARTING}) do
-        for _, line in ipairs(report_lines(run_id, state, false)) do
-            table.insert(lines, line)
-        end
-    end
+    local lines = report_lines(run_id, RunState.QUEUED, false)
+    table.insert(lines, 1, 'DWARFSPEC_OWNER ' .. OWNER_CAPABILITY)
     return lines
 end
 
@@ -101,6 +140,7 @@ local function options(run_id)
         filters={}, filter_out={}, names={}, tags={}, exclude_tags={},
         repeat_count=1,
         timeout_seconds=30,
+        queue_timeout_seconds=nil,
         poll_interval_ms=1,
         startup_delay_frames=1,
         lease_timeout_ms=5000,
@@ -141,7 +181,8 @@ describe('DwarfSpec external runner', function()
         assert.equals(RunState.PASSED, outcome.report.state)
         assert.equals(ResultState.PASSED, outcome.result.state)
         assert.equals('dwarfspec.result.v2', outcome.result.schema)
-        assert.same({'progress line'}, emitted)
+        assert.same({'START progress line'}, emitted)
+        assert.equals(EventType.TEST_STARTED, outcome.result.events[1].type)
         assert.equals(4, calls)
         local test_glob_found = false
         local lua_module_root_found = false
@@ -172,6 +213,7 @@ describe('DwarfSpec external runner', function()
         local states = {}
         local result_paths = {}
         local bootstrap_arguments_seen
+        local status_calls = 0
         local run_options = options('state-transitions')
         run_options.result_path = 'D:/results with spaces/results.json'
         run_options.result_store = {
@@ -188,6 +230,14 @@ describe('DwarfSpec external runner', function()
                 bootstrap_arguments_seen = arguments
                 return {exit_code=0,
                     lines=bootstrap_sequence('state-transitions')}
+            elseif arguments[3]:match('status%.lua$') then
+                status_calls = status_calls + 1
+                local state = status_calls == 1 and RunState.STARTING or
+                    RunState.PASSED
+                return {exit_code=0,
+                    lines=transport_lines(arguments,
+                        'state-transitions', state,
+                        state == RunState.PASSED)}
             end
             return {exit_code=0,
                 lines=report_lines(
@@ -263,14 +313,14 @@ describe('DwarfSpec external runner', function()
         assert.equals(RunState.ABORTED,
             outcome.report.state)
         assert.equals(ResultState.TIMEOUT, outcome.result.state)
-        assert.is_true(table.concat(calls, '\n'):match('abort%.lua') ~= nil)
+        assert.is_true(table.concat(calls, '\n'):match('recover%.lua') ~= nil)
     end)
 
     it('classifies a queued external timeout separately from active timeout',
             function()
         local clock = 0
         local run_options = options('queue-timeout')
-        run_options.timeout_seconds = 1
+        run_options.queue_timeout_seconds = 1
         run_options.now = function()
             clock = clock + 1
             return clock
@@ -285,8 +335,8 @@ describe('DwarfSpec external runner', function()
                         'queue-timeout', RunState.QUEUED, false)}
             end
             return {exit_code=0,
-                lines=report_lines(
-                    'queue-timeout', RunState.ABORTED, true)}
+                lines=transport_lines(arguments,
+                    'queue-timeout', RunState.CANCELLED, true)}
         end
 
         local outcome = runner.run(run_options)
@@ -294,6 +344,78 @@ describe('DwarfSpec external runner', function()
         assert.equals(runner.exit_codes[runner.failure_kinds.TIMEOUT],
             outcome.exit_code)
         assert.equals(ResultState.QUEUE_TIMEOUT, outcome.result.state)
+    end)
+
+    it('does not consume execution timeout while waiting in the queue',
+            function()
+        local clock = 0
+        local status_calls = 0
+        local run_options = options('separate-timeout-budgets')
+        run_options.timeout_seconds = 1
+        run_options.now = function() return clock end
+        run_options.sleep = function()
+            if status_calls == 0 then
+                clock = clock + 100
+            else
+                clock = clock + 0.1
+            end
+        end
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    'separate-timeout-budgets', RunState.QUEUED, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                status_calls = status_calls + 1
+                local state = status_calls == 1 and RunState.STARTING or
+                    RunState.PASSED
+                return {exit_code=0, lines=transport_lines(arguments,
+                    'separate-timeout-budgets', state,
+                    state == RunState.PASSED)}
+            end
+            return {exit_code=0, lines=transport_lines(arguments,
+                'separate-timeout-budgets', RunState.PASSED, true)}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(runner.exit_codes[runner.failure_kinds.SUCCESS],
+            outcome.exit_code)
+        assert.equals(ResultState.PASSED, outcome.result.state)
+        assert.equals(2, status_calls)
+    end)
+
+    it('retries an ambiguous submit with the identical idempotency input',
+            function()
+        local bootstrap_calls = {}
+        local run_options = options('ambiguous-submit')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                table.insert(bootstrap_calls, table.concat(arguments, '\0'))
+                if #bootstrap_calls == 1 then
+                    error('bridge response was lost after submission')
+                end
+                return {exit_code=0, lines=transport_lines(arguments,
+                    'ambiguous-submit', RunState.QUEUED, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    'ambiguous-submit', RunState.PASSED, true)}
+            end
+            return {exit_code=0, lines=transport_lines(arguments,
+                'ambiguous-submit', RunState.PASSED, true)}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(runner.exit_codes[runner.failure_kinds.SUCCESS],
+            outcome.exit_code)
+        assert.equals(2, #bootstrap_calls)
+        assert.equals(bootstrap_calls[1], bootstrap_calls[2])
     end)
 
     it('persists cancellation before native execution without a host report',
@@ -311,7 +433,7 @@ describe('DwarfSpec external runner', function()
 
         local outcome = runner.run(run_options)
 
-        assert.equals(runner.exit_codes[runner.failure_kinds.TEST],
+        assert.equals(runner.exit_codes[runner.failure_kinds.CANCELLED],
             outcome.exit_code)
         assert.equals(ResultState.CANCELLED, outcome.result.state)
         assert.is_nil(outcome.result.host_report)
@@ -344,6 +466,32 @@ describe('DwarfSpec external runner', function()
             outcome.report.state)
         assert.equals(ResultState.HOST_ERROR, outcome.result.state)
         assert.matches('did not contain a DWARFSPEC_JSON report',
+            outcome.error.message, 1, true)
+    end)
+
+    it('preserves malformed transport as primary when recovery also fails',
+            function()
+        local run_options = options('double-failure')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    'double-failure', RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                return {exit_code=0, lines={'malformed status'}}
+            end
+            return {exit_code=13, lines={'recovery unavailable'}}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
+            outcome.exit_code)
+        assert.matches('did not contain a DWARFSPEC_JSON report',
+            outcome.error.message, 1, true)
+        assert.matches('recovery failed: recovery exited with 13',
             outcome.error.message, 1, true)
     end)
 

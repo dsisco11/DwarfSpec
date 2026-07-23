@@ -957,6 +957,24 @@ function M.poll(run_id, owner_capability)
     return run
 end
 
+---Returns canonical transport data after one event sequence cursor.
+---@param run_id string
+---@param after_sequence integer
+---@return table
+function M.transport(run_id, after_sequence)
+    return service.transport(run_id, after_sequence, service_dependencies())
+end
+
+---Renews an owned run and returns canonical cursor-based transport data.
+---@param run_id string
+---@param owner_capability string
+---@param after_sequence integer
+---@return table
+function M.poll_transport(run_id, owner_capability, after_sequence)
+    M.poll(run_id, owner_capability)
+    return M.transport(run_id, after_sequence)
+end
+
 ---Acknowledges successful persistence for one exact terminal owner.
 ---@param run_id string
 ---@param generation integer
@@ -973,6 +991,65 @@ function M.acknowledge(run_id, generation, owner_capability)
     }
     service.acknowledge(request, service_dependencies())
     return run
+end
+
+---Cancels one exact capability-owned queued run.
+---@param run_id string
+---@param owner_capability string
+---@param reason string|nil
+---@return table
+function M.cancel(run_id, owner_capability, reason)
+    local run = M.observe(run_id)
+    assert(run.state == RunState.QUEUED,
+        'only a queued automation run can be cancelled')
+    local request = owner_request(run, owner_capability)
+    request.reason = reason or 'by request'
+    service.cancel(request, service_dependencies())
+    table.insert(run.output_lines, 'CANCELLED ' .. request.reason)
+    run.terminal_observed = false
+    return run
+end
+
+---Recovers one owned nonterminal run from its authoritative current state.
+---@param run_id string
+---@param owner_capability string
+---@param reason string|nil
+---@return table
+function M.recover(run_id, owner_capability, reason)
+    local run = M.observe(run_id)
+    if M.is_terminal(run) then return run end
+    if run.state == RunState.QUEUED then
+        return M.cancel(run_id, owner_capability,
+            reason or 'external runner recovery')
+    end
+    local request = owner_request(run, owner_capability)
+    request.reason = reason or 'external runner recovery'
+    service.abort(request, service_dependencies())
+    return run
+end
+
+---Explicitly discards one exact terminal result through local authority.
+---@param run_id string
+---@param generation integer
+---@param reason string
+---@return table
+function M.discard(run_id, generation, reason)
+    local run = M.observe(run_id)
+    service.discard({
+        service_instance_id=run.service_instance_id,
+        project_id=run.project_id,
+        run_id=run.run_id,
+        generation=generation,
+        authority={local_dfhack_run=true},
+        reason=reason,
+    }, service_dependencies())
+    return run
+end
+
+---Returns the current canonical scheduler snapshot.
+---@return table
+function M.scheduler_snapshot()
+    return service.scheduler_snapshot(service_dependencies())
 end
 
 ---Aborts an owned queued or suspended run and invalidates its callbacks.
@@ -1024,6 +1101,16 @@ function M.abort(run_id, owner_capability)
 end
 
 local JSON_NULL = '\0'
+
+---Encodes one canonical transport response with DFHack JSON.
+---@param transport table
+---@return string
+function M.encode_transport(transport)
+    return require('json').encode(transport, {
+        pretty=false,
+        null=JSON_NULL,
+    })
+end
 
 ---Builds one JSON-safe machine-readable live automation report.
 ---@param run table

@@ -1,8 +1,10 @@
--- Reports one active or retained in-process automation run.
+-- Polls one active or retained run through cursor-based transport.
 
-local run_id, owner_capability, output_offset_text = ...
+local run_id, owner_capability, after_sequence_text = ...
 assert(run_id, 'run id argument is required')
 assert(owner_capability, 'owner capability argument is required')
+local after_sequence = assert(tonumber(after_sequence_text),
+    'event cursor argument must be numeric')
 
 ---Configures pure-Lua module lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
@@ -44,42 +46,12 @@ local function load_host(root, lua_root)
         '/src/dwarfspec/automation/host.lua'))()
 end
 
----Escapes one status value onto a stable single output line.
----@param value any
----@return string
-local function escape(value)
-    return tostring(value):gsub('\\', '\\\\'):gsub('\r', '\\r')
-        :gsub('\n', '\\n')
-end
-
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local poll_ok, run = pcall(host.poll, run_id, owner_capability)
-if not poll_ok then qerror(run) end
-
-print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d ' ..
-    'successes=%d failures=%d errors=%d pending=%d ' ..
-    'total_successes=%d total_failures=%d total_errors=%d total_pending=%d ' ..
-    'output_count=%d cleanup_confirmed=%s')
-    :format(run.protocol_version, run.run_id, run.state, run.generation,
-        run.counts.successes, run.counts.failures, run.counts.errors,
-        run.counts.pending, run.totals.successes, run.totals.failures,
-        run.totals.errors, run.totals.pending, #run.output_lines,
-        tostring(run.cleanup_confirmed)))
-
-local output_offset = tonumber(output_offset_text) or #run.output_lines
-for index = output_offset + 1, #run.output_lines do
-    print(('OUTPUT %d %s'):format(index, escape(run.output_lines[index])))
-end
-if host.is_terminal(run) then
-    for index, detail in ipairs(run.failure_details) do
-        print(('DETAIL %d kind=%s name=%s message=%s trace=%s'):format(
-            index, escape(detail.kind), escape(detail.name),
-            escape(detail.message), escape(detail.trace or '')))
-    end
-    if run.host_error then
-        print('HOST_ERROR ' .. escape(run.host_error))
-        print('HOST_TRACE ' .. escape(run.host_trace or ''))
-    end
-end
-print('DWARFSPEC_JSON ' .. host.encode_report(run))
+local poll_ok, transport = pcall(host.poll_transport, run_id,
+    owner_capability, after_sequence)
+if not poll_ok then qerror(transport) end
+print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
+    :format(transport.protocol, transport.run_id,
+        transport.snapshot.state, transport.generation))
+print('DWARFSPEC_JSON ' .. host.encode_transport(transport))

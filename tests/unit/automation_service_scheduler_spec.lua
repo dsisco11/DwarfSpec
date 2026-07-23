@@ -160,6 +160,38 @@ local function assert_executor_invariant(dependencies)
 end
 
 describe('multi-project automation service scheduler', function()
+    it('builds canonical cursor transport from service-owned state',
+            function()
+        local dependencies = environment()
+        local project = register_project(dependencies, 1)
+        local admitted = service.submit(project.project_id,
+            submission('transport'), dependencies)
+
+        local initial = service.transport(admitted.identity.run_id, 0,
+            dependencies)
+        assert.equals('dwarfspec.transport.v2', initial.schema)
+        assert.equals(2, initial.protocol)
+        assert.equals(admitted.identity.service_instance_id,
+            initial.service_instance_id)
+        assert.equals(admitted.identity.project_id, initial.project_id)
+        assert.equals(admitted.identity.run_id, initial.run_id)
+        assert.equals(admitted.identity.generation, initial.generation)
+        assert.equals(EventType.RUN_QUEUED, initial.events[1].type)
+        assert.equals(1, initial.last_sequence)
+        assert.equals(1, initial.snapshot.last_sequence)
+
+        initial.snapshot.state = RunState.FAILED
+        initial.events[1].payload.owner_kind = 'mutated'
+        local next_read = service.transport(admitted.identity.run_id, 1,
+            dependencies)
+        assert.equals(RunState.QUEUED, next_read.snapshot.state)
+        assert.same({}, next_read.events)
+        assert.equals(1, next_read.last_sequence)
+        assert.has_error(function()
+            service.transport(admitted.identity.run_id, 2, dependencies)
+        end, 'stale event cursor is ahead of journal: 2 > 1')
+    end)
+
     it('retries a generated owner capability collision', function()
         local dependencies = environment()
         local projects = register_three(dependencies)

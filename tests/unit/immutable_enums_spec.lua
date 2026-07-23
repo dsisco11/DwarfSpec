@@ -31,6 +31,8 @@ describe('immutable DwarfSpec contract enums', function()
         assert.equals('none', ResultPolicy.NONE)
         assert.equals('project_busy', SchedulerFailureKind.PROJECT_BUSY)
         assert.equals('host', RunnerFailureKind.HOST)
+        assert.equals('queue_timeout', RunnerFailureKind.QUEUE_TIMEOUT)
+        assert.equals('cancelled', RunnerFailureKind.CANCELLED)
         assert.equals(RunState.QUEUED, ResultState.QUEUED)
     end)
 

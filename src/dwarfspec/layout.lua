@@ -46,7 +46,10 @@ function M.current()
             host_scripts={
                 bootstrap=installed_bootstrap,
                 status=join(lua_root, 'dwarfspec/automation/status.lua'),
+                recover=join(lua_root, 'dwarfspec/automation/recover.lua'),
                 abort=join(lua_root, 'dwarfspec/automation/abort.lua'),
+                acknowledge=join(lua_root,
+                    'dwarfspec/automation/acknowledge.lua'),
                 probe=join(lua_root, 'dwarfspec/automation/probe.lua'),
             },
         }
@@ -59,7 +62,10 @@ function M.current()
             bootstrap=join(package_root,
                 'tests/automation/support/bootstrap.lua'),
             status=join(package_root, 'tests/automation/support/status.lua'),
+            recover=join(package_root, 'tests/automation/support/recover.lua'),
             abort=join(package_root, 'tests/automation/support/abort.lua'),
+            acknowledge=join(package_root,
+                'tests/automation/support/acknowledge.lua'),
             probe=join(package_root, 'tests/automation/support/probe.lua'),
         },
     }

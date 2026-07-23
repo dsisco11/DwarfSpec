@@ -62,7 +62,9 @@ Options:
   --tag TAG                    Include a Busted tag (repeatable)
   --exclude-tag TAG            Exclude a Busted tag (repeatable)
   --repeat COUNT               Repeat the selected suite (default: 1)
-  --timeout SECONDS            External wall-clock timeout (default: 30)
+  --timeout SECONDS            Execution timeout after activation (default: 30)
+  --queue-timeout SECONDS      Maximum wait for activation, or unlimited
+                               (default: unlimited)
   --poll-interval-ms MS        Status polling interval (default: 100)
   --startup-delay-frames N     Frames before starting Busted (default: 1)
   --lease-timeout-ms MS        Lost-runner lease timeout (default: 5000)
@@ -76,8 +78,12 @@ Options:
 
 Runner lookup order is --runner, DFHACK_RUNNER, DFHACK_ROOT/dfhack-run,
 then PATH. Environment values already set in the process override values loaded
-from PROJECT_ROOT/.env. A run returns zero only when Busted passes and cleanup
-is confirmed.
+from PROJECT_ROOT/.env. Concurrent projects wait in one FIFO and execute one at
+a time. Successful status polls renew the queue or execution lease. Queue time
+does not consume --timeout. Results replace the exact configured file; no run
+history is created unless the caller chooses distinct paths. --no-results
+disables the write but still validates and acknowledges the terminal result.
+A run returns zero only when Busted passes and cleanup is confirmed.
 ]]
 
 local ABORT_HELP = [[
@@ -101,6 +107,7 @@ local RUN_OPTIONS = {
     ['exclude-tag']=true,
     ['repeat']=true,
     timeout=true,
+    ['queue-timeout']=true,
     ['poll-interval-ms']=true,
     ['startup-delay-frames']=true,
     ['lease-timeout-ms']=true,
@@ -165,6 +172,7 @@ local function defaults(package_root)
         exclude_tags={},
         repeat_count=1,
         timeout_seconds=30,
+        queue_timeout_seconds=nil,
         poll_interval_ms=100,
         startup_delay_frames=1,
         lease_timeout_ms=5000,
@@ -243,6 +251,13 @@ local function parse_options(argv, start_index, package_root, allowed)
                     options.repeat_count = positive_integer(name, value)
                 elseif name == 'timeout' then
                     options.timeout_seconds = positive_number(name, value)
+                elseif name == 'queue-timeout' then
+                    if value == 'unlimited' then
+                        options.queue_timeout_seconds = nil
+                    else
+                        options.queue_timeout_seconds = positive_number(
+                            name, value)
+                    end
                 elseif name == 'poll-interval-ms' then
                     options.poll_interval_ms = positive_integer(name, value)
                 elseif name == 'startup-delay-frames' then

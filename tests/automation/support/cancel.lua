@@ -1,31 +1,32 @@
--- Aborts or operator-cancels one retained in-process automation run.
+-- Cancels one exact capability-owned queued automation run.
 
-local run_id, owner_capability, after_sequence_text = ...
+local run_id, owner_capability, after_sequence_text, reason = ...
 assert(run_id, 'run id argument is required')
-if owner_capability == '' then owner_capability = nil end
-local after_sequence = tonumber(after_sequence_text) or 0
+assert(owner_capability, 'owner capability argument is required')
+local after_sequence = assert(tonumber(after_sequence_text),
+    'event cursor argument must be numeric')
 
----Configures pure-Lua module lookup and derives the DwarfSpec runtime root.
+---Configures pure-Lua lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
 local function package_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
     local lua_root = source:match(
-        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]abort%.lua$')
+        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]cancel%.lua$')
     if lua_root then
         local separator = package.config:sub(1, 1)
         package.path = lua_root .. separator .. '?.lua;' .. lua_root ..
             separator .. '?' .. separator .. 'init.lua;' .. package.path
         return lua_root, lua_root
     end
-    local root = source:match(
-        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]abort%.lua$')
-    root = assert(root, 'could not derive DwarfSpec root from ' .. source)
+    local root = assert(source:match(
+        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]cancel%.lua$'),
+        'could not derive DwarfSpec root from ' .. source)
     package.path = root .. '/src/?.lua;' .. root ..
         '/src/?/init.lua;' .. package.path
     return root
 end
 
----Loads the host from this installed package without reusing an older cache.
+---Loads the host from this installed package without stale cached modules.
 ---@param root string
 ---@param lua_root string|nil
 ---@return table
@@ -38,8 +39,8 @@ local function load_host(root, lua_root)
             end
         end
         local separator = package.config:sub(1, 1)
-        return assert(loadfile(root .. separator .. 'dwarfspec' .. separator ..
-            'automation' .. separator .. 'host.lua'))()
+        return assert(loadfile(root .. separator .. 'dwarfspec' ..
+            separator .. 'automation' .. separator .. 'host.lua'))()
     end
     return assert(loadfile(root ..
         '/src/dwarfspec/automation/host.lua'))()
@@ -47,9 +48,7 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local run = host.abort(run_id, owner_capability)
+local run = host.cancel(run_id, owner_capability,
+    reason or 'external runner cancellation')
 local transport = host.transport(run.run_id, after_sequence)
-print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
-    :format(transport.protocol, transport.run_id,
-        transport.snapshot.state, transport.generation))
 print('DWARFSPEC_JSON ' .. host.encode_transport(transport))

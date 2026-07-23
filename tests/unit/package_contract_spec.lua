@@ -168,6 +168,26 @@ describe('DwarfSpec package contract', function()
         end
     end)
 
+    it('publishes every version 2 transport adapter', function()
+        local rockspec = read_repository_file(ROCKSPEC_PATH)
+        for name, path in pairs({
+                acknowledge='tests/automation/support/acknowledge.lua',
+                abort='tests/automation/support/abort.lua',
+                bootstrap='tests/automation/support/bootstrap.lua',
+                cancel='tests/automation/support/cancel.lua',
+                discard='tests/automation/support/discard.lua',
+                event_read='tests/automation/support/events.lua',
+                recover='tests/automation/support/recover.lua',
+                scheduler_status=
+                    'tests/automation/support/scheduler_status.lua',
+                status='tests/automation/support/status.lua'}) do
+            assert.matches(('["dwarfspec.automation.%s"]'):format(name),
+                rockspec, 1, true)
+            assert.matches(('"%s"'):format(path), rockspec, 1, true)
+            assert.is_truthy(read_repository_file(path))
+        end
+    end)
+
     it('lets LuaRocks generate the platform command launcher', function()
         local rockspec = read_repository_file(ROCKSPEC_PATH)
         assert.matches('dwarfspec = "bin/dwarfspec"', rockspec, 1, true)

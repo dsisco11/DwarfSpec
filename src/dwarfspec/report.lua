@@ -2,6 +2,7 @@
 
 local M = {}
 local events = require('dwarfspec.automation.events')
+local EventType = require('dwarfspec.automation.event_types')
 local schemas = require('dwarfspec.automation.schemas')
 local RunState = require('dwarfspec.automation.run_states')
 
@@ -18,18 +19,6 @@ local RUN_STATE_TERMINAL = {
     [RunState.ABORTED]=true,
     [RunState.CANCELLED]=true,
 }
-
----Returns the last machine-readable report line from process output.
----@param lines string[]
----@return string
-local function report_line(lines)
-    local found
-    for _, line in ipairs(lines) do
-        if line:sub(1, #PREFIX) == PREFIX then found = line end
-    end
-    assert(found, 'DFHack output did not contain a DWARFSPEC_JSON report')
-    return found
-end
 
 ---Validates one transitional version 1 native report.
 ---@param report table
@@ -74,6 +63,17 @@ local function report_payloads(lines)
     return payloads
 end
 
+---Returns the sole canonical machine-readable payload from process output.
+---@param lines string[]
+---@return string
+local function report_line(lines)
+    local payloads = report_payloads(lines)
+    assert(#payloads == 1,
+        ('DFHack output contained %d DWARFSPEC_JSON reports; expected one')
+            :format(#payloads))
+    return payloads[1]
+end
+
 ---Returns the one bootstrap-only owner capability from process output.
 ---@param lines string[]
 ---@return string
@@ -115,8 +115,7 @@ end
 ---@param decoder function|nil
 ---@return table, string
 function M.parse(lines, expected, decoder)
-    local line = report_line(lines)
-    local payload = line:sub(#PREFIX + 1)
+    local payload = report_line(lines)
     local decode = decoder or function(text)
         return require('dkjson').decode(text, 1, nil)
     end
@@ -124,6 +123,18 @@ function M.parse(lines, expected, decoder)
     assert(report, 'DFHack emitted invalid DwarfSpec JSON: ' ..
         tostring(decode_error))
     return M.validate(report, expected), payload
+end
+
+---Decodes and validates exactly one canonical version 2 transport response.
+---@param lines string[]
+---@param expected table
+---@param decoder function|nil
+---@return table, string
+function M.parse_transport(lines, expected, decoder)
+    local report, payload = M.parse(lines, expected, decoder)
+    assert(report.schema == 'dwarfspec.transport.v2',
+        'DFHack output did not contain version 2 transport data')
+    return report, payload
 end
 
 ---Decodes every native DwarfSpec report in transport order.
@@ -165,6 +176,69 @@ function M.progress(lines)
         if text then table.insert(progress, text) end
     end
     return progress
+end
+
+---Formats one structured event for terminal progress output.
+---@param event table
+---@return string|nil
+local function format_event(event)
+    local payload = event.payload
+    if event.type == EventType.RUN_QUEUED then
+        return 'QUEUED'
+    elseif event.type == EventType.RUN_ACTIVATED then
+        return ('ACTIVATED after %d ms'):format(payload.queue_wait_ms)
+    elseif event.type == EventType.RUN_STARTED then
+        return ('RUN started (%d repeat%s)'):format(payload.repeat_count,
+            payload.repeat_count == 1 and '' or 's')
+    elseif event.type == EventType.REPEAT_STARTED then
+        return ('RUN %d/%d'):format(payload.repeat_index,
+            payload.repeat_count)
+    elseif event.type == EventType.REPEAT_FINISHED then
+        return ('RUN_END %d successes=%d failures=%d errors=%d pending=%d')
+            :format(payload.repeat_index, payload.counts.successes,
+                payload.counts.failures, payload.counts.errors,
+                payload.counts.pending)
+    elseif event.type == EventType.TEST_STARTED then
+        return 'START ' .. payload.name
+    elseif event.type == EventType.TEST_FINISHED then
+        return ('%s %s (%d ms)'):format(payload.status:upper(),
+            payload.name, payload.duration_ms)
+    elseif event.type == EventType.PROBLEM_RECORDED then
+        return ('%s %s: %s'):format(payload.kind:upper(),
+            payload.name, payload.message)
+    elseif event.type == EventType.CLEANUP_STARTED then
+        return ('CLEANUP started (%d pending)'):format(
+            payload.pending_action_count)
+    elseif event.type == EventType.CLEANUP_FAILED then
+        return ('CLEANUP_FAILED %s: %s'):format(payload.action_name,
+            payload.message)
+    elseif event.type == EventType.CLEANUP_FINISHED then
+        return ('CLEANUP finished confirmed=%s'):format(
+            tostring(payload.cleanup_confirmed))
+    elseif event.type == EventType.RUN_CANCELLED then
+        return 'CANCELLED ' .. payload.reason
+    elseif event.type == EventType.RUN_ABORTED then
+        return 'ABORTED ' .. payload.reason
+    elseif event.type == EventType.RUN_FINISHED then
+        return ('FINISHED %s cleanup_confirmed=%s'):format(
+            payload.terminal_state,
+            tostring(payload.cleanup_confirmed))
+    elseif event.type == EventType.SCHEDULER_BLOCKED then
+        return 'SCHEDULER_BLOCKED ' .. payload.reason
+    end
+    return nil
+end
+
+---Formats structured transport events without depending on diagnostic lines.
+---@param transport_events table[]
+---@return string[]
+function M.format_events(transport_events)
+    local lines = {}
+    for _, event in ipairs(transport_events) do
+        local line = format_event(event)
+        if line ~= nil then table.insert(lines, line) end
+    end
+    return lines
 end
 
 return M

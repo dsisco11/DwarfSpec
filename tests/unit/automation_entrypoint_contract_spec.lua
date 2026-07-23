@@ -1,4 +1,4 @@
--- Unit characterization of the legacy bootstrap and abort entrypoint protocol.
+-- Unit contract for version 2 bootstrap, recovery, and acknowledgement.
 
 describe('legacy automation entrypoint contract', function()
     local original_dfhack
@@ -85,7 +85,7 @@ describe('legacy automation entrypoint contract', function()
         rawset(_G, 'print', original_print)
     end)
 
-    it('starts and aborts through version 1 text and JSON entrypoints',
+    it('starts and aborts through version 2 transport entrypoints',
             function()
         local root = require('lfs').currentdir()
         assert(loadfile(root ..
@@ -111,14 +111,13 @@ describe('legacy automation entrypoint contract', function()
         assert.equals(4, run.options.lease_check_frames)
         assert.equals('tests/live/*.ds.lua', run.options.test_glob)
         assert.same({'live/shared_spec.ds.lua'}, run.options.specs)
-        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[1])
-        assert.matches('DWARFSPEC protocol=1 ' ..
-            'run_id=entrypoint-contract state=starting generation=1',
-            lines[2], 1, true)
-        assert.matches('DWARFSPEC_OWNER owner-', lines[3], 1, true)
-        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[4])
-        assert.equals('dwarfspec.run.v1', encoded[2].schema)
-        assert.equals(1, encoded[2].protocol)
+        assert.matches('DWARFSPEC protocol=2 ' ..
+            'run_id=entrypoint-contract state=queued generation=1',
+            lines[1], 1, true)
+        assert.matches('DWARFSPEC_OWNER owner-', lines[2], 1, true)
+        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[3])
+        assert.equals('dwarfspec.transport.v2', encoded[1].schema)
+        assert.equals(2, encoded[1].protocol)
 
         lines = {}
         assert(loadfile(root .. '/tests/automation/support/abort.lua'))(
@@ -132,22 +131,84 @@ describe('legacy automation entrypoint contract', function()
         assert.is_false(run.terminal_observed)
         assert.equals(run.run_id,
             registry.projects[run.project_id].outstanding_run_id)
-        assert.matches('DWARFSPEC protocol=1 ' ..
+        assert.matches('DWARFSPEC protocol=2 ' ..
             'run_id=entrypoint-contract state=aborted generation=1',
             lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[2])
-        assert.equals('dwarfspec.run.v1', encoded[3].schema)
-        assert.equals(1, encoded[3].protocol)
+        assert.equals('dwarfspec.transport.v2', encoded[2].schema)
+        assert.equals(2, encoded[2].protocol)
 
         lines = {}
         assert(loadfile(root ..
             '/tests/automation/support/acknowledge.lua'))(
             'entrypoint-contract', tostring(run.generation),
-            run.owner_capability)
+            run.owner_capability, tostring(#run.event_journal.events))
         assert.is_true(run.acknowledged)
         assert.is_nil(registry.projects[run.project_id].outstanding_run_id)
         assert.matches('acknowledged=true', lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[2])
-        assert.equals('dwarfspec.run.v1', encoded[4].schema)
+        assert.equals('dwarfspec.transport.v2', encoded[3].schema)
+    end)
+
+    it('keeps cancel, event, scheduler, recovery, and discard adapters thin',
+            function()
+        local root = require('lfs').currentdir()
+        local host = assert(loadfile(root ..
+            '/src/dwarfspec/automation/host.lua'))()
+        local queued = host.start(root,
+            'tests/framework/service project beta', {
+                run_id='adapter-cancel',
+                defer_activation=true,
+                defer_frames=1,
+                lease_timeout_ms=9000,
+                lease_check_frames=4,
+            })
+
+        assert(loadfile(root .. '/tests/automation/support/cancel.lua'))(
+            queued.run_id, queued.owner_capability, '0', 'fixture cancel')
+        assert.equals('cancelled', queued.state)
+        assert.equals('dwarfspec.transport.v2',
+            encoded[#encoded].schema)
+        assert.equals('cancelled', encoded[#encoded].snapshot.state)
+
+        lines = {}
+        assert(loadfile(root .. '/tests/automation/support/events.lua'))(
+            queued.run_id, tostring(encoded[#encoded].last_sequence))
+        assert.equals(1, #lines)
+        assert.equals('dwarfspec.transport.v2',
+            encoded[#encoded].schema)
+        assert.same({}, encoded[#encoded].events)
+
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/scheduler_status.lua'))(
+            queued.run_id, tostring(encoded[#encoded].last_sequence))
+        assert.equals('dwarfspec.scheduler.v2',
+            encoded[#encoded].scheduler.schema)
+
+        lines = {}
+        assert(loadfile(root .. '/tests/automation/support/discard.lua'))(
+            queued.run_id, tostring(queued.generation),
+            tostring(encoded[#encoded].last_sequence), 'fixture discard')
+        assert.is_true(queued.discarded)
+        assert.equals('dwarfspec.transport.v2',
+            encoded[#encoded].schema)
+
+        local active = host.start(root,
+            'tests/framework/minimal_project', {
+                run_id='adapter-recover',
+                defer_frames=1,
+                lease_timeout_ms=9000,
+                lease_check_frames=4,
+            })
+        local cursor = #active.event_journal.events
+        lines = {}
+        assert(loadfile(root .. '/tests/automation/support/recover.lua'))(
+            active.run_id, active.owner_capability, tostring(cursor),
+            'fixture recovery')
+        assert.equals('aborted', active.state)
+        assert.is_true(active.cleanup_confirmed)
+        assert.equals('dwarfspec.transport.v2',
+            encoded[#encoded].schema)
     end)
 end)

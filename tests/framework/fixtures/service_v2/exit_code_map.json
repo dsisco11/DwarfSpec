@@ -37,9 +37,19 @@
       "states": ["timeout"]
     },
     {
+      "kind": "queue_timeout",
+      "exit_code": 7,
+      "states": ["queue_timeout"]
+    },
+    {
       "kind": "aborted",
       "exit_code": 8,
       "states": ["aborted", "interrupted"]
+    },
+    {
+      "kind": "cancelled",
+      "exit_code": 8,
+      "states": ["cancelled"]
     }
   ]
 }

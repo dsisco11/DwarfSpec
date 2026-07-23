@@ -44,10 +44,17 @@ dwarfspec version
 ```
 
 `run` supports project-root and discovery-glob configuration, Busted filters
-and tags, repeat count, external timeout and polling controls, lease controls,
-exact result-file selection, explicit run ids, and verbose runner diagnostics.
-`dwarfspec help run` prints the
-complete option list.
+and tags, repeat count, separate queue and execution timeouts, polling and
+lease controls, exact result-file selection, explicit run ids, and verbose
+runner diagnostics. `dwarfspec help run` prints the complete option list.
+
+Multiple projects can submit runs concurrently to one DFHack instance. They
+wait in deterministic FIFO order while DwarfSpec keeps one live executor.
+`--queue-timeout SECONDS` limits the wait for activation; its default and the
+explicit value `unlimited` allow an unbounded wait. `--timeout SECONDS` starts
+only after the service reports activation, so time in the queue never consumes
+the execution budget. Every successful status poll renews whichever external
+queue or execution lease applies.
 
 The recommended runner configuration is `DFHACK_ROOT` in
 `<project-root>/.env`; its value is the directory that directly contains
@@ -101,9 +108,10 @@ Exit codes are stable:
 | 4 | DFHack connection or core-context failure |
 | 5 | Host, report, status, or result persistence failure |
 | 6 | Busted failure/error or unconfirmed cleanup |
-| 7 | External wall-clock timeout |
-| 8 | Aborted run |
+| 7 | Execution timeout or the distinct queue-timeout classification |
+| 8 | Active abort or the distinct pre-activation cancellation classification |
 
-On timeout, interruption, or a malformed status report after bootstrap, the
-command attempts an explicit native abort and preserves the final abort report
-without hiding the original failure.
+On timeout, interruption, or malformed transport after bootstrap, the command
+asks the service to recover from authoritative current state. A queued run is
+cancelled without native cleanup; an active run is aborted with cleanup. If
+recovery also fails, the original runner failure remains primary.

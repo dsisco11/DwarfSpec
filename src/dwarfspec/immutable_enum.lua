@@ -16,21 +16,17 @@ function M.define(values)
         seen[value] = true
     end
 
-    ---Rejects mutation of the immutable enum.
-    local function reject_mutation()
-        error('Enums are immutable.', 2)
-    end
-
-    ---Iterates the immutable enum names and string values.
-    ---@return function, table, nil
-    local function enum_pairs()
-        return pairs(data)
-    end
-
     return setmetatable({}, {
         __index=data,
-        __newindex=reject_mutation,
-        __pairs=enum_pairs,
+        ---Rejects mutation of the immutable enum.
+        __newindex=function()
+            error('Enums are immutable.', 2)
+        end,
+        ---Iterates the immutable enum names and string values.
+        ---@return function, table, nil
+        __pairs=function()
+            return pairs(data)
+        end,
         __metatable=false,
     })
 end

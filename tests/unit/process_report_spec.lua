@@ -121,30 +121,56 @@ describe('DwarfSpec process bridge', function()
 end)
 
 describe('DwarfSpec native reports', function()
-    it('uses the last canonical JSON line and extracts progress', function()
+    it('accepts one exact version 2 transport identity and cursor', function()
+        local payload = read_contract_fixture('transport_failed.json')
+        local transport = report.parse_transport({
+            'diagnostic output',
+            'DWARFSPEC_JSON ' .. payload,
+        }, {
+            service_instance_id='service-fixture-1',
+            project_id='project-alpha',
+            run_id='run-failed',
+            generation=4,
+            after_sequence=0,
+        })
+
+        assert.equals('dwarfspec.transport.v2', transport.schema)
+        assert.equals(RunState.FAILED, transport.snapshot.state)
+        assert.equals(1, transport.last_sequence)
+    end)
+
+    it('does not accept a transitional version 1 report as transport',
+            function()
+        assert.has_error(function()
+            report.parse_transport({'DWARFSPEC_JSON ignored'}, 'run',
+                function()
+                    return {
+                        schema='dwarfspec.run.v1',
+                        protocol=1,
+                        run_id='run',
+                        state=RunState.PASSED,
+                        terminal=true,
+                        generation=1,
+                        counts={},
+                        totals={},
+                        output_count=0,
+                        cleanup_confirmed=true,
+                        failures={},
+                    }
+                end)
+        end, 'DFHack output did not contain version 2 transport data')
+    end)
+
+    it('rejects duplicated canonical JSON and extracts diagnostics', function()
         local lines = {
             'DWARFSPEC_JSON {"protocol":1,"run_id":"old"}',
             'OUTPUT 1 START suite example',
             'OUTPUT 2 SUCCESS suite example',
             'DWARFSPEC_JSON final',
         }
-        local parsed = report.parse(lines, 'run', function(text)
-            assert.equals('final', text)
-            return {
-                schema='dwarfspec.run.v1',
-                protocol=1,
-                run_id='run',
-            state=RunState.PASSED,
-                terminal=true,
-                generation=1,
-                counts={},
-                totals={},
-                output_count=2,
-                cleanup_confirmed=true,
-                failures={},
-            }
-        end)
-        assert.equals(RunState.PASSED, parsed.state)
+        assert.has_error(function()
+            report.parse(lines, 'run')
+        end, 'DFHack output contained 2 DWARFSPEC_JSON reports; expected one')
         assert.same({'START suite example', 'SUCCESS suite example'},
             report.progress(lines))
     end)

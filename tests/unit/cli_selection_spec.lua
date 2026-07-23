@@ -281,7 +281,8 @@ describe('DwarfSpec CLI selection', function()
             '--filter', 'name with spaces', '--filter-out=legacy',
             '--name=exact example', '--tag=fast', '--exclude-tag=slow',
             '--repeat=2',
-            '--timeout=12.5', '--poll-interval-ms=25',
+            '--timeout=12.5', '--queue-timeout=45',
+            '--poll-interval-ms=25',
             '--results=result directory', '--run-id=quoted-run', '--verbose',
         }, context))
         assert.same({'name with spaces'}, invoked.filters)
@@ -291,8 +292,20 @@ describe('DwarfSpec CLI selection', function()
         assert.same({'slow'}, invoked.exclude_tags)
         assert.equals(2, invoked.repeat_count)
         assert.equals(12.5, invoked.timeout_seconds)
+        assert.equals(45, invoked.queue_timeout_seconds)
         assert.equals('project/result directory', invoked.result_path)
         assert.equals('quoted-run', invoked.run_id)
         assert.is_true(invoked.verbose)
+    end)
+
+    it('accepts an explicitly unlimited queue wait', function()
+        assert.equals(0, cli.main({
+            'run', 'tests/automation/*',
+            '--test-glob=tests/automation/*.lua',
+            '--queue-timeout=unlimited',
+            '--no-results',
+        }, context))
+        assert.is_nil(invoked.queue_timeout_seconds)
+        assert.equals(ResultPolicy.NONE, invoked.result_policy)
     end)
 end)

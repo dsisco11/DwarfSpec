@@ -1,10 +1,12 @@
 -- Acknowledges one exact terminal generation after owner persistence succeeds.
 
-local run_id, generation_text, owner_capability = ...
+local run_id, generation_text, owner_capability, after_sequence_text = ...
 assert(run_id, 'run id argument is required')
 local generation = assert(tonumber(generation_text),
     'generation argument must be numeric')
 assert(owner_capability, 'owner capability argument is required')
+local after_sequence = assert(tonumber(after_sequence_text),
+    'event cursor argument must be numeric')
 
 ---Configures pure-Lua module lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
@@ -50,7 +52,9 @@ end
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
 local run = host.acknowledge(run_id, generation, owner_capability)
+local transport = host.transport(run.run_id, after_sequence)
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d ' ..
     'acknowledged=true')
-    :format(run.protocol_version, run.run_id, run.state, run.generation))
-print('DWARFSPEC_JSON ' .. host.encode_report(run))
+    :format(transport.protocol, transport.run_id,
+        transport.snapshot.state, transport.generation))
+print('DWARFSPEC_JSON ' .. host.encode_transport(transport))

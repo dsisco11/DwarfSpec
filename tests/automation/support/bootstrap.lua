@@ -142,9 +142,10 @@ local options = parse_options(arguments, ResultPolicy)
 local host = load_host(root, lua_root)
 options.defer_activation = true
 local queued = host.start(root, options.project_root, options)
-print('DWARFSPEC_JSON ' .. host.encode_report(queued))
-local run = host.activate_next() or queued
+local transport = host.transport(queued.run_id, 0)
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
-    :format(run.protocol_version, run.run_id, run.state, run.generation))
-print('DWARFSPEC_OWNER ' .. run.owner_capability)
-print('DWARFSPEC_JSON ' .. host.encode_report(run))
+    :format(transport.protocol, transport.run_id,
+        transport.snapshot.state, transport.generation))
+print('DWARFSPEC_OWNER ' .. queued.owner_capability)
+print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+host.activate_next()

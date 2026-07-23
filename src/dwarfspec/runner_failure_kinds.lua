@@ -11,5 +11,7 @@ return immutable_enum.define({
     HOST='host',
     TEST='test',
     TIMEOUT='timeout',
+    QUEUE_TIMEOUT='queue_timeout',
     ABORTED='aborted',
+    CANCELLED='cancelled',
 })
