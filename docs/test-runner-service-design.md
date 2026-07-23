@@ -171,9 +171,10 @@ loaded between runs.
 
 ### Project ID
 
-An opaque service-assigned identifier for a registered canonical project root.
-Registering the same canonical root again returns the existing compatible
-project session. A caller-provided display name is never used as identity.
+An opaque service-assigned identifier for a registered normalized project
+root. Registering the same normalized root again returns the existing
+compatible project session. A caller-provided display name is never used as
+identity.
 
 ### Run ID and generation
 
@@ -239,7 +240,7 @@ The registry stores ordinary data for each project:
 
 ```text
 projects[project_id] = {
-    canonical_project_root,
+    normalized_project_root,
     display_name,
     normalized_configuration,
     result_path,
@@ -250,9 +251,12 @@ projects[project_id] = {
 }
 ```
 
-Project roots are canonicalized according to the active platform before
-identity comparison. The service rejects an attempt to reuse a project ID for
-a different root.
+Project roots are converted to absolute paths, separators are normalized, and
+lexical `.` and `..` segments are removed before identity comparison. Identity
+is case-folded on Windows. This normalization does not resolve filesystem
+aliases such as symlinks, junctions, or Windows short names; roots expressed
+through different aliases remain distinct project sessions. The service
+rejects an attempt to reuse a project ID for a different normalized root.
 
 Registration never loads test files or consumer modules. Catalog and run
 operations use the registered project record and perform their work in a
@@ -911,8 +915,8 @@ service boundary.
 
 ### Offline contracts
 
-- Registering distinct canonical project roots produces distinct project IDs.
-- Registering the same canonical root returns the same compatible project.
+- Registering distinct normalized project roots produces distinct project IDs.
+- Registering the same normalized root returns the same compatible project.
 - An incompatible client cannot replace the running service or its projects.
 - Different projects can submit while another project is active.
 - A second outstanding submission from the same project returns

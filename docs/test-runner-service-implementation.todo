@@ -46,7 +46,7 @@ it is a separate design and implementation effort.
 
 ☐ Keep one compatible DwarfSpec service runtime and package root per DFHack
   process.
-☐ Allow multiple canonical project roots to register concurrently.
+☐ Allow multiple normalized project roots to register concurrently.
 ☐ Allow different projects to submit while another project is queued or
   active.
 ☐ Keep at most one outstanding run per project.
@@ -103,7 +103,7 @@ service migration must preserve.
   record the exact environmental blocker before implementation begins.
   @done(26-07-23 05:35)
 ✔ Add distinct fixture projects for multi-project tests, including stable
-  canonical roots and independent `.test-results` locations.
+  normalized roots and independent `.test-results` locations.
   @done(26-07-23 05:35)
 ✔ Include at least one project path containing spaces and one pair of projects
   with identically named specs to prove project identity is not display-name or
@@ -135,36 +135,45 @@ Phase 0 exit gate:
 Goal: replace implicit singleton host ownership with an explicit compatible
 service and independently registered project sessions.
 
-☐ Add `dwarfspec.automation.service` as the only public mutation boundary over
-  project, run, scheduler, and terminal state.
-☐ Add `dwarfspec.automation.projects` for canonical project identity,
+✔ Add `dwarfspec.automation.service` as the only public mutation boundary over
+  project, run, scheduler, and terminal state. @done(26-07-23 08:36)
+✔ Add `dwarfspec.automation.projects` for canonical project identity,
   registration, refresh, lookup, and unregister operations.
-☐ Define the process-wide registry with protocol version, service instance ID,
+  @done(26-07-23 08:36)
+✔ Define the process-wide registry with protocol version, service instance ID,
   package root, package version, generation counter, projects, runs, queue,
   active run, quarantine, and latest terminal results.
-☐ Make first bootstrap establish the service package root and compatibility
-  contract without loading consumer test modules.
-☐ Return the same project session when the same canonical root registers with
-  compatible configuration.
-☐ Reject reuse of a project ID for a different canonical root.
-☐ Reject incompatible protocol or package requirements without mutating the
+  @done(26-07-23 08:36)
+✔ Make first bootstrap establish the service package root and compatibility
+  contract without loading consumer test modules. @done(26-07-23 08:36)
+✔ Return the same project session when the same normalized root registers with
+  compatible configuration. @done(26-07-23 08:36)
+✔ Reject reuse of a project ID for a different normalized root.
+  @done(26-07-23 08:36)
+✔ Reject incompatible protocol or package requirements without mutating the
   existing service, projects, queue, active run, or retained results.
-☐ Prevent adapter reloads from clearing compatible service state.
-☐ Allow unregister only when the project has no outstanding run.
-☐ Return copied, immutable, JSON-safe project and service summaries instead of
-  internal records.
-☐ Establish `src/dwarfspec/automation/` as the authoritative source location
+  @done(26-07-23 08:36)
+✔ Prevent adapter reloads from clearing compatible service state.
+  @done(26-07-23 08:36)
+✔ Allow unregister only when the project has no outstanding run.
+  @done(26-07-23 08:36)
+✔ Return copied, immutable, JSON-safe project and service summaries instead of
+  internal records. @done(26-07-23 08:36)
+✔ Establish `src/dwarfspec/automation/` as the authoritative source location
   and update module loading without changing live behavior yet.
-☐ Add all new production modules to the current rockspec.
+  @done(26-07-23 08:36)
+✔ Add all new production modules to the current rockspec.
+  @done(26-07-23 08:36)
 
 Phase 1 exit gate:
 
-☐ Unit tests cover registration, canonicalization, refresh, unregister,
+✔ Unit tests cover registration, canonicalization, refresh, unregister,
   incompatible clients, adapter reload, and immutable summaries.
-☐ Unit tests prove two registered project roots retain independent
-  configuration and result policies.
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes.
+  @done(26-07-23 08:36)
+✔ Unit tests prove two registered project roots retain independent
+  configuration and result policies. @done(26-07-23 08:36)
+✔ Lua syntax and formatting checks pass. @done(26-07-23 08:36)
+✔ The full unit suite passes. @done(26-07-23 08:36)
 
 ## Phase 2: Structured events, snapshots, and schemas
 
@@ -496,7 +505,7 @@ one evidence category as a substitute for another.
 | Phase | Lua syntax and formatting | Full unit suite | Live DFHack | Packaging or installed rock | Notes and artifacts |
 |---|---|---|---|---|---|
 | 0 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 91 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 156 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; exit 6, 20 successes/1 failure/0 errors/0 pending, cleanup confirmed; existing `complete_screen_mount_live_spec.lua:194` observed `true`, expected `false` | not required | Workspace `D:\CODE\DFHack\DwarfSpec`, `origin=https://github.com/dsisco11/DwarfSpec.git`; native result `.test-results/dwarfspec/dwarfspec-93409734-57826f4c.json` |
-| 1 | pending | pending | not required | module list only | |
+| 1 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 94 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 168 successes, pass | not required; supplementary full live run passed 21/21 with cleanup confirmed | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | `src/dwarfspec/automation/{service,projects}.lua`; `tests/unit/automation_service_spec.lua`; native result `.test-results/dwarfspec/dwarfspec-104270906-3877eddc.json` |
 | 2 | pending | pending | not required | schema fixtures | |
 | 3 | pending | pending | not required | not required | |
 | 4 | pending | pending | pending | not required | |
@@ -523,6 +532,25 @@ Phase 0 characterization evidence:
 - The live failure is baseline evidence, not a service regression: no production
   source changed in Phase 0, and the native version 1 report confirms terminal
   state `failed` with cleanup confirmed.
+
+Phase 1 service evidence:
+
+- `dwarfspec.automation.service` is the only new module that assigns the
+  process-wide `dwarfspec` registry. Its public mutation operations apply
+  validated copy-on-write project maps from `dwarfspec.automation.projects`.
+- Bootstrap owns the service protocol, instance, package root, package version,
+  generation, projects, runs, FIFO storage, active run identity, quarantine, and
+  latest terminal-result maps without loading consumer configuration modules.
+- `automation_service_spec.lua` covers canonical registration and refresh,
+  independent project state, ID reuse rejection, incompatible and unsafe
+  registration atomicity, compatible reload preservation, incompatible
+  bootstrap preservation, busy unregister, detached JSON encoding, and
+  copy-on-write internals.
+- `package_contract_spec.lua` proves both modules resolve from
+  `src/dwarfspec/automation/` and are packaged from those authoritative paths.
+- Existing bootstrap, status, abort, host, scheduler, and cleanup modules were
+  not changed; the supplementary live suite passed 21/21 with cleanup
+  confirmed.
 
 ## Final acceptance
 

@@ -91,6 +91,35 @@ describe('DwarfSpec package contract', function()
             'tests/automation/support/overlay_registration.lua'))
     end)
 
+    it('publishes the service runtime from authoritative source modules',
+            function()
+        local rockspec = read_repository_file(ROCKSPEC_PATH)
+        for name, path in pairs({
+                projects='src/dwarfspec/automation/projects.lua',
+                service='src/dwarfspec/automation/service.lua'}) do
+            assert.matches(('["dwarfspec.automation.%s"]'):format(name),
+                rockspec, 1, true)
+            assert.matches(('"%s"'):format(path), rockspec, 1, true)
+            assert.is_truthy(read_repository_file(path))
+        end
+        assert.is_nil(rockspec:find(
+            '["dwarfspec.automation.service"] = "tests/', 1, true))
+        assert.is_nil(rockspec:find(
+            '["dwarfspec.automation.projects"] = "tests/', 1, true))
+    end)
+
+    it('resolves service modules from the authoritative source namespace',
+            function()
+        for _, name in ipairs({
+                'dwarfspec.automation.projects',
+                'dwarfspec.automation.service'}) do
+            local path = assert(package.searchpath(name, package.path))
+                :gsub('\\', '/')
+            assert.matches('/src/dwarfspec/automation/', path, 1, true)
+            assert.is_table(require(name))
+        end
+    end)
+
     it('lets LuaRocks generate the platform command launcher', function()
         local rockspec = read_repository_file(ROCKSPEC_PATH)
         assert.matches('dwarfspec = "bin/dwarfspec"', rockspec, 1, true)

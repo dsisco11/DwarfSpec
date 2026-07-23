@@ -136,7 +136,7 @@ end
 function M.project(overrides)
     return record({
         project_id='project-fixture-1',
-        canonical_project_root='tests/framework/service_project_alpha',
+        normalized_project_root='tests/framework/service_project_alpha',
         display_name='Service Project Alpha',
         normalized_configuration={},
         result_path='tests/framework/service_project_alpha/tests/' ..

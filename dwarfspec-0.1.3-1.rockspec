@@ -53,6 +53,10 @@ build = {
         ["dwarfspec.report"] = "src/dwarfspec/report.lua",
         ["dwarfspec.runner"] = "src/dwarfspec/runner.lua",
         ["dwarfspec.subject"] = "src/dwarfspec/subject.lua",
+        ["dwarfspec.automation.projects"] =
+            "src/dwarfspec/automation/projects.lua",
+        ["dwarfspec.automation.service"] =
+            "src/dwarfspec/automation/service.lua",
         ["dwarfspec.ds"] = "tests/automation/support/ds.lua",
         ["dwarfspec.automation.abort"] = "tests/automation/support/abort.lua",
         ["dwarfspec.automation.bootstrap"] = "tests/automation/support/bootstrap.lua",
