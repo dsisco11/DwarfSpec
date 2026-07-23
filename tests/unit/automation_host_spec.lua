@@ -76,6 +76,27 @@ describe('automation host ownership', function()
         }
     end
 
+    it('initializes and retains the version 1 singleton registry shape',
+            function()
+        assert.is_nil(dfhack.dwarfspec)
+
+        local run = host.start('.', '.', options('registry-contract'))
+        local registry = dfhack.dwarfspec
+
+        assert.equals(1, registry.protocol_version)
+        assert.equals(1, registry.generation)
+        assert.equals(run, registry.active_run)
+        assert.is_nil(registry.last_completed)
+
+        local aborted = host.abort(run.run_id)
+        assert.is_nil(registry.active_run)
+        assert.equals(aborted, registry.last_completed)
+        assert.is_false(aborted.terminal_observed)
+
+        assert.equals(aborted, host.poll(run.run_id))
+        assert.is_true(aborted.terminal_observed)
+    end)
+
     it('rejects overlap and ignores a callback after abort', function()
         local run = host.start('.', '.', options('owner'))
         assert.equals('starting', run.state)

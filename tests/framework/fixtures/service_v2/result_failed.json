@@ -1,0 +1,27 @@
+{
+  "schema": "dwarfspec.result.v2",
+  "service_instance_id": "service-fixture-1",
+  "project_id": "project-alpha",
+  "run_id": "run-failed",
+  "generation": 4,
+  "state": "failed",
+  "terminal": true,
+  "exit_code": 6,
+  "project_root": "tests/framework/service_project_alpha",
+  "selection": {
+    "identities": ["tests/live/shared_spec.ds.lua"]
+  },
+  "submitted_at": "2026-07-23T00:00:00Z",
+  "activated_at": "2026-07-23T00:00:01Z",
+  "finished_at": "2026-07-23T00:00:02Z",
+  "queue_wait_ms": 1000,
+  "error": {
+    "kind": "test",
+    "message": "fixture failure"
+  },
+  "host_report": {
+    "state": "failed",
+    "cleanup_confirmed": true
+  },
+  "events": []
+}

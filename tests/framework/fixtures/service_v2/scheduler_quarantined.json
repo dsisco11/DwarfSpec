@@ -1,0 +1,26 @@
+{
+  "schema": "dwarfspec.scheduler.v2",
+  "service_instance_id": "service-fixture-1",
+  "active_run_id": null,
+  "active_project_id": null,
+  "queue": [
+    {
+      "project_id": "project-beta",
+      "run_id": "run-waiting"
+    }
+  ],
+  "projects": [
+    {
+      "project_id": "project-alpha",
+      "outstanding_run_id": "run-failed"
+    },
+    {
+      "project_id": "project-beta",
+      "outstanding_run_id": "run-waiting"
+    }
+  ],
+  "quarantine": {
+    "active": true,
+    "reason": "cleanup was not confirmed for run-failed"
+  }
+}

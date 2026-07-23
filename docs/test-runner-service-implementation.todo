@@ -92,34 +92,43 @@ it is a separate design and implementation effort.
 Goal: establish reproducible evidence and characterize behavior that the
 service migration must preserve.
 
-☐ Confirm the workspace is the DwarfSpec repository and its `origin` points to
+✔ Confirm the workspace is the DwarfSpec repository and its `origin` points to
   the intended DwarfSpec remote before editing implementation files.
-☐ Record the current Lua syntax-check result from `tools/Check-Lua.ps1`.
-☐ Record the current full unit-test result from `tools/Run-UnitTests.ps1`.
-☐ Record the current full live result from `tools/Run-AutomationTests.ps1`, or
+  @done(26-07-23 05:35)
+✔ Record the current Lua syntax-check result from `tools/Check-Lua.ps1`.
+  @done(26-07-23 05:35)
+✔ Record the current full unit-test result from `tools/Run-UnitTests.ps1`.
+  @done(26-07-23 05:35)
+✔ Record the current full live result from `tools/Run-AutomationTests.ps1`, or
   record the exact environmental blocker before implementation begins.
-☐ Add distinct fixture projects for multi-project tests, including stable
+  @done(26-07-23 05:35)
+✔ Add distinct fixture projects for multi-project tests, including stable
   canonical roots and independent `.test-results` locations.
-☐ Include at least one project path containing spaces and one pair of projects
+  @done(26-07-23 05:35)
+✔ Include at least one project path containing spaces and one pair of projects
   with identically named specs to prove project identity is not display-name or
-  spec-name based.
-☐ Characterize the current `dfhack.dwarfspec` registry, version 1 bootstrap,
+  spec-name based. @done(26-07-23 05:35)
+✔ Characterize the current `dfhack.dwarfspec` registry, version 1 bootstrap,
   status, abort, lease, cleanup, report parsing, exit-code, and result-directory
-  behaviors in tests before replacing them.
-☐ Add reusable test builders for service registries, project records, run
+  behaviors in tests before replacing them. @done(26-07-23 05:35)
+✔ Add reusable test builders for service registries, project records, run
   records, fake clocks, fake schedulers, and deterministic identifiers.
-☐ Add checked-in schema fixtures for representative queued, active, passed,
+  @done(26-07-23 05:35)
+✔ Add checked-in schema fixtures for representative queued, active, passed,
   failed, aborted, cancelled, quarantined, and pre-execution-failure outcomes.
-☐ Map every existing exit-code meaning to its version 2 invocation state and
-  record the mapping in a test fixture.
+  @done(26-07-23 05:35)
+✔ Map every existing exit-code meaning to its version 2 invocation state and
+  record the mapping in a test fixture. @done(26-07-23 05:35)
 
 Phase 0 exit gate:
 
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes without reducing existing coverage.
-☐ The baseline live result or exact live-environment blocker is recorded in the
-  evidence ledger.
-☐ Contract fixtures contain no UI assumptions or implementation work.
+✔ Lua syntax and formatting checks pass. @done(26-07-23 05:35)
+✔ The full unit suite passes without reducing existing coverage.
+  @done(26-07-23 05:35)
+✔ The baseline live result or exact live-environment blocker is recorded in the
+  evidence ledger. @done(26-07-23 05:35)
+✔ Contract fixtures contain no UI assumptions or implementation work.
+  @done(26-07-23 05:35)
 
 ## Phase 1: Service runtime and project registry
 
@@ -486,7 +495,7 @@ one evidence category as a substitute for another.
 
 | Phase | Lua syntax and formatting | Full unit suite | Live DFHack | Packaging or installed rock | Notes and artifacts |
 |---|---|---|---|---|---|
-| 0 | pending | pending | pending | not required | |
+| 0 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 91 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 156 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; exit 6, 20 successes/1 failure/0 errors/0 pending, cleanup confirmed; existing `complete_screen_mount_live_spec.lua:194` observed `true`, expected `false` | not required | Workspace `D:\CODE\DFHack\DwarfSpec`, `origin=https://github.com/dsisco11/DwarfSpec.git`; native result `.test-results/dwarfspec/dwarfspec-93409734-57826f4c.json` |
 | 1 | pending | pending | not required | module list only | |
 | 2 | pending | pending | not required | schema fixtures | |
 | 3 | pending | pending | not required | not required | |
@@ -496,6 +505,24 @@ one evidence category as a substitute for another.
 | 7 | pending | pending | pending | not required | |
 | 8 | pending | pending | pending | not required | |
 | 9 | pending | pending | pending | pending | |
+
+Phase 0 characterization evidence:
+
+- Legacy registry, bootstrap, abort, status, lease, cleanup, report parsing,
+  exit-code, and result-directory contracts are covered by
+  `automation_host_spec.lua`, `automation_entrypoint_contract_spec.lua`,
+  `automation_status_spec.lua`, `automation_cleanup_spec.lua`,
+  `process_report_spec.lua`, `service_contract_fixtures_spec.lua`, and
+  `runner_spec.lua`.
+- Deterministic builders are in `tests/support/service_builders.lua`.
+- Multi-project roots are `tests/framework/service_project_alpha` and
+  `tests/framework/service project beta`; both expose
+  `tests/live/shared_spec.ds.lua` and resolve independent default result paths.
+- Version 2 outcome and exit-code fixtures are in
+  `tests/framework/fixtures/service_v2/`.
+- The live failure is baseline evidence, not a service regression: no production
+  source changed in Phase 0, and the native version 1 report confirms terminal
+  state `failed` with cleanup confirmed.
 
 ## Final acceptance
 

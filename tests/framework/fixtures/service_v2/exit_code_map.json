@@ -1,0 +1,45 @@
+{
+  "schema": "dwarfspec.exit-code-map.v1",
+  "mappings": [
+    {
+      "kind": "success",
+      "exit_code": 0,
+      "states": ["passed"]
+    },
+    {
+      "kind": "usage",
+      "exit_code": 2,
+      "states": ["usage_error"]
+    },
+    {
+      "kind": "dependency",
+      "exit_code": 3,
+      "states": ["dependency_error"]
+    },
+    {
+      "kind": "connection",
+      "exit_code": 4,
+      "states": ["connection_error"]
+    },
+    {
+      "kind": "host",
+      "exit_code": 5,
+      "states": ["registration_error", "host_error"]
+    },
+    {
+      "kind": "test",
+      "exit_code": 6,
+      "states": ["failed"]
+    },
+    {
+      "kind": "timeout",
+      "exit_code": 7,
+      "states": ["timeout"]
+    },
+    {
+      "kind": "aborted",
+      "exit_code": 8,
+      "states": ["aborted", "interrupted"]
+    }
+  ]
+}

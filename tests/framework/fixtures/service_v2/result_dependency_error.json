@@ -1,0 +1,24 @@
+{
+  "schema": "dwarfspec.result.v2",
+  "service_instance_id": null,
+  "project_id": null,
+  "run_id": null,
+  "generation": null,
+  "state": "dependency_error",
+  "terminal": true,
+  "exit_code": 3,
+  "project_root": "tests/framework/service_project_alpha",
+  "selection": {
+    "identities": ["tests/live/shared_spec.ds.lua"]
+  },
+  "submitted_at": "2026-07-23T00:00:00Z",
+  "activated_at": null,
+  "finished_at": "2026-07-23T00:00:00Z",
+  "queue_wait_ms": null,
+  "error": {
+    "kind": "dependency",
+    "message": "DwarfSpec dependency was not found"
+  },
+  "host_report": null,
+  "events": []
+}

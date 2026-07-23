@@ -332,4 +332,39 @@ describe('DwarfSpec external runner', function()
         assert.matches('could not create directory', outcome.error.message,
             1, true)
     end)
+
+    it('writes the version 1 report under a run-named directory result',
+            function()
+        local lfs = require('lfs')
+        local result_directory = lfs.currentdir() ..
+            '/tests/framework/command_project/' ..
+            '.test-results/legacy-result-contract'
+        local result_path = result_directory .. '/legacy-result.json'
+        os.remove(result_path)
+        lfs.rmdir(result_directory)
+
+        local run_options = options('legacy-result')
+        run_options.result_directory = result_directory
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            end
+            return {exit_code=0,
+                lines=report_lines('legacy-result', 'passed', true)}
+        end
+
+        local outcome = runner.run(run_options)
+        local file = assert(io.open(result_path, 'rb'))
+        local contents = assert(file:read('*a'))
+        file:close()
+        assert(os.remove(result_path))
+        assert(lfs.rmdir(result_directory))
+        local persisted = assert(json.decode(contents))
+
+        assert.equals(runner.exit_codes.success, outcome.exit_code)
+        assert.equals('dwarfspec.run.v1', persisted.schema)
+        assert.equals('legacy-result', persisted.run_id)
+        assert.equals('passed', persisted.state)
+    end)
 end)

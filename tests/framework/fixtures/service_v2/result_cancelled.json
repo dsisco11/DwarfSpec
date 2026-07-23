@@ -1,0 +1,24 @@
+{
+  "schema": "dwarfspec.result.v2",
+  "service_instance_id": "service-fixture-1",
+  "project_id": "project-beta",
+  "run_id": "run-cancelled",
+  "generation": 6,
+  "state": "cancelled",
+  "terminal": true,
+  "exit_code": null,
+  "project_root": "tests/framework/service project beta",
+  "selection": {
+    "identities": ["tests/live/shared_spec.ds.lua"]
+  },
+  "submitted_at": "2026-07-23T00:00:00Z",
+  "activated_at": null,
+  "finished_at": "2026-07-23T00:00:02Z",
+  "queue_wait_ms": null,
+  "error": {
+    "kind": "cancelled",
+    "message": "cancelled before activation"
+  },
+  "host_report": null,
+  "events": []
+}
