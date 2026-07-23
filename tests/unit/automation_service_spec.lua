@@ -29,7 +29,7 @@ describe('multi-project automation service', function()
         return {
             protocol_version=2,
             package_root=package_root or 'D:/Packages/DwarfSpec',
-            package_version=package_version or '0.1.3',
+            package_version=package_version or '0.2.0',
         }
     end
 
@@ -50,7 +50,7 @@ describe('multi-project automation service', function()
             result_policy=ResultPolicy.FILE,
             client_compatibility={
                 protocol=2,
-                package_version='0.1.3',
+            package_version='0.2.0',
             },
         }
         for key, value in pairs(overrides or {}) do request[key] = value end
@@ -106,7 +106,7 @@ describe('multi-project automation service', function()
         assert.equals(2, registry.protocol_version)
         assert.equals('service-contract-1', registry.service_instance_id)
         assert.equals('D:/Packages/DwarfSpec', registry.package_root)
-        assert.equals('0.1.3', registry.package_version)
+        assert.equals('0.2.0', registry.package_version)
         assert.equals(0, registry.generation)
         assert.equals(2, registry.next_project_sequence)
         assert.is_table(registry.projects)
@@ -212,7 +212,7 @@ describe('multi-project automation service', function()
             service.register_project(registration('D:/Clients/Alpha', {
                 client_compatibility={
                     protocol=1,
-                    package_version='0.1.3',
+                    package_version='0.2.0',
                 },
             }), dependencies)
         end, 'incompatible project protocol: expected 2, found 1')
@@ -223,7 +223,7 @@ describe('multi-project automation service', function()
                     package_version='9.9.9',
                 },
             }), dependencies)
-        end, 'incompatible project package version: expected 0.1.3, ' ..
+        end, 'incompatible project package version: expected 0.2.0, ' ..
             'found 9.9.9')
         assert.has_error(function()
             service.register_project(registration('D:/Clients/Alpha', {
@@ -292,13 +292,13 @@ describe('multi-project automation service', function()
 
         assert.has_error(function()
             service.bootstrap(bootstrap_request(nil, '9.9.9'), dependencies)
-        end, 'incompatible automation package version: expected 0.1.3, ' ..
+        end, 'incompatible automation package version: expected 0.2.0, ' ..
             'found 9.9.9')
         assert.has_error(function()
             service.bootstrap({
                 protocol_version=1,
                 package_root='D:/Packages/DwarfSpec',
-                package_version='0.1.3',
+                package_version='0.2.0',
             }, dependencies)
         end, 'incompatible automation service protocol: expected 2, found 1')
 

@@ -10,7 +10,7 @@ For a local release candidate, build and install the generated rock instead of
 loading files from a sibling checkout:
 
 ```powershell
-luarocks install .\dist\dwarfspec-0.1.3-1.all.rock
+luarocks install .\dist\dwarfspec-0.2.0-1.all.rock
 ```
 
 The VS Code `Publish` task, or `tools/Publish.ps1`, produces that portable

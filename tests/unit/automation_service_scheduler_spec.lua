@@ -57,7 +57,7 @@ local function environment()
     service.bootstrap({
         protocol_version=2,
         package_root='.',
-        package_version='0.1.3',
+        package_version='0.2.0',
     }, dependencies)
     return dependencies, clock, controls
 end
@@ -76,7 +76,7 @@ local function register_project(dependencies, index, overrides)
         result_path='tests/.test-results/dwarfspec/results.json',
         client_compatibility={
             protocol=2,
-            package_version='0.1.3',
+            package_version='0.2.0',
         },
     }
     for key, value in pairs(overrides or {}) do request[key] = value end

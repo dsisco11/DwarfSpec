@@ -48,7 +48,7 @@ local function registry(run)
         protocol_version=2,
         service_instance_id='service-schema-1',
         package_root='D:/Packages/DwarfSpec',
-        package_version='0.1.3',
+        package_version='0.2.0',
         generation=3,
         next_project_sequence=2,
         projects={
@@ -63,7 +63,7 @@ local function registry(run)
             result_policy=ResultPolicy.FILE,
                 client_compatibility={
                     protocol=2,
-                    package_version='0.1.3',
+                    package_version='0.2.0',
                 },
                 registered_at=50,
                 refreshed_at=50,
