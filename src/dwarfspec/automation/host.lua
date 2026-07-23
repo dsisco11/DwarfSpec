@@ -1,9 +1,14 @@
--- Safe programmatic Busted host for DFHack core-context automation.
+-- Service-owned Busted host for DFHack core-context automation.
 
 local RunState = require('dwarfspec.automation.run_states')
+local EventType = require('dwarfspec.automation.event_types')
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+local service = require('dwarfspec.automation.service')
 
 local M = {
     protocol_version=1,
+    service_protocol_version=2,
+    package_version='0.1.3',
 }
 
 local RUN_STATE_TERMINAL = {
@@ -126,56 +131,53 @@ local function validate_run_id(run_id)
     end
 end
 
----Returns the compatible process-wide automation registry.
+---Returns the compatible process-wide service registry.
 ---@return table
 local function get_registry()
     local registry = dfhack.dwarfspec
-    if registry and registry.protocol_version ~= M.protocol_version then
-        error(('incompatible automation host protocol: expected %d, found %s')
-            :format(M.protocol_version, tostring(registry.protocol_version)))
-    end
-    if not registry then
-        registry = {
-            protocol_version=M.protocol_version,
-            generation=0,
-            active_run=nil,
-            last_completed=nil,
-        }
-        dfhack.dwarfspec = registry
-    end
+    assert(type(registry) == 'table' and
+        registry.protocol_version == M.service_protocol_version and
+        registry.schema == service.schema,
+        'compatible automation service has not been bootstrapped')
     return registry
 end
 
----Moves a run through one explicitly permitted state transition.
----@param run table
----@param expected DwarfSpecRunState|DwarfSpecRunState[]
----@param target DwarfSpecRunState
-local function transition(run, expected, target)
-    assert(RUN_STATE_TERMINAL[target] ~= nil,
-        'transition target must be a RunState')
-    local allowed = type(expected) == 'string' and {expected} or expected
-    assert(type(allowed) == 'table',
-        'transition source must be a RunState or RunState array')
-    for _, state in ipairs(allowed) do
-        assert(RUN_STATE_TERMINAL[state] ~= nil,
-            'transition source must be a RunState')
-        if run.state == state then
-            run.state = target
-            run.state_changed_ms = dfhack.getTickCount()
-            return
-        end
+---Returns the filesystem surface used for service path validation.
+---@return table|nil
+local function service_filesystem()
+    local filesystem = dfhack.filesystem
+    if type(filesystem) ~= 'table' or
+            type(filesystem.getcwd) ~= 'function' or
+            type(filesystem.isdir) ~= 'function' then
+        return nil
     end
-    error(('invalid automation state transition %s -> %s')
-        :format(tostring(run.state), target))
+    return {
+        currentdir=filesystem.getcwd,
+        isdir=filesystem.isdir,
+        case_insensitive=package.config:sub(1, 1) == '\\',
+    }
 end
 
----Archives a terminal run while retaining only the most recent completion.
----@param registry table
----@param run table
-local function archive_run(registry, run)
-    if registry.active_run == run then registry.active_run = nil end
-    run.terminal_observed = false
-    registry.last_completed = run
+---Returns dependencies for service mutations in the live host.
+---@param run_id string|nil
+---@return table
+local function service_dependencies(run_id)
+    local dependencies = {
+        namespace=dfhack,
+        filesystem=service_filesystem(),
+        now_ms=dfhack.getTickCount,
+    }
+    if run_id ~= nil then
+        dependencies.new_run_id=function()
+            return run_id
+        end
+        dependencies.new_owner_capability=function()
+            return ('owner-v1:%s:%d:%08x'):format(
+                run_id, dfhack.getTickCount(),
+                math.random(0, 0x7fffffff))
+        end
+    end
+    return dependencies
 end
 
 ---Returns whether a file can be opened for reading.
@@ -235,11 +237,11 @@ local function configure_dependencies(package_root, configured_lua_root)
     return source_entries
 end
 
----Installs project-root module lookup and returns its idempotent cleanup.
+---Installs project-root module lookup and returns cleanup plus an audit record.
 ---@param project_root string
 ---@param protected_entries string[]
 ---@param runtime_package table|nil
----@return function
+---@return function, table
 function M.configure_project_modules(project_root, protected_entries,
         runtime_package)
     assert(type(project_root) == 'string' and project_root ~= '',
@@ -276,6 +278,13 @@ function M.configure_project_modules(project_root, protected_entries,
     for entry in original_path:gmatch('[^;]+') do include(entry) end
     runtime_package.path = table.concat(reordered, ';')
 
+    local audit = {
+        original_path=original_path,
+        project_entries=project_entries,
+        restored=false,
+        path_restored=false,
+        evicted_modules={},
+    }
     local restored = false
     return function()
         if restored then return end
@@ -287,10 +296,14 @@ function M.configure_project_modules(project_root, protected_entries,
                     runtime_package.searchpath(name, project_path) and
                     not runtime_package.searchpath(name, protected_path) then
                 runtime_package.loaded[name] = nil
+                table.insert(audit.evicted_modules, name)
             end
         end
         runtime_package.path = original_path
-    end
+        audit.restored = true
+        audit.path_restored = runtime_package.path == original_path
+        table.sort(audit.evicted_modules)
+    end, audit
 end
 
 ---Normalizes a caller's optional scalar or dense-list filter value.
@@ -385,8 +398,9 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local extensions_module = load_automation_module(package_root,
         'dwarfspec.automation.extensions',
         'tests/automation/support/extensions.lua')
-    local restore_project_modules = M.configure_project_modules(project_root,
-        dependency_entries)
+    local restore_project_modules, module_audit =
+        M.configure_project_modules(project_root, dependency_entries)
+    run.module_environment_audit = module_audit
     run.cleanup_module.push(run.cleanup_registry,
         'project module environment', restore_project_modules)
     local extensions = extensions_module.load(project)
@@ -433,6 +447,17 @@ local function cancel_timeout(timeout_id)
     if timeout_id ~= nil then dfhack.timeout_active(timeout_id, nil) end
 end
 
+---Publishes one structured event through the run's generation guard.
+---@param run table
+---@param event_type DwarfSpecEventType
+---@param payload table
+local function publish_run_event(run, event_type, payload)
+    assert(type(run.event_publisher) == 'table' and
+        type(run.event_publisher.publish) == 'function',
+        'active run does not own an event publisher')
+    run.event_publisher.publish(event_type, payload)
+end
+
 ---Records cleanup failures as host errors without hiding later failures.
 ---@param run table
 ---@param failures table[]
@@ -441,6 +466,12 @@ local function record_cleanup_failures(run, failures)
         local failure_key = failure.id or failure
         if not run.recorded_cleanup_failures[failure_key] then
             run.recorded_cleanup_failures[failure_key] = true
+            publish_run_event(run, EventType.CLEANUP_FAILED, {
+                action_name=failure.name,
+                reason=failure.reason,
+                message=failure.message,
+                trace=failure.message,
+            })
             if not failure.reported_by_busted then
                 local message = ('cleanup %s failed during %s: %s')
                     :format(failure.name, failure.reason, failure.message)
@@ -491,8 +522,14 @@ local function clean_run(run, reason)
     end
     if mount_state then mount_state.verified = mount_ok end
     run.mount_cleanup_state = mount_state
+    run.mount_cleanup_verified = mount_ok
     local history_ok = #run.cleanup_registry.failures == 0
+    local module_audit = run.module_environment_audit
+    local module_environment_ok = module_audit == nil or
+        module_audit.restored == true and
+        module_audit.path_restored == true
     run.cleanup_confirmed = ok and history_ok and mount_ok and
+        module_environment_ok and
         run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
         run.outstanding_wait == nil and run.coroutine == nil and
         run.scheduler == nil and run.scheduled_timeout_id == nil and
@@ -509,7 +546,32 @@ local function clean_run(run, reason)
             message=message,
             trace=mount_state and mount_state.probe_error or nil,
         })
+        publish_run_event(run, EventType.CLEANUP_FAILED, {
+            action_name='mount lifecycle verification',
+            reason=reason,
+            message=message,
+            trace=mount_state and mount_state.probe_error or nil,
+        })
     end
+    if not module_environment_ok then
+        local message = 'project module environment was not restored during ' ..
+            reason
+        table.insert(run.output_lines, 'CLEANUP_ERROR ' .. message)
+        table.insert(run.failure_details, {
+            kind='error',
+            name='automation cleanup: project module environment',
+            message=message,
+        })
+        publish_run_event(run, EventType.CLEANUP_FAILED, {
+            action_name='project module environment',
+            reason=reason,
+            message=message,
+        })
+    end
+    publish_run_event(run, EventType.CLEANUP_FINISHED, {
+        cleanup_confirmed=run.cleanup_confirmed,
+        mount_cleanup_verified=mount_ok,
+    })
     return run.cleanup_confirmed
 end
 
@@ -519,10 +581,14 @@ end
 ---@param ok boolean
 ---@param host_error any
 local function finalize_run(registry, run, ok, host_error)
-    if registry.active_run ~= run or registry.generation ~= run.generation then
+    if registry.active_run_id ~= run.run_id or
+            registry.runs[run.run_id] ~= run or
+            run.terminal then
         return
     end
-    transition(run, RunState.RUNNING, RunState.CLEANING)
+    service.begin_cleanup(run.run_id, run.generation, 'suite completion',
+        run.cleanup_module.pending_count(run.cleanup_registry),
+        service_dependencies())
     if not ok then
         run.host_error = tostring(host_error)
         run.host_trace = debug.traceback(run.coroutine, tostring(host_error))
@@ -537,13 +603,17 @@ local function finalize_run(registry, run, ok, host_error)
     end
     run.finished_ms = dfhack.getTickCount()
     run.finished_frame = current_frame()
+    local terminal_state
     if ok and cleanup_ok and run.totals.failures == 0 and
             run.totals.errors == 0 then
-        transition(run, RunState.CLEANING, RunState.PASSED)
+        terminal_state = RunState.PASSED
     else
-        transition(run, RunState.CLEANING, RunState.FAILED)
+        terminal_state = RunState.FAILED
     end
-    archive_run(registry, run)
+    service.complete_active(run.run_id, run.generation, terminal_state,
+        cleanup_ok, run.cleanup_reason, service_dependencies())
+    run.terminal_observed = false
+    M.activate_next()
 end
 
 ---Starts Busted execution when the queued generation still owns the run.
@@ -552,22 +622,34 @@ end
 ---@param registry table
 ---@param run table
 local function begin_queued_run(package_root, project_root, registry, run)
-    if registry.active_run ~= run or registry.generation ~= run.generation or
+    if registry.active_run_id ~= run.run_id or
+            registry.runs[run.run_id] ~= run or
             run.state ~= RunState.STARTING then
         return
     end
     run.scheduled_timeout_id = nil
-    transition(run, RunState.STARTING, RunState.RUNNING)
+    service.start_active(run.run_id, run.generation, {
+        repeat_count=run.options.repeat_count,
+        options={
+            seed=run.options.seed,
+            shuffle=false,
+            filters=run.options.filters,
+            filter_out=run.options.filter_out,
+            names=run.options.names,
+            tags=run.options.tags,
+            exclude_tags=run.options.exclude_tags,
+        },
+    }, service_dependencies())
     run.started_ms = dfhack.getTickCount()
     run.started_frame = current_frame()
     local scheduler_module = load_automation_module(package_root,
         'dwarfspec.automation.coroutine_scheduler',
-        'tests/automation/support/scheduler.lua')
+        'src/dwarfspec/automation/coroutine_scheduler.lua')
     local scheduler
     scheduler = scheduler_module.new(run, {
         is_current=function()
-            return registry.active_run == run and
-                registry.generation == run.generation and
+            return registry.active_run_id == run.run_id and
+                registry.runs[run.run_id] == run and
                 run.state == RunState.RUNNING
         end,
         schedule_timeout=function(delay, callback)
@@ -607,9 +689,10 @@ end
 ---@param reason string
 ---@return table
 local function terminate_aborted(registry, run, reason)
-    registry.generation = registry.generation + 1
-    transition(run, {RunState.STARTING, RunState.RUNNING},
-        RunState.CLEANING)
+    publish_run_event(run, EventType.RUN_ABORTED, {reason=reason})
+    service.begin_cleanup(run.run_id, run.generation, reason,
+        run.cleanup_module.pending_count(run.cleanup_registry),
+        service_dependencies())
     local cleanup_ok = clean_run(run, reason)
     if not cleanup_ok and not run.cleanup_failure_reported_by_busted then
         run.counts.errors = run.counts.errors + 1
@@ -618,8 +701,10 @@ local function terminate_aborted(registry, run, reason)
     run.finished_ms = dfhack.getTickCount()
     run.finished_frame = current_frame()
     table.insert(run.output_lines, 'ABORTED ' .. reason)
-    transition(run, RunState.CLEANING, RunState.ABORTED)
-    archive_run(registry, run)
+    service.complete_active(run.run_id, run.generation, RunState.ABORTED,
+        cleanup_ok, reason, service_dependencies())
+    run.terminal_observed = false
+    M.activate_next()
     return run
 end
 
@@ -629,8 +714,8 @@ end
 local function schedule_lease_check(registry, run)
     local timeout_id
     timeout_id = dfhack.timeout(run.lease_check_frames, 'frames', function()
-        if registry.active_run ~= run or
-                registry.generation ~= run.generation or
+        if registry.active_run_id ~= run.run_id or
+                registry.runs[run.run_id] ~= run or
                 M.is_terminal(run) then
             return
         end
@@ -652,7 +737,122 @@ local function schedule_lease_check(registry, run)
     run.lease_timeout_id = timeout_id
 end
 
----Starts one uniquely owned nonblocking automation run.
+---Initializes host-only runtime fields on one admitted service run.
+---@param run table
+---@param package_root string
+---@param project_root string
+---@param options table
+local function initialize_runtime(run, package_root, project_root, options)
+    local cleanup_module = load_automation_module(package_root,
+        'dwarfspec.automation.cleanup',
+        'src/dwarfspec/automation/cleanup.lua')
+    local created_ms = dfhack.getTickCount()
+    run.protocol_version = M.protocol_version
+    run.package_root = package_root
+    run.project_root = project_root
+    run.options = options
+    run.state_changed_ms = created_ms
+    run.created_ms = created_ms
+    run.created_frame = current_frame()
+    run.started_ms = nil
+    run.started_frame = nil
+    run.finished_ms = nil
+    run.finished_frame = nil
+    run.last_status_poll_ms = nil
+    run.last_status_poll_frame = nil
+    run.current_test = nil
+    run.output_lines = {}
+    run.failure_details = {}
+    run.discovered_files = {}
+    run.coroutine = nil
+    run.scheduled_timeout_id = nil
+    run.lease_timeout_id = nil
+    run.lease_timeout_ms = options.lease_timeout_ms or 5000
+    run.lease_check_frames = options.lease_check_frames or 30
+    run.lease_elapsed_ms = 0
+    run.outstanding_wait = nil
+    run.cleanup_module = cleanup_module
+    run.cleanup_registry = nil
+    run.cleanup_reason = nil
+    run.mount_cleanup_probe = nil
+    run.mount_cleanup_state = nil
+    run.module_environment_audit = nil
+    run.recorded_cleanup_failures = {}
+    run.cleanup_failure_reported_by_busted = false
+    run.scheduler_module = nil
+    run.scheduler = nil
+    run.suspended = false
+    run.terminal_observed = false
+    assert(type(run.lease_timeout_ms) == 'number' and
+        run.lease_timeout_ms >= 1,
+        'lease timeout must be positive')
+    assert(type(run.lease_check_frames) == 'number' and
+        run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0,
+        'lease check interval must be a positive integer')
+    run.cleanup_registry = cleanup_module.new(run, function()
+        local registry = dfhack.dwarfspec
+        return type(registry) == 'table' and
+            registry.active_run_id == run.run_id and
+            registry.runs[run.run_id] == run and
+            run.generation == registry.runs[run.run_id].generation and
+            not run.terminal
+    end)
+    run.event_publisher = {
+        now_ms=dfhack.getTickCount,
+        publish=function(event_type, payload)
+            return service.publish_active_event(run.run_id, run.generation,
+                event_type, payload, service_dependencies())
+        end,
+    }
+end
+
+---Schedules native execution and lease checks for one activated run.
+---@param registry table
+---@param run table
+local function schedule_activated_run(registry, run)
+    local timeout_id = dfhack.timeout(run.options.defer_frames, 'frames',
+        function()
+        begin_queued_run(run.package_root, run.project_root, registry, run)
+    end)
+    if not timeout_id then
+        finalize_run(registry, run, false,
+            'DFHack rejected the automation startup timer')
+        return
+    end
+    run.scheduled_timeout_id = timeout_id
+    local lease_ok, lease_error = pcall(schedule_lease_check, registry, run)
+    if not lease_ok then
+        cancel_timeout(run.scheduled_timeout_id)
+        run.scheduled_timeout_id = nil
+        finalize_run(registry, run, false, lease_error)
+    end
+end
+
+---Activates and schedules the next service-owned FIFO run when possible.
+---@return table|nil
+function M.activate_next()
+    local outcome = service.activate_next(service_dependencies())
+    if not outcome.activated then return nil end
+    local registry = get_registry()
+    local run = assert(registry.runs[outcome.identity.run_id],
+        'activated service run is missing from the registry')
+    schedule_activated_run(registry, run)
+    return run
+end
+
+---Returns canonical service selection identities for host spec arguments.
+---@param specs string[]|nil
+---@return string[]
+local function service_selection(specs)
+    local identities = {}
+    for _, spec in ipairs(specs or {}) do
+        table.insert(identities, 'tests/' .. spec:gsub('\\', '/'))
+    end
+    table.sort(identities)
+    return identities
+end
+
+---Starts one service-owned nonblocking automation run.
 ---@param package_root string
 ---@param project_root string
 ---@param options table
@@ -665,102 +865,51 @@ function M.start(package_root, project_root, options)
     assert(type(project_root) == 'string' and project_root ~= '',
         'project root must be a nonempty string')
     validate_run_id(options.run_id)
-    local registry = get_registry()
-    if registry.active_run and not M.is_terminal(registry.active_run) then
+    local dependencies = service_dependencies(options.run_id)
+    service.bootstrap({
+        protocol_version=M.service_protocol_version,
+        package_root=package_root,
+        package_version=M.package_version,
+    }, dependencies)
+    local project = service.register_project({
+        project_root=project_root,
+        normalized_configuration=options,
+        result_policy=ResultPolicy.NONE,
+        client_compatibility={
+            protocol=M.service_protocol_version,
+            package_version=M.package_version,
+        },
+    }, dependencies)
+    local outcome = service.submit(project.project_id, {
+        request_key='version1-request:' .. options.run_id,
+        owner_kind='external',
+        selection={identities=service_selection(options.specs)},
+    }, dependencies)
+    if not outcome.accepted then
+        if outcome.snapshot.terminal then
+            error(('automation run %s has an unobserved %s result')
+                :format(outcome.identity.run_id, outcome.snapshot.state))
+        end
         error(('automation run %s is already %s')
-            :format(registry.active_run.run_id, registry.active_run.state))
+            :format(outcome.identity.run_id, outcome.snapshot.state))
     end
-    if registry.last_completed and
-            registry.last_completed.terminal_observed ~= true then
-        error(('automation run %s has an unobserved %s result')
-            :format(registry.last_completed.run_id,
-                registry.last_completed.state))
-    end
-
-    registry.generation = registry.generation + 1
-    local cleanup_module = load_automation_module(package_root,
-        'dwarfspec.automation.cleanup',
-        'tests/automation/support/cleanup.lua')
-    local created_ms = dfhack.getTickCount()
-    local run = {
-        protocol_version=M.protocol_version,
-        run_id=options.run_id,
-        generation=registry.generation,
-        state=RunState.STARTING,
-        state_changed_ms=created_ms,
-        created_ms=created_ms,
-        created_frame=current_frame(),
-        started_ms=nil,
-        started_frame=nil,
-        finished_ms=nil,
-        finished_frame=nil,
-        last_status_poll_ms=nil,
-        last_status_poll_frame=nil,
-        options=options,
-        counts={successes=0, failures=0, errors=0, pending=0},
-        totals={successes=0, failures=0, errors=0, pending=0},
-        current_test=nil,
-        output_lines={},
-        failure_details={},
-        discovered_files={},
-        coroutine=nil,
-        scheduled_timeout_id=nil,
-        lease_timeout_id=nil,
-        lease_timeout_ms=options.lease_timeout_ms or 5000,
-        lease_check_frames=options.lease_check_frames or 30,
-        lease_elapsed_ms=0,
-        outstanding_wait=nil,
-        cleanup_module=cleanup_module,
-        cleanup_registry=nil,
-        cleanup_confirmed=false,
-        cleanup_reason=nil,
-        mount_cleanup_probe=nil,
-        mount_cleanup_state=nil,
-        recorded_cleanup_failures={},
-        cleanup_failure_reported_by_busted=false,
-        scheduler_module=nil,
-        scheduler=nil,
-        suspended=false,
-        terminal_observed=false,
-    }
-    assert(type(run.lease_timeout_ms) == 'number' and
-        run.lease_timeout_ms >= 1,
-        'lease timeout must be positive')
-    assert(type(run.lease_check_frames) == 'number' and
-        run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0,
-        'lease check interval must be a positive integer')
-    run.cleanup_registry = cleanup_module.new(run)
-    registry.active_run = run
-    local timeout_id = dfhack.timeout(options.defer_frames, 'frames', function()
-        begin_queued_run(package_root, project_root, registry, run)
-    end)
-    if not timeout_id then
-        registry.active_run = nil
-        error('DFHack rejected the automation startup timer')
-    end
-    run.scheduled_timeout_id = timeout_id
-    local lease_ok, lease_error = pcall(schedule_lease_check, registry, run)
-    if not lease_ok then
-        cancel_timeout(run.scheduled_timeout_id)
-        run.scheduled_timeout_id = nil
-        registry.active_run = nil
-        error(lease_error)
-    end
+    local registry = get_registry()
+    local run = assert(registry.runs[outcome.identity.run_id],
+        'admitted service run is missing from the registry')
+    if outcome.reused then return run end
+    run.owner_capability = outcome.owner_capability
+    initialize_runtime(run, registry.package_root,
+        project.normalized_project_root, options)
+    M.activate_next()
     return run
 end
 
----Returns an active or most-recent completed run by exact id.
+---Returns any retained service run by exact identifier.
 ---@param run_id string
 ---@return table|nil
 function M.find(run_id)
     local registry = get_registry()
-    if registry.active_run and registry.active_run.run_id == run_id then
-        return registry.active_run
-    end
-    if registry.last_completed and registry.last_completed.run_id == run_id then
-        return registry.last_completed
-    end
-    return nil
+    return registry.runs[run_id]
 end
 
 ---Records a status poll that renews an active run's frame-driven lease.
@@ -771,7 +920,13 @@ function M.poll(run_id)
     if not run then error('automation run not found: ' .. run_id) end
     run.last_status_poll_ms = dfhack.getTickCount()
     run.last_status_poll_frame = current_frame()
-    if M.is_terminal(run) then run.terminal_observed = true end
+    if M.is_terminal(run) and not run.terminal_observed then
+        run.terminal_observed = true
+        if not run.acknowledged then
+            service.acknowledge_compatibility(run.run_id, run.generation,
+                run.owner_capability, service_dependencies())
+        end
+    end
     return run
 end
 
@@ -780,12 +935,18 @@ end
 ---@return table
 function M.abort(run_id)
     local registry = get_registry()
-    local run = registry.active_run
-    if not run or run.run_id ~= run_id then
-        error('active automation run not found: ' .. run_id)
-    end
+    local run = registry.runs[run_id]
+    if not run then error('automation run not found: ' .. run_id) end
     if M.is_terminal(run) then return run end
-
+    if run.state == RunState.QUEUED then
+        service.cancel(run.run_id, run.owner_capability, 'by request',
+            service_dependencies())
+        table.insert(run.output_lines, 'CANCELLED by request')
+        run.terminal_observed = false
+        return run
+    end
+    assert(registry.active_run_id == run_id,
+        'active automation run not found: ' .. run_id)
     return terminate_aborted(registry, run, 'by request')
 end
 

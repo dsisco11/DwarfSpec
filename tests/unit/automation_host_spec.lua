@@ -1,6 +1,7 @@
 -- Unit contracts for live automation ownership and generation guards.
 
-local host_path = 'tests/automation/support/busted_host.lua'
+local host_path = 'src/dwarfspec/automation/host.lua'
+local EventType = require('dwarfspec.automation.event_types')
 local RunState = require('dwarfspec.automation.run_states')
 
 describe('automation host ownership', function()
@@ -77,25 +78,34 @@ describe('automation host ownership', function()
         }
     end
 
-    it('initializes and retains the version 1 singleton registry shape',
+    it('initializes and retains the version 2 service registry shape',
             function()
         assert.is_nil(dfhack.dwarfspec)
 
         local run = host.start('.', '.', options('registry-contract'))
         local registry = dfhack.dwarfspec
 
-        assert.equals(1, registry.protocol_version)
+        assert.equals(2, registry.protocol_version)
+        assert.equals('dwarfspec.service.v2', registry.schema)
         assert.equals(1, registry.generation)
-        assert.equals(run, registry.active_run)
-        assert.is_nil(registry.last_completed)
+        assert.equals(run.run_id, registry.active_run_id)
+        assert.equals(run, registry.runs[run.run_id])
+        assert.equals(run.project_id,
+            registry.projects[run.project_id].project_id)
 
         local aborted = host.abort(run.run_id)
-        assert.is_nil(registry.active_run)
-        assert.equals(aborted, registry.last_completed)
+        assert.is_nil(registry.active_run_id)
+        assert.equals(aborted.run_id,
+            registry.latest_terminal_results[aborted.project_id])
         assert.is_false(aborted.terminal_observed)
+        assert.equals(aborted.run_id,
+            registry.projects[aborted.project_id].outstanding_run_id)
 
         assert.equals(aborted, host.poll(run.run_id))
         assert.is_true(aborted.terminal_observed)
+        assert.is_true(aborted.acknowledged)
+        assert.is_nil(registry.projects[aborted.project_id].
+            outstanding_run_id)
     end)
 
     it('rejects overlap and ignores a callback after abort', function()
@@ -126,6 +136,18 @@ describe('automation host ownership', function()
         assert.is_true(aborted.cleanup_confirmed)
         assert.is_true(aborted.mount_cleanup_state.verified)
         assert.equals(0, aborted.mount_cleanup_state.active_screen_count)
+        local event_types = {}
+        for _, event in ipairs(aborted.event_journal.events) do
+            table.insert(event_types, event.type)
+        end
+        assert.same({
+            EventType.RUN_QUEUED,
+            EventType.RUN_ACTIVATED,
+            EventType.RUN_ABORTED,
+            EventType.CLEANUP_STARTED,
+            EventType.CLEANUP_FINISHED,
+            EventType.RUN_FINISHED,
+        }, event_types)
         callbacks[1]()
         callbacks[2]()
         assert.equals('aborted', aborted.state)
@@ -140,7 +162,7 @@ describe('automation host ownership', function()
             host.start('.', '.', options('replacement'))
         end, 'automation run retained has an unobserved aborted result')
 
-        aborted.terminal_observed = true
+        host.poll(aborted.run_id)
         local replacement = host.start('.', '.', options('replacement'))
         assert.equals('starting', replacement.state)
         host.abort(replacement.run_id)
@@ -398,7 +420,7 @@ describe('automation host ownership', function()
             return nil
         end
 
-        local restore = host.configure_project_modules(project_root,
+        local restore, audit = host.configure_project_modules(project_root,
             {dependency_path}, runtime_package)
         assert.equals(table.concat({
             dependency_path,
@@ -421,5 +443,8 @@ describe('automation host ownership', function()
         assert.same({value='dependency'},
             runtime_package.loaded['protected.fixture'])
         assert.same({value='non-string key'}, runtime_package.loaded[1])
+        assert.is_true(audit.restored)
+        assert.is_true(audit.path_restored)
+        assert.same({'support.fixture'}, audit.evicted_modules)
     end)
 end)

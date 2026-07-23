@@ -1,6 +1,7 @@
 -- Live resilience contracts for reusable automation-host infrastructure.
 
 local widgets = require('gui.widgets')
+local RunState = require('dwarfspec.automation.run_states')
 
 ---@class tests.FailingMountWidget: widgets.Panel
 local FailingMountWidget = defclass(nil, widgets.Panel)
@@ -19,7 +20,7 @@ local function repository_root()
     return assert(root, 'could not derive repository root from ' .. source)
 end
 
----Builds the smallest valid competing host-run option set.
+---Builds the smallest valid queued host-run option set.
 ---@param run_id string
 ---@return table
 local function competing_options(run_id)
@@ -39,27 +40,34 @@ describe('automation framework live resilience', function()
         assert.equals('project-root module', fixture.value)
     end)
 
-    it('rejects a competing host run without changing the active owner',
+    it('queues another project without changing the active owner',
             function()
         local root = repository_root()
         local host = assert(loadfile(root ..
-            '/tests/automation/support/busted_host.lua'))()
-        local active = assert(dfhack.dwarfspec.active_run)
+        '/src/dwarfspec/automation/host.lua'))()
+        local registry = assert(dfhack.dwarfspec)
+        local active = ds.current_run()
+        local other_root = root .. '/tests/framework/command_project'
+        local competing_id = 'live-host-conflict-' ..
+            tostring(active.generation)
 
-        local ok, message = pcall(host.start, root, root,
-            competing_options('live-host-conflict'))
+        local queued = host.start(root, other_root,
+            competing_options(competing_id))
 
-        assert.is_false(ok)
-        assert.matches('automation run ' .. active.run_id ..
-            ' is already running', message, 1, true)
-        assert.equals(active, dfhack.dwarfspec.active_run)
+        assert.equals(RunState.QUEUED, queued.state)
+        assert.equals(active.run_id, registry.active_run_id)
+        assert.equals(active, ds.current_run())
+
+        local cancelled = host.abort(queued.run_id)
+        assert.equals(RunState.CANCELLED, cancelled.state)
+        host.poll(cancelled.run_id)
     end)
 
     it('rejects stale real-frame callbacks from a no-longer-current generation',
             function()
         local root = repository_root()
         local scheduler_module = assert(loadfile(root ..
-            '/tests/automation/support/scheduler.lua'))()
+        '/src/dwarfspec/automation/coroutine_scheduler.lua'))()
         local run = {outstanding_wait=nil, suspended=false}
         local complete_calls = 0
         local stale_callback
@@ -103,7 +111,7 @@ describe('automation framework live resilience', function()
     it('captures injected mount failures and restores test-owned state',
             function()
         local ok, message = pcall(ds.mount, FailingMountWidget)
-        local run = assert(dfhack.dwarfspec.active_run)
+        local run = ds.current_run()
 
         assert.is_false(ok)
         assert.matches('DwarfSpec mount failure: operation="mount"',

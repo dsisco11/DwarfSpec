@@ -38,7 +38,7 @@ local function load_host(root, lua_root)
             'automation' .. separator .. 'host.lua'))()
     end
     return assert(loadfile(root ..
-        '/tests/automation/support/busted_host.lua'))()
+        '/src/dwarfspec/automation/host.lua'))()
 end
 
 ---Parses one positive integer option.

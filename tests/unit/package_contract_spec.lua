@@ -100,6 +100,10 @@ describe('DwarfSpec package contract', function()
                     'src/dwarfspec/automation/event_types.lua',
                 output_handler=
                     'src/dwarfspec/automation/output_handler.lua',
+                cleanup='src/dwarfspec/automation/cleanup.lua',
+                coroutine_scheduler=
+                    'src/dwarfspec/automation/coroutine_scheduler.lua',
+                host='src/dwarfspec/automation/host.lua',
                 projects='src/dwarfspec/automation/projects.lua',
                 result_policies=
                     'src/dwarfspec/automation/result_policies.lua',
@@ -130,6 +134,9 @@ describe('DwarfSpec package contract', function()
                 'dwarfspec.automation.events',
                 'dwarfspec.automation.event_types',
                 'dwarfspec.automation.output_handler',
+                'dwarfspec.automation.cleanup',
+                'dwarfspec.automation.coroutine_scheduler',
+                'dwarfspec.automation.host',
                 'dwarfspec.automation.projects',
                 'dwarfspec.automation.result_policies',
                 'dwarfspec.automation.result_states',

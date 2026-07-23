@@ -5,7 +5,9 @@ local overlay = require('plugins.overlay')
 ---Records one run-owned lifecycle event without persisting product state.
 ---@param name string
 local function record(name)
-    local run = dfhack.dwarfspec and dfhack.dwarfspec.active_run
+local registry = dfhack.dwarfspec
+local run = registry and registry.active_run_id and
+    registry.runs[registry.active_run_id]
     if not run then return end
     run.overlay_registration_events = run.overlay_registration_events or {}
     local events = run.overlay_registration_events

@@ -100,11 +100,10 @@ describe('legacy automation entrypoint contract', function()
             '--spec=live/shared_spec.ds.lua')
 
         local registry = dfhack.dwarfspec
-        local run = registry.active_run
-        assert.equals(1, registry.protocol_version)
+        local run = registry.runs['entrypoint-contract']
+        assert.equals(2, registry.protocol_version)
         assert.equals(1, registry.generation)
-        assert.equals(run, registry.active_run)
-        assert.is_nil(registry.last_completed)
+        assert.equals(run.run_id, registry.active_run_id)
         assert.equals('starting', run.state)
         assert.equals(2, run.options.repeat_count)
         assert.equals(3, run.options.defer_frames)
@@ -123,8 +122,9 @@ describe('legacy automation entrypoint contract', function()
         assert(loadfile(root .. '/tests/automation/support/abort.lua'))(
             'entrypoint-contract')
 
-        assert.is_nil(registry.active_run)
-        assert.equals(run, registry.last_completed)
+        assert.is_nil(registry.active_run_id)
+        assert.equals(run.run_id,
+            registry.latest_terminal_results[run.project_id])
         assert.equals('aborted', run.state)
         assert.is_true(run.cleanup_confirmed)
         assert.is_true(run.terminal_observed)

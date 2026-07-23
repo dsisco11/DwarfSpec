@@ -1,12 +1,14 @@
 -- Unit contracts for public mount commands on the run-scoped ds namespace.
 
 local cleanup = assert(loadfile(
-    'tests/automation/support/cleanup.lua'))()
+    'src/dwarfspec/automation/cleanup.lua'))()
 local component = assert(loadfile('src/dwarfspec/component.lua'))()
 local render_tracker = assert(loadfile(
     'src/dwarfspec/render_tracker.lua'))()
 local ds_factory = assert(loadfile(
     'tests/automation/support/ds.lua'))()
+local EventType = require('dwarfspec.automation.event_types')
+local TestStatus = require('dwarfspec.automation.test_statuses')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
 ---@param parent table|nil
@@ -34,6 +36,7 @@ describe('DwarfSpec public mount commands', function()
     local reset
     local screen
     local TestWidget
+    local published
 
     before_each(function()
         local Widget = make_class()
@@ -45,7 +48,24 @@ describe('DwarfSpec public mount commands', function()
             OverlayWidget=OverlayWidget,
             ZScreen=ZScreen,
         })
-        local run = {run_id='ds-mount-test', scheduler_state={}}
+        published = {}
+        local now = 10
+        local run = {
+            run_id='ds-mount-test',
+            scheduler_state={},
+            event_publisher={
+                now_ms=function()
+                    now = now + 2
+                    return now
+                end,
+                publish=function(event_type, payload)
+                    table.insert(published, {
+                        type=event_type,
+                        payload=payload,
+                    })
+                end,
+            },
+        }
         registry = cleanup.new(run)
         local scheduler = {run=run}
         local scheduler_module = {
@@ -55,7 +75,14 @@ describe('DwarfSpec public mount commands', function()
         ds, reset = ds_factory.new('.',
             {project_root='.', package_root='.'},
             scheduler_module, scheduler, cleanup, registry,
-            {settings={}, commands={}}, {
+            {settings={}, commands={
+                sample_success={
+                    callback=function(_, value) return 'ok:' .. value end,
+                },
+                sample_failure={
+                    callback=function() error('deliberate command failure') end,
+                },
+            }}, {
                 boundary=boundary,
                 render_tracker_factory=function()
                     return render_tracker.new(scheduler_module, scheduler)
@@ -205,5 +232,26 @@ describe('DwarfSpec public mount commands', function()
             {_native=root_native}, function() return unrelated end))
         assert.equals(root_native, ds_factory.resolve_native_screen(
             {_native=root_native}, function() error('unavailable') end))
+    end)
+
+    it('publishes structured command results and bounded diagnostics',
+            function()
+        assert.equals('ok:value', ds.sample_success('value'))
+        local ok, failure = pcall(ds.sample_failure)
+
+        assert.is_false(ok)
+        assert.matches('deliberate command failure', failure, 1, true)
+        assert.equals(EventType.COMMAND_STARTED, published[1].type)
+        assert.equals('sample_success', published[1].payload.name)
+        assert.equals(EventType.COMMAND_FINISHED, published[2].type)
+        assert.equals(TestStatus.SUCCESS, published[2].payload.status)
+        assert.equals(2, published[2].payload.duration_ms)
+        assert.equals(EventType.COMMAND_STARTED, published[3].type)
+        assert.equals(EventType.COMMAND_FINISHED, published[4].type)
+        assert.equals(TestStatus.ERROR, published[4].payload.status)
+        assert.equals(EventType.DIAGNOSTIC_RECORDED, published[5].type)
+        assert.equals('command_failure', published[5].payload.kind)
+        assert.matches('deliberate command failure',
+            published[5].payload.content.message, 1, true)
     end)
 end)

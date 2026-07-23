@@ -389,6 +389,48 @@ function M.activate_next(dependencies)
     }
 end
 
+---Moves the active generation from starting to running.
+---@param run_id string
+---@param generation integer
+---@param payload table
+---@param dependencies table|nil
+---@return table
+function M.start_active(run_id, generation, payload, dependencies)
+    local registry = require_registry(dependencies)
+    local run = scheduler.start_active(registry, run_id, generation,
+        payload, scheduler_context(dependencies))
+    return snapshots.run(run, registry)
+end
+
+---Moves the active generation into cleanup.
+---@param run_id string
+---@param generation integer
+---@param reason string
+---@param pending_action_count integer
+---@param dependencies table|nil
+---@return table
+function M.begin_cleanup(run_id, generation, reason, pending_action_count,
+        dependencies)
+    local registry = require_registry(dependencies)
+    local run = scheduler.begin_cleanup(registry, run_id, generation,
+        reason, pending_action_count, scheduler_context(dependencies))
+    return snapshots.run(run, registry)
+end
+
+---Publishes one structured event for the exact active generation.
+---@param run_id string
+---@param generation integer
+---@param event_type DwarfSpecEventType
+---@param payload table
+---@param dependencies table|nil
+---@return table
+function M.publish_active_event(run_id, generation, event_type, payload,
+        dependencies)
+    local registry = require_registry(dependencies)
+    return scheduler.publish_active_event(registry, run_id, generation,
+        event_type, payload, scheduler_context(dependencies))
+end
+
 ---Cancels one owned queued run without invoking native cleanup.
 ---@param run_id string
 ---@param owner_capability string
@@ -441,6 +483,21 @@ function M.recover_executor(request, dependencies)
         recovered=outcome.recovered,
         scheduler=snapshots.scheduler(registry),
     }
+end
+
+---Releases a terminal reservation after version 1 status observation.
+---This adapter-only bridge is removed when explicit acknowledgement ships.
+---@param run_id string
+---@param generation integer
+---@param owner_capability string
+---@param dependencies table|nil
+---@return table
+function M.acknowledge_compatibility(run_id, generation, owner_capability,
+        dependencies)
+    local registry = require_registry(dependencies)
+    local run = scheduler.acknowledge_compatibility(registry, run_id,
+        generation, owner_capability)
+    return snapshots.run(run, registry)
 end
 
 return M

@@ -1,7 +1,7 @@
 -- Unit contracts for reversible real-overlay registration staging.
 
 local cleanup = assert(loadfile(
-    'tests/automation/support/cleanup.lua'))()
+    'src/dwarfspec/automation/cleanup.lua'))()
 local overlay_registration = assert(loadfile(
     'tests/automation/support/overlay_registration.lua'))()
 

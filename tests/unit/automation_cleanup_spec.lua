@@ -1,7 +1,7 @@
 -- Unit contracts for the live automation cleanup registry.
 
 local cleanup = assert(loadfile(
-    'tests/automation/support/cleanup.lua'))()
+    'src/dwarfspec/automation/cleanup.lua'))()
 
 describe('automation cleanup registry', function()
     it('runs actions once in strict LIFO order across repeated resets', function()
@@ -89,5 +89,25 @@ describe('automation cleanup registry', function()
         assert.equals(1, cleanup.pending_count(registry))
         assert.is_true(cleanup.run(registry, 'run cleanup'))
         assert.same({'child', 'parent', 'baseline'}, order)
+    end)
+
+    it('rejects stale generation cleanup without invoking its action',
+            function()
+        local current = true
+        local called = false
+        local registry = cleanup.new({}, function() return current end)
+        cleanup.push(registry, 'stale action', function()
+            called = true
+        end)
+        current = false
+
+        local ok, failures = cleanup.run(registry, 'stale callback')
+
+        assert.is_false(ok)
+        assert.is_false(called)
+        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals('cleanup ownership guard', failures[1].name)
+        assert.matches('generation no longer owns cleanup',
+            failures[1].message, 1, true)
     end)
 end)

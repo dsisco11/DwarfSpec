@@ -275,38 +275,45 @@ Phase 3 exit gate:
 Goal: move live Busted execution under scheduler-controlled run records without
 weakening lifecycle guarantees.
 
-☐ Replace the host's `active_run` and `last_completed` singleton policy with
-  service-owned project and run records.
-☐ Make the scheduler grant the executor to exactly one queued generation.
-☐ Install only the activated project's configuration, selection, module paths,
-  commands, fixtures, and support modules.
-☐ Preserve pinned dependencies before project-local module paths.
-☐ Restore the exact original `package.path` and evict newly loaded consumer
-  modules before another project activates.
-☐ Drive `queued`, `starting`, `running`, `cleaning`, and terminal transitions
-  through the service state machine.
-☐ Publish structured events from real Busted callbacks instead of storing
-  formatted progress lines as the primary protocol.
-☐ Preserve repeat behavior, result counts, test identities, problems, command
-  diagnostics, and host-error classification.
-☐ Preserve generation checks on scheduled execution, Busted callbacks,
-  cleanup callbacks, and terminal publication.
-☐ Drain run-owned resources in strict LIFO order for success, assertion
+✔ Replace the host's `active_run` and `last_completed` singleton policy with
+  service-owned project and run records. @done(26-07-23 10:55)
+✔ Make the scheduler grant the executor to exactly one queued generation.
+  @done(26-07-23 10:55)
+✔ Install only the activated project's configuration, selection, module paths,
+  commands, fixtures, and support modules. @done(26-07-23 10:55)
+✔ Preserve pinned dependencies before project-local module paths.
+  @done(26-07-23 10:55)
+✔ Restore the exact original `package.path` and evict newly loaded consumer
+  modules before another project activates. @done(26-07-23 10:55)
+✔ Drive `queued`, `starting`, `running`, `cleaning`, and terminal transitions
+  through the service state machine. @done(26-07-23 10:55)
+✔ Publish structured events from real Busted callbacks instead of storing
+  formatted progress lines as the primary protocol. @done(26-07-23 10:55)
+✔ Preserve repeat behavior, result counts, test identities, problems, command
+  diagnostics, and host-error classification. @done(26-07-23 10:55)
+✔ Preserve generation checks on scheduled execution, Busted callbacks,
+  cleanup callbacks, and terminal publication. @done(26-07-23 10:55)
+✔ Drain run-owned resources in strict LIFO order for success, assertion
   failure, host error, timeout, abort, and early unmount.
-☐ Confirm no active mount, screen, subject, wait, pointer, timeout, scheduler,
+  @done(26-07-23 10:55)
+✔ Confirm no active mount, screen, subject, wait, pointer, timeout, scheduler,
   project module path, or evictable consumer module remains before executor
-  release.
-☐ Publish cleanup failure without hiding the original run failure.
-☐ Enter scheduler quarantine when the cleanup probe is not confirmed.
+  release. @done(26-07-23 10:55)
+✔ Publish cleanup failure without hiding the original run failure.
+  @done(26-07-23 10:55)
+✔ Enter scheduler quarantine when the cleanup probe is not confirmed.
+  @done(26-07-23 10:55)
 
 Phase 4 exit gate:
 
-☐ Host, output-handler, cleanup, scheduler, and stale-callback unit tests pass.
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes.
-☐ The full live automation suite passes for one project through the new service
-  boundary.
-☐ Live evidence confirms exact module-path restoration and no lifecycle leaks.
+✔ Host, output-handler, cleanup, scheduler, and stale-callback unit tests pass.
+  @done(26-07-23 10:55)
+✔ Lua syntax and formatting checks pass. @done(26-07-23 10:55)
+✔ The full unit suite passes. @done(26-07-23 10:55)
+✔ The full live automation suite passes for one project through the new service
+  boundary. @done(26-07-23 10:55)
+✔ Live evidence confirms exact module-path restoration and no lifecycle leaks.
+  @done(26-07-23 10:55)
 
 ## Phase 5: Ownership, leases, terminal retention, and recovery
 
@@ -523,7 +530,7 @@ one evidence category as a substitute for another.
 | 1 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 94 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 168 successes, pass | not required; supplementary full live run passed 21/21 with cleanup confirmed | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | `src/dwarfspec/automation/{service,projects}.lua`; `tests/unit/automation_service_spec.lua`; native result `.test-results/dwarfspec/dwarfspec-104270906-3877eddc.json` |
 | 2 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 107 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 190 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | service, scheduler, run, event, transport, and result fixtures validated; immutable `EventType`, `RunState`, `ResultState`, `TestStatus`, `ResultPolicy`, and `RunnerFailureKind`; version 1 report transition retained |
 | 3 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 110 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 196 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; authoritative scheduler module contract passed | global FIFO across three projects; idempotent admission; project and result-path exclusion; cross-project active and retained-terminal admission; cancellation; cleanup-gated release; quarantine and identity-bound recovery |
-| 4 | pending | pending | pending | not required | |
+| 4 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 111 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 201 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; 21 successes/0 failures/0 errors/0 pending through service v2, cleanup confirmed | not required; authoritative host, cleanup, and coroutine scheduler module contracts passed | Run `dwarfspec-112644906-02f5f9ce`, generation 7; 114 structured events; 32 command pairs; exact module-path restoration; zero pending cleanup, mounts, subjects, waits, timeouts, schedulers, or pointers; executor idle and not quarantined; native compatibility result `.test-results/dwarfspec/dwarfspec-112644906-02f5f9ce.json` |
 | 5 | pending | pending | pending | not required | |
 | 6 | pending | pending | pending | not required | |
 | 7 | pending | pending | pending | not required | |
@@ -627,6 +634,32 @@ Phase 3 scheduler evidence:
   are packaged from those authoritative paths. The version 1 coroutine
   scheduler remains under its explicit transitional module name until host
   execution moves in Phase 4.
+
+Phase 4 service-host evidence:
+
+- `dwarfspec.automation.host`, `dwarfspec.automation.cleanup`, and
+  `dwarfspec.automation.coroutine_scheduler` now resolve from authoritative
+  production paths. Bootstrap, status, and abort remain transport adapters.
+- Host admission registers projects and submits runs through the version 2
+  service. Only the FIFO-activated generation installs consumer configuration,
+  selection, paths, commands, fixtures, and support modules.
+- `automation_service_host_boundary_spec.lua` proves service-owned
+  `starting`, `running`, `cleaning`, terminal, structured-event, stale
+  generation, cleanup-failure, and quarantine behavior.
+- Host and cleanup tests prove exact `package.path` restoration, consumer-module
+  eviction, strict LIFO cleanup, stale cleanup rejection, cleanup-history
+  gating, mount verification, lease-timeout cleanup, abort cleanup, and
+  terminal acknowledgement.
+- Output-handler and command tests prove structured repeat, test, problem,
+  command, diagnostic, cleanup, and terminal events while retaining formatted
+  version 1 progress only as a compatibility view.
+- Live run `dwarfspec-112644906-02f5f9ce` passed 21/21. Its service journal
+  retained 114 events, including 21 test starts and finishes, 32 command starts
+  and finishes, and one cleanup and terminal sequence.
+- The post-run live probe found an idle executor, an empty FIFO, quarantine
+  disabled, zero pending cleanup actions, no coroutine, scheduler, wait, lease
+  timer, scheduled timer, mount, subject, or pointer, and exact project module
+  path restoration.
 
 ## Final acceptance
 

@@ -23,7 +23,7 @@ end
 describe('real overlay registration integration', function()
     it('discovers, enables, positions, and focus-filters registered widgets',
             function()
-        local run = assert(dfhack.dwarfspec.active_run)
+        local run = ds.current_run()
         local stage = assert(run.overlay_registration_integration,
             'internal overlay registration support is unavailable')
         run.overlay_registration_events = {}
@@ -66,7 +66,7 @@ describe('real overlay registration integration', function()
     end)
 
     it('restores every external registration artifact', function()
-        local run = assert(dfhack.dwarfspec.active_run)
+        local run = ds.current_run()
         assert.is_truthy(staged)
         assert.same({
             complete=true,

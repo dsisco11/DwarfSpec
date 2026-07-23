@@ -66,7 +66,7 @@ describe('automatic component render tracking', function()
     it('retains the original render failure with bounded mount diagnostics',
             function()
         local ok, message = pcall(ds.mount, FailingMountWidget)
-        local run = assert(dfhack.dwarfspec.active_run)
+        local run = ds.current_run()
 
         assert.is_false(ok)
         assert.matches('deliberate component render failure', message,

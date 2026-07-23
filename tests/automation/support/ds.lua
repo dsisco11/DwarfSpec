@@ -85,6 +85,12 @@ local render_tracker_module = load_automation_module(package_root,
     'dwarfspec.render_tracker', '/src/dwarfspec/render_tracker.lua')
 local subject_module = load_automation_module(package_root,
     'dwarfspec.subject', '/src/dwarfspec/subject.lua')
+local EventType = load_automation_module(package_root,
+    'dwarfspec.automation.event_types',
+    '/src/dwarfspec/automation/event_types.lua')
+local TestStatus = load_automation_module(package_root,
+    'dwarfspec.automation.test_statuses',
+    '/src/dwarfspec/automation/test_statuses.lua')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
@@ -101,6 +107,74 @@ local subject_module = load_automation_module(package_root,
         current_viewscreen=mount_dependencies.current_viewscreen or
             function() return dfhack.gui.getCurViewscreen(true) end,
     }
+    local publisher = context.run.event_publisher
+
+    ---Publishes one command boundary through the active run generation.
+    ---@param event_type DwarfSpecEventType
+    ---@param payload table
+    local function publish(event_type, payload)
+        if publisher then publisher.publish(event_type, payload) end
+    end
+
+    ---Returns a stable mounted subject identity.
+    ---@param subject table
+    ---@return string
+    local function command_subject_identity(subject)
+        return ('mount:%s/%s'):format(
+            tostring(subject.mount_id), tostring(subject.control_path))
+    end
+
+    local command_observer = {}
+
+    ---Returns bounded text safe for a structured diagnostic payload.
+    ---@param value any
+    ---@return string
+    local function bounded_text(value)
+        local text = tostring(value)
+        if #text <= 8192 then return text end
+        return text:sub(1, 8189) .. '...'
+    end
+
+    ---Publishes one command start and returns its timing identity.
+    ---@param name string
+    ---@param subject table
+    ---@return table
+    function command_observer.started(name, subject)
+        local started_ms = publisher and publisher.now_ms() or 0
+        publish(EventType.COMMAND_STARTED, {
+            name=name,
+            subject_identity=command_subject_identity(subject),
+            safe_arguments={},
+        })
+        return {
+            name=name,
+            started_ms=started_ms,
+        }
+    end
+
+    ---Publishes one command result and bounded failure diagnostics.
+    ---@param observation table
+    ---@param ok boolean
+    ---@param failure any|nil
+    function command_observer.finished(observation, ok, failure)
+        local finished_ms = publisher and publisher.now_ms() or
+            observation.started_ms
+        publish(EventType.COMMAND_FINISHED, {
+            name=observation.name,
+            status=ok and TestStatus.SUCCESS or TestStatus.ERROR,
+            duration_ms=math.max(0,
+                finished_ms - observation.started_ms),
+        })
+        if not ok then
+            publish(EventType.DIAGNOSTIC_RECORDED, {
+                kind='command_failure',
+                content={
+                    name=observation.name,
+                    message=bounded_text(failure),
+                },
+            })
+        end
+    end
     ---Creates one private render tracker using the run's wait settings.
     ---@return table
     local function new_render_tracker()
@@ -155,6 +229,7 @@ local subject_module = load_automation_module(package_root,
             report_mount_failure,
         render_tracker_factory=new_render_tracker,
         subject_module=mount_dependencies.subject_module or subject_module,
+        command_observer=command_observer,
     })
     context.run.mount_cleanup_probe = function()
         local state = context.mount_context:cleanup_state()
@@ -175,6 +250,17 @@ local subject_module = load_automation_module(package_root,
     local ds = {
         protocol_version=1,
     }
+
+    ---Returns the exact service-owned run that currently owns the executor.
+    ---@return table
+    function ds.current_run()
+        local registry = assert(dfhack.dwarfspec,
+            'DwarfSpec automation service is not running')
+        local run_id = assert(registry.active_run_id,
+            'DwarfSpec automation executor is idle')
+        return assert(registry.runs[run_id],
+            'DwarfSpec active run record is missing')
+    end
 
     ---Resolves a subject or omitted target against the implicit mount.
     ---@param value any
@@ -439,7 +525,20 @@ local subject_module = load_automation_module(package_root,
     for name, command in pairs(extensions.commands) do
         local callback = command.callback
         ds[name] = function(...)
-            return callback(ds, ...)
+            local observation = command_observer.started(name, {
+                mount_id=context.mount_context.current and
+                    context.mount_context.current.id or 0,
+                control_path='<custom>',
+            })
+            local arguments = table.pack(...)
+            local results = table.pack(xpcall(function()
+                return callback(ds,
+                    table.unpack(arguments, 1, arguments.n))
+            end, debug.traceback))
+            command_observer.finished(observation, results[1],
+                results[1] and nil or results[2])
+            if not results[1] then error(results[2], 2) end
+            return table.unpack(results, 2, results.n)
         end
     end
 

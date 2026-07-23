@@ -64,7 +64,7 @@ describe('automation status formatting', function()
         end
 
         host = assert(loadfile(
-            'tests/automation/support/busted_host.lua'))()
+            'src/dwarfspec/automation/host.lua'))()
     end)
 
     after_each(function()

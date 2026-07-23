@@ -1,7 +1,7 @@
 -- Unit contracts for run-owned component mount orchestration.
 
 local cleanup = assert(loadfile(
-    'tests/automation/support/cleanup.lua'))()
+    'src/dwarfspec/automation/cleanup.lua'))()
 local component = assert(loadfile('src/dwarfspec/component.lua'))()
 local mount_context = assert(loadfile(
     'src/dwarfspec/mount_context.lua'))()

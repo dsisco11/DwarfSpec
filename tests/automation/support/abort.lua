@@ -39,13 +39,13 @@ local function load_host(root, lua_root)
             'automation' .. separator .. 'host.lua'))()
     end
     return assert(loadfile(root ..
-        '/tests/automation/support/busted_host.lua'))()
+        '/src/dwarfspec/automation/host.lua'))()
 end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
 local run = host.abort(run_id)
-run.terminal_observed = true
+run = host.poll(run_id)
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
     :format(run.protocol_version, run.run_id, run.state, run.generation))
 print('DWARFSPEC_JSON ' .. host.encode_report(run))

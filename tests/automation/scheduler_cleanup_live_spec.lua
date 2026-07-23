@@ -2,7 +2,7 @@
 
 describe('automation scheduler', function()
     it('resumes after real raw-frame callbacks', function()
-        local run = assert(dfhack.dwarfspec.active_run)
+        local run = ds.current_run()
         local started_ms = dfhack.getTickCount()
 
         local elapsed_frames = ds.wait_frames(3)

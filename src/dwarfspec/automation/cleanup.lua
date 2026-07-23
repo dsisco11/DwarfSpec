@@ -4,10 +4,14 @@ local M = {}
 
 ---Creates an empty cleanup registry associated with one automation run.
 ---@param run table
+---@param is_current function|nil
 ---@return table
-function M.new(run)
+function M.new(run, is_current)
+    assert(is_current == nil or type(is_current) == 'function',
+        'cleanup ownership guard must be a function')
     return {
         run=run,
+        is_current=is_current or function() return true end,
         entries={},
         next_id=0,
         cleaning=false,
@@ -94,6 +98,16 @@ function M.run_from(registry, marker, reason)
     while #registry.entries > 0 do
         local entry = registry.entries[#registry.entries]
         if entry.id <= marker then break end
+        if not registry.is_current() then
+            local failure = {
+                name='cleanup ownership guard',
+                message='automation generation no longer owns cleanup',
+                reason=reason,
+            }
+            table.insert(failures, failure)
+            table.insert(registry.failures, failure)
+            break
+        end
         table.remove(registry.entries)
         if entry.state == 'pending' then
             entry.state = 'running'

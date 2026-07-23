@@ -72,6 +72,12 @@ build = {
             "src/dwarfspec/automation/scheduler.lua",
         ["dwarfspec.automation.scheduler_failure_kinds"] =
             "src/dwarfspec/automation/scheduler_failure_kinds.lua",
+        ["dwarfspec.automation.coroutine_scheduler"] =
+            "src/dwarfspec/automation/coroutine_scheduler.lua",
+        ["dwarfspec.automation.cleanup"] =
+            "src/dwarfspec/automation/cleanup.lua",
+        ["dwarfspec.automation.host"] =
+            "src/dwarfspec/automation/host.lua",
         ["dwarfspec.automation.schemas"] =
             "src/dwarfspec/automation/schemas.lua",
         ["dwarfspec.automation.service"] =
@@ -87,16 +93,12 @@ build = {
         ["dwarfspec.automation.bootstrap"] = "tests/automation/support/bootstrap.lua",
         ["dwarfspec.automation.probe"] = "tests/automation/support/probe.lua",
         ["dwarfspec.automation.status"] = "tests/automation/support/status.lua",
-        ["dwarfspec.automation.cleanup"] = "tests/automation/support/cleanup.lua",
         ["dwarfspec.automation.diagnostics"] = "tests/automation/support/diagnostics.lua",
         ["dwarfspec.automation.extensions"] = "tests/automation/support/extensions.lua",
-        ["dwarfspec.automation.host"] = "tests/automation/support/busted_host.lua",
         ["dwarfspec.automation.lfs_adapter"] = "tests/automation/support/lfs_adapter.lua",
         ["dwarfspec.automation.overlay_registration"] = "tests/automation/support/overlay_registration.lua",
         ["dwarfspec.automation.pointer_adapter"] = "tests/automation/support/pointer_adapter.lua",
         ["dwarfspec.automation.project"] = "tests/automation/support/project.lua",
-        ["dwarfspec.automation.coroutine_scheduler"] =
-            "tests/automation/support/scheduler.lua",
         ["dwarfspec.automation.system_adapter"] = "tests/automation/support/system_adapter.lua",
     },
     install = {

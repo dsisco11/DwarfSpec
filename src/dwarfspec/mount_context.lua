@@ -82,6 +82,12 @@ function M.new(options)
     assert(type(options.subject_module) == 'table' and
         type(options.subject_module.new) == 'function',
         'mount context requires a subject factory')
+    if options.command_observer ~= nil then
+        assert(type(options.command_observer) == 'table' and
+            type(options.command_observer.started) == 'function' and
+            type(options.command_observer.finished) == 'function',
+            'mount context command observer is incomplete')
+    end
 
     local context = {
         run=options.run,
@@ -91,6 +97,7 @@ function M.new(options)
         adapter_factory=options.adapter_factory,
         render_tracker_factory=options.render_tracker_factory,
         failure_reporter=options.failure_reporter,
+        command_observer=options.command_observer,
         subject_module=options.subject_module,
         current=nil,
         next_mount_id=0,
@@ -424,9 +431,20 @@ local function parent_identity(control_path)
         assert(type(action) == 'function',
             'mutation action must be a function')
         local mount = self:require_current(operation)
+        local observation
+        if self.command_observer then
+            observation = self.command_observer.started(operation, {
+                mount_id=mount.id,
+                control_path=mount.command_subject and
+                    mount.command_subject.control_path or '<root>',
+            })
+        end
         local captured = mount.render_tracker:capture()
         local results = table.pack(xpcall(action, debug.traceback))
         if not results[1] then
+            if self.command_observer then
+                self.command_observer.finished(observation, false, results[2])
+            end
             error(self:report_failure(mount, operation, results[2]), 2)
         end
         local wait_ok, wait_result = xpcall(function()
@@ -434,9 +452,15 @@ local function parent_identity(control_path)
                 operation .. ' render')
         end, debug.traceback)
         if not wait_ok then
+            if self.command_observer then
+                self.command_observer.finished(observation, false, wait_result)
+            end
             error(self:report_failure(mount, operation, wait_result), 2)
         end
         self:refresh_views(mount)
+        if self.command_observer then
+            self.command_observer.finished(observation, true)
+        end
         return table.unpack(results, 2, results.n)
     end
 

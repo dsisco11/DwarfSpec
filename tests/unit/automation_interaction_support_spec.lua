@@ -1,7 +1,7 @@
 -- Unit contracts for live interaction support utilities without DFHack state.
 
 local cleanup = assert(loadfile(
-    'tests/automation/support/cleanup.lua'))()
+    'src/dwarfspec/automation/cleanup.lua'))()
 local diagnostics = assert(loadfile(
     'tests/automation/support/diagnostics.lua'))()
 local pointer_adapter = assert(loadfile(

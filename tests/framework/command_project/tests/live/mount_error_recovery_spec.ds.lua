@@ -30,8 +30,7 @@ end
 
 ---Asserts that the preceding failed example leaked no mounted resources.
 local function assert_previous_mount_cleaned()
-    local evidence = assert(dfhack.dwarfspec.active_run
-        .last_mount_diagnostics)
+    local evidence = assert(ds.current_run().last_mount_diagnostics)
     assert.is_false(failed_screen:isActive())
     assert.has_error(function() ds.root() end,
         'DwarfSpec root requires a mounted component; call ' ..

@@ -139,6 +139,27 @@ local function assert_executor_invariant(dependencies)
 end
 
 describe('multi-project automation service scheduler', function()
+    it('retries a generated owner capability collision', function()
+        local dependencies = environment()
+        local projects = register_three(dependencies)
+        local first = service.submit(projects[1].project_id,
+            submission('collision-first'), dependencies)
+        local attempts = 0
+        dependencies.new_owner_capability = function()
+            attempts = attempts + 1
+            if attempts == 1 then return first.owner_capability end
+            return 'owner-capability-after-collision'
+        end
+
+        local second = service.submit(projects[2].project_id,
+            submission('collision-second'), dependencies)
+
+        assert.is_true(second.accepted)
+        assert.equals(2, attempts)
+        assert.equals('owner-capability-after-collision',
+            second.owner_capability)
+    end)
+
     it('activates three projects in FIFO order with one executor owner',
             function()
         local dependencies, clock = environment()

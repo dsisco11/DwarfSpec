@@ -139,14 +139,20 @@ end
 ---@param context table
 ---@return string
 local function allocate_owner_capability(registry, context)
-    local capability = context.new_owner_capability()
-    assert(type(capability) == 'string' and #capability >= 16,
-        'owner capability generator returned an invalid capability')
-    for _, run in pairs(registry.runs) do
-        assert(run.owner_capability ~= capability,
-            'owner capability generator returned an existing capability')
+    for _ = 1, 128 do
+        local capability = context.new_owner_capability()
+        assert(type(capability) == 'string' and #capability >= 16,
+            'owner capability generator returned an invalid capability')
+        local available = true
+        for _, run in pairs(registry.runs) do
+            if run.owner_capability == capability then
+                available = false
+                break
+            end
+        end
+        if available then return capability end
     end
-    return capability
+    error('owner capability generator repeatedly returned existing values')
 end
 
 ---Returns one run identity safe to expose without its owner capability.
@@ -499,6 +505,87 @@ function M.activate_next(registry, context)
     }
 end
 
+---Moves the active generation from starting to running.
+---@param registry table
+---@param run_id string
+---@param generation integer
+---@param payload table
+---@param context table
+---@return table
+function M.start_active(registry, run_id, generation, payload, context)
+    assert(registry.active_run_id == run_id,
+        'active executor identity does not match start')
+    local run = assert(registry.runs[run_id],
+        'active executor references an unknown run')
+    validate_run_identity(registry, run)
+    assert(run.generation == generation,
+        'active executor generation does not match start')
+    assert(run.state == RunState.STARTING and not run.terminal,
+        'active executor run is not starting')
+    events.validate_payload(EventType.RUN_STARTED, payload)
+    local timestamp_ms = current_time(context)
+    run.state = RunState.RUNNING
+    run.started_at_ms = timestamp_ms
+    events.publish(run.event_journal, EventType.RUN_STARTED, payload,
+        timestamp_ms)
+    return run
+end
+
+---Moves the active generation into cleanup and publishes its boundary event.
+---@param registry table
+---@param run_id string
+---@param generation integer
+---@param reason string
+---@param pending_action_count integer
+---@param context table
+---@return table
+function M.begin_cleanup(registry, run_id, generation, reason,
+        pending_action_count, context)
+    assert(registry.active_run_id == run_id,
+        'active executor identity does not match cleanup')
+    local run = assert(registry.runs[run_id],
+        'active executor references an unknown run')
+    validate_run_identity(registry, run)
+    assert(run.generation == generation,
+        'active executor generation does not match cleanup')
+    assert((run.state == RunState.STARTING or
+        run.state == RunState.RUNNING) and not run.terminal,
+        'active executor run cannot enter cleanup from its current state')
+    local payload = {
+        reason=reason,
+        pending_action_count=pending_action_count,
+    }
+    events.validate_payload(EventType.CLEANUP_STARTED, payload)
+    local timestamp_ms = current_time(context)
+    run.state = RunState.CLEANING
+    events.publish(run.event_journal, EventType.CLEANUP_STARTED, payload,
+        timestamp_ms)
+    return run
+end
+
+---Publishes one generation-guarded event for the active executor.
+---@param registry table
+---@param run_id string
+---@param generation integer
+---@param event_type DwarfSpecEventType
+---@param payload table
+---@param context table
+---@return table
+function M.publish_active_event(registry, run_id, generation, event_type,
+        payload, context)
+    assert(registry.active_run_id == run_id,
+        'event publisher no longer owns the active executor')
+    local run = assert(registry.runs[run_id],
+        'event publisher references an unknown run')
+    validate_run_identity(registry, run)
+    assert(run.generation == generation,
+        'event publisher generation does not match active run')
+    assert(ACTIVE_STATES[run.state] == true and not run.terminal,
+        'event publisher run is not active')
+    return events.publish(run.event_journal, event_type, payload,
+        current_time(context))
+end
+
 ---Cancels one owned queued run without invoking native cleanup.
 ---@param registry table
 ---@param run_id string
@@ -643,6 +730,29 @@ function M.recover_executor(registry, request, context)
         detail or 'executor clean-state proof was rejected')
     registry.quarantine = {active=false}
     return {recovered=true}
+end
+
+---Releases one terminal project reservation for the version 1 adapter.
+---The retained run and journal remain observable in the service registry.
+---@param registry table
+---@param run_id string
+---@param generation integer
+---@param owner_capability string
+---@return table
+function M.acknowledge_compatibility(registry, run_id, generation,
+        owner_capability)
+    local run = assert(registry.runs[run_id],
+        'automation run was not found: ' .. tostring(run_id))
+    validate_run_identity(registry, run)
+    assert(run.generation == generation,
+        'terminal generation does not match acknowledgement')
+    assert(run.owner_capability == owner_capability,
+        'terminal owner capability does not match acknowledgement')
+    assert(run.terminal and TERMINAL_STATES[run.state] == true,
+        'only a terminal run can be acknowledged')
+    run.acknowledged = true
+    registry.projects[run.project_id].outstanding_run_id = nil
+    return run
 end
 
 return M
