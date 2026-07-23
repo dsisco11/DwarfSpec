@@ -1,0 +1,23 @@
+{
+    "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+    "runtime.version": "Lua 5.4",
+    "runtime.path": [
+        "?.lua",
+        "?/init.lua",
+        "src/scripts_modinstalled/?.lua",
+        "src/scripts_modinstalled/?/init.lua"
+    ],
+    "workspace.library": [
+        "./src/scripts_modinstalled",
+        "./tests/support",
+        "./.luarocks/share/lua/5.4",
+        "C:/Users/Sisco/AppData/Roaming/luarocks/share/lua/5.4",
+        "G:/Steam/steamapps/common/Dwarf Fortress/hack/lua",
+        "G:/Steam/steamapps/common/Dwarf Fortress/hack/scripts",
+        "${3rd}/busted/library",
+        "${3rd}/luassert/library"
+    ],
+    "workspace.checkThirdParty": false,
+    "diagnostics.globals": [
+    ]
+}
