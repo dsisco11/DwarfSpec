@@ -1,8 +1,16 @@
 -- In-memory Busted output handler for live automation runs.
 
 local EventType = require('dwarfspec.automation.event_types')
+local TestStatus = require('dwarfspec.automation.test_statuses')
 
 local M = {}
+
+local TEST_COUNT_KEYS = {
+    [TestStatus.SUCCESS]='successes',
+    [TestStatus.FAILURE]='failures',
+    [TestStatus.ERROR]='errors',
+    [TestStatus.PENDING]='pending',
+}
 
 ---Publishes one structured Busted event when a publisher is configured.
 ---@param publisher table|nil
@@ -140,23 +148,18 @@ function M.new(busted, run, publisher)
     ---@param trace any
     function handler.baseTestEnd(element, parent, status, trace)
         local first, second = base_test_end(element, parent, status, trace)
-        local count_key = ({
-            success='successes',
-            failure='failures',
-            error='errors',
-            pending='pending',
-        })[status]
-        if count_key then
-            run.counts[count_key] = run.counts[count_key] + 1
-            run.totals[count_key] = run.totals[count_key] + 1
-        end
+        local count_key = assert(TEST_COUNT_KEYS[status],
+            'unsupported Busted test status: ' .. tostring(status))
+        run.counts[count_key] = run.counts[count_key] + 1
+        run.totals[count_key] = run.totals[count_key] + 1
         run.last_repeat_counts = {
             successes=handler.successesCount,
             failures=handler.failuresCount,
             errors=handler.errorsCount,
             pending=handler.pendingsCount,
         }
-        append_line(run, status:upper() .. ' ' .. handler.getFullName(element))
+        append_line(run, status:upper() .. ' ' ..
+            handler.getFullName(element))
         publish(publisher, EventType.TEST_FINISHED, {
             name=handler.getFullName(element),
             status=status,

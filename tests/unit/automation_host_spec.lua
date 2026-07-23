@@ -1,6 +1,7 @@
 -- Unit contracts for live automation ownership and generation guards.
 
 local host_path = 'tests/automation/support/busted_host.lua'
+local RunState = require('dwarfspec.automation.run_states')
 
 describe('automation host ownership', function()
     local original_dfhack
@@ -227,7 +228,7 @@ describe('automation host ownership', function()
         local report = host.report_data({
             protocol_version=1,
             run_id='json-run',
-            state='failed',
+            state=RunState.FAILED,
             generation=7,
             counts={successes=1, failures=1, errors=0, pending=0},
             totals={successes=1, failures=1, errors=0, pending=0},

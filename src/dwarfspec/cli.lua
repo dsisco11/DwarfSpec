@@ -398,9 +398,9 @@ function M.main(argv, context)
             message:match('accepts at most') or message:match('requires') or
             message:match('must be') or message:match('unknown command:') or
             message:match('unknown help topic:') then
-        return runner.exit_codes.usage
+        return runner.exit_codes[runner.failure_kinds.USAGE]
     end
-    return runner.exit_codes.dependency
+    return runner.exit_codes[runner.failure_kinds.DEPENDENCY]
 end
 
 return M

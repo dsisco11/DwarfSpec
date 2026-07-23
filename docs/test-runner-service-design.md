@@ -197,6 +197,16 @@ result for recovery. Operator recovery is recorded as an event and does not
 silently impersonate the original persistence owner. How an in-game UI exposes
 that authority belongs to its separate design.
 
+### Closed contract enums
+
+Service and runner producers use immutable `RunState`, `ResultState`,
+`TestStatus`, `ResultPolicy`, `RunnerFailureKind`, and `EventType` members.
+Each member is its stable wire string, so producers do not need a separate
+token-to-identifier serialization step. Producers and state-transition logic
+reference named enum members instead of repeating string literals. Readers
+validate incoming strings against private closed-set and metadata tables before
+using them.
+
 ### Outstanding run
 
 A run that is queued, starting, running, cleaning, or terminal but not yet
@@ -476,10 +486,9 @@ ordering. Sequence numbers are authoritative within one run.
 ### Initial event types
 
 Service-side publishers use immutable members of
-`dwarfspec.automation.event_types`; they do not pass loose string identifiers.
-Serialization writes each member's stable identifier into the envelope's
-string-valued `type` field, and readers resolve that wire identifier through
-the same enum before validating its payload.
+`dwarfspec.automation.event_types`. Each member is already the stable string
+written into the envelope's `type` field. Readers validate that string against
+the event payload contract table.
 
 | Event type | Required payload |
 |---|---|
@@ -906,6 +915,10 @@ The implementation is expected to converge on boundaries similar to:
 | `dwarfspec.automation.scheduler` | Admission queue, leases, activation, executor release, and quarantine. |
 | `dwarfspec.automation.events` | Event construction, validation, copying, sequencing, and cursor reads. |
 | `dwarfspec.automation.event_types` | Immutable identifiers for all supported structured event types. |
+| `dwarfspec.automation.run_states` | Immutable service run-state identifiers. |
+| `dwarfspec.automation.result_states` | Immutable persisted invocation-state identifiers. |
+| `dwarfspec.automation.test_statuses` | Immutable Busted result-status identifiers. |
+| `dwarfspec.automation.result_policies` | Immutable result-persistence policies. |
 | `dwarfspec.automation.schemas` | Versioned service, scheduler, run, transport, event, and result validation. |
 | `dwarfspec.automation.snapshots` | Immutable run and scheduler snapshot construction. |
 | `dwarfspec.automation.host` | Busted execution, native state transitions, and cleanup. |
@@ -913,6 +926,7 @@ The implementation is expected to converge on boundaries similar to:
 | `dwarfspec.automation.result_store` | Per-project result schema and safe replacement writes. |
 | command adapters | `dfhack-run` argument and JSON transport translation. |
 | `dwarfspec.runner` | External registration, submission, polling, formatting, recovery, and exit classification. |
+| `dwarfspec.runner_failure_kinds` | Immutable runner failure-classification identifiers. |
 | `dwarfspec.report` | Transport/result schema validation and external persistence support. |
 
 Exact filenames may change, but projects, scheduling, events, host execution,

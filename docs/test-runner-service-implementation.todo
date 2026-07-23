@@ -516,7 +516,7 @@ one evidence category as a substitute for another.
 |---|---|---|---|---|---|
 | 0 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 91 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 156 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; exit 6, 20 successes/1 failure/0 errors/0 pending, cleanup confirmed; existing `complete_screen_mount_live_spec.lua:194` observed `true`, expected `false` | not required | Workspace `D:\CODE\DFHack\DwarfSpec`, `origin=https://github.com/dsisco11/DwarfSpec.git`; native result `.test-results/dwarfspec/dwarfspec-93409734-57826f4c.json` |
 | 1 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 94 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 168 successes, pass | not required; supplementary full live run passed 21/21 with cleanup confirmed | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | `src/dwarfspec/automation/{service,projects}.lua`; `tests/unit/automation_service_spec.lua`; native result `.test-results/dwarfspec/dwarfspec-104270906-3877eddc.json` |
-| 2 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 100 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 185 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | service, scheduler, run, event, transport, and result fixtures validated; immutable `EventType`; `src/dwarfspec/automation/{event_types,events,schemas,snapshots,output_handler}.lua`; version 1 report transition retained |
+| 2 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 107 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 190 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | service, scheduler, run, event, transport, and result fixtures validated; immutable `EventType`, `RunState`, `ResultState`, `TestStatus`, `ResultPolicy`, and `RunnerFailureKind`; version 1 report transition retained |
 | 3 | pending | pending | not required | not required | |
 | 4 | pending | pending | pending | not required | |
 | 5 | pending | pending | pending | not required | |
@@ -565,11 +565,15 @@ Phase 1 service evidence:
 Phase 2 structured-contract evidence:
 
 - `automation_events_spec.lua` covers all 18 initial event types, all four
-  terminal states, immutable enum identifiers, rejection of loose publisher
-  strings, sequence-one journals, contiguous ordering, cursor retries, empty
+  terminal states, immutable event-type identifiers, unsupported event
+  rejection, sequence-one journals, contiguous ordering, cursor retries, empty
   reads, stale cursors, sparse journals, payload immutability, malformed
   envelopes, bounded values, cycles, unsupported runtime values, behavioral
   metatables, and owner-capability exclusion.
+- `immutable_enums_spec.lua` proves `EventType`, `RunState`, `ResultState`,
+  `TestStatus`, `ResultPolicy`, and `RunnerFailureKind` stable string values,
+  iteration, definition validation, duplicate rejection, and namespace
+  immutability.
 - `automation_schemas_spec.lua` covers version 2 run, scheduler, transport,
   service, event, and result contracts; immutable run and scheduler snapshots;
   FIFO and active ownership; identity continuity; and exclusion of capabilities

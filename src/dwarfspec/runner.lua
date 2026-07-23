@@ -3,36 +3,67 @@
 local process = require('dwarfspec.process')
 local project = require('dwarfspec.project')
 local reports = require('dwarfspec.report')
+local RunState = require('dwarfspec.automation.run_states')
+local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
 
 local M = {}
 
-local EXIT = {
-    success=0,
-    usage=2,
-    dependency=3,
-    connection=4,
-    host=5,
-    test=6,
-    timeout=7,
-    aborted=8,
+local exit_codes = {
+    [RunnerFailureKind.SUCCESS]=0,
+    [RunnerFailureKind.USAGE]=2,
+    [RunnerFailureKind.DEPENDENCY]=3,
+    [RunnerFailureKind.CONNECTION]=4,
+    [RunnerFailureKind.HOST]=5,
+    [RunnerFailureKind.TEST]=6,
+    [RunnerFailureKind.TIMEOUT]=7,
+    [RunnerFailureKind.ABORTED]=8,
 }
 
-M.exit_codes = EXIT
+---Rejects mutation of the compatibility exit-code view.
+---@param target table
+---@param key any
+local function reject_exit_code_mutation(target, key)
+    error('DwarfSpec runner exit codes are immutable: ' .. tostring(key), 2)
+end
+
+---Returns one compatibility exit code by serialized failure kind.
+---@param target table
+---@param key any
+---@return integer|nil
+local function exit_code_index(target, key)
+    return exit_codes[key]
+end
+
+---Iterates the compatibility exit-code view.
+---@return function, table, nil
+local function exit_code_pairs()
+    return next, exit_codes, nil
+end
+
+M.failure_kinds = RunnerFailureKind
+M.exit_codes = setmetatable({}, {
+    __index=exit_code_index,
+    __metatable='DwarfSpec runner exit codes',
+    __newindex=reject_exit_code_mutation,
+    __pairs=exit_code_pairs,
+})
 
 ---Creates one classified runner failure.
----@param kind string
+---@param kind DwarfSpecRunnerFailureKind
 ---@param message string
 ---@return table
 local function failure(kind, message)
+    assert(exit_codes[kind] ~= nil,
+        'runner failure kind must be a RunnerFailureKind')
     return {
         kind=kind,
         message=message,
-        exit_code=assert(EXIT[kind], 'unknown runner failure kind: ' .. kind),
+        exit_code=exit_codes[kind],
     }
 end
 
 ---Raises one classified runner failure.
----@param kind string
+---@param kind DwarfSpecRunnerFailureKind
 ---@param message string
 local function fail(kind, message)
     error(failure(kind, message), 0)
@@ -92,7 +123,8 @@ local function validate_dependencies(options)
             host_script(options, 'abort'),
             host_script(options, 'probe')}) do
         if not is_file(path) then
-            fail('dependency', 'DwarfSpec dependency was not found: ' .. path)
+            fail(RunnerFailureKind.DEPENDENCY,
+                'DwarfSpec dependency was not found: ' .. path)
         end
     end
 end
@@ -143,14 +175,16 @@ local function verify_connection(runner, options, invoke)
         'lua', '-f', host_script(options, 'probe'),
     })
     if not ok then
-        fail('connection', 'could not contact DFHack through ' .. runner ..
-            ': ' .. clean_message(result))
+        fail(RunnerFailureKind.CONNECTION,
+            'could not contact DFHack through ' .. runner .. ': ' ..
+                clean_message(result))
     end
     if result.exit_code ~= 0 or
             result.lines[#result.lines] ~=
                 'DWARFSPEC_PROBE protocol=1 core=true timeout=function' then
-        fail('connection', 'DFHack is not running or did not provide a ' ..
-            'healthy core Lua context')
+        fail(RunnerFailureKind.CONNECTION,
+            'DFHack is not running or did not provide a healthy core Lua ' ..
+                'context')
     end
 end
 
@@ -201,7 +235,8 @@ local function recovery_abort(runner, options, run_id, invoke)
     local ok, report, payload = pcall(reports.parse, result.lines, run_id,
         options.decode_json)
     if not ok then return nil, tostring(report), nil end
-    if report.state ~= 'aborted' or not report.cleanup_confirmed then
+    if report.state ~= RunState.ABORTED or
+            not report.cleanup_confirmed then
         return report, 'recovery abort did not confirm cleanup', payload
     end
     return report, nil, payload
@@ -232,7 +267,8 @@ function M.run(options)
         if not resolved then
             resolve_error = runner
             runner = nil
-            fail('dependency', clean_message(resolve_error))
+            fail(RunnerFailureKind.DEPENDENCY,
+                clean_message(resolve_error))
         end
         if options.verbose then emit('DFHack runner: ' .. runner) end
         verify_connection(runner, options, invoke)
@@ -240,7 +276,8 @@ function M.run(options)
         bootstrap_attempted = true
         local start = invoke(runner, bootstrap_arguments(options, run_id))
         if start.exit_code ~= 0 then
-            fail('host', 'DwarfSpec bootstrap exited with ' .. start.exit_code)
+            fail(RunnerFailureKind.HOST,
+                'DwarfSpec bootstrap exited with ' .. start.exit_code)
         end
         native_report, native_json = reports.parse(start.lines, run_id,
             options.decode_json)
@@ -249,8 +286,9 @@ function M.run(options)
 
         while not native_report.terminal do
             if now() - started_at >= options.timeout_seconds then
-                fail('timeout', ('DwarfSpec run timed out after %s seconds')
-                    :format(options.timeout_seconds))
+                fail(RunnerFailureKind.TIMEOUT,
+                    ('DwarfSpec run timed out after %s seconds')
+                        :format(options.timeout_seconds))
             end
             sleep(options.poll_interval_ms / 1000)
             local status = invoke(runner, {
@@ -258,8 +296,8 @@ function M.run(options)
                 run_id, tostring(output_offset),
             })
             if status.exit_code ~= 0 then
-                fail('host', 'DwarfSpec status exited with ' ..
-                    status.exit_code)
+                fail(RunnerFailureKind.HOST,
+                    'DwarfSpec status exited with ' .. status.exit_code)
             end
             native_report, native_json = reports.parse(status.lines, run_id,
                 options.decode_json)
@@ -267,15 +305,18 @@ function M.run(options)
             output_offset = native_report.output_count
         end
 
-        if native_report.state == 'aborted' then
-            fail('aborted', 'DwarfSpec run was aborted')
+        local native_state = native_report.state
+        if native_state == RunState.ABORTED then
+            fail(RunnerFailureKind.ABORTED, 'DwarfSpec run was aborted')
         end
-        if native_report.state ~= 'passed' then
-            fail('test', 'DwarfSpec run finished with state ' ..
-                tostring(native_report.state))
+        if native_state ~= RunState.PASSED then
+            fail(RunnerFailureKind.TEST,
+                'DwarfSpec run finished with state ' ..
+                    tostring(native_report.state))
         end
         if not native_report.cleanup_confirmed then
-            fail('test', 'DwarfSpec run passed without confirmed cleanup')
+            fail(RunnerFailureKind.TEST,
+                'DwarfSpec run passed without confirmed cleanup')
         end
     end, function(value) return value end)
 
@@ -283,9 +324,11 @@ function M.run(options)
         if type(caught) == 'table' and caught.exit_code then
             runner_error = caught
         elseif clean_message(caught):lower():match('interrupt') then
-            runner_error = failure('aborted', 'DwarfSpec run interrupted')
+            runner_error = failure(RunnerFailureKind.ABORTED,
+                'DwarfSpec run interrupted')
         else
-            runner_error = failure('host', clean_message(caught))
+            runner_error = failure(RunnerFailureKind.HOST,
+                clean_message(caught))
         end
         if runner and bootstrap_attempted and
                 (not native_report or not native_report.terminal) then
@@ -305,14 +348,16 @@ function M.run(options)
     local write_ok, write_error = pcall(write_result, options, run_id,
         native_json)
     if not write_ok and not runner_error then
-        runner_error = failure('host', tostring(write_error))
+        runner_error = failure(RunnerFailureKind.HOST,
+            tostring(write_error))
     elseif not write_ok then
         runner_error.message = runner_error.message ..
             '; could not write result report: ' .. tostring(write_error)
     end
 
     return {
-        exit_code=runner_error and runner_error.exit_code or EXIT.success,
+        exit_code=runner_error and runner_error.exit_code or
+            exit_codes[RunnerFailureKind.SUCCESS],
         run_id=run_id,
         runner=runner,
         report=native_report,
@@ -329,8 +374,9 @@ function M.abort(options, run_id)
     local ok, runner = pcall(process.resolve_runner, options,
         options.environment)
     if not ok then
-        return {exit_code=EXIT.dependency,
-            error=failure('dependency', clean_message(runner))}
+        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
+            error=failure(RunnerFailureKind.DEPENDENCY,
+                clean_message(runner))}
     end
     if options.verbose and options.emit then
         options.emit('DFHack runner: ' .. runner)
@@ -340,28 +386,31 @@ function M.abort(options, run_id)
     if not connected then
         local detail = type(connection_error) == 'table' and
             connection_error or
-            failure('connection', clean_message(connection_error))
+            failure(RunnerFailureKind.CONNECTION,
+                clean_message(connection_error))
         return {exit_code=detail.exit_code, error=detail}
     end
     local result = invoke(runner, {
         'lua', '-f', host_script(options, 'abort'), run_id,
     })
     if result.exit_code ~= 0 then
-        return {exit_code=EXIT.host,
-            error=failure('host', 'DwarfSpec abort exited with ' ..
-                result.exit_code)}
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST,
+                'DwarfSpec abort exited with ' .. result.exit_code)}
     end
     local ok, report = pcall(reports.parse, result.lines, run_id,
         options.decode_json)
     if not ok then
-        return {exit_code=EXIT.host,
-            error=failure('host', tostring(report))}
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST, tostring(report))}
     end
-    if report.state ~= 'aborted' or not report.cleanup_confirmed then
-        return {exit_code=EXIT.test, report=report,
-            error=failure('test', 'abort did not confirm cleanup')}
+    if report.state ~= RunState.ABORTED or
+            not report.cleanup_confirmed then
+        return {exit_code=exit_codes[RunnerFailureKind.TEST], report=report,
+            error=failure(RunnerFailureKind.TEST,
+                'abort did not confirm cleanup')}
     end
-    return {exit_code=EXIT.success, report=report}
+    return {exit_code=exit_codes[RunnerFailureKind.SUCCESS], report=report}
 end
 
 return M

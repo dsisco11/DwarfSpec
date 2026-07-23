@@ -1,62 +1,48 @@
 -- Versioned schema validators for automation service data contracts.
 
 local events = require('dwarfspec.automation.events')
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+local ResultState = require('dwarfspec.automation.result_states')
+local RunState = require('dwarfspec.automation.run_states')
 
 local M = {
     protocol_version=2,
 }
 
-local RUN_STATES = {
-    queued=true,
-    starting=true,
-    running=true,
-    cleaning=true,
-    passed=true,
-    failed=true,
-    aborted=true,
-    cancelled=true,
+local RESULT_POLICIES = {
+    [ResultPolicy.FILE]=true,
+    [ResultPolicy.NONE]=true,
 }
 
-local TERMINAL_RUN_STATES = {
-    passed=true,
-    failed=true,
-    aborted=true,
-    cancelled=true,
+local RUN_STATE_TERMINAL = {
+    [RunState.QUEUED]=false,
+    [RunState.STARTING]=false,
+    [RunState.RUNNING]=false,
+    [RunState.CLEANING]=false,
+    [RunState.PASSED]=true,
+    [RunState.FAILED]=true,
+    [RunState.ABORTED]=true,
+    [RunState.CANCELLED]=true,
 }
 
-local RESULT_STATES = {
-    queued=true,
-    starting=true,
-    running=true,
-    cleaning=true,
-    passed=true,
-    failed=true,
-    aborted=true,
-    cancelled=true,
-    usage_error=true,
-    dependency_error=true,
-    connection_error=true,
-    registration_error=true,
-    queue_timeout=true,
-    host_error=true,
-    timeout=true,
-    interrupted=true,
-    persistence_error=true,
-}
-
-local NONTERMINAL_RESULT_STATES = {
-    queued=true,
-    starting=true,
-    running=true,
-    cleaning=true,
-}
-
-local IDENTITY_OPTIONAL_RESULT_STATES = {
-    usage_error=true,
-    dependency_error=true,
-    connection_error=true,
-    registration_error=true,
-    host_error=true,
+local RESULT_STATE_METADATA = {
+    [ResultState.QUEUED]={terminal=false, identity_optional=false},
+    [ResultState.STARTING]={terminal=false, identity_optional=false},
+    [ResultState.RUNNING]={terminal=false, identity_optional=false},
+    [ResultState.CLEANING]={terminal=false, identity_optional=false},
+    [ResultState.PASSED]={terminal=true, identity_optional=false},
+    [ResultState.FAILED]={terminal=true, identity_optional=false},
+    [ResultState.ABORTED]={terminal=true, identity_optional=false},
+    [ResultState.CANCELLED]={terminal=true, identity_optional=false},
+    [ResultState.USAGE_ERROR]={terminal=true, identity_optional=true},
+    [ResultState.DEPENDENCY_ERROR]={terminal=true, identity_optional=true},
+    [ResultState.CONNECTION_ERROR]={terminal=true, identity_optional=true},
+    [ResultState.REGISTRATION_ERROR]={terminal=true, identity_optional=true},
+    [ResultState.QUEUE_TIMEOUT]={terminal=true, identity_optional=false},
+    [ResultState.HOST_ERROR]={terminal=true, identity_optional=true},
+    [ResultState.TIMEOUT]={terminal=true, identity_optional=false},
+    [ResultState.INTERRUPTED]={terminal=true, identity_optional=false},
+    [ResultState.PERSISTENCE_ERROR]={terminal=true, identity_optional=false},
 }
 
 ---Returns whether a value is a nonnegative integer.
@@ -135,6 +121,8 @@ local function validate_project(project)
         'scheduler project summary')
     require_string(project, 'display_name', 'scheduler project summary')
     require_string(project, 'result_policy', 'scheduler project summary')
+    assert(RESULT_POLICIES[project.result_policy] == true,
+        'scheduler project summary has invalid result policy')
 end
 
 ---Validates one version 2 service snapshot.
@@ -211,10 +199,11 @@ function M.validate_run(value)
             'owner_kind'}) do
         require_string(value, field, 'automation run')
     end
-    assert(RUN_STATES[value.state] == true,
+    local terminal = RUN_STATE_TERMINAL[value.state]
+    assert(terminal ~= nil,
         'automation run has unsupported state: ' .. tostring(value.state))
     assert(type(value.terminal) == 'boolean' and
-        value.terminal == (TERMINAL_RUN_STATES[value.state] == true),
+        value.terminal == terminal,
         'automation run terminal flag does not match state')
     for _, field in ipairs({
             'generation', 'submitted_at_ms', 'last_sequence'}) do
@@ -340,11 +329,12 @@ function M.validate_result(value)
     require_schema(value, 'dwarfspec.result.v2',
         'automation result')
     require_string(value, 'state', 'automation result')
-    assert(RESULT_STATES[value.state] == true,
+    local state = RESULT_STATE_METADATA[value.state]
+    assert(state ~= nil,
         'automation result has unsupported state: ' .. tostring(value.state))
     assert(type(value.terminal) == 'boolean',
         'automation result terminal flag must be boolean')
-    assert(value.terminal == (NONTERMINAL_RESULT_STATES[value.state] ~= true),
+    assert(value.terminal == state.terminal,
         'automation result terminal flag does not match state')
     require_string(value, 'project_root', 'automation result')
     require_table(value, 'selection', 'automation result')
@@ -368,8 +358,7 @@ function M.validate_result(value)
     local identity_present = value.service_instance_id ~= nil or
         value.project_id ~= nil or value.run_id ~= nil or
         value.generation ~= nil
-    assert(identity_present or
-        IDENTITY_OPTIONAL_RESULT_STATES[value.state] == true,
+    assert(identity_present or state.identity_optional,
         'automation result state requires a service run identity')
     if identity_present then
         for _, field in ipairs(identity_fields) do

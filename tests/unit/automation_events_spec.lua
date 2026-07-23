@@ -2,6 +2,8 @@
 
 local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
+local RunState = require('dwarfspec.automation.run_states')
+local TestStatus = require('dwarfspec.automation.test_statuses')
 
 ---Returns one deterministic journal identity.
 ---@return table
@@ -39,7 +41,7 @@ local function payloads()
         },
         [EventType.TEST_FINISHED]={
             name='suite test',
-            status='success',
+            status=TestStatus.SUCCESS,
             duration_ms=5,
         },
         [EventType.PROBLEM_RECORDED]={
@@ -79,7 +81,7 @@ local function payloads()
         },
         [EventType.RUN_ABORTED]={reason='external timeout'},
         [EventType.RUN_FINISHED]={
-            terminal_state='passed',
+            terminal_state=RunState.PASSED,
             totals=counts,
             cleanup_required=true,
             cleanup_confirmed=true,
@@ -99,7 +101,6 @@ describe('automation structured events', function()
 
         assert.equals(18, #types)
         for index, event_type in ipairs(types) do
-            local identifier = EventType.id(event_type)
             local event = events.publish(journal, event_type,
                 samples[event_type], 100 + index)
             assert.equals('dwarfspec.event.v1', event.schema)
@@ -109,13 +110,17 @@ describe('automation structured events', function()
             assert.equals(7, event.generation)
             assert.equals(index, event.sequence)
             assert.equals(index, event.elapsed_ms)
-            assert.equals(identifier, event.type)
+            assert.equals(event_type, event.type)
         end
         assert.equals(#types, #events.validate_journal(journal).events)
     end)
 
     it('supports every terminal run state', function()
-        for _, state in ipairs({'passed', 'failed', 'aborted', 'cancelled'}) do
+        for _, state in ipairs({
+                RunState.PASSED,
+                RunState.FAILED,
+                RunState.ABORTED,
+                RunState.CANCELLED}) do
             local journal = events.new_journal(identity())
             local event = events.publish(journal, EventType.RUN_FINISHED, {
                 terminal_state=state,
@@ -173,14 +178,14 @@ describe('automation structured events', function()
         local journal = events.new_journal(identity())
         assert.has_error(function()
             events.publish(journal, 'unknown.event', {}, 100)
-        end, 'event type must be a DwarfSpec EventType')
+        end, 'unsupported automation event type: unknown.event')
         assert.has_error(function()
             events.validate_payload('unknown.event', {})
         end, 'unsupported automation event type: unknown.event')
         assert.has_error(function()
             events.publish(journal, EventType.TEST_FINISHED, {
                 name='test',
-                status='success',
+                status=TestStatus.SUCCESS,
             }, 100)
         end, 'event payload for test.finished is missing field: duration_ms')
 
@@ -193,18 +198,14 @@ describe('automation structured events', function()
     end)
 
     it('provides immutable event-type enum values', function()
-        assert.equals('run.queued', EventType.id(EventType.RUN_QUEUED))
-        assert.equals('RUN_QUEUED', EventType.name(EventType.RUN_QUEUED))
-        assert.equals(EventType.RUN_QUEUED,
-            EventType.from_id('run.queued'))
-        assert.is_true(EventType.is(EventType.RUN_QUEUED))
-        assert.is_false(EventType.is('run.queued'))
+        assert.equals('run.queued', EventType.RUN_QUEUED)
+        local values = {}
+        for name, value in pairs(EventType) do values[name] = value end
+        assert.equals('run.queued', values.RUN_QUEUED)
+        assert.equals('run.finished', values.RUN_FINISHED)
         assert.has_error(function()
             EventType.RUN_QUEUED = EventType.RUN_FINISHED
-        end, 'DwarfSpec EventType is immutable: RUN_QUEUED')
-        assert.has_error(function()
-            EventType.RUN_QUEUED.id = 'mutated'
-        end, 'DwarfSpec EventType is immutable: id')
+        end, 'Enums are immutable.')
     end)
 
     it('bounds JSON values and excludes capabilities and live objects',

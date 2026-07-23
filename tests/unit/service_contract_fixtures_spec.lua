@@ -6,6 +6,8 @@ local project = require('dwarfspec.project')
 local runner = require('dwarfspec.runner')
 local schemas = require('dwarfspec.automation.schemas')
 local EventType = require('dwarfspec.automation.event_types')
+local ResultState = require('dwarfspec.automation.result_states')
+local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
 local builders = assert(loadfile('tests/support/service_builders.lua'))()
 
 local fixture_root = 'tests/framework/fixtures/service_v2'
@@ -49,7 +51,7 @@ describe('multi-project service contract fixtures', function()
         local first_run = builders.run()
         local second_run = builders.run({run_id='run-fixture-2'})
         table.insert(first_run.events, {
-            type=EventType.id(EventType.RUN_QUEUED),
+            type=EventType.RUN_QUEUED,
         })
         assert.equals(0, #second_run.events)
 
@@ -112,14 +114,32 @@ describe('multi-project service contract fixtures', function()
 
     it('decodes representative version 2 result outcomes', function()
         local expected = {
-            result_queued={state='queued', terminal=false},
-            result_running={state='running', terminal=false},
-            result_passed={state='passed', terminal=true},
-            result_failed={state='failed', terminal=true},
-            result_aborted={state='aborted', terminal=true},
-            result_cancelled={state='cancelled', terminal=true},
+            result_queued={
+                state=ResultState.QUEUED,
+                terminal=false,
+            },
+            result_running={
+                state=ResultState.RUNNING,
+                terminal=false,
+            },
+            result_passed={
+                state=ResultState.PASSED,
+                terminal=true,
+            },
+            result_failed={
+                state=ResultState.FAILED,
+                terminal=true,
+            },
+            result_aborted={
+                state=ResultState.ABORTED,
+                terminal=true,
+            },
+            result_cancelled={
+                state=ResultState.CANCELLED,
+                terminal=true,
+            },
             result_dependency_error={
-                state='dependency_error',
+                state=ResultState.DEPENDENCY_ERROR,
                 terminal=true,
             },
         }
@@ -188,9 +208,10 @@ describe('multi-project service contract fixtures', function()
         end
 
         local count = 0
-        for kind, exit_code in pairs(runner.exit_codes) do
+        for _, kind in pairs(RunnerFailureKind) do
             count = count + 1
-            assert.equals(exit_code, by_kind[kind].exit_code)
+            assert.equals(runner.exit_codes[kind],
+                by_kind[kind].exit_code)
         end
         assert.equals(count, #fixture.mappings)
         assert.equals('dwarfspec.exit-code-map.v1', fixture.schema)

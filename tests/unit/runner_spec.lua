@@ -2,16 +2,28 @@
 
 local json = require('dkjson')
 local runner = require('dwarfspec.runner')
+local RunState = require('dwarfspec.automation.run_states')
+
+local RUN_STATE_TERMINAL = {
+    [RunState.QUEUED]=false,
+    [RunState.STARTING]=false,
+    [RunState.RUNNING]=false,
+    [RunState.CLEANING]=false,
+    [RunState.PASSED]=true,
+    [RunState.FAILED]=true,
+    [RunState.ABORTED]=true,
+    [RunState.CANCELLED]=true,
+}
 
 ---Builds one canonical native report output line.
 ---@param run_id string
----@param state string
+---@param state DwarfSpecRunState
 ---@param cleanup_confirmed boolean
 ---@param output_count integer|nil
 ---@return string[]
 local function report_lines(run_id, state, cleanup_confirmed, output_count)
-    local terminal = state == 'passed' or state == 'failed' or
-        state == 'aborted'
+    assert(RUN_STATE_TERMINAL[state] ~= nil,
+        'fixture state must be a RunState')
     local lines = {}
     if output_count then table.insert(lines, 'OUTPUT 1 progress line') end
     table.insert(lines, 'DWARFSPEC_JSON ' .. json.encode({
@@ -19,12 +31,14 @@ local function report_lines(run_id, state, cleanup_confirmed, output_count)
             protocol=1,
             run_id=run_id,
             state=state,
-            terminal=terminal,
+            terminal=RUN_STATE_TERMINAL[state],
             generation=1,
-            counts={successes=state == 'passed' and 1 or 0,
-                failures=state == 'failed' and 1 or 0, errors=0, pending=0},
-            totals={successes=state == 'passed' and 1 or 0,
-                failures=state == 'failed' and 1 or 0, errors=0, pending=0},
+            counts={successes=state == RunState.PASSED and 1 or 0,
+                failures=state == RunState.FAILED and 1 or 0,
+                errors=0, pending=0},
+            totals={successes=state == RunState.PASSED and 1 or 0,
+                failures=state == RunState.FAILED and 1 or 0,
+                errors=0, pending=0},
             output_count=output_count or 0,
             cleanup_confirmed=cleanup_confirmed,
             failures={},
@@ -71,16 +85,18 @@ describe('DwarfSpec external runner', function()
             elseif arguments[3]:match('bootstrap%.lua$') then
                 bootstrap_arguments = arguments
                 return {exit_code=0,
-                    lines=report_lines('pass-run', 'starting', false)}
+                    lines=report_lines(
+                        'pass-run', RunState.STARTING, false)}
             end
             return {exit_code=0,
-                lines=report_lines('pass-run', 'passed', true, 1)}
+                    lines=report_lines(
+                        'pass-run', RunState.PASSED, true, 1)}
         end
 
         local outcome = runner.run(run_options)
 
         assert.equals(0, outcome.exit_code)
-        assert.equals('passed', outcome.report.state)
+        assert.equals(RunState.PASSED, outcome.report.state)
         assert.same({'progress line'}, emitted)
         assert.equals(3, calls)
         local test_glob_found = false
@@ -107,10 +123,12 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines('failed-run', 'failed', true)}
+                    lines=report_lines(
+                        'failed-run', RunState.FAILED, true)}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.test, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.TEST],
+            outcome.exit_code)
         assert.matches('finished with state failed', outcome.error.message,
             1, true)
         assert.equals(2, #calls)
@@ -132,14 +150,18 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
-                    lines=report_lines('timeout-run', 'starting', false)}
+                    lines=report_lines(
+                        'timeout-run', RunState.STARTING, false)}
             end
             return {exit_code=0,
-                lines=report_lines('timeout-run', 'aborted', true)}
+                    lines=report_lines(
+                        'timeout-run', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.timeout, outcome.exit_code)
-        assert.equals('aborted', outcome.report.state)
+        assert.equals(runner.exit_codes[runner.failure_kinds.TIMEOUT],
+            outcome.exit_code)
+        assert.equals(RunState.ABORTED,
+            outcome.report.state)
         assert.matches('abort%.lua$', calls[#calls])
     end)
 
@@ -152,18 +174,22 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
-                    lines=report_lines('malformed-run', 'starting', false)}
+                    lines=report_lines(
+                        'malformed-run', RunState.STARTING, false)}
             elseif arguments[3]:match('status%.lua$') then
                 status_seen = true
                 return {exit_code=0, lines={'not json'}}
             end
             return {exit_code=0,
-                lines=report_lines('malformed-run', 'aborted', true)}
+                    lines=report_lines(
+                        'malformed-run', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
         assert.is_true(status_seen)
-        assert.equals(runner.exit_codes.host, outcome.exit_code)
-        assert.equals('aborted', outcome.report.state)
+        assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
+            outcome.exit_code)
+        assert.equals(RunState.ABORTED,
+            outcome.report.state)
         assert.matches('did not contain a DWARFSPEC_JSON report',
             outcome.error.message, 1, true)
     end)
@@ -174,7 +200,8 @@ describe('DwarfSpec external runner', function()
             return {exit_code=1, lines={'not running'}}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.connection, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
+            outcome.exit_code)
         assert.matches('DFHack is not running', outcome.error.message,
             1, true)
         assert.is_nil(outcome.report)
@@ -185,7 +212,8 @@ describe('DwarfSpec external runner', function()
         local run_options = options('missing-runner')
         run_options.runner = 'tests/framework/runner_path/missing'
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.dependency, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.DEPENDENCY],
+            outcome.exit_code)
         assert.matches('configured DFHack runner was not found',
             outcome.error.message, 1, true)
     end)
@@ -197,7 +225,8 @@ describe('DwarfSpec external runner', function()
             error('process launch failed')
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.connection, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
+            outcome.exit_code)
         assert.matches('could not contact DFHack through',
             outcome.error.message, 1, true)
     end)
@@ -211,15 +240,19 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
-                    lines=report_lines('interrupted-run', 'starting', false)}
+                    lines=report_lines(
+                        'interrupted-run', RunState.STARTING, false)}
             end
             return {exit_code=0,
-                lines=report_lines('interrupted-run', 'aborted', true)}
+                    lines=report_lines(
+                        'interrupted-run', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.aborted, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.ABORTED],
+            outcome.exit_code)
         assert.equals('DwarfSpec run interrupted', outcome.error.message)
-        assert.equals('aborted', outcome.report.state)
+        assert.equals(RunState.ABORTED,
+            outcome.report.state)
         assert.is_true(outcome.report.cleanup_confirmed)
     end)
 
@@ -231,10 +264,12 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines('unclean-run', 'passed', false)}
+                lines=report_lines(
+                    'unclean-run', RunState.PASSED, false)}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.test, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.TEST],
+            outcome.exit_code)
         assert.matches('without confirmed cleanup', outcome.error.message,
             1, true)
     end)
@@ -251,7 +286,8 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines('explicit-abort', 'aborted', true)}
+                lines=report_lines(
+                    'explicit-abort', RunState.ABORTED, true)}
         end
         local outcome = runner.abort(run_options, 'explicit-abort')
         assert.equals(0, outcome.exit_code)
@@ -268,13 +304,16 @@ describe('DwarfSpec external runner', function()
                 return {exit_code=9, lines={'bootstrap failed'}}
             end
             return {exit_code=0,
-                lines=report_lines('bootstrap-failure', 'aborted', true)}
+                    lines=report_lines(
+                        'bootstrap-failure', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.host, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
+            outcome.exit_code)
         assert.matches('bootstrap exited with 9', outcome.error.message,
             1, true)
-        assert.equals('aborted', outcome.report.state)
+        assert.equals(RunState.ABORTED,
+            outcome.report.state)
     end)
 
     it('classifies status transport failure and recovers cleanup', function()
@@ -285,18 +324,22 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
-                    lines=report_lines('status-failure', 'starting', false)}
+                    lines=report_lines(
+                        'status-failure', RunState.STARTING, false)}
             elseif arguments[3]:match('status%.lua$') then
                 return {exit_code=11, lines={'status failed'}}
             end
             return {exit_code=0,
-                lines=report_lines('status-failure', 'aborted', true)}
+                    lines=report_lines(
+                        'status-failure', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.host, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
+            outcome.exit_code)
         assert.matches('status exited with 11', outcome.error.message,
             1, true)
-        assert.equals('aborted', outcome.report.state)
+        assert.equals(RunState.ABORTED,
+            outcome.report.state)
     end)
 
     it('propagates a host-reported abort with its stable exit code', function()
@@ -307,11 +350,14 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines('host-aborted', 'aborted', true)}
+                    lines=report_lines(
+                        'host-aborted', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.aborted, outcome.exit_code)
-        assert.equals('aborted', outcome.report.state)
+        assert.equals(runner.exit_codes[runner.failure_kinds.ABORTED],
+            outcome.exit_code)
+        assert.equals(RunState.ABORTED,
+            outcome.report.state)
     end)
 
     it('reports result persistence failures after a passing native run',
@@ -325,10 +371,12 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines('write-failure', 'passed', true)}
+                    lines=report_lines(
+                        'write-failure', RunState.PASSED, true)}
         end
         local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes.host, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
+            outcome.exit_code)
         assert.matches('could not create directory', outcome.error.message,
             1, true)
     end)
@@ -351,7 +399,8 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines('legacy-result', 'passed', true)}
+                lines=report_lines(
+                    'legacy-result', RunState.PASSED, true)}
         end
 
         local outcome = runner.run(run_options)
@@ -362,9 +411,10 @@ describe('DwarfSpec external runner', function()
         assert(lfs.rmdir(result_directory))
         local persisted = assert(json.decode(contents))
 
-        assert.equals(runner.exit_codes.success, outcome.exit_code)
+        assert.equals(runner.exit_codes[runner.failure_kinds.SUCCESS],
+            outcome.exit_code)
         assert.equals('dwarfspec.run.v1', persisted.schema)
         assert.equals('legacy-result', persisted.run_id)
-        assert.equals('passed', persisted.state)
+        assert.equals(RunState.PASSED, persisted.state)
     end)
 end)

@@ -1,6 +1,13 @@
 -- Internal copy-on-write project registry operations for the automation service.
 
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+
 local M = {}
+
+local RESULT_POLICIES = {
+    [ResultPolicy.FILE]=true,
+    [ResultPolicy.NONE]=true,
+}
 
 ---Returns whether the active Lua platform uses case-insensitive Windows paths.
 ---@param filesystem table|nil
@@ -227,11 +234,12 @@ local function normalize_request(request, filesystem)
     assert(type(display_name) == 'string' and display_name ~= '',
         'project display name must be a nonempty string')
 
-    local result_policy = request.result_policy or 'file'
-    assert(result_policy == 'file' or result_policy == 'none',
+    local result_policy = request.result_policy == nil and ResultPolicy.FILE or
+        request.result_policy
+    assert(RESULT_POLICIES[result_policy] == true,
         'project result policy must be file or none')
     local result_path = request.result_path
-    if result_policy == 'file' then
+    if result_policy == ResultPolicy.FILE then
         assert(type(result_path) == 'string' and result_path ~= '',
             'file-backed project registration requires a result path')
     else

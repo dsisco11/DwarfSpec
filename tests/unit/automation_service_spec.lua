@@ -3,6 +3,8 @@
 local projects = require('dwarfspec.automation.projects')
 local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+local RunState = require('dwarfspec.automation.run_states')
 local service_path = 'src/dwarfspec/automation/service.lua'
 
 describe('multi-project automation service', function()
@@ -45,7 +47,7 @@ describe('multi-project automation service', function()
             },
             result_path=root:gsub('\\', '/') ..
                 '/tests/.test-results/dwarfspec/results.json',
-            result_policy='file',
+            result_policy=ResultPolicy.FILE,
             client_compatibility={
                 protocol=2,
                 package_version='0.1.3',
@@ -155,7 +157,7 @@ describe('multi-project automation service', function()
             'D:/Clients/Project With Spaces', {
                 display_name='Beta',
                 normalized_configuration={filters={'slow'}},
-                result_policy='none',
+                result_policy=ResultPolicy.NONE,
             })
         beta_request.result_path = nil
         local beta = service.register_project(beta_request, dependencies)
@@ -164,8 +166,10 @@ describe('multi-project automation service', function()
         assert.is_not.equals(alpha.project_id, beta.project_id)
         assert.is_not.equals(alpha.normalized_project_root,
             beta.normalized_project_root)
-        assert.equals('file', alpha.result_policy)
-        assert.equals('none', beta.result_policy)
+        assert.equals(ResultPolicy.FILE,
+            alpha.result_policy)
+        assert.equals(ResultPolicy.NONE,
+            beta.result_policy)
         assert.is_nil(beta.result_path)
         assert.same({'fast'}, alpha.normalized_configuration.filters)
         assert.same({'slow'}, beta.normalized_configuration.filters)
@@ -423,7 +427,7 @@ describe('multi-project automation service', function()
             project_id=project.project_id,
             run_id='run-1',
             generation=1,
-            state='queued',
+            state=RunState.QUEUED,
             terminal=false,
             submitted_at_ms=100,
             counts={successes=0, failures=0, errors=0, pending=0},

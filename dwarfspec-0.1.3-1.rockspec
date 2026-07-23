@@ -42,6 +42,7 @@ build = {
         ["dwarfspec.dotenv"] = "src/dwarfspec/dotenv.lua",
         ["dwarfspec.glob"] = "src/dwarfspec/glob.lua",
         ["dwarfspec.layout"] = "src/dwarfspec/layout.lua",
+        ["dwarfspec.immutable_enum"] = "src/dwarfspec/immutable_enum.lua",
         ["dwarfspec.mount_context"] = "src/dwarfspec/mount_context.lua",
         ["dwarfspec.mount_adapters"] = "src/dwarfspec/mount_adapters.lua",
         ["dwarfspec.overlay_mount"] = "src/dwarfspec/overlay_mount.lua",
@@ -52,6 +53,8 @@ build = {
         ["dwarfspec.project"] = "src/dwarfspec/project.lua",
         ["dwarfspec.report"] = "src/dwarfspec/report.lua",
         ["dwarfspec.runner"] = "src/dwarfspec/runner.lua",
+        ["dwarfspec.runner_failure_kinds"] =
+            "src/dwarfspec/runner_failure_kinds.lua",
         ["dwarfspec.subject"] = "src/dwarfspec/subject.lua",
         ["dwarfspec.automation.projects"] =
             "src/dwarfspec/automation/projects.lua",
@@ -59,12 +62,20 @@ build = {
             "src/dwarfspec/automation/events.lua",
         ["dwarfspec.automation.event_types"] =
             "src/dwarfspec/automation/event_types.lua",
+        ["dwarfspec.automation.result_policies"] =
+            "src/dwarfspec/automation/result_policies.lua",
+        ["dwarfspec.automation.result_states"] =
+            "src/dwarfspec/automation/result_states.lua",
+        ["dwarfspec.automation.run_states"] =
+            "src/dwarfspec/automation/run_states.lua",
         ["dwarfspec.automation.schemas"] =
             "src/dwarfspec/automation/schemas.lua",
         ["dwarfspec.automation.service"] =
             "src/dwarfspec/automation/service.lua",
         ["dwarfspec.automation.snapshots"] =
             "src/dwarfspec/automation/snapshots.lua",
+        ["dwarfspec.automation.test_statuses"] =
+            "src/dwarfspec/automation/test_statuses.lua",
         ["dwarfspec.automation.output_handler"] =
             "src/dwarfspec/automation/output_handler.lua",
         ["dwarfspec.ds"] = "tests/automation/support/ds.lua",

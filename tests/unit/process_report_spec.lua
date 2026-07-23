@@ -2,6 +2,7 @@
 
 local process = require('dwarfspec.process')
 local report = require('dwarfspec.report')
+local RunState = require('dwarfspec.automation.run_states')
 
 ---Reads one version 2 checked-in contract fixture.
 ---@param name string
@@ -133,7 +134,7 @@ describe('DwarfSpec native reports', function()
                 schema='dwarfspec.run.v1',
                 protocol=1,
                 run_id='run',
-                state='passed',
+            state=RunState.PASSED,
                 terminal=true,
                 generation=1,
                 counts={},
@@ -143,7 +144,7 @@ describe('DwarfSpec native reports', function()
                 failures={},
             }
         end)
-        assert.equals('passed', parsed.state)
+        assert.equals(RunState.PASSED, parsed.state)
         assert.same({'START suite example', 'SUCCESS suite example'},
             report.progress(lines))
     end)
@@ -157,7 +158,7 @@ describe('DwarfSpec native reports', function()
                     schema='dwarfspec.run.v1',
                     protocol=1,
                     run_id='other',
-                    state='passed',
+            state=RunState.PASSED,
                     terminal=true,
                     generation=1,
                     counts={}, totals={}, output_count=0,
@@ -174,7 +175,7 @@ describe('DwarfSpec native reports', function()
                     schema='another.schema',
                     protocol=1,
                     run_id='run',
-                    state='passed',
+            state=RunState.PASSED,
                     terminal=true,
                     generation=1,
                     counts={}, totals={}, output_count=0,
@@ -196,7 +197,8 @@ describe('DwarfSpec native reports', function()
             })
 
         assert.equals('dwarfspec.transport.v2', parsed.schema)
-        assert.equals('failed', parsed.snapshot.state)
+        assert.equals(RunState.FAILED,
+            parsed.snapshot.state)
         assert.has_error(function()
             report.parse({'DWARFSPEC_JSON ' .. contents}, {
                 run_id='foreign-run',

@@ -3,8 +3,20 @@
 local M = {}
 local events = require('dwarfspec.automation.events')
 local schemas = require('dwarfspec.automation.schemas')
+local RunState = require('dwarfspec.automation.run_states')
 
 local PREFIX = 'DWARFSPEC_JSON '
+
+local RUN_STATE_TERMINAL = {
+    [RunState.QUEUED]=false,
+    [RunState.STARTING]=false,
+    [RunState.RUNNING]=false,
+    [RunState.CLEANING]=false,
+    [RunState.PASSED]=true,
+    [RunState.FAILED]=true,
+    [RunState.ABORTED]=true,
+    [RunState.CANCELLED]=true,
+}
 
 ---Returns the last machine-readable report line from process output.
 ---@param lines string[]
@@ -33,6 +45,11 @@ local function validate_version_one(report, expected)
     end
     assert(report.protocol == 1,
         'unsupported DwarfSpec protocol: ' .. tostring(report.protocol))
+    local terminal = RUN_STATE_TERMINAL[report.state]
+    assert(terminal ~= nil,
+        'unsupported DwarfSpec run state: ' .. tostring(report.state))
+    assert(report.terminal == terminal,
+        'DwarfSpec terminal flag does not match run state')
     if expected.run_id ~= nil then
         assert(report.run_id == expected.run_id,
             ('DwarfSpec report run id %q does not match %q')

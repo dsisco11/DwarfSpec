@@ -1,5 +1,8 @@
 -- Deterministic builders for multi-project automation service unit tests.
 
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+local RunState = require('dwarfspec.automation.run_states')
+
 local M = {}
 
 ---Copies a flat record and applies caller overrides.
@@ -141,7 +144,7 @@ function M.project(overrides)
         normalized_configuration={},
         result_path='tests/framework/service_project_alpha/tests/' ..
             '.test-results/dwarfspec/results.json',
-        result_policy='file',
+        result_policy=ResultPolicy.FILE,
         client_compatibility={protocol=2, package_version='0.1.2'},
         registered_at_ms=0,
         outstanding_run_id=nil,
@@ -157,7 +160,7 @@ function M.run(overrides)
         project_id='project-fixture-1',
         run_id='run-fixture-1',
         generation=1,
-        state='queued',
+        state=RunState.QUEUED,
         terminal=false,
         sequence=0,
         events={},

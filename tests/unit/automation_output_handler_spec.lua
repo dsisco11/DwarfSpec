@@ -9,7 +9,7 @@ local EventType = require('dwarfspec.automation.event_types')
 local function published_types(published)
     local types = {}
     for _, event in ipairs(published) do
-        table.insert(types, EventType.id(event.type))
+        table.insert(types, event.type)
     end
     return types
 end

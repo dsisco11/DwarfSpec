@@ -1,6 +1,8 @@
 -- Structured, bounded, append-only event journals for automation runs.
 
 local EventType = require('dwarfspec.automation.event_types')
+local RunState = require('dwarfspec.automation.run_states')
+local TestStatus = require('dwarfspec.automation.test_statuses')
 
 local M = {
     schema='dwarfspec.event.v1',
@@ -68,18 +70,18 @@ local PAYLOAD_FIELDS = {
     [EventType.SCHEDULER_BLOCKED]={reason='string'},
 }
 
-local TERMINAL_STATES = {
-    passed=true,
-    failed=true,
-    aborted=true,
-    cancelled=true,
+local TERMINAL_RUN_STATES = {
+    [RunState.PASSED]=true,
+    [RunState.FAILED]=true,
+    [RunState.ABORTED]=true,
+    [RunState.CANCELLED]=true,
 }
 
 local TEST_STATUSES = {
-    success=true,
-    failure=true,
-    error=true,
-    pending=true,
+    [TestStatus.SUCCESS]=true,
+    [TestStatus.FAILURE]=true,
+    [TestStatus.ERROR]=true,
+    [TestStatus.PENDING]=true,
 }
 
 ---Returns whether a value is a nonnegative integer.
@@ -245,11 +247,8 @@ end
 ---@param event_type table|string
 ---@param payload table
 function M.validate_payload(event_type, payload)
-    local enum_value = EventType.is(event_type) and event_type or
-        EventType.from_id(event_type)
-    local identifier = enum_value and EventType.id(enum_value) or
-        tostring(event_type)
-    local fields = enum_value and PAYLOAD_FIELDS[enum_value] or nil
+    local identifier = tostring(event_type)
+    local fields = PAYLOAD_FIELDS[event_type]
     assert(fields ~= nil, 'unsupported automation event type: ' ..
         identifier)
     assert(type(payload) == 'table',
@@ -262,24 +261,24 @@ function M.validate_payload(event_type, payload)
         validate_typed_field(payload[field], expected_type,
             ('event payload %s.%s'):format(identifier, field))
     end
-    if enum_value == EventType.RUN_FINISHED then
-        assert(TERMINAL_STATES[payload.terminal_state] == true,
+    if event_type == EventType.RUN_FINISHED then
+        assert(TERMINAL_RUN_STATES[payload.terminal_state] == true,
             'event payload run.finished has invalid terminal state')
-    elseif enum_value == EventType.TEST_FINISHED then
+    elseif event_type == EventType.TEST_FINISHED then
         assert(TEST_STATUSES[payload.status] == true,
             'event payload test.finished has invalid status')
-    elseif enum_value == EventType.REPEAT_STARTED then
+    elseif event_type == EventType.REPEAT_STARTED then
         assert(payload.repeat_index > 0 and payload.repeat_count > 0 and
             payload.repeat_index <= payload.repeat_count,
             'event payload repeat.started has invalid repeat bounds')
-    elseif enum_value == EventType.REPEAT_FINISHED then
+    elseif event_type == EventType.REPEAT_FINISHED then
         assert(payload.repeat_index > 0,
             'event payload repeat.finished has invalid repeat index')
     end
-    if enum_value == EventType.REPEAT_FINISHED then
+    if event_type == EventType.REPEAT_FINISHED then
         validate_counts(payload.counts,
             'event payload repeat.finished.counts')
-    elseif enum_value == EventType.RUN_FINISHED then
+    elseif event_type == EventType.RUN_FINISHED then
         validate_counts(payload.totals,
             'event payload run.finished.totals')
     end
@@ -358,8 +357,6 @@ function M.publish(journal, event_type, payload, timestamp_ms)
         'event timestamp must be a nonnegative integer')
     assert(timestamp_ms >= journal.admitted_at_ms,
         'event timestamp precedes run admission')
-    assert(EventType.is(event_type),
-        'event type must be a DwarfSpec EventType')
     M.validate_payload(event_type, payload)
 
     local event = {
@@ -369,7 +366,7 @@ function M.publish(journal, event_type, payload, timestamp_ms)
         run_id=journal.run_id,
         generation=journal.generation,
         sequence=#journal.events + 1,
-        type=EventType.id(event_type),
+        type=event_type,
         elapsed_ms=timestamp_ms - journal.admitted_at_ms,
         payload=M.copy_json(payload, 'event payload'),
     }
@@ -423,7 +420,12 @@ end
 ---Returns all supported initial event-type enum values in deterministic order.
 ---@return DwarfSpecEventType[]
 function M.types()
-    return EventType.values()
+    local result = {}
+    for _, event_type in pairs(EventType) do
+        table.insert(result, event_type)
+    end
+    table.sort(result)
+    return result
 end
 
 return M

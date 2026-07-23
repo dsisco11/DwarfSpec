@@ -2,11 +2,14 @@
 
 local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
+local ResultPolicy = require('dwarfspec.automation.result_policies')
+local ResultState = require('dwarfspec.automation.result_states')
+local RunState = require('dwarfspec.automation.run_states')
 local schemas = require('dwarfspec.automation.schemas')
 local snapshots = require('dwarfspec.automation.snapshots')
 
 ---Returns one valid internal run record.
----@param state string|nil
+---@param state DwarfSpecRunState|nil
 ---@param terminal boolean|nil
 ---@return table
 local function run_record(state, terminal)
@@ -15,7 +18,7 @@ local function run_record(state, terminal)
         project_id='project-schema-1',
         run_id='run-schema-1',
         generation=3,
-        state=state or 'queued',
+        state=state or RunState.QUEUED,
         terminal=terminal == true,
         submitted_at_ms=100,
         counts={successes=0, failures=0, errors=0, pending=0},
@@ -57,7 +60,7 @@ local function registry(run)
                 normalized_configuration={filters={}},
                 result_path='D:/Clients/Schema/tests/.test-results/' ..
                     'dwarfspec/results.json',
-                result_policy='file',
+            result_policy=ResultPolicy.FILE,
                 client_compatibility={
                     protocol=2,
                     package_version='0.1.3',
@@ -95,7 +98,7 @@ describe('automation version 2 schemas and snapshots', function()
         assert.equals(0, run.counts.successes)
         assert.is_true(run.queue_lease.active)
 
-        run.state = 'running'
+        run.state = RunState.RUNNING
         run.activated_at_ms = 150
         run.queue_wait_ms = 50
         run.current_repeat = 1
@@ -125,12 +128,17 @@ describe('automation version 2 schemas and snapshots', function()
 
     it('validates every terminal run state and rejects flag mismatches',
             function()
-        for _, state in ipairs({'passed', 'failed', 'aborted', 'cancelled'}) do
+        for _, state in ipairs({
+                RunState.PASSED,
+                RunState.FAILED,
+                RunState.ABORTED,
+                RunState.CANCELLED}) do
             local run = run_record(state, true)
             run.cleanup_confirmed = true
             run.mount_cleanup_verified = true
             local snapshot = snapshots.run(run, registry(run))
-            assert.equals(state, schemas.validate_run(snapshot).state)
+            assert.equals(state,
+                schemas.validate_run(snapshot).state)
         end
 
         local invalid = snapshots.run(run_record(), registry(run_record()))
@@ -163,7 +171,7 @@ describe('automation version 2 schemas and snapshots', function()
 
         service.queue = {}
         service.active_run_id = run.run_id
-        run.state = 'running'
+        run.state = RunState.RUNNING
         local active = snapshots.scheduler(service)
         assert.equals('run-schema-1', active.active_run_id)
         assert.equals('project-schema-1', active.active_project_id)
@@ -172,11 +180,11 @@ describe('automation version 2 schemas and snapshots', function()
 
     it('validates transport identity and contiguous cursor responses',
             function()
-        local run = run_record('failed', true)
+        local run = run_record(RunState.FAILED, true)
         run.cleanup_confirmed = true
         run.mount_cleanup_verified = true
         events.publish(run.event_journal, EventType.RUN_FINISHED, {
-            terminal_state='failed',
+            terminal_state=RunState.FAILED,
             totals=run.totals,
             cleanup_required=true,
             cleanup_confirmed=true,
@@ -226,7 +234,7 @@ describe('automation version 2 schemas and snapshots', function()
         assert.has_error(function()
             schemas.validate_result({
                 schema='dwarfspec.result.v2',
-                state='passed',
+            state=ResultState.PASSED,
                 terminal=true,
                 service_instance_id='service-schema-1',
                 project_id='project-schema-1',

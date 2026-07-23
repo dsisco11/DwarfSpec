@@ -1,13 +1,20 @@
 -- Safe programmatic Busted host for DFHack core-context automation.
 
+local RunState = require('dwarfspec.automation.run_states')
+
 local M = {
     protocol_version=1,
 }
 
-local TERMINAL_STATES = {
-    passed=true,
-    failed=true,
-    aborted=true,
+local RUN_STATE_TERMINAL = {
+    [RunState.QUEUED]=false,
+    [RunState.STARTING]=false,
+    [RunState.RUNNING]=false,
+    [RunState.CLEANING]=false,
+    [RunState.PASSED]=true,
+    [RunState.FAILED]=true,
+    [RunState.ABORTED]=true,
+    [RunState.CANCELLED]=true,
 }
 
 local TEST_DEPENDENCY_ROOTS = {
@@ -108,7 +115,7 @@ end
 ---@param run table
 ---@return boolean
 function M.is_terminal(run)
-    return TERMINAL_STATES[run.state] == true
+    return RUN_STATE_TERMINAL[run.state] == true
 end
 
 ---Validates a caller-provided run identifier.
@@ -141,11 +148,17 @@ end
 
 ---Moves a run through one explicitly permitted state transition.
 ---@param run table
----@param expected string|string[]
----@param target string
+---@param expected DwarfSpecRunState|DwarfSpecRunState[]
+---@param target DwarfSpecRunState
 local function transition(run, expected, target)
-    local allowed = type(expected) == 'table' and expected or {expected}
+    assert(RUN_STATE_TERMINAL[target] ~= nil,
+        'transition target must be a RunState')
+    local allowed = type(expected) == 'string' and {expected} or expected
+    assert(type(allowed) == 'table',
+        'transition source must be a RunState or RunState array')
     for _, state in ipairs(allowed) do
+        assert(RUN_STATE_TERMINAL[state] ~= nil,
+            'transition source must be a RunState')
         if run.state == state then
             run.state = target
             run.state_changed_ms = dfhack.getTickCount()
@@ -509,7 +522,7 @@ local function finalize_run(registry, run, ok, host_error)
     if registry.active_run ~= run or registry.generation ~= run.generation then
         return
     end
-    transition(run, 'running', 'cleaning')
+    transition(run, RunState.RUNNING, RunState.CLEANING)
     if not ok then
         run.host_error = tostring(host_error)
         run.host_trace = debug.traceback(run.coroutine, tostring(host_error))
@@ -526,9 +539,9 @@ local function finalize_run(registry, run, ok, host_error)
     run.finished_frame = current_frame()
     if ok and cleanup_ok and run.totals.failures == 0 and
             run.totals.errors == 0 then
-        transition(run, 'cleaning', 'passed')
+        transition(run, RunState.CLEANING, RunState.PASSED)
     else
-        transition(run, 'cleaning', 'failed')
+        transition(run, RunState.CLEANING, RunState.FAILED)
     end
     archive_run(registry, run)
 end
@@ -540,11 +553,11 @@ end
 ---@param run table
 local function begin_queued_run(package_root, project_root, registry, run)
     if registry.active_run ~= run or registry.generation ~= run.generation or
-            run.state ~= 'starting' then
+            run.state ~= RunState.STARTING then
         return
     end
     run.scheduled_timeout_id = nil
-    transition(run, 'starting', 'running')
+    transition(run, RunState.STARTING, RunState.RUNNING)
     run.started_ms = dfhack.getTickCount()
     run.started_frame = current_frame()
     local scheduler_module = load_automation_module(package_root,
@@ -555,7 +568,7 @@ local function begin_queued_run(package_root, project_root, registry, run)
         is_current=function()
             return registry.active_run == run and
                 registry.generation == run.generation and
-                run.state == 'running'
+                run.state == RunState.RUNNING
         end,
         schedule_timeout=function(delay, callback)
             return dfhack.timeout(delay, 'frames', callback)
@@ -595,7 +608,8 @@ end
 ---@return table
 local function terminate_aborted(registry, run, reason)
     registry.generation = registry.generation + 1
-    transition(run, {'starting', 'running'}, 'cleaning')
+    transition(run, {RunState.STARTING, RunState.RUNNING},
+        RunState.CLEANING)
     local cleanup_ok = clean_run(run, reason)
     if not cleanup_ok and not run.cleanup_failure_reported_by_busted then
         run.counts.errors = run.counts.errors + 1
@@ -604,7 +618,7 @@ local function terminate_aborted(registry, run, reason)
     run.finished_ms = dfhack.getTickCount()
     run.finished_frame = current_frame()
     table.insert(run.output_lines, 'ABORTED ' .. reason)
-    transition(run, 'cleaning', 'aborted')
+    transition(run, RunState.CLEANING, RunState.ABORTED)
     archive_run(registry, run)
     return run
 end
@@ -672,7 +686,7 @@ function M.start(package_root, project_root, options)
         protocol_version=M.protocol_version,
         run_id=options.run_id,
         generation=registry.generation,
-        state='starting',
+        state=RunState.STARTING,
         state_changed_ms=created_ms,
         created_ms=created_ms,
         created_frame=current_frame(),

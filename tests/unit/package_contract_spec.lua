@@ -101,9 +101,16 @@ describe('DwarfSpec package contract', function()
                 output_handler=
                     'src/dwarfspec/automation/output_handler.lua',
                 projects='src/dwarfspec/automation/projects.lua',
+                result_policies=
+                    'src/dwarfspec/automation/result_policies.lua',
+                result_states=
+                    'src/dwarfspec/automation/result_states.lua',
+                run_states='src/dwarfspec/automation/run_states.lua',
                 schemas='src/dwarfspec/automation/schemas.lua',
                 service='src/dwarfspec/automation/service.lua',
-                snapshots='src/dwarfspec/automation/snapshots.lua'}) do
+                snapshots='src/dwarfspec/automation/snapshots.lua',
+                test_statuses=
+                    'src/dwarfspec/automation/test_statuses.lua'}) do
             assert.matches(('["dwarfspec.automation.%s"]'):format(name),
                 rockspec, 1, true)
             assert.matches(('"%s"'):format(path), rockspec, 1, true)
@@ -121,13 +128,31 @@ describe('DwarfSpec package contract', function()
                 'dwarfspec.automation.event_types',
                 'dwarfspec.automation.output_handler',
                 'dwarfspec.automation.projects',
+                'dwarfspec.automation.result_policies',
+                'dwarfspec.automation.result_states',
+                'dwarfspec.automation.run_states',
                 'dwarfspec.automation.schemas',
                 'dwarfspec.automation.service',
-                'dwarfspec.automation.snapshots'}) do
+                'dwarfspec.automation.snapshots',
+                'dwarfspec.automation.test_statuses'}) do
             local path = assert(package.searchpath(name, package.path))
                 :gsub('\\', '/')
             assert.matches('/src/dwarfspec/automation/', path, 1, true)
             assert.is_table(require(name))
+        end
+    end)
+
+    it('publishes shared enum and runner failure-kind modules', function()
+        local rockspec = read_repository_file(ROCKSPEC_PATH)
+        for name, path in pairs({
+                immutable_enum='src/dwarfspec/immutable_enum.lua',
+                runner_failure_kinds=
+                    'src/dwarfspec/runner_failure_kinds.lua'}) do
+            assert.matches(('["dwarfspec.%s"]'):format(name),
+                rockspec, 1, true)
+            assert.matches(('"%s"'):format(path), rockspec, 1, true)
+            assert.is_truthy(read_repository_file(path))
+            assert.is_table(require('dwarfspec.' .. name))
         end
     end)
 
