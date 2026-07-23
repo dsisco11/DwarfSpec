@@ -1,0 +1,79 @@
+{
+  "schema": "dwarfspec.transport.v2",
+  "protocol": 2,
+  "service_instance_id": "service-fixture-1",
+  "project_id": "project-alpha",
+  "run_id": "run-failed",
+  "generation": 4,
+  "snapshot": {
+    "schema": "dwarfspec.run.v2",
+    "protocol_version": 2,
+    "service_instance_id": "service-fixture-1",
+    "project_id": "project-alpha",
+    "run_id": "run-failed",
+    "generation": 4,
+    "state": "failed",
+    "terminal": true,
+    "queue_position": null,
+    "submitted_at_ms": 1000,
+    "activated_at_ms": 1500,
+    "queue_wait_ms": 500,
+    "current_repeat": null,
+    "current_test": null,
+    "counts": {
+      "successes": 0,
+      "failures": 1,
+      "errors": 0,
+      "pending": 0
+    },
+    "totals": {
+      "successes": 0,
+      "failures": 1,
+      "errors": 0,
+      "pending": 0
+    },
+    "last_sequence": 1,
+    "queue_lease": {
+      "active": false
+    },
+    "execution_lease": {
+      "active": false
+    },
+    "owner_kind": "external",
+    "cleanup_confirmed": true,
+    "cleanup_reason": "test failure",
+    "mount_cleanup_verified": true,
+    "host_error": null,
+    "failures": [
+      {
+        "kind": "failure",
+        "name": "fixture failure",
+        "message": "expected true"
+      }
+    ]
+  },
+  "events": [
+    {
+      "schema": "dwarfspec.event.v1",
+      "service_instance_id": "service-fixture-1",
+      "project_id": "project-alpha",
+      "run_id": "run-failed",
+      "generation": 4,
+      "sequence": 1,
+      "type": "run.finished",
+      "elapsed_ms": 2000,
+      "payload": {
+        "terminal_state": "failed",
+        "totals": {
+          "successes": 0,
+          "failures": 1,
+          "errors": 0,
+          "pending": 0
+        },
+        "cleanup_required": true,
+        "cleanup_confirmed": true
+      }
+    }
+  ],
+  "last_sequence": 1
+}

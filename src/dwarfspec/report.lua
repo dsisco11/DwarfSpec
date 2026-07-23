@@ -1,6 +1,8 @@
 -- Native-host JSON report parsing, validation, and result-file persistence.
 
 local M = {}
+local events = require('dwarfspec.automation.events')
+local schemas = require('dwarfspec.automation.schemas')
 
 local PREFIX = 'DWARFSPEC_JSON '
 
@@ -16,12 +18,53 @@ local function report_line(lines)
     return found
 end
 
+---Validates one transitional version 1 native report.
+---@param report table
+---@param expected table
+---@return table
+local function validate_version_one(report, expected)
+    events.copy_json(report, 'version 1 report')
+    for _, field in ipairs({
+            'schema', 'protocol', 'run_id', 'state', 'terminal', 'generation',
+            'counts', 'totals', 'output_count', 'cleanup_confirmed',
+            'failures'}) do
+        assert(report[field] ~= nil,
+            'DwarfSpec JSON report is missing field: ' .. field)
+    end
+    assert(report.protocol == 1,
+        'unsupported DwarfSpec protocol: ' .. tostring(report.protocol))
+    if expected.run_id ~= nil then
+        assert(report.run_id == expected.run_id,
+            ('DwarfSpec report run id %q does not match %q')
+                :format(tostring(report.run_id), expected.run_id))
+    end
+    return report
+end
+
+---Validates one supported native or service transport report.
+---@param report table
+---@param expected table|string|nil
+---@return table
+function M.validate(report, expected)
+    assert(type(report) == 'table', 'DwarfSpec JSON report must be a table')
+    if type(expected) == 'string' then expected = {run_id=expected} end
+    expected = expected or {}
+    if report.schema == 'dwarfspec.run.v1' then
+        return validate_version_one(report, expected)
+    end
+    if report.schema == 'dwarfspec.transport.v2' then
+        return schemas.validate_transport(report, expected)
+    end
+    error('unsupported DwarfSpec report schema: ' ..
+        tostring(report.schema), 0)
+end
+
 ---Decodes and validates one native DwarfSpec report.
 ---@param lines string[]
----@param expected_run_id string
+---@param expected table|string|nil
 ---@param decoder function|nil
 ---@return table, string
-function M.parse(lines, expected_run_id, decoder)
+function M.parse(lines, expected, decoder)
     local line = report_line(lines)
     local payload = line:sub(#PREFIX + 1)
     local decode = decoder or function(text)
@@ -30,21 +73,14 @@ function M.parse(lines, expected_run_id, decoder)
     local report, _, decode_error = decode(payload)
     assert(report, 'DFHack emitted invalid DwarfSpec JSON: ' ..
         tostring(decode_error))
-    for _, field in ipairs({
-            'schema', 'protocol', 'run_id', 'state', 'terminal', 'generation',
-            'counts', 'totals', 'output_count', 'cleanup_confirmed',
-            'failures'}) do
-        assert(report[field] ~= nil,
-            'DwarfSpec JSON report is missing field: ' .. field)
-    end
-    assert(report.schema == 'dwarfspec.run.v1',
-        'unsupported DwarfSpec report schema: ' .. tostring(report.schema))
-    assert(report.protocol == 1,
-        'unsupported DwarfSpec protocol: ' .. tostring(report.protocol))
-    assert(report.run_id == expected_run_id,
-        ('DwarfSpec report run id %q does not match %q')
-            :format(tostring(report.run_id), expected_run_id))
-    return report, payload
+    return M.validate(report, expected), payload
+end
+
+---Validates one version 2 persisted result document.
+---@param result table
+---@return table
+function M.validate_result(result)
+    return schemas.validate_result(result)
 end
 
 ---Returns newly streamed Busted output lines without protocol framing.

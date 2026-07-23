@@ -137,7 +137,7 @@ service and independently registered project sessions.
 
 ✔ Add `dwarfspec.automation.service` as the only public mutation boundary over
   project, run, scheduler, and terminal state. @done(26-07-23 08:36)
-✔ Add `dwarfspec.automation.projects` for canonical project identity,
+✔ Add `dwarfspec.automation.projects` for normalized project identity,
   registration, refresh, lookup, and unregister operations.
   @done(26-07-23 08:36)
 ✔ Define the process-wide registry with protocol version, service instance ID,
@@ -180,38 +180,48 @@ Phase 1 exit gate:
 Goal: introduce the presentation-neutral data contracts before changing live
 execution ownership.
 
-☐ Add `dwarfspec.automation.events` for event construction, defensive copying,
+✔ Add `dwarfspec.automation.events` for event construction, defensive copying,
   sequencing, validation, retention, and cursor reads.
-☐ Emit the required envelope fields: schema, service instance ID, project ID,
+  @done(26-07-23 09:06)
+✔ Emit the required envelope fields: schema, service instance ID, project ID,
   run ID, generation, sequence, elapsed time, type, and payload.
-☐ Implement the initial scheduler, run, repeat, test, problem, command,
+  @done(26-07-23 09:06)
+✔ Implement the initial scheduler, run, repeat, test, problem, command,
   diagnostic, cleanup, abort, and terminal event types from the design.
-☐ Ensure every admitted run starts at sequence one and publishes contiguous,
-  immutable events.
-☐ Make repeated cursor reads deterministic and non-mutating.
-☐ Add bounded JSON-safe copying that rejects or classifies unsupported and
-  cyclic values.
-☐ Define version 2 service, scheduler, run-snapshot, transport, event, and
-  result validators.
-☐ Add immutable run snapshots with queue, activation, execution, count, lease,
+  @done(26-07-23 09:06)
+✔ Ensure every admitted run starts at sequence one and publishes contiguous,
+  immutable events. @done(26-07-23 09:06)
+✔ Make repeated cursor reads deterministic and non-mutating.
+  @done(26-07-23 09:06)
+✔ Add bounded JSON-safe copying that rejects or classifies unsupported and
+  cyclic values. @done(26-07-23 09:06)
+✔ Define version 2 service, scheduler, run-snapshot, transport, event, and
+  result validators. @done(26-07-23 09:06)
+✔ Add immutable run snapshots with queue, activation, execution, count, lease,
   cleanup, host-error, and failure-summary fields.
-☐ Add immutable scheduler snapshots with service compatibility, registered
+  @done(26-07-23 09:06)
+✔ Add immutable scheduler snapshots with service compatibility, registered
   projects, FIFO order, active ownership, and quarantine state.
-☐ Refactor the Busted output handler behind an event-publisher interface while
+  @done(26-07-23 09:06)
+✔ Refactor the Busted output handler behind an event-publisher interface while
   retaining temporary version 1 compatibility output.
-☐ Extend `dwarfspec.report` to validate version 2 identities and schemas while
+  @done(26-07-23 09:06)
+✔ Extend `dwarfspec.report` to validate version 2 identities and schemas while
   accepting the explicitly supported version 1 transition input.
-☐ Prove owner capabilities and live DFHack objects cannot enter events,
-  snapshots, terminal output, or results.
+  @done(26-07-23 09:06)
+✔ Prove owner capabilities and live DFHack objects cannot enter events,
+  snapshots, terminal output, or results. @done(26-07-23 09:06)
 
 Phase 2 exit gate:
 
-☐ Unit tests cover every initial event type and every terminal state.
-☐ Unit tests cover cursor retry, empty reads, stale cursors, defensive copying,
-  malformed data, and sequence discontinuity.
-☐ Checked-in schema fixtures validate against the new readers.
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes.
+✔ Unit tests cover every initial event type and every terminal state.
+  @done(26-07-23 09:06)
+✔ Unit tests cover cursor retry, empty reads, stale cursors, defensive copying,
+  malformed data, and sequence discontinuity. @done(26-07-23 09:06)
+✔ Checked-in schema fixtures validate against the new readers.
+  @done(26-07-23 09:06)
+✔ Lua syntax and formatting checks pass. @done(26-07-23 09:06)
+✔ The full unit suite passes. @done(26-07-23 09:06)
 
 ## Phase 3: Multi-project admission and FIFO scheduling
 
@@ -506,7 +516,7 @@ one evidence category as a substitute for another.
 |---|---|---|---|---|---|
 | 0 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 91 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 156 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; exit 6, 20 successes/1 failure/0 errors/0 pending, cleanup confirmed; existing `complete_screen_mount_live_spec.lua:194` observed `true`, expected `false` | not required | Workspace `D:\CODE\DFHack\DwarfSpec`, `origin=https://github.com/dsisco11/DwarfSpec.git`; native result `.test-results/dwarfspec/dwarfspec-93409734-57826f4c.json` |
 | 1 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 94 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 168 successes, pass | not required; supplementary full live run passed 21/21 with cleanup confirmed | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | `src/dwarfspec/automation/{service,projects}.lua`; `tests/unit/automation_service_spec.lua`; native result `.test-results/dwarfspec/dwarfspec-104270906-3877eddc.json` |
-| 2 | pending | pending | not required | schema fixtures | |
+| 2 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 100 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 185 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | service, scheduler, run, event, transport, and result fixtures validated; immutable `EventType`; `src/dwarfspec/automation/{event_types,events,schemas,snapshots,output_handler}.lua`; version 1 report transition retained |
 | 3 | pending | pending | not required | not required | |
 | 4 | pending | pending | pending | not required | |
 | 5 | pending | pending | pending | not required | |
@@ -541,7 +551,7 @@ Phase 1 service evidence:
 - Bootstrap owns the service protocol, instance, package root, package version,
   generation, projects, runs, FIFO storage, active run identity, quarantine, and
   latest terminal-result maps without loading consumer configuration modules.
-- `automation_service_spec.lua` covers canonical registration and refresh,
+- `automation_service_spec.lua` covers normalized registration and refresh,
   independent project state, ID reuse rejection, incompatible and unsafe
   registration atomicity, compatible reload preservation, incompatible
   bootstrap preservation, busy unregister, detached JSON encoding, and
@@ -551,6 +561,28 @@ Phase 1 service evidence:
 - Existing bootstrap, status, abort, host, scheduler, and cleanup modules were
   not changed; the supplementary live suite passed 21/21 with cleanup
   confirmed.
+
+Phase 2 structured-contract evidence:
+
+- `automation_events_spec.lua` covers all 18 initial event types, all four
+  terminal states, immutable enum identifiers, rejection of loose publisher
+  strings, sequence-one journals, contiguous ordering, cursor retries, empty
+  reads, stale cursors, sparse journals, payload immutability, malformed
+  envelopes, bounded values, cycles, unsupported runtime values, behavioral
+  metatables, and owner-capability exclusion.
+- `automation_schemas_spec.lua` covers version 2 run, scheduler, transport,
+  service, event, and result contracts; immutable run and scheduler snapshots;
+  FIFO and active ownership; identity continuity; and exclusion of capabilities
+  and runtime objects.
+- `automation_output_handler_spec.lua` proves Busted callbacks publish
+  structured repeat, test, and problem events while retaining version 1
+  progress lines and failure details.
+- `process_report_spec.lua` proves the report reader accepts the explicit
+  `dwarfspec.run.v1` transition and validates version 2 transport identities,
+  event continuity, snapshots, and persisted results.
+- Checked-in fixtures under `tests/framework/fixtures/service_v2/` validate
+  service, scheduler, run, event, transport, and every representative result
+  outcome through the production readers.
 
 ## Final acceptance
 

@@ -1,6 +1,8 @@
 -- Unit contracts for the multi-project automation service runtime.
 
 local projects = require('dwarfspec.automation.projects')
+local events = require('dwarfspec.automation.events')
+local EventType = require('dwarfspec.automation.event_types')
 local service_path = 'src/dwarfspec/automation/service.lua'
 
 describe('multi-project automation service', function()
@@ -396,5 +398,58 @@ describe('multi-project automation service', function()
         assert.is_nil(original['project-copy'])
         assert.is_table(updated['project-copy'])
         assert.equals('project-copy', project.project_id)
+    end)
+
+    it('exposes immutable event, run, and scheduler observations',
+            function()
+        service.bootstrap(bootstrap_request(), dependencies)
+        local project = service.register_project(
+            registration('D:/Clients/Alpha'), dependencies)
+        local registry = namespace.dwarfspec
+        local journal = events.new_journal({
+            service_instance_id=registry.service_instance_id,
+            project_id=project.project_id,
+            run_id='run-1',
+            generation=1,
+            admitted_at_ms=100,
+        })
+        events.publish(journal, EventType.RUN_QUEUED, {
+            selection={identities={'tests/live/example.ds.lua'}},
+            queue_admitted_ms=100,
+            owner_kind='external',
+        }, 100)
+        registry.runs['run-1']={
+            service_instance_id=registry.service_instance_id,
+            project_id=project.project_id,
+            run_id='run-1',
+            generation=1,
+            state='queued',
+            terminal=false,
+            submitted_at_ms=100,
+            counts={successes=0, failures=0, errors=0, pending=0},
+            totals={successes=0, failures=0, errors=0, pending=0},
+            queue_lease={active=true},
+            execution_lease={active=false},
+            owner_kind='external',
+            cleanup_confirmed=false,
+            mount_cleanup_verified=false,
+            failures={},
+            event_journal=journal,
+        }
+        registry.queue[1]='run-1'
+
+        local run_snapshot = service.snapshot('run-1', dependencies)
+        local cursor = service.events('run-1', 0, dependencies)
+        local scheduler = service.scheduler_snapshot(dependencies)
+        run_snapshot.counts.successes = 99
+        cursor.events[1].payload.owner_kind = 'mutated'
+        scheduler.queue[1].run_id = 'mutated'
+
+        assert.equals(0, registry.runs['run-1'].counts.successes)
+        assert.equals('external',
+            journal.events[1].payload.owner_kind)
+        assert.equals('run-1', registry.queue[1])
+        assert.equals(1, cursor.last_sequence)
+        assert.equals(1, run_snapshot.queue_position)
     end)
 end)

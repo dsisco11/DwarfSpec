@@ -1,7 +1,18 @@
 -- Unit contracts for Busted event collection in the in-process host.
 
-local output_handler = assert(loadfile(
-    'tests/automation/support/output_handler.lua'))()
+local output_handler = require('dwarfspec.automation.output_handler')
+local EventType = require('dwarfspec.automation.event_types')
+
+---Returns the ordered type names published by one handler.
+---@param published table[]
+---@return string[]
+local function published_types(published)
+    local types = {}
+    for _, event in ipairs(published) do
+        table.insert(types, EventType.id(event.type))
+    end
+    return types
+end
 
 describe('automation Busted output collection', function()
     local original_base_loader
@@ -81,8 +92,17 @@ describe('automation Busted output collection', function()
             output_lines={},
             failure_details={},
             current_test=nil,
+            owner_capability='owner-secret',
         }
-        local handler = output_handler.new({}, run)
+        local published = {}
+        local handler = output_handler.new({}, run, {
+            publish=function(event_type, payload)
+                table.insert(published, {
+                    type=event_type,
+                    payload=payload,
+                })
+            end,
+        })
         local test = {name='suite records events'}
 
         handler.baseSuiteReset()
@@ -112,5 +132,18 @@ describe('automation Busted output collection', function()
         assert.same('error', run.failure_details[3].kind)
         assert.same('file error', run.failure_details[3].message)
         assert.same('RUN_END 1/1', run.output_lines[#run.output_lines])
+        assert.same({
+            'repeat.started',
+            'test.started',
+            'test.finished',
+            'problem.recorded',
+            'problem.recorded',
+            'problem.recorded',
+            'repeat.finished',
+        }, published_types(published))
+        assert.is_nil(table.concat(run.output_lines, '\n')
+            :find('owner-secret', 1, true))
+        assert.is_nil(require('dkjson').encode(published)
+            :find('owner-secret', 1, true))
     end)
 end)

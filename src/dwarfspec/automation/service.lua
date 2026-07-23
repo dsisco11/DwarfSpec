@@ -1,6 +1,9 @@
 -- Process-wide multi-project automation service runtime and public boundary.
 
 local projects = require('dwarfspec.automation.projects')
+local events = require('dwarfspec.automation.events')
+local schemas = require('dwarfspec.automation.schemas')
+local snapshots = require('dwarfspec.automation.snapshots')
 
 local M = {
     protocol_version=2,
@@ -113,7 +116,7 @@ end
 ---@param registry table
 ---@return table
 local function service_summary(registry)
-    return projects.copy_json({
+    local summary = events.copy_json({
         schema=registry.schema,
         protocol_version=registry.protocol_version,
         service_instance_id=registry.service_instance_id,
@@ -127,6 +130,8 @@ local function service_summary(registry)
         quarantine=registry.quarantine,
         latest_terminal_results=registry.latest_terminal_results,
     }, 'service summary')
+    schemas.validate_service(summary)
+    return summary
 end
 
 ---Validates one project client's compatibility with the running service.
@@ -256,6 +261,44 @@ end
 ---@return table
 function M.summary(dependencies)
     return service_summary(require_registry(dependencies))
+end
+
+---Returns one detached immutable run snapshot by identifier.
+---@param run_id string
+---@param dependencies table|nil
+---@return table
+function M.snapshot(run_id, dependencies)
+    assert(type(run_id) == 'string' and run_id ~= '',
+        'run id must be a nonempty string')
+    local registry = require_registry(dependencies)
+    local run = registry.runs[run_id]
+    assert(type(run) == 'table',
+        'automation run was not found: ' .. run_id)
+    return snapshots.run(run, registry)
+end
+
+---Returns immutable run events after one stable cursor.
+---@param run_id string
+---@param after_sequence integer
+---@param dependencies table|nil
+---@return table
+function M.events(run_id, after_sequence, dependencies)
+    assert(type(run_id) == 'string' and run_id ~= '',
+        'run id must be a nonempty string')
+    local registry = require_registry(dependencies)
+    local run = registry.runs[run_id]
+    assert(type(run) == 'table',
+        'automation run was not found: ' .. run_id)
+    assert(type(run.event_journal) == 'table',
+        'automation run does not own an event journal: ' .. run_id)
+    return events.read(run.event_journal, after_sequence)
+end
+
+---Returns one detached immutable scheduler snapshot.
+---@param dependencies table|nil
+---@return table
+function M.scheduler_snapshot(dependencies)
+    return snapshots.scheduler(require_registry(dependencies))
 end
 
 return M

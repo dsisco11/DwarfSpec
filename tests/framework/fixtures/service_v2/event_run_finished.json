@@ -1,0 +1,21 @@
+{
+  "schema": "dwarfspec.event.v1",
+  "service_instance_id": "service-fixture-1",
+  "project_id": "project-alpha",
+  "run_id": "run-failed",
+  "generation": 4,
+  "sequence": 1,
+  "type": "run.finished",
+  "elapsed_ms": 2000,
+  "payload": {
+    "terminal_state": "failed",
+    "totals": {
+      "successes": 0,
+      "failures": 1,
+      "errors": 0,
+      "pending": 0
+    },
+    "cleanup_required": true,
+    "cleanup_confirmed": true
+  }
+}

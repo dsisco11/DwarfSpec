@@ -475,6 +475,12 @@ ordering. Sequence numbers are authoritative within one run.
 
 ### Initial event types
 
+Service-side publishers use immutable members of
+`dwarfspec.automation.event_types`; they do not pass loose string identifiers.
+Serialization writes each member's stable identifier into the envelope's
+string-valued `type` field, and readers resolve that wire identifier through
+the same enum before validating its payload.
+
 | Event type | Required payload |
 |---|---|
 | `run.queued` | normalized selection and queue admission metadata |
@@ -899,6 +905,9 @@ The implementation is expected to converge on boundaries similar to:
 | `dwarfspec.automation.projects` | Project identity, registration, compatibility, and configuration. |
 | `dwarfspec.automation.scheduler` | Admission queue, leases, activation, executor release, and quarantine. |
 | `dwarfspec.automation.events` | Event construction, validation, copying, sequencing, and cursor reads. |
+| `dwarfspec.automation.event_types` | Immutable identifiers for all supported structured event types. |
+| `dwarfspec.automation.schemas` | Versioned service, scheduler, run, transport, event, and result validation. |
+| `dwarfspec.automation.snapshots` | Immutable run and scheduler snapshot construction. |
 | `dwarfspec.automation.host` | Busted execution, native state transitions, and cleanup. |
 | `dwarfspec.automation.output_handler` | Translation from Busted callbacks into service events. |
 | `dwarfspec.automation.result_store` | Per-project result schema and safe replacement writes. |

@@ -55,8 +55,18 @@ build = {
         ["dwarfspec.subject"] = "src/dwarfspec/subject.lua",
         ["dwarfspec.automation.projects"] =
             "src/dwarfspec/automation/projects.lua",
+        ["dwarfspec.automation.events"] =
+            "src/dwarfspec/automation/events.lua",
+        ["dwarfspec.automation.event_types"] =
+            "src/dwarfspec/automation/event_types.lua",
+        ["dwarfspec.automation.schemas"] =
+            "src/dwarfspec/automation/schemas.lua",
         ["dwarfspec.automation.service"] =
             "src/dwarfspec/automation/service.lua",
+        ["dwarfspec.automation.snapshots"] =
+            "src/dwarfspec/automation/snapshots.lua",
+        ["dwarfspec.automation.output_handler"] =
+            "src/dwarfspec/automation/output_handler.lua",
         ["dwarfspec.ds"] = "tests/automation/support/ds.lua",
         ["dwarfspec.automation.abort"] = "tests/automation/support/abort.lua",
         ["dwarfspec.automation.bootstrap"] = "tests/automation/support/bootstrap.lua",
@@ -67,7 +77,6 @@ build = {
         ["dwarfspec.automation.extensions"] = "tests/automation/support/extensions.lua",
         ["dwarfspec.automation.host"] = "tests/automation/support/busted_host.lua",
         ["dwarfspec.automation.lfs_adapter"] = "tests/automation/support/lfs_adapter.lua",
-        ["dwarfspec.automation.output_handler"] = "tests/automation/support/output_handler.lua",
         ["dwarfspec.automation.overlay_registration"] = "tests/automation/support/overlay_registration.lua",
         ["dwarfspec.automation.pointer_adapter"] = "tests/automation/support/pointer_adapter.lua",
         ["dwarfspec.automation.project"] = "tests/automation/support/project.lua",

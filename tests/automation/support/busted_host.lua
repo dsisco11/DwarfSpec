@@ -393,8 +393,8 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
 
     local output_factory = load_automation_module(package_root,
         'dwarfspec.automation.output_handler',
-        'tests/automation/support/output_handler.lua')
-    output_factory.new(busted, run)
+        'src/dwarfspec/automation/output_handler.lua')
+    output_factory.new(busted, run, run.event_publisher)
     require('busted.modules.filter_loader')()(busted,
         M.filter_options(run.options))
 

@@ -1,6 +1,9 @@
 {
   "schema": "dwarfspec.scheduler.v2",
+  "protocol_version": 2,
   "service_instance_id": "service-fixture-1",
+  "package_root": "D:/Packages/DwarfSpec",
+  "package_version": "0.1.3",
   "active_run_id": null,
   "active_project_id": null,
   "queue": [
@@ -12,10 +15,16 @@
   "projects": [
     {
       "project_id": "project-alpha",
+      "normalized_project_root": "tests/framework/service_project_alpha",
+      "display_name": "Service Project Alpha",
+      "result_policy": "file",
       "outstanding_run_id": "run-failed"
     },
     {
       "project_id": "project-beta",
+      "normalized_project_root": "tests/framework/service project beta",
+      "display_name": "Service Project Beta",
+      "result_policy": "file",
       "outstanding_run_id": "run-waiting"
     }
   ],

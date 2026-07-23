@@ -91,28 +91,39 @@ describe('DwarfSpec package contract', function()
             'tests/automation/support/overlay_registration.lua'))
     end)
 
-    it('publishes the service runtime from authoritative source modules',
+    it('publishes automation runtime from authoritative source modules',
             function()
         local rockspec = read_repository_file(ROCKSPEC_PATH)
         for name, path in pairs({
+                events='src/dwarfspec/automation/events.lua',
+                event_types=
+                    'src/dwarfspec/automation/event_types.lua',
+                output_handler=
+                    'src/dwarfspec/automation/output_handler.lua',
                 projects='src/dwarfspec/automation/projects.lua',
-                service='src/dwarfspec/automation/service.lua'}) do
+                schemas='src/dwarfspec/automation/schemas.lua',
+                service='src/dwarfspec/automation/service.lua',
+                snapshots='src/dwarfspec/automation/snapshots.lua'}) do
             assert.matches(('["dwarfspec.automation.%s"]'):format(name),
                 rockspec, 1, true)
             assert.matches(('"%s"'):format(path), rockspec, 1, true)
             assert.is_truthy(read_repository_file(path))
+            assert.is_nil(rockspec:find(
+                ('["dwarfspec.automation.%s"] = "tests/'):format(name),
+                1, true))
         end
-        assert.is_nil(rockspec:find(
-            '["dwarfspec.automation.service"] = "tests/', 1, true))
-        assert.is_nil(rockspec:find(
-            '["dwarfspec.automation.projects"] = "tests/', 1, true))
     end)
 
-    it('resolves service modules from the authoritative source namespace',
+    it('resolves automation modules from the authoritative source namespace',
             function()
         for _, name in ipairs({
+                'dwarfspec.automation.events',
+                'dwarfspec.automation.event_types',
+                'dwarfspec.automation.output_handler',
                 'dwarfspec.automation.projects',
-                'dwarfspec.automation.service'}) do
+                'dwarfspec.automation.schemas',
+                'dwarfspec.automation.service',
+                'dwarfspec.automation.snapshots'}) do
             local path = assert(package.searchpath(name, package.path))
                 :gsub('\\', '/')
             assert.matches('/src/dwarfspec/automation/', path, 1, true)

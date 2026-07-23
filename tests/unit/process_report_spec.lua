@@ -3,6 +3,17 @@
 local process = require('dwarfspec.process')
 local report = require('dwarfspec.report')
 
+---Reads one version 2 checked-in contract fixture.
+---@param name string
+---@return string
+local function read_contract_fixture(name)
+    local file = assert(io.open(
+        'tests/framework/fixtures/service_v2/' .. name, 'rb'))
+    local contents = assert(file:read('*a'))
+    file:close()
+    return contents
+end
+
 describe('DwarfSpec process bridge', function()
     it('quotes Windows and Unix-like arguments with spaces and metacharacters',
             function()
@@ -171,5 +182,33 @@ describe('DwarfSpec native reports', function()
                 }
             end)
         end, 'unsupported DwarfSpec report schema: another.schema')
+    end)
+
+    it('accepts and validates version 2 transport identities', function()
+        local contents = read_contract_fixture('transport_failed.json')
+        local parsed = report.parse(
+            {'DWARFSPEC_JSON ' .. contents}, {
+                service_instance_id='service-fixture-1',
+                project_id='project-alpha',
+                run_id='run-failed',
+                generation=4,
+                after_sequence=0,
+            })
+
+        assert.equals('dwarfspec.transport.v2', parsed.schema)
+        assert.equals('failed', parsed.snapshot.state)
+        assert.has_error(function()
+            report.parse({'DWARFSPEC_JSON ' .. contents}, {
+                run_id='foreign-run',
+                after_sequence=0,
+            })
+        end, 'automation transport identity mismatch: run_id')
+    end)
+
+    it('validates version 2 result fixtures', function()
+        local contents = read_contract_fixture('result_passed.json')
+        local value, _, decode_error = require('dkjson').decode(contents)
+        assert(value, decode_error)
+        assert.equals(value, report.validate_result(value))
     end)
 end)

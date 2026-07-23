@@ -4,6 +4,8 @@ local json = require('dkjson')
 local lfs = require('lfs')
 local project = require('dwarfspec.project')
 local runner = require('dwarfspec.runner')
+local schemas = require('dwarfspec.automation.schemas')
+local EventType = require('dwarfspec.automation.event_types')
 local builders = assert(loadfile('tests/support/service_builders.lua'))()
 
 local fixture_root = 'tests/framework/fixtures/service_v2'
@@ -46,7 +48,9 @@ describe('multi-project service contract fixtures', function()
 
         local first_run = builders.run()
         local second_run = builders.run({run_id='run-fixture-2'})
-        table.insert(first_run.events, {type='run.queued'})
+        table.insert(first_run.events, {
+            type=EventType.id(EventType.RUN_QUEUED),
+        })
         assert.equals(0, #second_run.events)
 
         local first_registry = builders.registry()
@@ -122,6 +126,7 @@ describe('multi-project service contract fixtures', function()
 
         for name, contract in pairs(expected) do
             local fixture, contents = read_fixture(name .. '.json')
+            schemas.validate_result(fixture)
             assert.equals('dwarfspec.result.v2', fixture.schema)
             assert.equals(contract.state, fixture.state)
             assert.equals(contract.terminal, fixture.terminal)
@@ -138,6 +143,7 @@ describe('multi-project service contract fixtures', function()
         local fixture, contents = read_fixture(
             'scheduler_quarantined.json')
 
+        schemas.validate_scheduler(fixture)
         assert.equals('dwarfspec.scheduler.v2', fixture.schema)
         assert.is_true(fixture.quarantine.active)
         assert.equals(1, #fixture.queue)
@@ -145,6 +151,28 @@ describe('multi-project service contract fixtures', function()
         assert.is_nil(contents:lower():find('"ui"', 1, true))
         assert.is_nil(contents:lower():find('"widget"', 1, true))
         assert_no_owner_capability(fixture)
+    end)
+
+    it('validates checked-in service, run, event, and transport schemas',
+            function()
+        local service = read_fixture('service_ready.json')
+        local run = read_fixture('run_failed_snapshot.json')
+        local event = read_fixture('event_run_finished.json')
+        local transport = read_fixture('transport_failed.json')
+
+        assert.equals(service, schemas.validate_service(service))
+        assert.equals(run, schemas.validate_run(run))
+        assert.equals(event, schemas.validate_event(event))
+        assert.equals(transport, schemas.validate_transport(transport, {
+            service_instance_id='service-fixture-1',
+            project_id='project-alpha',
+            run_id='run-failed',
+            generation=4,
+            after_sequence=0,
+        }))
+        for _, value in ipairs({service, run, event, transport}) do
+            assert_no_owner_capability(value)
+        end
     end)
 
     it('maps every existing exit code to version 2 states', function()
