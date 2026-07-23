@@ -28,6 +28,15 @@ describe('DwarfSpec discovery configuration', function()
         return function() return result end
     end
 
+    it('selects this repository product automation suite by default',
+            function()
+        local repository_config =
+            assert(loadfile('tests/dwarfspec/config.lua'))()
+
+        assert.equals('tests/automation/*.lua',
+            repository_config.settings.discovery.test_glob)
+    end)
+
     it('defaults to every recursively visited .ds.lua basename', function()
         assert.equals('*.ds.lua',
             config.load_test_glob('project', filesystem, loader))
