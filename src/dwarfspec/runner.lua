@@ -16,6 +16,7 @@ local exit_codes = {
     [RunnerFailureKind.USAGE]=2,
     [RunnerFailureKind.DEPENDENCY]=3,
     [RunnerFailureKind.CONNECTION]=4,
+    [RunnerFailureKind.REGISTRATION]=5,
     [RunnerFailureKind.HOST]=5,
     [RunnerFailureKind.TEST]=6,
     [RunnerFailureKind.TIMEOUT]=7,
@@ -221,10 +222,8 @@ end
 ---@param runner_error table
 ---@param native_report table|nil
 ---@param interrupted boolean
----@param registration_failed boolean
 ---@return DwarfSpecResultState
-local function failure_result_state(runner_error, native_report, interrupted,
-        registration_failed)
+local function failure_result_state(runner_error, native_report, interrupted)
     if interrupted then return ResultState.INTERRUPTED end
     if runner_error.kind == RunnerFailureKind.DEPENDENCY then
         return ResultState.DEPENDENCY_ERROR
@@ -234,7 +233,7 @@ local function failure_result_state(runner_error, native_report, interrupted,
         return ResultState.QUEUE_TIMEOUT
     elseif runner_error.kind == RunnerFailureKind.TIMEOUT then
         return ResultState.TIMEOUT
-    elseif registration_failed then
+    elseif runner_error.kind == RunnerFailureKind.REGISTRATION then
         return ResultState.REGISTRATION_ERROR
     elseif runner_error.kind == RunnerFailureKind.ABORTED and
             native_report and native_report.state == RunState.ABORTED then
@@ -248,6 +247,18 @@ local function failure_result_state(runner_error, native_report, interrupted,
         return native_report.state
     end
     return ResultState.HOST_ERROR
+end
+
+---Adds actionable guidance to one host registration rejection.
+---@param message string
+---@return string
+local function registration_message(message)
+    local result = 'DwarfSpec bootstrap rejected: ' .. message
+    if message:match('incompatible automation package version') then
+        result = result .. '. Restart DFHack to unload the running ' ..
+            'DwarfSpec service before using a different package version'
+    end
+    return result
 end
 
 ---Returns whether a native report has entered the executor.
@@ -418,7 +429,7 @@ function M.run(options)
     local owner_capability
     local runner_error
     local bootstrap_attempted = false
-    local registration_failed = false
+    local bootstrap_rejected = false
     local interrupted = false
     local activated_at
     local expected_identity
@@ -487,17 +498,28 @@ function M.run(options)
         for attempt = 1, 2 do
             local invoked, start = pcall(invoke, runner, arguments)
             if invoked and start.exit_code ~= 0 then
-                registration_failed = true
-                fail(RunnerFailureKind.HOST,
+                fail(RunnerFailureKind.REGISTRATION,
                     'DwarfSpec bootstrap exited with ' .. start.exit_code)
             end
             if invoked then
-                local parsed, transport, capability = pcall(function()
-                    return reports.parse_transport(start.lines,
-                        transport_expectation(0), options.decode_json),
-                        reports.owner_capability(start.lines)
+                local parsed, transport, capability, response_error =
+                    pcall(function()
+                        local response, _, adapter_error =
+                            reports.parse_transport_response(start.lines,
+                                transport_expectation(0),
+                                options.decode_json)
+                        if adapter_error then
+                            return nil, nil, adapter_error
+                        end
+                        return response,
+                            reports.owner_capability(start.lines), nil
                 end)
                 if parsed then
+                    if response_error then
+                        bootstrap_rejected = true
+                        fail(RunnerFailureKind.REGISTRATION,
+                            registration_message(response_error.message))
+                    end
                     owner_capability = capability
                     return transport
                 end
@@ -510,8 +532,7 @@ function M.run(options)
                     'retrying the same request')
             end
         end
-        registration_failed = true
-        fail(RunnerFailureKind.HOST,
+        fail(RunnerFailureKind.REGISTRATION,
             'DwarfSpec bootstrap response was invalid: ' ..
                 clean_message(last_error))
     end
@@ -602,6 +623,7 @@ function M.run(options)
                 clean_message(caught))
         end
         if runner and bootstrap_attempted and
+                not bootstrap_rejected and
                 (not native_report or not native_report.terminal) then
             local recovered, recovery_error = recover_run(
                 runner, options, run_id, owner_capability,
@@ -619,7 +641,7 @@ function M.run(options)
     local final_exit_code = runner_error and runner_error.exit_code or
         exit_codes[RunnerFailureKind.SUCCESS]
     local final_state = runner_error and failure_result_state(
-        runner_error, native_report, interrupted, registration_failed) or
+        runner_error, native_report, interrupted) or
         native_report.state
     local final_result = invocation_result(options, native_report,
         final_state, true, final_exit_code, submitted_at, activated_at,

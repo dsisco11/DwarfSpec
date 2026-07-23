@@ -5,6 +5,7 @@ local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
 local schemas = require('dwarfspec.automation.schemas')
 local RunState = require('dwarfspec.automation.run_states')
+local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
 
 local PREFIX = 'DWARFSPEC_JSON '
 local OWNER_PREFIX = 'DWARFSPEC_OWNER '
@@ -19,6 +20,20 @@ local RUN_STATE_TERMINAL = {
     [RunState.ABORTED]=true,
     [RunState.CANCELLED]=true,
 }
+
+---Validates one canonical adapter error response.
+---@param report table
+---@return table
+local function validate_error(report)
+    events.copy_json(report, 'adapter error response')
+    assert(report.protocol == 2,
+        'unsupported DwarfSpec protocol: ' .. tostring(report.protocol))
+    assert(report.kind == RunnerFailureKind.REGISTRATION,
+        'unsupported DwarfSpec adapter error kind: ' .. tostring(report.kind))
+    assert(type(report.message) == 'string' and report.message ~= '',
+        'DwarfSpec adapter error message must be a non-empty string')
+    return report
+end
 
 ---Validates one transitional version 1 native report.
 ---@param report table
@@ -105,6 +120,9 @@ function M.validate(report, expected)
     if report.schema == 'dwarfspec.transport.v2' then
         return schemas.validate_transport(report, expected)
     end
+    if report.schema == 'dwarfspec.error.v1' then
+        return validate_error(report)
+    end
     error('unsupported DwarfSpec report schema: ' ..
         tostring(report.schema), 0)
 end
@@ -125,16 +143,31 @@ function M.parse(lines, expected, decoder)
     return M.validate(report, expected), payload
 end
 
+---Decodes either a version 2 transport or a canonical adapter error.
+---@param lines string[]
+---@param expected table
+---@param decoder function|nil
+---@return table|nil, string, table|nil
+function M.parse_transport_response(lines, expected, decoder)
+    local report, payload = M.parse(lines, expected, decoder)
+    if report.schema == 'dwarfspec.error.v1' then
+        return nil, payload, report
+    end
+    assert(report.schema == 'dwarfspec.transport.v2',
+        'DFHack output did not contain version 2 transport data')
+    return report, payload, nil
+end
+
 ---Decodes and validates exactly one canonical version 2 transport response.
 ---@param lines string[]
 ---@param expected table
 ---@param decoder function|nil
 ---@return table, string
 function M.parse_transport(lines, expected, decoder)
-    local report, payload = M.parse(lines, expected, decoder)
-    assert(report.schema == 'dwarfspec.transport.v2',
-        'DFHack output did not contain version 2 transport data')
-    return report, payload
+    local transport, payload, response_error =
+        M.parse_transport_response(lines, expected, decoder)
+    assert(response_error == nil, response_error and response_error.message)
+    return transport, payload
 end
 
 ---Decodes every native DwarfSpec report in transport order.

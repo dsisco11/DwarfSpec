@@ -8,6 +8,7 @@ return immutable_enum.define({
     USAGE='usage',
     DEPENDENCY='dependency',
     CONNECTION='connection',
+    REGISTRATION='registration',
     HOST='host',
     TEST='test',
     TIMEOUT='timeout',

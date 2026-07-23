@@ -22,9 +22,14 @@
       "states": ["connection_error"]
     },
     {
+      "kind": "registration",
+      "exit_code": 5,
+      "states": ["registration_error"]
+    },
+    {
       "kind": "host",
       "exit_code": 5,
-      "states": ["registration_error", "host_error"]
+      "states": ["host_error"]
     },
     {
       "kind": "test",

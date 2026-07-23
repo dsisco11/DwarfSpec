@@ -137,12 +137,51 @@ local function parse_options(args, ResultPolicy)
 end
 
 local root, lua_root = package_root()
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local options = parse_options(arguments, ResultPolicy)
-local host = load_host(root, lua_root)
-options.defer_activation = true
-local queued = host.start(root, options.project_root, options)
-local transport = host.transport(queued.run_id, 0)
+local json = require('json')
+local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
+
+---Removes an incidental Lua source location from an adapter error.
+---@param value any
+---@return string
+local function clean_message(value)
+    return tostring(value):gsub('^.-:%d+: ', '')
+end
+
+---Emits one canonical bootstrap rejection.
+---@param value any
+local function emit_error(value)
+    print('DWARFSPEC_JSON ' .. json.encode({
+        schema='dwarfspec.error.v1',
+        protocol=2,
+        kind=RunnerFailureKind.REGISTRATION,
+        message=clean_message(value),
+    }))
+end
+
+---Registers one run without emitting a partial success response.
+---@return table
+local function register()
+    local ResultPolicy = require('dwarfspec.automation.result_policies')
+    local options = parse_options(arguments, ResultPolicy)
+    local host = load_host(root, lua_root)
+    options.defer_activation = true
+    local queued = host.start(root, options.project_root, options)
+    return {
+        host=host,
+        queued=queued,
+        transport=host.transport(queued.run_id, 0),
+    }
+end
+
+local registered, response = pcall(register)
+if not registered then
+    emit_error(response)
+    return
+end
+
+local host = response.host
+local queued = response.queued
+local transport = response.transport
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
     :format(transport.protocol, transport.run_id,
         transport.snapshot.state, transport.generation))

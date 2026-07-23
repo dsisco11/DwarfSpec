@@ -106,7 +106,7 @@ Exit codes are stable:
 | 2 | Invalid command, option, argument, or malformed glob |
 | 3 | Missing dependency, invalid project, or no selected tests |
 | 4 | DFHack connection or core-context failure |
-| 5 | Host, report, status, or result persistence failure |
+| 5 | Registration rejection, host, report, status, or result persistence failure |
 | 6 | Busted failure/error or unconfirmed cleanup |
 | 7 | Execution timeout or the distinct queue-timeout classification |
 | 8 | Active abort or the distinct pre-activation cancellation classification |

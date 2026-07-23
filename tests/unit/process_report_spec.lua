@@ -121,6 +121,28 @@ describe('DwarfSpec process bridge', function()
 end)
 
 describe('DwarfSpec native reports', function()
+    it('returns a canonical adapter rejection separately from transport',
+            function()
+        local transport, _, response_error =
+            report.parse_transport_response({'DWARFSPEC_JSON ignored'}, {
+                run_id='rejected-run',
+                after_sequence=0,
+            }, function()
+                return {
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind='registration',
+                    message='incompatible automation package version: ' ..
+                        'expected 0.1.3, found 0.2.0',
+                }
+            end)
+
+        assert.is_nil(transport)
+        assert.equals('registration', response_error.kind)
+        assert.equals('incompatible automation package version: ' ..
+            'expected 0.1.3, found 0.2.0', response_error.message)
+    end)
+
     it('accepts one exact version 2 transport identity and cursor', function()
         local payload = read_contract_fixture('transport_failed.json')
         local transport = report.parse_transport({

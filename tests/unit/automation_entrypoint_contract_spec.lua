@@ -148,6 +148,19 @@ describe('legacy automation entrypoint contract', function()
         assert.matches('acknowledged=true', lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[2])
         assert.equals('dwarfspec.transport.v2', encoded[3].schema)
+
+        registry.package_version = '0.1.3'
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/bootstrap.lua'))(
+            'entrypoint-version-rejection')
+        assert.same({'DWARFSPEC_JSON {"legacy":true}'}, lines)
+        assert.equals('dwarfspec.error.v1', encoded[4].schema)
+        assert.equals(2, encoded[4].protocol)
+        assert.equals('registration', encoded[4].kind)
+        assert.matches('incompatible automation package version: ' ..
+            'expected 0.1.3, found 0.2.0', encoded[4].message, 1, true)
+        assert.is_nil(registry.runs['entrypoint-version-rejection'])
     end)
 
     it('keeps cancel, event, scheduler, recovery, and discard adapters thin',
