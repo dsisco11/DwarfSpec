@@ -37,8 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A pinned local Busted unit-test command.
 - Automatic, non-executing project `.env` loading for `DFHACK_ROOT` and
   `DFHACK_RUNNER`, shared by `run` and `abort`.
+- A process-wide multi-project FIFO test service with structured events,
+  stable latest-result persistence, cleanup-gated execution, and immutable
+  state and failure identifiers.
+- Read-only `dwarfspec status` inspection and exact
+  `dwarfspec recover-executor` recovery guarded by authoritative DFHack
+  clean-state verification.
 
 ### Fixed
 
 - Install one portable command script and let LuaRocks generate the appropriate
   platform launcher instead of publishing overlapping command entries.
+- Reject executor quarantine before project registration or run admission and
+  report the blocking run, generation, reason, and recovery command.

@@ -19,14 +19,19 @@ Usage:
   dwarfspec
   dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
   dwarfspec run [glob] [options]
+  dwarfspec status [--project-root PATH] [--runner PATH]
   dwarfspec abort RUN_ID [--project-root PATH] [--runner PATH]
+  dwarfspec recover-executor RUN_ID --generation N [options]
   dwarfspec help [command]
   dwarfspec version
 
 Commands:
   list     List canonical live-spec identities without executing Lua files.
   run      Run all live specs or the identities selected by one glob.
+  status   Show the shared executor, queue, and quarantine state.
   abort    Abort one active run and require confirmed cleanup.
+  recover-executor
+           Clear quarantine only after authoritative host verification.
   help     Show general or command-specific help.
   version  Print the DwarfSpec version.
 
@@ -94,8 +99,39 @@ native report with cleanup_confirmed=true. The project root defaults to the
 current directory and supplies the optional .env runner configuration.
 ]]
 
+local STATUS_HELP = [[
+Usage: dwarfspec status [--project-root PATH] [--runner PATH] [--verbose]
+
+Reads the process-wide DwarfSpec scheduler through dfhack-run without changing
+service state. The output identifies the active run, queue depth, quarantine,
+and the exact recovery command when recovery is required.
+]]
+
+local RECOVER_EXECUTOR_HELP = [[
+Usage: dwarfspec recover-executor RUN_ID --generation N [options]
+
+Options:
+  --project-root PATH  Project root used for optional .env runner configuration
+  --runner PATH        Explicit dfhack-run executable
+  --generation N       Exact quarantined run generation (required)
+  --reason TEXT        Bounded operator reason recorded with recovery
+  --verbose            Print resolved runner diagnostics
+
+Recovery succeeds only when the local DFHack host authoritatively verifies
+that the executor and DwarfSpec mount state are clean. It does not provide an
+unsafe force mode.
+]]
+
 local LIST_OPTIONS = {['project-root']=true, ['test-glob']=true}
 local ABORT_OPTIONS = {['project-root']=true, runner=true, verbose=true}
+local STATUS_OPTIONS = {['project-root']=true, runner=true, verbose=true}
+local RECOVER_EXECUTOR_OPTIONS = {
+    ['project-root']=true,
+    runner=true,
+    generation=true,
+    reason=true,
+    verbose=true,
+}
 local RUN_OPTIONS = {
     ['project-root']=true,
     ['test-glob']=true,
@@ -179,6 +215,8 @@ local function defaults(package_root)
         lease_check_frames=30,
         result_path=result_store.default_relative_path,
         run_id=nil,
+        generation=nil,
+        reason='local operator requested verified recovery',
         verbose=false,
     }
 end
@@ -273,6 +311,12 @@ local function parse_options(argv, start_index, package_root, allowed)
                     assert(value:match('^[%w_.-]+$'),
                         '--run-id contains unsupported characters')
                     options.run_id = value
+                elseif name == 'generation' then
+                    options.generation = positive_integer(name, value)
+                elseif name == 'reason' then
+                    assert(#value <= 1024,
+                        '--reason must not exceed 1024 bytes')
+                    options.reason = value
                 else
                     error('unknown option: --' .. name, 2)
                 end
@@ -296,6 +340,10 @@ local function help(topic, output)
         write(output, RUN_HELP)
     elseif topic == 'abort' then
         write(output, ABORT_HELP)
+    elseif topic == 'status' then
+        write(output, STATUS_HELP)
+    elseif topic == 'recover-executor' then
+        write(output, RECOVER_EXECUTOR_HELP)
     else
         error('unknown help topic: ' .. topic, 2)
     end
@@ -394,6 +442,25 @@ function M.main(argv, context)
             local outcome = (context.runner or runner).run(options)
             if outcome.error then write(errors, outcome.error.message) end
             return outcome.exit_code
+        elseif command == 'status' then
+            local options, positionals = parse_options(argv, 2, package_root,
+                STATUS_OPTIONS)
+            assert(#positionals == 0, 'status does not accept arguments')
+            resolve_project_environment(options, context)
+            options.host_scripts = context.host_scripts
+            options.invoke = context.invoke
+            options.decode_json = context.decode_json
+            options.emit = function(line) write(output, line) end
+            local outcome = (context.runner or runner).status(options)
+            if outcome.status then
+                for _, line in ipairs(
+                        require('dwarfspec.report').format_status(
+                            outcome.status)) do
+                    write(output, line)
+                end
+            end
+            if outcome.error then write(errors, outcome.error.message) end
+            return outcome.exit_code
         elseif command == 'abort' then
             local options, positionals = parse_options(argv, 2, package_root,
                 ABORT_OPTIONS)
@@ -407,6 +474,29 @@ function M.main(argv, context)
                 positionals[1])
             if outcome.error then write(errors, outcome.error.message) end
             return outcome.exit_code
+        elseif command == 'recover-executor' then
+            local options, positionals = parse_options(argv, 2, package_root,
+                RECOVER_EXECUTOR_OPTIONS)
+            assert(#positionals == 1,
+                'recover-executor requires exactly one run id')
+            assert(options.generation ~= nil,
+                'recover-executor requires --generation')
+            resolve_project_environment(options, context)
+            options.host_scripts = context.host_scripts
+            options.invoke = context.invoke
+            options.decode_json = context.decode_json
+            options.emit = function(line) write(output, line) end
+            local outcome = (context.runner or runner).recover_executor(
+                options, positionals[1], options.generation, options.reason)
+            if outcome.scheduler then
+                for _, line in ipairs(
+                        require('dwarfspec.report').format_scheduler(
+                            outcome.scheduler)) do
+                    write(output, line)
+                end
+            end
+            if outcome.error then write(errors, outcome.error.message) end
+            return outcome.exit_code
         else
             error('unknown command: ' .. command, 2)
         end
@@ -418,7 +508,8 @@ function M.main(argv, context)
     write(errors, message)
     if message:match('malformed glob:') or message:match('unknown option:') or
             message:match('accepts at most') or message:match('requires') or
-            message:match('must be') or message:match('unknown command:') or
+            message:match('does not accept') or message:match('must be') or
+            message:match('unknown command:') or
             message:match('unknown help topic:') then
         return runner.exit_codes[runner.failure_kinds.USAGE]
     end

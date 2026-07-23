@@ -30,10 +30,22 @@ local function validate_error(report)
     events.copy_json(report, 'adapter error response')
     assert(report.protocol == 2,
         'unsupported DwarfSpec protocol: ' .. tostring(report.protocol))
-    assert(report.kind == RunnerFailureKind.REGISTRATION,
+    assert(report.kind == RunnerFailureKind.REGISTRATION or
+        report.kind == RunnerFailureKind.EXECUTOR_QUARANTINED,
         'unsupported DwarfSpec adapter error kind: ' .. tostring(report.kind))
     assert(type(report.message) == 'string' and report.message ~= '',
         'DwarfSpec adapter error message must be a non-empty string')
+    if report.kind == RunnerFailureKind.EXECUTOR_QUARANTINED then
+        assert(type(report.blocking_run_id) == 'string' and
+            report.blocking_run_id ~= '',
+            'DwarfSpec quarantine error requires blocking run id')
+        assert(type(report.blocking_generation) == 'number' and
+            report.blocking_generation > 0 and
+            report.blocking_generation % 1 == 0,
+            'DwarfSpec quarantine error requires blocking generation')
+        assert(type(report.reason) == 'string' and report.reason ~= '',
+            'DwarfSpec quarantine error requires a reason')
+    end
     return report
 end
 
@@ -170,6 +182,86 @@ function M.parse_transport(lines, expected, decoder)
         M.parse_transport_response(lines, expected, decoder)
     assert(response_error == nil, response_error and response_error.message)
     return transport, payload
+end
+
+---Decodes and validates exactly one version 2 scheduler snapshot.
+---@param lines string[]
+---@param decoder function|nil
+---@return table, string
+function M.parse_scheduler(lines, decoder)
+    local payload = report_line(lines)
+    local decode = decoder or function(text)
+        return require('dkjson').decode(text, 1, nil)
+    end
+    local scheduler, _, decode_error = decode(payload)
+    assert(scheduler, 'DFHack emitted invalid DwarfSpec JSON: ' ..
+        tostring(decode_error))
+    return schemas.validate_scheduler(scheduler), payload
+end
+
+---Decodes and validates one read-only service status envelope.
+---@param lines string[]
+---@param decoder function|nil
+---@return table, string
+function M.parse_status(lines, decoder)
+    local payload = report_line(lines)
+    local decode = decoder or function(text)
+        return require('dkjson').decode(text, 1, nil)
+    end
+    local status, _, decode_error = decode(payload)
+    assert(status, 'DFHack emitted invalid DwarfSpec JSON: ' ..
+        tostring(decode_error))
+    assert(type(status) == 'table' and
+        status.schema == 'dwarfspec.status.v1',
+        'DFHack output did not contain DwarfSpec service status')
+    assert(status.protocol == 2,
+        'unsupported DwarfSpec protocol: ' .. tostring(status.protocol))
+    assert(type(status.service_loaded) == 'boolean',
+        'DwarfSpec service status must declare whether the service is loaded')
+    if status.service_loaded then
+        schemas.validate_scheduler(status.scheduler)
+    else
+        assert(status.scheduler == nil,
+            'unloaded DwarfSpec service status cannot contain a scheduler')
+    end
+    events.copy_json(status, 'service status')
+    return status, payload
+end
+
+---Formats one scheduler snapshot for terminal status output.
+---@param scheduler table
+---@return string[]
+function M.format_scheduler(scheduler)
+    schemas.validate_scheduler(scheduler)
+    local lines = {
+        ('SERVICE %s version=%s'):format(scheduler.service_instance_id,
+            scheduler.package_version),
+        scheduler.active_run_id and
+            ('EXECUTOR active run=%s project=%s'):format(
+                scheduler.active_run_id, scheduler.active_project_id) or
+            'EXECUTOR idle',
+        ('QUEUE %d'):format(#scheduler.queue),
+    }
+    if scheduler.quarantine.active then
+        table.insert(lines, ('QUARANTINE run=%s generation=%d reason=%s')
+            :format(scheduler.quarantine.run_id,
+                scheduler.quarantine.generation,
+                scheduler.quarantine.reason))
+        table.insert(lines, ('RECOVERY dwarfspec recover-executor %s ' ..
+            '--generation %d'):format(scheduler.quarantine.run_id,
+                scheduler.quarantine.generation))
+    else
+        table.insert(lines, 'QUARANTINE none')
+    end
+    return lines
+end
+
+---Formats one read-only service status for terminal output.
+---@param status table
+---@return string[]
+function M.format_status(status)
+    if not status.service_loaded then return {'SERVICE not loaded'} end
+    return M.format_scheduler(status.scheduler)
 end
 
 ---Decodes every native DwarfSpec report in transport order.

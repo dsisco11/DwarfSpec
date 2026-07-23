@@ -16,6 +16,7 @@ return immutable_enum.define({
     DEPENDENCY_ERROR='dependency_error',
     CONNECTION_ERROR='connection_error',
     REGISTRATION_ERROR='registration_error',
+    EXECUTOR_QUARANTINED='executor_quarantined',
     QUEUE_TIMEOUT='queue_timeout',
     HOST_ERROR='host_error',
     TIMEOUT='timeout',

@@ -38,7 +38,9 @@ diagnostics. Multiple matches retain the deterministic order printed by
 ```text
 dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
 dwarfspec run [glob] [options]
+dwarfspec status [--project-root PATH] [--runner PATH]
 dwarfspec abort RUN_ID [--project-root PATH] [--runner PATH]
+dwarfspec recover-executor RUN_ID --generation N [options]
 dwarfspec help [command]
 dwarfspec version
 ```
@@ -55,6 +57,22 @@ explicit value `unlimited` allow an unbounded wait. `--timeout SECONDS` starts
 only after the service reports activation, so time in the queue never consumes
 the execution budget. Every successful status poll renews whichever external
 queue or execution lease applies.
+
+`dwarfspec status` reads the shared scheduler without changing it. It reports
+whether the service is loaded, the active run, queue depth, and quarantine
+state. An active quarantine includes the exact blocking run and generation
+plus the corresponding recovery command.
+
+`dwarfspec recover-executor RUN_ID --generation N` clears quarantine only
+after the local DFHack host verifies that no DwarfSpec mount, screen, pointer,
+or executor state remains active. `--reason TEXT` records an optional bounded
+operator reason. There is no force mode. A stale service identity, run,
+generation, or failed clean-state verification leaves quarantine intact.
+
+When the executor is quarantined, `run` returns a typed
+`executor_quarantined` failure before registering the project or admitting a
+run. Ordinary contention with a healthy active executor continues to use the
+multi-project FIFO.
 
 The recommended runner configuration is `DFHACK_ROOT` in
 `<project-root>/.env`; its value is the directory that directly contains
@@ -89,8 +107,8 @@ invocation.
 The document uses `dwarfspec.result.v2` and includes selection, classified
 state, timestamps, the native host report when execution started, the complete
 structured event journal, and cleanup confirmation. Dependency, connection,
-registration, timeout, interruption, transport, and host failures are written
-even when no native report is available.
+registration, executor-quarantine, timeout, interruption, transport, and host
+failures are written even when no native report is available.
 
 `--results PATH` names an exact file. Relative paths resolve beneath the
 project root; absolute paths remain explicit. `--no-results` validates the
@@ -106,7 +124,7 @@ Exit codes are stable:
 | 2 | Invalid command, option, argument, or malformed glob |
 | 3 | Missing dependency, invalid project, or no selected tests |
 | 4 | DFHack connection or core-context failure |
-| 5 | Registration rejection, host, report, status, or result persistence failure |
+| 5 | Registration rejection, executor quarantine, host, report, status, or result persistence failure |
 | 6 | Busted failure/error or unconfirmed cleanup |
 | 7 | Execution timeout or the distinct queue-timeout classification |
 | 8 | Active abort or the distinct pre-activation cancellation classification |

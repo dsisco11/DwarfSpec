@@ -19,6 +19,22 @@ local RUN_STATE_TERMINAL = {
 
 local OWNER_CAPABILITY = 'runner-owner-capability-000000000001'
 
+---Builds one version 2 scheduler snapshot.
+---@param quarantine table|nil
+---@return table
+local function scheduler_snapshot(quarantine)
+    return {
+        schema='dwarfspec.scheduler.v2',
+        protocol_version=2,
+        service_instance_id='service-runner-fixture',
+        package_root='D:/Packages/DwarfSpec',
+        package_version='0.2.0',
+        queue={},
+        projects={},
+        quarantine=quarantine or {active=false},
+    }
+end
+
 ---Returns the cursor argument used by one transport adapter invocation.
 ---@param arguments string[]
 ---@return integer
@@ -669,6 +685,41 @@ describe('DwarfSpec external runner', function()
         assert.is_nil(outcome.report)
     end)
 
+    it('rejects quarantine before admission with a distinct result state',
+            function()
+        local bootstrap_calls = 0
+        local run_options = options('quarantine-rejection')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            end
+            bootstrap_calls = bootstrap_calls + 1
+            return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                schema='dwarfspec.error.v1',
+                protocol=2,
+                kind=runner.failure_kinds.EXECUTOR_QUARANTINED,
+                message='DwarfSpec executor is quarantined by run old-run ' ..
+                    'generation 4: cleanup unconfirmed. Recover it with: ' ..
+                    'dwarfspec recover-executor old-run --generation 4',
+                blocking_run_id='old-run',
+                blocking_generation=4,
+                reason='cleanup unconfirmed',
+            })}}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(1, bootstrap_calls)
+        assert.equals(runner.failure_kinds.EXECUTOR_QUARANTINED,
+            outcome.error.kind)
+        assert.equals(ResultState.EXECUTOR_QUARANTINED,
+            outcome.result.state)
+        assert.matches('recover-executor old-run --generation 4',
+            outcome.error.message, 1, true)
+        assert.is_nil(outcome.report)
+    end)
+
     it('classifies status transport failure and recovers cleanup', function()
         local run_options = options('status-failure')
         run_options.invoke = function(_, arguments)
@@ -775,5 +826,69 @@ describe('DwarfSpec external runner', function()
         assert.equals('dwarfspec.result.v2', persisted.schema)
         assert.equals('stable-result', persisted.run_id)
         assert.equals(RunState.PASSED, persisted.state)
+    end)
+
+    it('reads scheduler status without mutating a run', function()
+        local run_options = options('unused-status-id')
+        local scheduler = scheduler_snapshot({
+            active=true,
+            run_id='blocking-run',
+            generation=3,
+            reason='cleanup unconfirmed',
+        })
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            end
+            assert.matches('scheduler_status%.lua$', arguments[3])
+            assert.equals(3, #arguments)
+            return {exit_code=0,
+                lines={'DWARFSPEC_JSON ' .. json.encode({
+                    schema='dwarfspec.status.v1',
+                    protocol=2,
+                    service_loaded=true,
+                    scheduler=scheduler,
+                })}}
+        end
+
+        local outcome = runner.status(run_options)
+
+        assert.equals(0, outcome.exit_code)
+        assert.equals('blocking-run',
+            outcome.scheduler.quarantine.run_id)
+    end)
+
+    it('recovers one exact quarantined generation through host verification',
+            function()
+        local run_options = options('unused-recovery-id')
+        local recovery_arguments
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            end
+            recovery_arguments = arguments
+            local lines = report_lines('blocking-run', RunState.ABORTED,
+                false)
+            local transport = assert(json.decode(
+                lines[1]:sub(#'DWARFSPEC_JSON ' + 1)))
+            transport.scheduler = scheduler_snapshot()
+            return {exit_code=0,
+                lines={'DWARFSPEC_JSON ' .. json.encode(transport)}}
+        end
+
+        local outcome = runner.recover_executor(run_options,
+            'blocking-run', 1, 'operator verified clean state')
+
+        assert.equals(0, outcome.exit_code)
+        assert.matches('recover_executor%.lua$', recovery_arguments[3])
+        assert.same({
+            'blocking-run', '1', '0', 'operator verified clean state',
+        }, {
+            recovery_arguments[4], recovery_arguments[5],
+            recovery_arguments[6], recovery_arguments[7],
+        })
+        assert.is_false(outcome.scheduler.quarantine.active)
     end)
 end)

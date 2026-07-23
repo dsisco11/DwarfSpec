@@ -1,9 +1,11 @@
 -- Reads scheduler state alongside one retained run transport envelope.
 
 local run_id, after_sequence_text = ...
-assert(run_id, 'run id argument is required')
-local after_sequence = assert(tonumber(after_sequence_text),
-    'event cursor argument must be numeric')
+local after_sequence
+if run_id ~= nil then
+    after_sequence = assert(tonumber(after_sequence_text),
+        'event cursor argument must be numeric')
+end
 
 ---Configures pure-Lua lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
@@ -42,6 +44,16 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local transport = host.transport(run_id, after_sequence)
-transport.scheduler = host.scheduler_snapshot()
-print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+if run_id == nil then
+    local loaded = dfhack.dwarfspec ~= nil
+    print('DWARFSPEC_JSON ' .. require('json').encode({
+        schema='dwarfspec.status.v1',
+        protocol=2,
+        service_loaded=loaded,
+        scheduler=loaded and host.scheduler_snapshot() or nil,
+    }))
+else
+    local transport = host.transport(run_id, after_sequence)
+    transport.scheduler = host.scheduler_snapshot()
+    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+end

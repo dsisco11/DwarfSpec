@@ -4,6 +4,8 @@ local RunState = require('dwarfspec.automation.run_states')
 local EventType = require('dwarfspec.automation.event_types')
 local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
+local SchedulerFailureKind =
+    require('dwarfspec.automation.scheduler_failure_kinds')
 local service = require('dwarfspec.automation.service')
 
 local M = {
@@ -916,6 +918,16 @@ function M.start(package_root, project_root, options)
         package_root=package_root,
         package_version=M.package_version,
     }, dependencies)
+    local scheduler = service.scheduler_snapshot(dependencies)
+    if scheduler.quarantine.active then
+        error({
+            kind=SchedulerFailureKind.EXECUTOR_QUARANTINED,
+            message='DwarfSpec executor is quarantined',
+            blocking_run_id=scheduler.quarantine.run_id,
+            blocking_generation=scheduler.quarantine.generation,
+            reason=scheduler.quarantine.reason,
+        }, 0)
+    end
     local project = service.register_project({
         project_root=project_root,
         normalized_configuration=options,

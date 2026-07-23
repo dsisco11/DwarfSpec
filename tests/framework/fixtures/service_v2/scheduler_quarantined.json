@@ -30,6 +30,8 @@
   ],
   "quarantine": {
     "active": true,
+    "run_id": "run-failed",
+    "generation": 4,
     "reason": "cleanup was not confirmed for run-failed"
   }
 }

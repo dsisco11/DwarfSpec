@@ -3,6 +3,8 @@
 local host_path = 'src/dwarfspec/automation/host.lua'
 local EventType = require('dwarfspec.automation.event_types')
 local RunState = require('dwarfspec.automation.run_states')
+local SchedulerFailureKind =
+    require('dwarfspec.automation.scheduler_failure_kinds')
 
 describe('automation host ownership', function()
     local original_dfhack
@@ -258,6 +260,34 @@ describe('automation host ownership', function()
             aborted.generation, 'cleanup history reviewed')
         assert.is_true(recovered.recovered)
         assert.is_false(host.scheduler_snapshot().quarantine.active)
+    end)
+
+    it('rejects quarantine before registering or admitting another run',
+            function()
+        local run = host.start('.', '.', options('blocking-cleanup'))
+        run.cleanup_module.push(run.cleanup_registry, 'broken cleanup',
+            function() error('cleanup exploded') end)
+        host.abort(run.run_id, run.owner_capability)
+        local registry = dfhack.dwarfspec
+        local generation_before = registry.generation
+        local projects_before = registry.projects
+
+        local accepted, rejection = pcall(host.start, '.', 'other-project',
+            options('must-not-be-admitted'))
+
+        assert.is_false(accepted)
+        assert.is_table(rejection)
+        assert.equals(SchedulerFailureKind.EXECUTOR_QUARANTINED,
+            rejection.kind)
+        assert.equals(run.run_id, rejection.blocking_run_id)
+        assert.equals(run.generation, rejection.blocking_generation)
+        assert.equals(generation_before, registry.generation)
+        assert.equals(projects_before, registry.projects)
+        for _, project in pairs(registry.projects) do
+            assert.not_equals('other-project',
+                project.normalized_project_root)
+        end
+        assert.is_nil(registry.runs['must-not-be-admitted'])
     end)
 
     it('builds a complete JSON-safe report for PowerShell consumption', function()

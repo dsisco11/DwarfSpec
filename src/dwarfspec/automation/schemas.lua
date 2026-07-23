@@ -39,6 +39,10 @@ local RESULT_STATE_METADATA = {
     [ResultState.DEPENDENCY_ERROR]={terminal=true, identity_optional=true},
     [ResultState.CONNECTION_ERROR]={terminal=true, identity_optional=true},
     [ResultState.REGISTRATION_ERROR]={terminal=true, identity_optional=true},
+    [ResultState.EXECUTOR_QUARANTINED]={
+        terminal=true,
+        identity_optional=true,
+    },
     [ResultState.QUEUE_TIMEOUT]={terminal=true, identity_optional=false},
     [ResultState.HOST_ERROR]={terminal=true, identity_optional=true},
     [ResultState.TIMEOUT]={terminal=true, identity_optional=false},
@@ -172,6 +176,12 @@ function M.validate_scheduler(value)
     if value.quarantine.active then
         require_string(value.quarantine, 'reason',
             'automation scheduler quarantine')
+        require_string(value.quarantine, 'run_id',
+            'automation scheduler quarantine')
+        require_integer(value.quarantine, 'generation',
+            'automation scheduler quarantine')
+        assert(value.quarantine.generation > 0,
+            'automation scheduler quarantine generation must be positive')
     end
     assert((value.active_run_id == nil) ==
         (value.active_project_id == nil),

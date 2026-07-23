@@ -85,6 +85,19 @@ describe('legacy automation entrypoint contract', function()
         rawset(_G, 'print', original_print)
     end)
 
+    it('reports an unloaded service without creating a registry', function()
+        local root = require('lfs').currentdir()
+
+        assert(loadfile(root ..
+            '/tests/automation/support/scheduler_status.lua'))()
+
+        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[1])
+        assert.equals('dwarfspec.status.v1', encoded[1].schema)
+        assert.is_false(encoded[1].service_loaded)
+        assert.is_nil(encoded[1].scheduler)
+        assert.is_nil(dfhack.dwarfspec)
+    end)
+
     it('starts and aborts through version 2 transport entrypoints',
             function()
         local root = require('lfs').currentdir()
@@ -161,6 +174,26 @@ describe('legacy automation entrypoint contract', function()
         assert.matches('incompatible automation package version: ' ..
             'expected 0.1.3, found 0.2.0', encoded[4].message, 1, true)
         assert.is_nil(registry.runs['entrypoint-version-rejection'])
+
+        registry.package_version = '0.2.0'
+        registry.quarantine = {
+            active=true,
+            run_id=run.run_id,
+            generation=run.generation,
+            reason='cleanup was not confirmed',
+        }
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/bootstrap.lua'))(
+            'entrypoint-quarantine-rejection')
+        assert.same({'DWARFSPEC_JSON {"legacy":true}'}, lines)
+        assert.equals('dwarfspec.error.v1', encoded[5].schema)
+        assert.equals('executor_quarantined', encoded[5].kind)
+        assert.equals(run.run_id, encoded[5].blocking_run_id)
+        assert.equals(run.generation, encoded[5].blocking_generation)
+        assert.matches('recover-executor ' .. run.run_id ..
+            ' --generation ' .. run.generation, encoded[5].message, 1, true)
+        assert.is_nil(registry.runs['entrypoint-quarantine-rejection'])
     end)
 
     it('keeps cancel, event, scheduler, recovery, and discard adapters thin',
@@ -223,5 +256,16 @@ describe('legacy automation entrypoint contract', function()
         assert.is_true(active.cleanup_confirmed)
         assert.equals('dwarfspec.transport.v2',
             encoded[#encoded].schema)
+
+        dfhack.dwarfspec.quarantine = {active=false}
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/scheduler_status.lua'))()
+        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[1])
+        assert.equals('dwarfspec.status.v1',
+            encoded[#encoded].schema)
+        assert.is_true(encoded[#encoded].service_loaded)
+        assert.equals('dwarfspec.scheduler.v2',
+            encoded[#encoded].scheduler.schema)
     end)
 end)

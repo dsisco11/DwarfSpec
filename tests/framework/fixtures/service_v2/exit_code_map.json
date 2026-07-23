@@ -27,6 +27,11 @@
       "states": ["registration_error"]
     },
     {
+      "kind": "executor_quarantined",
+      "exit_code": 5,
+      "states": ["executor_quarantined"]
+    },
+    {
       "kind": "host",
       "exit_code": 5,
       "states": ["host_error"]

@@ -389,7 +389,9 @@ the owning project from submitting another run.
 If cleanup is not confirmed, the scheduler enters quarantine:
 
 - no queued run may enter native execution;
-- queued requests remain observable and cancellable;
+- requests already queued remain observable and cancellable;
+- new submissions fail before project registration or run admission with the
+  exact quarantined run and generation;
 - all projects receive the same bounded quarantine reason;
 - recovery requires an explicit clean-state proof;
 - acknowledging or discarding a result does not clear quarantine.
@@ -510,7 +512,7 @@ the event payload contract table.
 | `cleanup.finished` | confirmation and verified mount cleanup state |
 | `run.aborted` | abort reason |
 | `run.finished` | terminal state, totals, and cleanup confirmation |
-| `scheduler.blocked` | quarantine reason when the run cannot activate |
+| `scheduler.blocked` | scheduler kind, reason, and exact blocking run and generation when quarantine prevents activation |
 
 Every terminal transition ends with `run.finished`. A queued cancellation emits
 `run.cancelled` followed by `run.finished` with `cleanup_required` set to
@@ -630,11 +632,16 @@ Project registration, bootstrap, status, cancel, abort, and acknowledgement use
 thin `dfhack-run` adapters over the service. UI loading is outside this
 transport and outside this implementation scope.
 
-The bootstrap adapter registers or refreshes its project, then submits a run.
-It does not fail merely because another project is active. The status adapter
-can retrieve any retained run by service-assigned run ID. The cancellation
-adapter distinguishes queued cancellation from active abort through the
-service state.
+The bootstrap adapter verifies package compatibility and executor health,
+then registers or refreshes its project and submits a run. It does not fail
+merely because another project is active, but rejects quarantine before
+project registration or run admission. The status adapter can retrieve any
+retained run by service-assigned run ID, while the read-only service status
+envelope exposes the executor, queue, and quarantine without a run ID. The
+cancellation adapter distinguishes queued cancellation from active abort
+through the service state. Executor recovery requires the exact quarantined
+run and generation and succeeds only after authoritative clean-state
+verification.
 
 The external transport continues to emit one canonical prefixed JSON line so
 unrelated DFHack console output cannot be mistaken for protocol data:
@@ -788,8 +795,8 @@ The persisted document uses `dwarfspec.result.v2`:
 
 The outer `state` describes the whole invocation. It may contain the stable
 service states or a runner classification such as `dependency_error`,
-`connection_error`, `registration_error`, `queue_timeout`, `host_error`,
-`timeout`, or `interrupted`.
+`connection_error`, `registration_error`, `executor_quarantined`,
+`queue_timeout`, `host_error`, `timeout`, or `interrupted`.
 
 `host_report` contains the final native snapshot when the run entered the
 executor. It is `null` for cancellation or failure before native execution.

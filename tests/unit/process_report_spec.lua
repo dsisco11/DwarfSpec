@@ -121,6 +121,20 @@ describe('DwarfSpec process bridge', function()
 end)
 
 describe('DwarfSpec native reports', function()
+    it('formats an unloaded service status without requiring a scheduler',
+            function()
+        local status = report.parse_status({'DWARFSPEC_JSON ignored'},
+            function()
+                return {
+                    schema='dwarfspec.status.v1',
+                    protocol=2,
+                    service_loaded=false,
+                }
+            end)
+
+        assert.same({'SERVICE not loaded'}, report.format_status(status))
+    end)
+
     it('formats executor quarantine as an actionable blocked state',
             function()
         assert.same({

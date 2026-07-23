@@ -135,6 +135,44 @@ describe('DwarfSpec CLI selection', function()
                     invoked = {options=options, run_id=run_id}
                     return {exit_code=0}
                 end,
+                status=function(options)
+                    invoked = {command='status', options=options}
+                    local scheduler = {
+                            schema='dwarfspec.scheduler.v2',
+                            protocol_version=2,
+                            service_instance_id='service-cli-fixture',
+                            package_root='D:/Packages/DwarfSpec',
+                            package_version='0.2.0',
+                            queue={},
+                            projects={},
+                            quarantine={active=false},
+                        }
+                    return {exit_code=0, scheduler=scheduler, status={
+                        schema='dwarfspec.status.v1',
+                        protocol=2,
+                        service_loaded=true,
+                        scheduler=scheduler,
+                    }}
+                end,
+                recover_executor=function(options, run_id, generation, reason)
+                    invoked = {
+                        command='recover-executor',
+                        options=options,
+                        run_id=run_id,
+                        generation=generation,
+                        reason=reason,
+                    }
+                    return {exit_code=0, scheduler={
+                        schema='dwarfspec.scheduler.v2',
+                        protocol_version=2,
+                        service_instance_id='service-cli-fixture',
+                        package_root='D:/Packages/DwarfSpec',
+                        package_version='0.2.0',
+                        queue={},
+                        projects={},
+                        quarantine={active=false},
+                    }}
+                end,
             },
         }
     end)
@@ -259,6 +297,34 @@ describe('DwarfSpec CLI selection', function()
         assert.equals('dotenv/root',
             invoked.options.environment.getenv('DFHACK_ROOT'))
         assert.equals('project/configured', invoked.options.project_root)
+    end)
+
+    it('prints read-only scheduler status', function()
+        assert.equals(0, cli.main({'status'}, context))
+        assert.equals('status', invoked.command)
+        assert.matches('SERVICE service-cli-fixture version=0.2.0',
+            output.text, 1, true)
+        assert.matches('EXECUTOR idle', output.text, 1, true)
+        assert.matches('QUARANTINE none', output.text, 1, true)
+    end)
+
+    it('forwards exact executor recovery identity and reason', function()
+        assert.equals(0, cli.main({
+            'recover-executor', 'blocking-run',
+            '--generation=4', '--reason=operator verified clean state',
+        }, context))
+        assert.equals('recover-executor', invoked.command)
+        assert.equals('blocking-run', invoked.run_id)
+        assert.equals(4, invoked.generation)
+        assert.equals('operator verified clean state', invoked.reason)
+        assert.matches('QUARANTINE none', output.text, 1, true)
+    end)
+
+    it('requires an exact generation for executor recovery', function()
+        assert.equals(2, cli.main({
+            'recover-executor', 'blocking-run',
+        }, context))
+        assert.matches('requires %-%-generation', errors.text)
     end)
 
     it('returns distinct usage and no-match diagnostics', function()

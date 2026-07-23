@@ -9,6 +9,7 @@ return immutable_enum.define({
     DEPENDENCY='dependency',
     CONNECTION='connection',
     REGISTRATION='registration',
+    EXECUTOR_QUARANTINED='executor_quarantined',
     HOST='host',
     TEST='test',
     TIMEOUT='timeout',

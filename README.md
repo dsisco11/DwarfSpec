@@ -269,6 +269,18 @@ after activation. Cursor-based status polling renews the applicable queue or
 execution lease and formats the structured service events shown in the
 terminal.
 
+Use `dwarfspec status` to inspect the shared executor, queue, and quarantine
+without changing service state. If cleanup was not confirmed, new runs are
+rejected before admission with the exact blocking identity. After confirming
+that no live run is active, use the command reported by status:
+
+```text
+dwarfspec recover-executor RUN_ID --generation N
+```
+
+Recovery remains gated by DFHack-side clean-state verification and has no
+force mode. Healthy concurrent projects continue to wait in the shared FIFO.
+
 By default, the latest invocation result is written to:
 
 ```text

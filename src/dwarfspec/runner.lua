@@ -17,6 +17,7 @@ local exit_codes = {
     [RunnerFailureKind.DEPENDENCY]=3,
     [RunnerFailureKind.CONNECTION]=4,
     [RunnerFailureKind.REGISTRATION]=5,
+    [RunnerFailureKind.EXECUTOR_QUARANTINED]=5,
     [RunnerFailureKind.HOST]=5,
     [RunnerFailureKind.TEST]=6,
     [RunnerFailureKind.TIMEOUT]=7,
@@ -127,6 +128,8 @@ local function validate_dependencies(options)
             host_script(options, 'bootstrap'),
             host_script(options, 'status'),
             host_script(options, 'recover'),
+            host_script(options, 'recover_executor'),
+            host_script(options, 'scheduler_status'),
             host_script(options, 'abort'),
             host_script(options, 'acknowledge'),
             host_script(options, 'probe')}) do
@@ -231,6 +234,8 @@ local function failure_result_state(runner_error, native_report, interrupted)
         return ResultState.CONNECTION_ERROR
     elseif runner_error.kind == RunnerFailureKind.QUEUE_TIMEOUT then
         return ResultState.QUEUE_TIMEOUT
+    elseif runner_error.kind == RunnerFailureKind.EXECUTOR_QUARANTINED then
+        return ResultState.EXECUTOR_QUARANTINED
     elseif runner_error.kind == RunnerFailureKind.TIMEOUT then
         return ResultState.TIMEOUT
     elseif runner_error.kind == RunnerFailureKind.REGISTRATION then
@@ -517,8 +522,11 @@ function M.run(options)
                 if parsed then
                     if response_error then
                         bootstrap_rejected = true
-                        fail(RunnerFailureKind.REGISTRATION,
-                            registration_message(response_error.message))
+                        local message = response_error.kind ==
+                            RunnerFailureKind.REGISTRATION and
+                            registration_message(response_error.message) or
+                            response_error.message
+                        fail(response_error.kind, message)
                     end
                     owner_capability = capability
                     return transport
@@ -745,6 +753,123 @@ function M.abort(options, run_id)
     end
     return {exit_code=exit_codes[RunnerFailureKind.SUCCESS], report=report,
         events=transport.events}
+end
+
+---Reads the process-wide scheduler without changing service state.
+---@param options table
+---@return table
+function M.status(options)
+    local invoke = options.invoke or process.invoke
+    local status_script = host_script(options, 'scheduler_status')
+    if not is_file(status_script) then
+        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
+            error=failure(RunnerFailureKind.DEPENDENCY,
+                'DwarfSpec dependency was not found: ' .. status_script)}
+    end
+    local ok, runner = pcall(process.resolve_runner, options,
+        options.environment)
+    if not ok then
+        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
+            error=failure(RunnerFailureKind.DEPENDENCY,
+                clean_message(runner))}
+    end
+    if options.verbose and options.emit then
+        options.emit('DFHack runner: ' .. runner)
+    end
+    local connected, connection_error = pcall(verify_connection, runner,
+        options, invoke)
+    if not connected then
+        local detail = type(connection_error) == 'table' and
+            connection_error or
+            failure(RunnerFailureKind.CONNECTION,
+                clean_message(connection_error))
+        return {exit_code=detail.exit_code, error=detail}
+    end
+    local result = invoke(runner, {
+        'lua', '-f', status_script,
+    })
+    if result.exit_code ~= 0 then
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST,
+                'DwarfSpec status exited with ' .. result.exit_code)}
+    end
+    local parsed, status = pcall(reports.parse_status, result.lines,
+        options.decode_json)
+    if not parsed then
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST,
+                clean_message(status))}
+    end
+    return {
+        exit_code=exit_codes[RunnerFailureKind.SUCCESS],
+        status=status,
+        scheduler=status.scheduler,
+    }
+end
+
+---Recovers one exact quarantined executor after host clean-state verification.
+---@param options table
+---@param run_id string
+---@param generation integer
+---@param reason string
+---@return table
+function M.recover_executor(options, run_id, generation, reason)
+    local invoke = options.invoke or process.invoke
+    local recovery_script = host_script(options, 'recover_executor')
+    if not is_file(recovery_script) then
+        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
+            error=failure(RunnerFailureKind.DEPENDENCY,
+                'DwarfSpec dependency was not found: ' .. recovery_script)}
+    end
+    local ok, runner = pcall(process.resolve_runner, options,
+        options.environment)
+    if not ok then
+        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
+            error=failure(RunnerFailureKind.DEPENDENCY,
+                clean_message(runner))}
+    end
+    if options.verbose and options.emit then
+        options.emit('DFHack runner: ' .. runner)
+    end
+    local connected, connection_error = pcall(verify_connection, runner,
+        options, invoke)
+    if not connected then
+        local detail = type(connection_error) == 'table' and
+            connection_error or
+            failure(RunnerFailureKind.CONNECTION,
+                clean_message(connection_error))
+        return {exit_code=detail.exit_code, error=detail}
+    end
+    local result = invoke(runner, {
+        'lua', '-f', recovery_script,
+        run_id, tostring(generation), '0', reason,
+    })
+    if result.exit_code ~= 0 then
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST,
+                'DwarfSpec executor recovery exited with ' ..
+                    result.exit_code)}
+    end
+    local parsed, transport = pcall(reports.parse_transport, result.lines, {
+        run_id=run_id,
+        generation=generation,
+        after_sequence=0,
+    }, options.decode_json)
+    if not parsed then
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST,
+                clean_message(transport))}
+    end
+    if not transport.scheduler or transport.scheduler.quarantine.active then
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST,
+                'DwarfSpec executor recovery did not clear quarantine')}
+    end
+    return {
+        exit_code=exit_codes[RunnerFailureKind.SUCCESS],
+        report=transport.snapshot,
+        scheduler=transport.scheduler,
+    }
 end
 
 return M
