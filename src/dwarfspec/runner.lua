@@ -121,6 +121,7 @@ local function validate_dependencies(options)
             host_script(options, 'bootstrap'),
             host_script(options, 'status'),
             host_script(options, 'abort'),
+            host_script(options, 'acknowledge'),
             host_script(options, 'probe')}) do
         if not is_file(path) then
             fail(RunnerFailureKind.DEPENDENCY,
@@ -223,12 +224,18 @@ end
 ---@param runner string
 ---@param options table
 ---@param run_id string
+---@param owner_capability string|nil
 ---@param invoke function
 ---@return table|nil, string|nil, string|nil
-local function recovery_abort(runner, options, run_id, invoke)
-    local result = invoke(runner, {
+local function recovery_abort(runner, options, run_id, owner_capability,
+        invoke)
+    local arguments = {
         'lua', '-f', host_script(options, 'abort'), run_id,
-    })
+    }
+    if owner_capability ~= nil then
+        table.insert(arguments, owner_capability)
+    end
+    local result = invoke(runner, arguments)
     if result.exit_code ~= 0 then
         return nil, 'recovery abort exited with ' .. result.exit_code, nil
     end
@@ -240,6 +247,24 @@ local function recovery_abort(runner, options, run_id, invoke)
         return report, 'recovery abort did not confirm cleanup', payload
     end
     return report, nil, payload
+end
+
+---Acknowledges one persisted terminal generation through its owner capability.
+---@param runner string
+---@param options table
+---@param run_id string
+---@param generation integer
+---@param owner_capability string
+---@param invoke function
+local function acknowledge_terminal(runner, options, run_id, generation,
+        owner_capability, invoke)
+    local result = invoke(runner, {
+        'lua', '-f', host_script(options, 'acknowledge'),
+        run_id, tostring(generation), owner_capability,
+    })
+    assert(result.exit_code == 0,
+        'DwarfSpec acknowledgement exited with ' .. result.exit_code)
+    reports.parse(result.lines, run_id, options.decode_json)
 end
 
 ---Runs selected live specifications and returns a stable command outcome.
@@ -256,6 +281,7 @@ function M.run(options)
     local runner
     local native_report
     local native_json
+    local owner_capability
     local runner_error
     local bootstrap_attempted = false
 
@@ -279,6 +305,7 @@ function M.run(options)
             fail(RunnerFailureKind.HOST,
                 'DwarfSpec bootstrap exited with ' .. start.exit_code)
         end
+        owner_capability = reports.owner_capability(start.lines)
         native_report, native_json = reports.parse(start.lines, run_id,
             options.decode_json)
         local output_offset = native_report.output_count
@@ -293,7 +320,7 @@ function M.run(options)
             sleep(options.poll_interval_ms / 1000)
             local status = invoke(runner, {
                 'lua', '-f', host_script(options, 'status'),
-                run_id, tostring(output_offset),
+                run_id, owner_capability, tostring(output_offset),
             })
             if status.exit_code ~= 0 then
                 fail(RunnerFailureKind.HOST,
@@ -332,8 +359,8 @@ function M.run(options)
         end
         if runner and bootstrap_attempted and
                 (not native_report or not native_report.terminal) then
-            local aborted, abort_error, abort_json = recovery_abort(runner, options,
-                run_id, invoke)
+            local aborted, abort_error, abort_json = recovery_abort(
+                runner, options, run_id, owner_capability, invoke)
             if aborted then
                 native_report = aborted
                 native_json = abort_json
@@ -353,6 +380,21 @@ function M.run(options)
     elseif not write_ok then
         runner_error.message = runner_error.message ..
             '; could not write result report: ' .. tostring(write_error)
+    end
+
+    if write_ok and native_report and native_report.terminal and
+            owner_capability ~= nil then
+        local acknowledge_ok, acknowledge_error = pcall(
+            acknowledge_terminal, runner, options, run_id,
+            native_report.generation, owner_capability, invoke)
+        if not acknowledge_ok and not runner_error then
+            runner_error = failure(RunnerFailureKind.HOST,
+                tostring(acknowledge_error))
+        elseif not acknowledge_ok then
+            runner_error.message = runner_error.message ..
+                '; could not acknowledge terminal result: ' ..
+                    tostring(acknowledge_error)
+        end
     end
 
     return {

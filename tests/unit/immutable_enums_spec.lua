@@ -2,6 +2,7 @@
 
 local immutable_enum = require('dwarfspec.immutable_enum')
 local EventType = require('dwarfspec.automation.event_types')
+local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
 local ResultState = require('dwarfspec.automation.result_states')
 local RunState = require('dwarfspec.automation.run_states')
@@ -23,6 +24,7 @@ end
 describe('immutable DwarfSpec contract enums', function()
     it('exposes stable string values directly', function()
         assert.equals('run.queued', EventType.RUN_QUEUED)
+        assert.equals('external', OwnerKind.EXTERNAL)
         assert.equals('queued', RunState.QUEUED)
         assert.equals('dependency_error', ResultState.DEPENDENCY_ERROR)
         assert.equals('success', TestStatus.SUCCESS)
@@ -57,6 +59,7 @@ describe('immutable DwarfSpec contract enums', function()
 
     it('rejects namespace mutation for every requested type', function()
         assert_immutable(EventType, 'RUN_QUEUED')
+        assert_immutable(OwnerKind, 'EXTERNAL')
         assert_immutable(RunState, 'QUEUED')
         assert_immutable(ResultState, 'FAILED')
         assert_immutable(TestStatus, 'SUCCESS')

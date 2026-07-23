@@ -27,7 +27,7 @@ local function competing_options(run_id)
     return {
         run_id=run_id,
         defer_frames=1,
-        lease_timeout_ms=1000,
+        lease_timeout_ms=1,
         lease_check_frames=1,
     }
 end
@@ -40,7 +40,7 @@ describe('automation framework live resilience', function()
         assert.equals('project-root module', fixture.value)
     end)
 
-    it('queues another project without changing the active owner',
+    it('expires a lost queued project without changing the active owner',
             function()
         local root = repository_root()
         local host = assert(loadfile(root ..
@@ -58,9 +58,14 @@ describe('automation framework live resilience', function()
         assert.equals(active.run_id, registry.active_run_id)
         assert.equals(active, ds.current_run())
 
-        local cancelled = host.abort(queued.run_id)
+        ds.wait_frames(30)
+        local cancelled = host.observe(queued.run_id)
         assert.equals(RunState.CANCELLED, cancelled.state)
-        host.poll(cancelled.run_id)
+        assert.is_true(cancelled.queue_lease.expired)
+        assert.equals(active.run_id, registry.active_run_id)
+        assert.equals(active, ds.current_run())
+        host.acknowledge(cancelled.run_id, cancelled.generation,
+            cancelled.owner_capability)
     end)
 
     it('rejects stale real-frame callbacks from a no-longer-current generation',

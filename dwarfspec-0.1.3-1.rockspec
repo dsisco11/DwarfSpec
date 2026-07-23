@@ -88,7 +88,11 @@ build = {
             "src/dwarfspec/automation/test_statuses.lua",
         ["dwarfspec.automation.output_handler"] =
             "src/dwarfspec/automation/output_handler.lua",
+        ["dwarfspec.automation.owner_kinds"] =
+            "src/dwarfspec/automation/owner_kinds.lua",
         ["dwarfspec.ds"] = "tests/automation/support/ds.lua",
+        ["dwarfspec.automation.acknowledge"] =
+            "tests/automation/support/acknowledge.lua",
         ["dwarfspec.automation.abort"] = "tests/automation/support/abort.lua",
         ["dwarfspec.automation.bootstrap"] = "tests/automation/support/bootstrap.lua",
         ["dwarfspec.automation.probe"] = "tests/automation/support/probe.lua",

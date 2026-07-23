@@ -1,7 +1,8 @@
 -- Reports one active or retained in-process automation run.
 
-local run_id, output_offset_text = ...
+local run_id, owner_capability, output_offset_text = ...
 assert(run_id, 'run id argument is required')
+assert(owner_capability, 'owner capability argument is required')
 
 ---Configures pure-Lua module lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
@@ -53,7 +54,7 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local poll_ok, run = pcall(host.poll, run_id)
+local poll_ok, run = pcall(host.poll, run_id, owner_capability)
 if not poll_ok then qerror(run) end
 
 print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d ' ..

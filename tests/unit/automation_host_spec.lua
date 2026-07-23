@@ -93,7 +93,7 @@ describe('automation host ownership', function()
         assert.equals(run.project_id,
             registry.projects[run.project_id].project_id)
 
-        local aborted = host.abort(run.run_id)
+        local aborted = host.abort(run.run_id, run.owner_capability)
         assert.is_nil(registry.active_run_id)
         assert.equals(aborted.run_id,
             registry.latest_terminal_results[aborted.project_id])
@@ -101,9 +101,12 @@ describe('automation host ownership', function()
         assert.equals(aborted.run_id,
             registry.projects[aborted.project_id].outstanding_run_id)
 
-        assert.equals(aborted, host.poll(run.run_id))
-        assert.is_true(aborted.terminal_observed)
-        assert.is_true(aborted.acknowledged)
+        assert.equals(aborted, host.observe(run.run_id))
+        assert.is_false(aborted.terminal_observed)
+        assert.is_false(aborted.acknowledged == true)
+        host.acknowledge(aborted.run_id, aborted.generation,
+            aborted.owner_capability)
+        assert.is_true(host.observe(run.run_id).acknowledged)
         assert.is_nil(registry.projects[aborted.project_id].
             outstanding_run_id)
     end)
@@ -128,7 +131,7 @@ describe('automation host ownership', function()
                 pointer_active=not cleaned,
             }
         end
-        local aborted = host.abort('owner')
+        local aborted = host.abort('owner', run.owner_capability)
         assert.equals('aborted', aborted.state)
         assert.is_nil(active_callbacks[1])
         assert.is_nil(active_callbacks[2])
@@ -155,17 +158,18 @@ describe('automation host ownership', function()
     end)
 
     it('retains an unobserved result until its owner acknowledges it', function()
-        local aborted = host.abort(host.start(
-            '.',
-            '.', options('retained')).run_id)
+        local retained = host.start('.', '.', options('retained'))
+        local aborted = host.abort(retained.run_id,
+            retained.owner_capability)
         assert.has_error(function()
             host.start('.', '.', options('replacement'))
         end, 'automation run retained has an unobserved aborted result')
 
-        host.poll(aborted.run_id)
+        host.acknowledge(aborted.run_id, aborted.generation,
+            aborted.owner_capability)
         local replacement = host.start('.', '.', options('replacement'))
         assert.equals('starting', replacement.state)
-        host.abort(replacement.run_id)
+        host.abort(replacement.run_id, replacement.owner_capability)
     end)
 
     it('expires an unpolled lease and performs emergency cleanup', function()
@@ -193,7 +197,8 @@ describe('automation host ownership', function()
         assert.is_true(cleaned)
         assert.is_true(run.cleanup_confirmed)
         assert.is_true(run.mount_cleanup_state.verified)
-        assert.matches('status lease expired', run.output_lines[1], 1, true)
+        assert.matches('execution lease expired', run.output_lines[1],
+            1, true)
         assert.is_nil(active_callbacks[1])
     end)
 
@@ -210,7 +215,7 @@ describe('automation host ownership', function()
             }
         end
 
-        local aborted = host.abort(run.run_id)
+        local aborted = host.abort(run.run_id, run.owner_capability)
 
         assert.is_false(aborted.cleanup_confirmed)
         assert.equals(1, aborted.totals.errors)
@@ -232,7 +237,7 @@ describe('automation host ownership', function()
                 error('cleanup exploded')
             end)
 
-        local aborted = host.abort(run.run_id)
+        local aborted = host.abort(run.run_id, run.owner_capability)
 
         assert.equals('aborted', aborted.state)
         assert.is_true(restored)

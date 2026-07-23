@@ -24,7 +24,7 @@ local function activated_run()
             return 'run-host-boundary'
         end,
         new_owner_capability=function()
-            return 'owner-capability-host-boundary'
+            return 'owner-capability-host-boundary-00000001'
         end,
     }
     service.bootstrap({

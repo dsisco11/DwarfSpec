@@ -15,6 +15,8 @@ local RUN_STATE_TERMINAL = {
     [RunState.CANCELLED]=true,
 }
 
+local OWNER_CAPABILITY = 'runner-owner-capability-000000000001'
+
 ---Builds one canonical native report output line.
 ---@param run_id string
 ---@param state DwarfSpecRunState
@@ -43,6 +45,22 @@ local function report_lines(run_id, state, cleanup_confirmed, output_count)
             cleanup_confirmed=cleanup_confirmed,
             failures={},
         }))
+    return lines
+end
+
+---Builds transport output, including the bootstrap-only owner capability.
+---@param arguments string[]
+---@param run_id string
+---@param state DwarfSpecRunState
+---@param cleanup_confirmed boolean
+---@param output_count integer|nil
+---@return string[]
+local function transport_lines(arguments, run_id, state, cleanup_confirmed,
+        output_count)
+    local lines = report_lines(run_id, state, cleanup_confirmed, output_count)
+    if arguments[3]:match('bootstrap%.lua$') then
+        table.insert(lines, 1, 'DWARFSPEC_OWNER ' .. OWNER_CAPABILITY)
+    end
     return lines
 end
 
@@ -85,11 +103,11 @@ describe('DwarfSpec external runner', function()
             elseif arguments[3]:match('bootstrap%.lua$') then
                 bootstrap_arguments = arguments
                 return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'pass-run', RunState.STARTING, false)}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'pass-run', RunState.PASSED, true, 1)}
         end
 
@@ -98,7 +116,7 @@ describe('DwarfSpec external runner', function()
         assert.equals(0, outcome.exit_code)
         assert.equals(RunState.PASSED, outcome.report.state)
         assert.same({'progress line'}, emitted)
-        assert.equals(3, calls)
+        assert.equals(4, calls)
         local test_glob_found = false
         local lua_module_root_found = false
         for _, argument in ipairs(bootstrap_arguments) do
@@ -123,7 +141,7 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'failed-run', RunState.FAILED, true)}
         end
         local outcome = runner.run(run_options)
@@ -131,7 +149,7 @@ describe('DwarfSpec external runner', function()
             outcome.exit_code)
         assert.matches('finished with state failed', outcome.error.message,
             1, true)
-        assert.equals(2, #calls)
+        assert.equals(3, #calls)
     end)
 
     it('times out, aborts, and preserves confirmed cleanup', function()
@@ -150,11 +168,11 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'timeout-run', RunState.STARTING, false)}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'timeout-run', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
@@ -162,7 +180,7 @@ describe('DwarfSpec external runner', function()
             outcome.exit_code)
         assert.equals(RunState.ABORTED,
             outcome.report.state)
-        assert.matches('abort%.lua$', calls[#calls])
+        assert.is_true(table.concat(calls, '\n'):match('abort%.lua') ~= nil)
     end)
 
     it('recovers after a malformed status report', function()
@@ -174,14 +192,14 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'malformed-run', RunState.STARTING, false)}
             elseif arguments[3]:match('status%.lua$') then
                 status_seen = true
                 return {exit_code=0, lines={'not json'}}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'malformed-run', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
@@ -240,11 +258,11 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'interrupted-run', RunState.STARTING, false)}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'interrupted-run', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
@@ -264,7 +282,7 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines(
+                lines=transport_lines(arguments,
                     'unclean-run', RunState.PASSED, false)}
         end
         local outcome = runner.run(run_options)
@@ -286,7 +304,7 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines(
+                lines=transport_lines(arguments,
                     'explicit-abort', RunState.ABORTED, true)}
         end
         local outcome = runner.abort(run_options, 'explicit-abort')
@@ -304,7 +322,7 @@ describe('DwarfSpec external runner', function()
                 return {exit_code=9, lines={'bootstrap failed'}}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'bootstrap-failure', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
@@ -324,13 +342,13 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'status-failure', RunState.STARTING, false)}
             elseif arguments[3]:match('status%.lua$') then
                 return {exit_code=11, lines={'status failed'}}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'status-failure', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
@@ -350,7 +368,7 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'host-aborted', RunState.ABORTED, true)}
         end
         local outcome = runner.run(run_options)
@@ -371,7 +389,7 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                    lines=report_lines(
+                    lines=transport_lines(arguments,
                         'write-failure', RunState.PASSED, true)}
         end
         local outcome = runner.run(run_options)
@@ -399,7 +417,7 @@ describe('DwarfSpec external runner', function()
                     'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
             end
             return {exit_code=0,
-                lines=report_lines(
+                lines=transport_lines(arguments,
                     'legacy-result', RunState.PASSED, true)}
         end
 

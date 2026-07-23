@@ -2,6 +2,7 @@
 
 local RunState = require('dwarfspec.automation.run_states')
 local EventType = require('dwarfspec.automation.event_types')
+local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
 local service = require('dwarfspec.automation.service')
 
@@ -166,15 +167,40 @@ local function service_dependencies(run_id)
         namespace=dfhack,
         filesystem=service_filesystem(),
         now_ms=dfhack.getTickCount,
+        schedule_lease_timer=function(run, delay_ms, callback)
+            assert(type(delay_ms) == 'number' and delay_ms >= 1,
+                'lease timer delay must be positive')
+            return dfhack.timeout(run.lease_check_frames or 30,
+                'frames', callback)
+        end,
+        cancel_lease_timer=function(timer_id)
+            return dfhack.timeout_active(timer_id, nil)
+        end,
+        abort_active=function(identity, reason)
+            return M.expire_active(identity.run_id,
+                identity.generation, reason)
+        end,
+        after_lease_expiry=function()
+            M.activate_next()
+        end,
+        authorize_operator=function(authority)
+            local authorized = type(authority) == 'table' and
+                authority.local_dfhack_run == true
+            return authorized, authorized and 'local dfhack-run operator' or
+                'local dfhack-run operator authority was rejected'
+        end,
     }
     if run_id ~= nil then
         dependencies.new_run_id=function()
             return run_id
         end
         dependencies.new_owner_capability=function()
-            return ('owner-v1:%s:%d:%08x'):format(
-                run_id, dfhack.getTickCount(),
-                math.random(0, 0x7fffffff))
+            return ('owner-%08x-%08x-%08x-%08x-%08x'):format(
+                math.random(0, 0x7fffffff),
+                math.random(0, 0x7fffffff),
+                math.random(0, 0x7fffffff),
+                math.random(0, 0x7fffffff),
+                math.floor(dfhack.getTickCount()) % 0x7fffffff)
         end
     end
     return dependencies
@@ -499,8 +525,6 @@ local function clean_run(run, reason)
     end
     cancel_timeout(run.scheduled_timeout_id)
     run.scheduled_timeout_id = nil
-    cancel_timeout(run.lease_timeout_id)
-    run.lease_timeout_id = nil
     local ok = run.cleanup_module.run(run.cleanup_registry, reason)
     run.coroutine = nil
     run.suspended = false
@@ -532,8 +556,7 @@ local function clean_run(run, reason)
         module_environment_ok and
         run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
         run.outstanding_wait == nil and run.coroutine == nil and
-        run.scheduler == nil and run.scheduled_timeout_id == nil and
-        run.lease_timeout_id == nil
+        run.scheduler == nil and run.scheduled_timeout_id == nil
     run.cleanup_reason = reason
     record_cleanup_failures(run, run.cleanup_registry.failures)
     if not mount_ok then
@@ -708,33 +731,20 @@ local function terminate_aborted(registry, run, reason)
     return run
 end
 
----Schedules the next frame-based lease ownership check.
----@param registry table
----@param run table
-local function schedule_lease_check(registry, run)
-    local timeout_id
-    timeout_id = dfhack.timeout(run.lease_check_frames, 'frames', function()
-        if registry.active_run_id ~= run.run_id or
-                registry.runs[run.run_id] ~= run or
-                M.is_terminal(run) then
-            return
-        end
-        if run.lease_timeout_id ~= timeout_id then return end
-        run.lease_timeout_id = nil
-        local last_poll_ms = run.last_status_poll_ms or run.created_ms
-        run.lease_elapsed_ms = dfhack.getTickCount() - last_poll_ms
-        if run.lease_elapsed_ms >= run.lease_timeout_ms then
-            terminate_aborted(registry, run,
-                ('status lease expired after %d ms'):format(
-                    run.lease_elapsed_ms))
-            return
-        end
-        schedule_lease_check(registry, run)
-    end)
-    if timeout_id == nil then
-        error('DFHack rejected the automation lease timer')
-    end
-    run.lease_timeout_id = timeout_id
+---Performs emergency cleanup for one exact lease-expired generation.
+---@param run_id string
+---@param generation integer
+---@param reason string
+---@return table
+function M.expire_active(run_id, generation, reason)
+    local registry = get_registry()
+    assert(registry.active_run_id == run_id,
+        'expired execution lease no longer owns the executor')
+    local run = assert(registry.runs[run_id],
+        'expired execution lease references an unknown run')
+    assert(run.generation == generation,
+        'expired execution lease generation does not match')
+    return terminate_aborted(registry, run, reason)
 end
 
 ---Initializes host-only runtime fields on one admitted service run.
@@ -766,10 +776,6 @@ local function initialize_runtime(run, package_root, project_root, options)
     run.discovered_files = {}
     run.coroutine = nil
     run.scheduled_timeout_id = nil
-    run.lease_timeout_id = nil
-    run.lease_timeout_ms = options.lease_timeout_ms or 5000
-    run.lease_check_frames = options.lease_check_frames or 30
-    run.lease_elapsed_ms = 0
     run.outstanding_wait = nil
     run.cleanup_module = cleanup_module
     run.cleanup_registry = nil
@@ -783,9 +789,6 @@ local function initialize_runtime(run, package_root, project_root, options)
     run.scheduler = nil
     run.suspended = false
     run.terminal_observed = false
-    assert(type(run.lease_timeout_ms) == 'number' and
-        run.lease_timeout_ms >= 1,
-        'lease timeout must be positive')
     assert(type(run.lease_check_frames) == 'number' and
         run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0,
         'lease check interval must be a positive integer')
@@ -806,7 +809,7 @@ local function initialize_runtime(run, package_root, project_root, options)
     }
 end
 
----Schedules native execution and lease checks for one activated run.
+---Schedules native execution for one activated run.
 ---@param registry table
 ---@param run table
 local function schedule_activated_run(registry, run)
@@ -820,12 +823,6 @@ local function schedule_activated_run(registry, run)
         return
     end
     run.scheduled_timeout_id = timeout_id
-    local lease_ok, lease_error = pcall(schedule_lease_check, registry, run)
-    if not lease_ok then
-        cancel_timeout(run.scheduled_timeout_id)
-        run.scheduled_timeout_id = nil
-        finalize_run(registry, run, false, lease_error)
-    end
 end
 
 ---Activates and schedules the next service-owned FIFO run when possible.
@@ -882,7 +879,12 @@ function M.start(package_root, project_root, options)
     }, dependencies)
     local outcome = service.submit(project.project_id, {
         request_key='version1-request:' .. options.run_id,
-        owner_kind='external',
+        owner_kind=options.owner_kind or OwnerKind.EXTERNAL,
+        queue_lease_ms=options.queue_lease_ms or
+            options.lease_timeout_ms or 5000,
+        execution_lease_ms=options.execution_lease_ms or
+            options.lease_timeout_ms or 5000,
+        lease_check_frames=options.lease_check_frames or 30,
         selection={identities=service_selection(options.specs)},
     }, dependencies)
     if not outcome.accepted then
@@ -912,42 +914,112 @@ function M.find(run_id)
     return registry.runs[run_id]
 end
 
----Records a status poll that renews an active run's frame-driven lease.
+---Returns an exact capability-bound mutation identity for one run.
+---@param run table
+---@param owner_capability string
+---@return table
+local function owner_request(run, owner_capability)
+    return {
+        service_instance_id=run.service_instance_id,
+        project_id=run.project_id,
+        run_id=run.run_id,
+        generation=run.generation,
+        owner_capability=owner_capability,
+    }
+end
+
+---Observes one retained run without renewing or transferring ownership.
 ---@param run_id string
 ---@return table
-function M.poll(run_id)
+function M.observe(run_id)
     local run = M.find(run_id)
     if not run then error('automation run not found: ' .. run_id) end
-    run.last_status_poll_ms = dfhack.getTickCount()
-    run.last_status_poll_frame = current_frame()
-    if M.is_terminal(run) and not run.terminal_observed then
+    return run
+end
+
+---Renews an owned nonterminal run and returns its current state.
+---@param run_id string
+---@param owner_capability string
+---@return table
+function M.poll(run_id, owner_capability)
+    local run = M.observe(run_id)
+    assert(type(owner_capability) == 'string' and owner_capability ~= '',
+        'status poll requires the owner capability')
+    if not M.is_terminal(run) then
+        service.renew(owner_request(run, owner_capability),
+            service_dependencies())
+        run.last_status_poll_ms = dfhack.getTickCount()
+        run.last_status_poll_frame = current_frame()
+    else
         run.terminal_observed = true
-        if not run.acknowledged then
-            service.acknowledge_compatibility(run.run_id, run.generation,
-                run.owner_capability, service_dependencies())
-        end
     end
+    return run
+end
+
+---Acknowledges successful persistence for one exact terminal owner.
+---@param run_id string
+---@param generation integer
+---@param owner_capability string
+---@return table
+function M.acknowledge(run_id, generation, owner_capability)
+    local run = M.observe(run_id)
+    local request = owner_request(run, owner_capability)
+    request.generation = generation
+    request.persistence = {
+        succeeded=true,
+        policy=run.result_policy,
+        result_path=run.result_path,
+    }
+    service.acknowledge(request, service_dependencies())
     return run
 end
 
 ---Aborts an owned queued or suspended run and invalidates its callbacks.
 ---@param run_id string
+---@param owner_capability string|nil
 ---@return table
-function M.abort(run_id)
+function M.abort(run_id, owner_capability)
     local registry = get_registry()
     local run = registry.runs[run_id]
     if not run then error('automation run not found: ' .. run_id) end
     if M.is_terminal(run) then return run end
+    local reason = 'by request'
     if run.state == RunState.QUEUED then
-        service.cancel(run.run_id, run.owner_capability, 'by request',
-            service_dependencies())
-        table.insert(run.output_lines, 'CANCELLED by request')
+        if owner_capability ~= nil then
+            local request = owner_request(run, owner_capability)
+            request.reason = reason
+            service.cancel(request, service_dependencies())
+        else
+            service.operator_cancel({
+                service_instance_id=run.service_instance_id,
+                project_id=run.project_id,
+                run_id=run.run_id,
+                generation=run.generation,
+                authority={local_dfhack_run=true},
+                reason='local operator cancellation',
+            }, service_dependencies())
+        end
+        table.insert(run.output_lines, 'CANCELLED ' .. reason)
         run.terminal_observed = false
         return run
     end
     assert(registry.active_run_id == run_id,
         'active automation run not found: ' .. run_id)
-    return terminate_aborted(registry, run, 'by request')
+    if owner_capability ~= nil then
+        local request = owner_request(run, owner_capability)
+        request.reason = reason
+        service.abort(request, service_dependencies())
+        return run
+    end
+    service.operator_abort({
+        service_instance_id=run.service_instance_id,
+        project_id=run.project_id,
+        run_id=run.run_id,
+        generation=run.generation,
+        authority={local_dfhack_run=true},
+        reason='local operator abort',
+    }, service_dependencies())
+    return run
 end
 
 local JSON_NULL = '\0'

@@ -2,6 +2,8 @@
 
 local projects = require('dwarfspec.automation.projects')
 local events = require('dwarfspec.automation.events')
+local OwnerKind = require('dwarfspec.automation.owner_kinds')
+local RunState = require('dwarfspec.automation.run_states')
 local scheduler = require('dwarfspec.automation.scheduler')
 local schemas = require('dwarfspec.automation.schemas')
 local snapshots = require('dwarfspec.automation.snapshots')
@@ -75,9 +77,9 @@ end
 ---Returns one opaque high-entropy owner capability.
 ---@param dependencies table|nil
 ---@return string
-local function new_owner_capability(dependencies)
+local function new_owner_capability(dependencies, run_id, generation)
     if dependencies and dependencies.new_owner_capability then
-        return dependencies.new_owner_capability()
+        return dependencies.new_owner_capability(run_id, generation)
     end
     return ('owner-%08x-%08x-%08x-%08x'):format(
         math.random(0, 0x7fffffff),
@@ -98,13 +100,15 @@ local function scheduler_context(dependencies)
         new_run_id=function(generation)
             return new_run_id(generation, dependencies)
         end,
-        new_owner_capability=function()
-            return new_owner_capability(dependencies)
+        new_owner_capability=function(run_id, generation)
+            return new_owner_capability(dependencies, run_id, generation)
         end,
         validate_activation=dependencies and
             dependencies.validate_activation or nil,
         verify_clean_state=dependencies and
             dependencies.verify_clean_state or nil,
+        authorize_operator=dependencies and
+            dependencies.authorize_operator or nil,
     }
 end
 
@@ -150,6 +154,94 @@ local function require_registry(dependencies)
     assert(registry ~= nil, 'automation service has not been bootstrapped')
     validate_registry(registry)
     return registry
+end
+
+---Returns the currently renewable lease for one nonterminal run.
+---@param run table
+---@return table|nil
+local function current_lease(run)
+    if run.state == RunState.QUEUED then return run.queue_lease end
+    if run.state == RunState.STARTING or run.state == RunState.RUNNING then
+        return run.execution_lease
+    end
+    return nil
+end
+
+---Cancels one service-owned lease timer without touching lease state.
+---@param run table
+---@param dependencies table|nil
+local function cancel_lease_timer(run, dependencies)
+    local timer_id = run.lease_timer_id
+    run.lease_timer_id = nil
+    run.lease_timer_generation = (run.lease_timer_generation or 0) + 1
+    if timer_id ~= nil and dependencies and
+            type(dependencies.cancel_lease_timer) == 'function' then
+        dependencies.cancel_lease_timer(timer_id)
+    end
+end
+
+local arm_lease_timer
+
+---Handles one exact service-owned lease timer callback.
+---@param run_id string
+---@param generation integer
+---@param timer_generation integer
+---@param dependencies table
+local function lease_timer_fired(run_id, generation, timer_generation,
+        dependencies)
+    local registry = require_registry(dependencies)
+    local run = registry.runs[run_id]
+    if run == nil or run.generation ~= generation or
+            run.lease_timer_generation ~= timer_generation then
+        return
+    end
+    run.lease_timer_id = nil
+    local ok, failure = xpcall(function()
+        if run.owner_kind == OwnerKind.IN_PROCESS and
+                run.execution_lease.active then
+            M.heartbeat({
+                service_instance_id=registry.service_instance_id,
+                project_id=run.project_id,
+                run_id=run.run_id,
+                generation=run.generation,
+            }, dependencies)
+            return
+        end
+        M.expire_leases(dependencies)
+        if registry.runs[run_id] == run and not run.terminal then
+            arm_lease_timer(registry, run, dependencies)
+        end
+    end, debug.traceback)
+    if not ok then run.lease_timer_error = tostring(failure) end
+end
+
+---Arms the timer for one currently renewable queue or execution lease.
+---@param registry table
+---@param run table
+---@param dependencies table|nil
+arm_lease_timer = function(registry, run, dependencies)
+    cancel_lease_timer(run, dependencies)
+    local lease = current_lease(run)
+    if lease == nil or not lease.active or not dependencies or
+            type(dependencies.schedule_lease_timer) ~= 'function' then
+        return
+    end
+    local timestamp_ms = now_ms(dependencies)
+    local delay_ms
+    if run.owner_kind == OwnerKind.IN_PROCESS then
+        delay_ms = math.max(1, math.floor(lease.timeout_ms / 2))
+    else
+        delay_ms = math.max(1, lease.expires_at_ms - timestamp_ms)
+    end
+    local timer_generation = run.lease_timer_generation
+    local timer_id = dependencies.schedule_lease_timer(
+        run, delay_ms, function()
+            lease_timer_fired(run.run_id, run.generation,
+                timer_generation, dependencies)
+        end)
+    assert(timer_id ~= nil,
+        'automation service lease timer was rejected')
+    run.lease_timer_id = timer_id
 end
 
 ---Counts keys in one service-owned record map.
@@ -359,6 +451,9 @@ function M.submit(project_id, request, dependencies)
     local registry = require_registry(dependencies)
     local outcome = scheduler.submit(registry, project_id, request,
         scheduler_context(dependencies))
+    if outcome.accepted and not outcome.reused then
+        arm_lease_timer(registry, outcome.run, dependencies)
+    end
     local response = {
         accepted=outcome.accepted,
         reused=outcome.reused,
@@ -378,8 +473,12 @@ end
 ---@return table
 function M.activate_next(dependencies)
     local registry = require_registry(dependencies)
+    M.expire_leases(dependencies)
     local outcome = scheduler.activate_next(registry,
         scheduler_context(dependencies))
+    if outcome.activated then
+        arm_lease_timer(registry, outcome.run, dependencies)
+    end
     return {
         activated=outcome.activated,
         kind=outcome.kind,
@@ -414,6 +513,7 @@ function M.begin_cleanup(run_id, generation, reason, pending_action_count,
     local registry = require_registry(dependencies)
     local run = scheduler.begin_cleanup(registry, run_id, generation,
         reason, pending_action_count, scheduler_context(dependencies))
+    cancel_lease_timer(run, dependencies)
     return snapshots.run(run, registry)
 end
 
@@ -431,20 +531,144 @@ function M.publish_active_event(run_id, generation, event_type, payload,
         event_type, payload, scheduler_context(dependencies))
 end
 
----Cancels one owned queued run without invoking native cleanup.
----@param run_id string
----@param owner_capability string
----@param reason string
+---Renews the applicable exact capability-owned external lease.
+---@param request table
 ---@param dependencies table|nil
 ---@return table
-function M.cancel(run_id, owner_capability, reason, dependencies)
+function M.renew(request, dependencies)
     local registry = require_registry(dependencies)
-    local outcome = scheduler.cancel(registry, run_id, owner_capability,
-        reason, scheduler_context(dependencies))
+    local run = scheduler.renew(registry, request,
+        scheduler_context(dependencies))
+    arm_lease_timer(registry, run, dependencies)
+    return snapshots.run(run, registry)
+end
+
+---Renews one service-owned in-process execution heartbeat.
+---@param request table
+---@param dependencies table|nil
+---@return table
+function M.heartbeat(request, dependencies)
+    local registry = require_registry(dependencies)
+    local run = scheduler.heartbeat(registry, request,
+        scheduler_context(dependencies))
+    arm_lease_timer(registry, run, dependencies)
+    return snapshots.run(run, registry)
+end
+
+---Cancels one owned queued run without invoking native cleanup.
+---@param request table
+---@param dependencies table|nil
+---@return table
+function M.cancel(request, dependencies)
+    local registry = require_registry(dependencies)
+    local outcome = scheduler.cancel(registry, request,
+        scheduler_context(dependencies))
+    cancel_lease_timer(outcome.run, dependencies)
     return {
         cancelled=outcome.cancelled,
         identity=outcome.identity,
         snapshot=snapshots.run(outcome.run, registry),
+    }
+end
+
+---Cancels one queued run through authorized operator recovery.
+---@param request table
+---@param dependencies table
+---@return table
+function M.operator_cancel(request, dependencies)
+    local registry = require_registry(dependencies)
+    local outcome = scheduler.operator_cancel(registry, request,
+        scheduler_context(dependencies))
+    cancel_lease_timer(outcome.run, dependencies)
+    return {
+        cancelled=outcome.cancelled,
+        identity=outcome.identity,
+        snapshot=snapshots.run(outcome.run, registry),
+    }
+end
+
+---Aborts one exact capability-owned active run through native cleanup.
+---@param request table
+---@param dependencies table
+---@return table
+function M.abort(request, dependencies)
+    local registry = require_registry(dependencies)
+    local run = scheduler.authorize_abort(registry, request)
+    assert(type(dependencies) == 'table' and
+        type(dependencies.abort_active) == 'function',
+        'active abort requires the service host cleanup boundary')
+    dependencies.abort_active({
+        service_instance_id=run.service_instance_id,
+        project_id=run.project_id,
+        run_id=run.run_id,
+        generation=run.generation,
+    }, request.reason)
+    assert(run.terminal and run.state == RunState.ABORTED,
+        'active abort did not produce an aborted terminal run')
+    return snapshots.run(run, registry)
+end
+
+---Force-aborts one active run through authorized operator recovery.
+---@param request table
+---@param dependencies table
+---@return table
+function M.operator_abort(request, dependencies)
+    local registry = require_registry(dependencies)
+    local run = scheduler.authorize_operator_abort(registry, request,
+        scheduler_context(dependencies))
+    assert(type(dependencies) == 'table' and
+        type(dependencies.abort_active) == 'function',
+        'operator abort requires the service host cleanup boundary')
+    dependencies.abort_active({
+        service_instance_id=run.service_instance_id,
+        project_id=run.project_id,
+        run_id=run.run_id,
+        generation=run.generation,
+    }, request.reason)
+    assert(run.terminal and run.state == RunState.ABORTED,
+        'operator abort did not produce an aborted terminal run')
+    return snapshots.run(run, registry)
+end
+
+---Expires due queue and execution leases through their distinct paths.
+---@param dependencies table
+---@return table
+function M.expire_leases(dependencies)
+    local registry = require_registry(dependencies)
+    local queue_outcomes = scheduler.expire_due_queue(
+        registry, scheduler_context(dependencies))
+    local expired_queue = {}
+    for _, outcome in ipairs(queue_outcomes) do
+        cancel_lease_timer(outcome.run, dependencies)
+        table.insert(expired_queue, outcome.identity)
+    end
+
+    local active = scheduler.claim_expired_active(
+        registry, scheduler_context(dependencies))
+    local active_identity
+    if active ~= nil then
+        cancel_lease_timer(active, dependencies)
+        active_identity = {
+            service_instance_id=active.service_instance_id,
+            project_id=active.project_id,
+            run_id=active.run_id,
+            generation=active.generation,
+        }
+        assert(type(dependencies.abort_active) == 'function',
+            'execution lease expiry requires the service host cleanup boundary')
+        dependencies.abort_active(active_identity,
+            ('execution lease expired after %d ms')
+                :format(active.execution_lease.timeout_ms))
+        assert(active.terminal and active.state == RunState.ABORTED,
+            'execution lease expiry did not abort the active run')
+    end
+    if (#expired_queue > 0 or active_identity ~= nil) and
+            type(dependencies.after_lease_expiry) == 'function' then
+        dependencies.after_lease_expiry()
+    end
+    return {
+        expired_queue=expired_queue,
+        expired_active=active_identity,
     }
 end
 
@@ -463,6 +687,7 @@ function M.complete_active(run_id, generation, terminal_state,
     local outcome = scheduler.finish_active(registry, run_id, generation,
         terminal_state, cleanup_confirmed, reason,
         scheduler_context(dependencies))
+    cancel_lease_timer(outcome.run, dependencies)
     return {
         finished=outcome.finished,
         identity=outcome.identity,
@@ -485,18 +710,40 @@ function M.recover_executor(request, dependencies)
     }
 end
 
----Releases a terminal reservation after version 1 status observation.
----This adapter-only bridge is removed when explicit acknowledgement ships.
----@param run_id string
----@param generation integer
----@param owner_capability string
+---Acknowledges one exact owner-retained terminal result after persistence.
+---@param request table
 ---@param dependencies table|nil
 ---@return table
-function M.acknowledge_compatibility(run_id, generation, owner_capability,
-        dependencies)
+function M.acknowledge(request, dependencies)
     local registry = require_registry(dependencies)
-    local run = scheduler.acknowledge_compatibility(registry, run_id,
-        generation, owner_capability)
+    local run = scheduler.acknowledge(registry, request,
+        scheduler_context(dependencies))
+    return snapshots.run(run, registry)
+end
+
+---Explicitly discards one exact terminal result through operator authority.
+---@param request table
+---@param dependencies table|nil
+---@return table
+function M.discard(request, dependencies)
+    local registry = require_registry(dependencies)
+    local run = scheduler.discard(registry, request,
+        scheduler_context(dependencies))
+    return snapshots.run(run, registry)
+end
+
+---Returns the retained latest terminal result for one project.
+---@param project_id string
+---@param dependencies table|nil
+---@return table|nil
+function M.latest_result(project_id, dependencies)
+    assert(type(project_id) == 'string' and project_id ~= '',
+        'latest-result project id must be a nonempty string')
+    local registry = require_registry(dependencies)
+    local run_id = registry.latest_terminal_results[project_id]
+    if run_id == nil then return nil end
+    local run = assert(registry.runs[run_id],
+        'latest terminal result references an unknown run')
     return snapshots.run(run, registry)
 end
 

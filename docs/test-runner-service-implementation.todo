@@ -320,40 +320,45 @@ Phase 4 exit gate:
 Goal: make abandoned callers recover safely without allowing consumers to
 mutate one another's runs.
 
-☐ Generate opaque owner capabilities with enough entropy for concurrent local
-  callers.
-☐ Require the owner capability for lease renewal, normal cancel, normal abort,
-  and acknowledgement.
-☐ Permit read-only snapshots and event reads without renewing or transferring
-  ownership.
-☐ Implement distinct queue and execution leases with independent timestamps,
-  timers, and expiry behavior.
-☐ Renew an external lease only from a valid owner status request.
-☐ On queue-lease expiry, cancel without native cleanup and retain the terminal
-  snapshot and journal.
-☐ On execution-lease expiry, abort the active generation, run emergency
+✔ Generate opaque owner capabilities with enough entropy for concurrent local
+  callers. @done(26-07-23 11:39)
+✔ Require the owner capability for lease renewal, normal cancel, normal abort,
+  and acknowledgement. @done(26-07-23 11:39)
+✔ Permit read-only snapshots and event reads without renewing or transferring
+  ownership. @done(26-07-23 11:39)
+✔ Implement distinct queue and execution leases with independent timestamps,
+  timers, and expiry behavior. @done(26-07-23 11:39)
+✔ Renew an external lease only from a valid owner status request.
+  @done(26-07-23 11:39)
+✔ On queue-lease expiry, cancel without native cleanup and retain the terminal
+  snapshot and journal. @done(26-07-23 11:39)
+✔ On execution-lease expiry, abort the active generation, run emergency
   cleanup, and retain the terminal snapshot and journal.
-☐ Support service-owned heartbeats for direct in-process clients without tying
-  ownership to a presentation object's lifetime.
-☐ Acknowledge only the exact terminal project, run, generation, and owner after
-  its persistence policy succeeds.
-☐ Implement explicit operator discard with a bounded reason and audit event.
-☐ Keep an unacknowledged terminal result addressable and block only its owning
-  project.
-☐ Reject stale, mismatched, cross-project, cross-service, and unauthorized
-  mutations without changing leases or state.
-☐ Ensure acknowledgement or discard cannot clear executor quarantine.
+  @done(26-07-23 11:39)
+✔ Support service-owned heartbeats for direct in-process clients without tying
+  ownership to a presentation object's lifetime. @done(26-07-23 11:39)
+✔ Acknowledge only the exact terminal project, run, generation, and owner after
+  its persistence policy succeeds. @done(26-07-23 11:39)
+✔ Implement explicit operator discard with a bounded reason and audit event.
+  @done(26-07-23 11:39)
+✔ Keep an unacknowledged terminal result addressable and block only its owning
+  project. @done(26-07-23 11:39)
+✔ Reject stale, mismatched, cross-project, cross-service, and unauthorized
+  mutations without changing leases or state. @done(26-07-23 11:39)
+✔ Ensure acknowledgement or discard cannot clear executor quarantine.
+  @done(26-07-23 11:39)
 
 Phase 5 exit gate:
 
-☐ Unit tests cover valid ownership, observation without renewal, wrong owner,
+✔ Unit tests cover valid ownership, observation without renewal, wrong owner,
   stale generation, expired queue owner, expired active owner, acknowledgement,
-  discard, and quarantine separation.
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes.
-☐ The full live automation suite passes.
-☐ Live evidence confirms lost queued and active external callers take their
+  discard, and quarantine separation. @done(26-07-23 11:39)
+✔ Lua syntax and formatting checks pass. @done(26-07-23 11:39)
+✔ The full unit suite passes. @done(26-07-23 11:39)
+✔ The full live automation suite passes. @done(26-07-23 11:39)
+✔ Live evidence confirms lost queued and active external callers take their
   distinct terminal paths and do not block clean runs from other projects.
+  @done(26-07-23 11:39)
 
 ## Phase 6: Per-project latest-result persistence
 

@@ -4,6 +4,7 @@ local events = require('dwarfspec.automation.events')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
 local ResultState = require('dwarfspec.automation.result_states')
 local RunState = require('dwarfspec.automation.run_states')
+local OwnerKind = require('dwarfspec.automation.owner_kinds')
 
 local M = {
     protocol_version=2,
@@ -222,6 +223,34 @@ function M.validate_run(value)
         'automation run queue lease must declare active')
     assert(type(value.execution_lease.active) == 'boolean',
         'automation run execution lease must declare active')
+    assert(value.owner_kind == OwnerKind.EXTERNAL or
+        value.owner_kind == OwnerKind.IN_PROCESS,
+        'automation run has unsupported owner kind')
+    if value.acknowledged ~= nil then
+        assert(type(value.acknowledged) == 'boolean',
+            'automation run acknowledgement flag must be boolean')
+    end
+    if value.discarded ~= nil then
+        assert(type(value.discarded) == 'boolean',
+            'automation run discard flag must be boolean')
+    end
+    for lease_name, lease in pairs({
+            queue=value.queue_lease,
+            execution=value.execution_lease}) do
+        if lease.timeout_ms ~= nil then
+            assert(is_nonnegative_integer(lease.timeout_ms) and
+                lease.timeout_ms > 0,
+                'automation run ' .. lease_name ..
+                    ' lease timeout must be positive')
+        end
+        for _, field in ipairs({'renewed_at_ms', 'expires_at_ms'}) do
+            if lease[field] ~= nil then
+                assert(is_nonnegative_integer(lease[field]),
+                    'automation run ' .. lease_name ..
+                        ' lease timestamp must be nonnegative')
+            end
+        end
+    end
     if value.queue_position ~= nil then
         assert(is_nonnegative_integer(value.queue_position) and
             value.queue_position > 0,

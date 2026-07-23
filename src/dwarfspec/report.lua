@@ -6,6 +6,7 @@ local schemas = require('dwarfspec.automation.schemas')
 local RunState = require('dwarfspec.automation.run_states')
 
 local PREFIX = 'DWARFSPEC_JSON '
+local OWNER_PREFIX = 'DWARFSPEC_OWNER '
 
 local RUN_STATE_TERMINAL = {
     [RunState.QUEUED]=false,
@@ -56,6 +57,23 @@ local function validate_version_one(report, expected)
                 :format(tostring(report.run_id), expected.run_id))
     end
     return report
+end
+
+---Returns the one bootstrap-only owner capability from process output.
+---@param lines string[]
+---@return string
+function M.owner_capability(lines)
+    local found
+    for _, line in ipairs(lines) do
+        if line:sub(1, #OWNER_PREFIX) == OWNER_PREFIX then
+            assert(found == nil,
+                'DFHack output contained multiple owner capabilities')
+            found = line:sub(#OWNER_PREFIX + 1)
+        end
+    end
+    assert(type(found) == 'string' and #found >= 32 and #found <= 512,
+        'DFHack output did not contain a valid owner capability')
+    return found
 end
 
 ---Validates one supported native or service transport report.

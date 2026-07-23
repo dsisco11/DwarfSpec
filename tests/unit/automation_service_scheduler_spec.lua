@@ -2,6 +2,7 @@
 
 local service = require('dwarfspec.automation.service')
 local EventType = require('dwarfspec.automation.event_types')
+local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
 local RunState = require('dwarfspec.automation.run_states')
 local SchedulerFailureKind =
@@ -35,7 +36,8 @@ local function environment()
         end,
         new_owner_capability=function()
             capability_sequence = capability_sequence + 1
-            return ('owner-capability-%08d'):format(capability_sequence)
+            return ('owner-capability-scheduler-%016d')
+                :format(capability_sequence)
         end,
         validate_activation=function(project)
             local rejection = controls.activation_rejection
@@ -47,6 +49,9 @@ local function environment()
         verify_clean_state=function(proof)
             return controls.clean_state_verified and proof.clean == true,
                 'fixture clean-state proof was rejected'
+        end,
+        authorize_operator=function(authority)
+            return authority.local_operator == true, 'fixture operator'
         end,
     }
     service.bootstrap({
@@ -84,7 +89,7 @@ end
 local function submission(suffix)
     return {
         request_key='request-key-' .. suffix .. '-00000001',
-        owner_kind='external',
+        owner_kind=OwnerKind.EXTERNAL,
         selection={
             identities={
                 'tests/live/alpha.ds.lua',
@@ -92,6 +97,22 @@ local function submission(suffix)
             },
         },
     }
+end
+
+---Builds an exact owner-authorized mutation request.
+---@param admitted table
+---@param overrides table|nil
+---@return table
+local function owner_request(admitted, overrides)
+    local request = {
+        service_instance_id=admitted.identity.service_instance_id,
+        project_id=admitted.identity.project_id,
+        run_id=admitted.identity.run_id,
+        generation=admitted.identity.generation,
+        owner_capability=admitted.owner_capability,
+    }
+    for key, value in pairs(overrides or {}) do request[key] = value end
+    return request
 end
 
 ---Returns event identifiers retained by one run.
@@ -148,7 +169,7 @@ describe('multi-project automation service scheduler', function()
         dependencies.new_owner_capability = function()
             attempts = attempts + 1
             if attempts == 1 then return first.owner_capability end
-            return 'owner-capability-after-collision'
+            return 'owner-capability-after-collision-0001'
         end
 
         local second = service.submit(projects[2].project_id,
@@ -156,8 +177,197 @@ describe('multi-project automation service scheduler', function()
 
         assert.is_true(second.accepted)
         assert.equals(2, attempts)
-        assert.equals('owner-capability-after-collision',
+        assert.equals('owner-capability-after-collision-0001',
             second.owner_capability)
+    end)
+
+    it('renews only an exact owner while observation remains read-only',
+            function()
+        local dependencies, clock = environment()
+        local projects = register_three(dependencies)
+        local request = submission('renew-owner')
+        request.queue_lease_ms = 50
+        request.execution_lease_ms = 80
+        local admitted = service.submit(projects[1].project_id,
+            request, dependencies)
+        local before = service.snapshot(admitted.identity.run_id,
+            dependencies)
+
+        assert.is_nil(before.owner_capability)
+        service.events(admitted.identity.run_id, 0, dependencies)
+        assert.same(before, service.snapshot(admitted.identity.run_id,
+            dependencies))
+
+        for _, mutation in ipairs({
+            {owner_capability='wrong-owner-capability-00000000001'},
+            {generation=admitted.identity.generation + 1},
+            {project_id=projects[2].project_id},
+            {service_instance_id='other-service-instance'},
+        }) do
+            local unchanged = service.snapshot(admitted.identity.run_id,
+                dependencies)
+            assert.has_error(function()
+                service.renew(owner_request(admitted, mutation), dependencies)
+            end)
+            assert.same(unchanged, service.snapshot(
+                admitted.identity.run_id, dependencies))
+        end
+
+        clock.advance(10)
+        local renewed = service.renew(owner_request(admitted), dependencies)
+        assert.equals(before.queue_lease.expires_at_ms + 10,
+            renewed.queue_lease.expires_at_ms)
+        assert.equals(before.execution_lease.expires_at_ms,
+            renewed.execution_lease.expires_at_ms)
+    end)
+
+    it('expires queued owners without cleanup and blocks only their project',
+            function()
+        local dependencies, clock = environment()
+        local projects = register_three(dependencies)
+        local request = submission('queued-expiry')
+        request.queue_lease_ms = 20
+        request.execution_lease_ms = 90
+        local expired = service.submit(projects[1].project_id,
+            request, dependencies)
+        local cleanup_called = false
+        dependencies.abort_active = function()
+            cleanup_called = true
+        end
+
+        clock.advance(20)
+        local outcome = service.expire_leases(dependencies)
+        local retained = service.snapshot(expired.identity.run_id,
+            dependencies)
+        assert.same({expired.identity}, outcome.expired_queue)
+        assert.is_false(cleanup_called)
+        assert.equals(RunState.CANCELLED, retained.state)
+        assert.is_true(retained.terminal)
+        assert.is_true(retained.queue_lease.expired)
+        assert.is_true(retained.cleanup_confirmed)
+
+        local blocked = service.submit(projects[1].project_id,
+            submission('same-project-blocked'), dependencies)
+        assert.is_false(blocked.accepted)
+        local other = service.submit(projects[2].project_id,
+            submission('other-project-continues'), dependencies)
+        assert.is_true(other.accepted)
+        assert.equals(other.identity.run_id,
+            service.activate_next(dependencies).identity.run_id)
+    end)
+
+    it('expires active owners through cleanup while another project continues',
+            function()
+        local dependencies, clock = environment()
+        local projects = register_three(dependencies)
+        local request = submission('active-expiry')
+        request.queue_lease_ms = 15
+        request.execution_lease_ms = 40
+        local expired = service.submit(projects[1].project_id,
+            request, dependencies)
+        local active = service.activate_next(dependencies)
+        local other = service.submit(projects[2].project_id,
+            submission('after-active-expiry'), dependencies)
+        local cleanup_identity
+        dependencies.abort_active = function(identity, reason)
+            cleanup_identity = identity
+            service.complete_active(identity.run_id, identity.generation,
+                RunState.ABORTED, true, reason, dependencies)
+        end
+
+        clock.advance(40)
+        local outcome = service.expire_leases(dependencies)
+        local retained = service.snapshot(expired.identity.run_id,
+            dependencies)
+        assert.same(active.identity, cleanup_identity)
+        assert.same(active.identity, outcome.expired_active)
+        assert.equals(RunState.ABORTED, retained.state)
+        assert.is_true(retained.execution_lease.expired)
+        assert.is_true(retained.cleanup_confirmed)
+        assert.has_error(function()
+            service.renew(owner_request(expired), dependencies)
+        end)
+        assert.equals(other.identity.run_id,
+            service.activate_next(dependencies).identity.run_id)
+    end)
+
+    it('heartbeats in-process execution without a presentation owner',
+            function()
+        local dependencies, clock = environment()
+        local project = register_project(dependencies, 1)
+        local request = submission('in-process-heartbeat')
+        request.owner_kind = OwnerKind.IN_PROCESS
+        request.execution_lease_ms = 60
+        local admitted = service.submit(project.project_id,
+            request, dependencies)
+        local active = service.activate_next(dependencies)
+        assert.is_false(active.snapshot.queue_lease.active)
+        assert.is_true(active.snapshot.execution_lease.service_owned)
+
+        clock.advance(20)
+        local renewed = service.heartbeat({
+            service_instance_id=admitted.identity.service_instance_id,
+            project_id=admitted.identity.project_id,
+            run_id=admitted.identity.run_id,
+            generation=admitted.identity.generation,
+        }, dependencies)
+        assert.equals(clock.now_ms() + 60,
+            renewed.execution_lease.expires_at_ms)
+    end)
+
+    it('releases exact persisted results without clearing quarantine',
+            function()
+        local dependencies = environment()
+        local projects = register_three(dependencies)
+        local acknowledged = service.submit(projects[1].project_id,
+            submission('acknowledged'), dependencies)
+        local active = service.activate_next(dependencies)
+        service.complete_active(active.identity.run_id,
+            active.identity.generation, RunState.PASSED, true,
+            'cleanup confirmed', dependencies)
+
+        local acknowledgement = owner_request(acknowledged, {
+            persistence={
+                succeeded=true,
+                policy=ResultPolicy.FILE,
+                result_path=dependencies.namespace.dwarfspec.runs[
+                    acknowledged.identity.run_id].result_path,
+            },
+        })
+        local before = service.snapshot(acknowledged.identity.run_id,
+            dependencies)
+        acknowledgement.owner_capability =
+            'wrong-owner-capability-00000000001'
+        assert.has_error(function()
+            service.acknowledge(acknowledgement, dependencies)
+        end)
+        assert.same(before, service.snapshot(
+            acknowledged.identity.run_id, dependencies))
+        acknowledgement.owner_capability = acknowledged.owner_capability
+        assert.is_true(service.acknowledge(
+            acknowledgement, dependencies).acknowledged)
+
+        local discarded = service.submit(projects[2].project_id,
+            submission('discarded'), dependencies)
+        active = service.activate_next(dependencies)
+        service.complete_active(active.identity.run_id,
+            active.identity.generation, RunState.FAILED, false,
+            'cleanup could not be confirmed', dependencies)
+        local scheduler_before = service.scheduler_snapshot(dependencies)
+        assert.is_true(scheduler_before.quarantine.active)
+        local released = service.discard({
+            service_instance_id=discarded.identity.service_instance_id,
+            project_id=discarded.identity.project_id,
+            run_id=discarded.identity.run_id,
+            generation=discarded.identity.generation,
+            reason='operator reviewed retained failure',
+            authority={local_operator=true},
+        }, dependencies)
+        assert.is_true(released.discarded)
+        assert.is_true(service.scheduler_snapshot(
+            dependencies).quarantine.active)
+        local types = event_types(discarded.identity.run_id, dependencies)
+        assert.equals(EventType.DIAGNOSTIC_RECORDED, types[#types])
     end)
 
     it('activates three projects in FIFO order with one executor owner',
@@ -349,9 +559,14 @@ describe('multi-project automation service scheduler', function()
         end
         clock.advance(5)
 
-        local cancelled = service.cancel(first.identity.run_id,
-            first.owner_capability, 'caller cancelled while queued',
-            dependencies)
+        local cancelled = service.cancel({
+            service_instance_id=first.identity.service_instance_id,
+            project_id=first.identity.project_id,
+            run_id=first.identity.run_id,
+            generation=first.identity.generation,
+            owner_capability=first.owner_capability,
+            reason='caller cancelled while queued',
+        }, dependencies)
         assert.is_true(cancelled.cancelled)
         assert.equals(RunState.CANCELLED, cancelled.snapshot.state)
         assert.is_true(cancelled.snapshot.terminal)
@@ -414,9 +629,14 @@ describe('multi-project automation service scheduler', function()
             blocked.kind)
 
         clock.advance(5)
-        assert.is_true(service.cancel(second.identity.run_id,
-            second.owner_capability, 'cancel while quarantined',
-            dependencies).cancelled)
+        assert.is_true(service.cancel({
+            service_instance_id=second.identity.service_instance_id,
+            project_id=second.identity.project_id,
+            run_id=second.identity.run_id,
+            generation=second.identity.generation,
+            owner_capability=second.owner_capability,
+            reason='cancel while quarantined',
+        }, dependencies).cancelled)
         assert_executor_invariant(dependencies)
         assert.equals(1, service.snapshot(third.identity.run_id,
             dependencies).queue_position)

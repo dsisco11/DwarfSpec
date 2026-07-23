@@ -2,6 +2,7 @@
 
 local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
+local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local projects = require('dwarfspec.automation.projects')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
 local RunState = require('dwarfspec.automation.run_states')
@@ -16,6 +17,9 @@ local SUBMISSION_FIELDS = {
     selection=true,
     request_key=true,
     owner_kind=true,
+    queue_lease_ms=true,
+    execution_lease_ms=true,
+    lease_check_frames=true,
 }
 
 local TERMINAL_STATES = {
@@ -86,11 +90,34 @@ end
 ---@param owner_kind any
 ---@return string
 local function validate_owner_kind(owner_kind)
-    owner_kind = owner_kind or 'external'
-    assert(type(owner_kind) == 'string' and owner_kind ~= '' and
-        #owner_kind <= 64,
-        'run owner kind must be a nonempty bounded string')
+    owner_kind = owner_kind or OwnerKind.EXTERNAL
+    assert(owner_kind == OwnerKind.EXTERNAL or
+        owner_kind == OwnerKind.IN_PROCESS,
+        'run owner kind must be a supported OwnerKind')
     return owner_kind
+end
+
+---Validates one positive lease duration in milliseconds.
+---@param value any
+---@param name string
+---@return integer
+local function validate_lease_duration(value, name)
+    value = value or 5000
+    assert(type(value) == 'number' and value >= 1 and
+        value <= 86400000 and value % 1 == 0,
+        name .. ' must be an integer between 1 and 86400000 milliseconds')
+    return value
+end
+
+---Validates one positive frame interval for live lease checks.
+---@param value any
+---@return integer
+local function validate_lease_check_frames(value)
+    value = value or 30
+    assert(type(value) == 'number' and value >= 1 and
+        value <= 1000000 and value % 1 == 0,
+        'lease check interval must be a positive bounded integer')
+    return value
 end
 
 ---Returns whether two detached JSON-safe values are structurally equal.
@@ -115,6 +142,9 @@ end
 ---@return boolean
 local function matches_request_key(run, normalized)
     return run.owner_kind == normalized.owner_kind and
+        run.queue_lease.timeout_ms == normalized.queue_lease_ms and
+        run.execution_lease.timeout_ms == normalized.execution_lease_ms and
+        run.lease_check_frames == normalized.lease_check_frames and
         run.result_path_identity == normalized.result_path_identity and
         run.result_policy == normalized.project.result_policy and
         json_equal(run.selection, normalized.selection)
@@ -138,10 +168,11 @@ end
 ---@param registry table
 ---@param context table
 ---@return string
-local function allocate_owner_capability(registry, context)
+local function allocate_owner_capability(registry, context, run_id, generation)
     for _ = 1, 128 do
-        local capability = context.new_owner_capability()
-        assert(type(capability) == 'string' and #capability >= 16,
+        local capability = context.new_owner_capability(run_id, generation)
+        assert(type(capability) == 'string' and #capability >= 32 and
+            #capability <= 512,
             'owner capability generator returned an invalid capability')
         local available = true
         for _, run in pairs(registry.runs) do
@@ -153,6 +184,38 @@ local function allocate_owner_capability(registry, context)
         if available then return capability end
     end
     error('owner capability generator repeatedly returned existing values')
+end
+
+local validate_run_identity
+
+---Returns one exact capability-authorized run without changing it.
+---@param registry table
+---@param request table
+---@param operation string
+---@return table
+local function authorize_owner(registry, request, operation)
+    assert(type(request) == 'table',
+        operation .. ' request must be a table')
+    assert(request.service_instance_id == registry.service_instance_id,
+        operation .. ' service identity does not match')
+    assert(type(request.project_id) == 'string' and
+        request.project_id ~= '',
+        operation .. ' project id must be a nonempty string')
+    assert(type(request.run_id) == 'string' and request.run_id ~= '',
+        operation .. ' run id must be a nonempty string')
+    local run = assert(registry.runs[request.run_id],
+        'automation run was not found: ' .. tostring(request.run_id))
+    assert(run.project_id == request.project_id,
+        operation .. ' project identity does not match run')
+    assert(run.generation == request.generation,
+        operation .. ' generation does not match run')
+    assert(type(request.owner_capability) == 'string' and
+        request.owner_capability ~= '',
+        operation .. ' owner capability must be a nonempty string')
+    assert(run.owner_capability == request.owner_capability,
+        operation .. ' owner capability does not match run')
+    validate_run_identity(registry, run)
+    return run
 end
 
 ---Returns one run identity safe to expose without its owner capability.
@@ -170,7 +233,7 @@ end
 ---Validates one run's immutable service and project ownership identity.
 ---@param registry table
 ---@param run table
-local function validate_run_identity(registry, run)
+validate_run_identity = function(registry, run)
     assert(run.service_instance_id == registry.service_instance_id,
         'automation run belongs to a different service instance')
     local project = assert(registry.projects[run.project_id],
@@ -180,6 +243,26 @@ local function validate_run_identity(registry, run)
     assert(type(run.generation) == 'number' and run.generation > 0 and
         run.generation % 1 == 0,
         'automation run has an invalid generation')
+end
+
+---Returns one exact run identity without authorizing an owner mutation.
+---@param registry table
+---@param request table
+---@param operation string
+---@return table
+local function exact_run(registry, request, operation)
+    assert(type(request) == 'table',
+        operation .. ' request must be a table')
+    assert(request.service_instance_id == registry.service_instance_id,
+        operation .. ' service identity does not match')
+    local run = assert(registry.runs[request.run_id],
+        'automation run was not found: ' .. tostring(request.run_id))
+    assert(run.project_id == request.project_id,
+        operation .. ' project identity does not match run')
+    assert(run.generation == request.generation,
+        operation .. ' generation does not match run')
+    validate_run_identity(registry, run)
+    return run
 end
 
 ---Returns a classified scheduler rejection for one existing run.
@@ -261,6 +344,12 @@ local function validate_submission(registry, project_id, request, context)
     local selection = validate_selection(request.selection)
     local request_key = validate_request_key(request.request_key)
     local owner_kind = validate_owner_kind(request.owner_kind)
+    local queue_lease_ms = validate_lease_duration(
+        request.queue_lease_ms, 'queue lease duration')
+    local execution_lease_ms = validate_lease_duration(
+        request.execution_lease_ms, 'execution lease duration')
+    local lease_check_frames = validate_lease_check_frames(
+        request.lease_check_frames)
     local result_path, result_path_identity = normalize_result_path(
         project, context.filesystem)
     return {
@@ -268,6 +357,9 @@ local function validate_submission(registry, project_id, request, context)
         selection=selection,
         request_key=request_key,
         owner_kind=owner_kind,
+        queue_lease_ms=queue_lease_ms,
+        execution_lease_ms=execution_lease_ms,
+        lease_check_frames=lease_check_frames,
         result_path=result_path,
         result_path_identity=result_path_identity,
     }
@@ -323,7 +415,19 @@ function M.submit(registry, project_id, request, context)
     local admitted_at_ms = current_time(context)
     local generation = registry.generation + 1
     local run_id = allocate_run_id(registry, generation, context)
-    local owner_capability = allocate_owner_capability(registry, context)
+    local owner_capability = allocate_owner_capability(
+        registry, context, run_id, generation)
+    local queue_lease = {
+        active=normalized.owner_kind == OwnerKind.EXTERNAL,
+        timeout_ms=normalized.queue_lease_ms,
+    }
+    if queue_lease.active then
+        queue_lease.renewed_at_ms = admitted_at_ms
+        queue_lease.expires_at_ms =
+            admitted_at_ms + normalized.queue_lease_ms
+    else
+        queue_lease.service_owned = true
+    end
     local run = {
         service_instance_id=registry.service_instance_id,
         project_id=project_id,
@@ -338,11 +442,16 @@ function M.submit(registry, project_id, request, context)
         request_key=normalized.request_key,
         owner_kind=normalized.owner_kind,
         owner_capability=owner_capability,
+        lease_check_frames=normalized.lease_check_frames,
         result_policy=project.result_policy,
         result_path=normalized.result_path,
         result_path_identity=normalized.result_path_identity,
-        queue_lease={active=true, renewed_at_ms=admitted_at_ms},
-        execution_lease={active=false},
+        queue_lease=queue_lease,
+        execution_lease={
+            active=false,
+            timeout_ms=normalized.execution_lease_ms,
+            service_owned=normalized.owner_kind == OwnerKind.IN_PROCESS,
+        },
         cleanup_confirmed=false,
         mount_cleanup_verified=false,
         counts=empty_counts(),
@@ -493,7 +602,11 @@ function M.activate_next(registry, context)
     run.activated_at_ms = activated_at_ms
     run.queue_wait_ms = activated_at_ms - run.submitted_at_ms
     run.queue_lease.active = false
-    run.execution_lease = {active=true, renewed_at_ms=activated_at_ms}
+    run.execution_lease.active = true
+    run.execution_lease.renewed_at_ms = activated_at_ms
+    run.execution_lease.expires_at_ms =
+        activated_at_ms + run.execution_lease.timeout_ms
+    run.execution_lease.expiring = nil
     registry.active_run_id = run_id
     events.publish(run.event_journal, EventType.RUN_ACTIVATED, {
         queue_wait_ms=run.queue_wait_ms,
@@ -558,6 +671,8 @@ function M.begin_cleanup(registry, run_id, generation, reason,
     events.validate_payload(EventType.CLEANUP_STARTED, payload)
     local timestamp_ms = current_time(context)
     run.state = RunState.CLEANING
+    run.execution_lease.active = false
+    run.execution_lease.expiring = nil
     events.publish(run.event_journal, EventType.CLEANUP_STARTED, payload,
         timestamp_ms)
     return run
@@ -586,34 +701,19 @@ function M.publish_active_event(registry, run_id, generation, event_type,
         current_time(context))
 end
 
----Cancels one owned queued run without invoking native cleanup.
+---Applies one queued terminal cancellation without invoking native cleanup.
 ---@param registry table
----@param run_id string
----@param owner_capability string
+---@param run table
 ---@param reason string
----@param context table
+---@param owner string
+---@param cancelled_at_ms number
 ---@return table
-function M.cancel(registry, run_id, owner_capability, reason, context)
-    assert(type(run_id) == 'string' and run_id ~= '',
-        'cancel run id must be a nonempty string')
-    assert(type(owner_capability) == 'string' and owner_capability ~= '',
-        'cancel owner capability must be a nonempty string')
-    assert(type(reason) == 'string' and reason ~= '' and #reason <= 1024,
-        'cancel reason must be a nonempty bounded string')
-    local run = assert(registry.runs[run_id],
-        'automation run was not found: ' .. run_id)
-    validate_run_identity(registry, run)
-    assert(run.owner_capability == owner_capability,
-        'cancel owner capability does not match run')
-    assert(run.state == RunState.QUEUED and not run.terminal,
-        'only a queued run can be cancelled')
+local function cancel_queued(registry, run, reason, owner, cancelled_at_ms)
     local queue_index
     for index, queued_id in ipairs(registry.queue) do
-        if queued_id == run_id then queue_index = index break end
+        if queued_id == run.run_id then queue_index = index break end
     end
     assert(queue_index ~= nil, 'queued run is missing from scheduler FIFO')
-    local cancelled_at_ms = current_time(context)
-
     table.remove(registry.queue, queue_index)
     run.state = RunState.CANCELLED
     run.terminal = true
@@ -621,9 +721,10 @@ function M.cancel(registry, run_id, owner_capability, reason, context)
     run.queue_lease.active = false
     run.cleanup_confirmed = true
     run.cleanup_reason = 'native execution was not started'
+    run.terminal_reason = reason
     events.publish(run.event_journal, EventType.RUN_CANCELLED, {
         reason=reason,
-        owner=run.owner_kind,
+        owner=owner,
     }, cancelled_at_ms)
     events.publish(run.event_journal, EventType.RUN_FINISHED, {
         terminal_state=RunState.CANCELLED,
@@ -633,6 +734,175 @@ function M.cancel(registry, run_id, owner_capability, reason, context)
     }, cancelled_at_ms)
     registry.latest_terminal_results[run.project_id] = run.run_id
     return {cancelled=true, identity=public_identity(run), run=run}
+end
+
+---Cancels one capability-owned queued run without native cleanup.
+---@param registry table
+---@param request table
+---@param context table
+---@return table
+function M.cancel(registry, request, context)
+    local run = authorize_owner(registry, request, 'cancel')
+    assert(type(request.reason) == 'string' and request.reason ~= '' and
+        #request.reason <= 1024,
+        'cancel reason must be a nonempty bounded string')
+    assert(run.state == RunState.QUEUED and not run.terminal,
+        'only a queued run can be cancelled')
+    return cancel_queued(registry, run, request.reason, run.owner_kind,
+        current_time(context))
+end
+
+---Cancels one queued run through authorized operator recovery.
+---@param registry table
+---@param request table
+---@param context table
+---@return table
+function M.operator_cancel(registry, request, context)
+    local run = exact_run(registry, request, 'operator cancel')
+    assert(run.state == RunState.QUEUED and not run.terminal,
+        'only a queued run can be force-cancelled')
+    assert(type(request.reason) == 'string' and request.reason ~= '' and
+        #request.reason <= 1024,
+        'operator cancel reason must be a nonempty bounded string')
+    assert(type(request.authority) == 'table',
+        'operator cancel requires operator authority')
+    events.copy_json(request.authority, 'operator cancel authority')
+    assert(type(context.authorize_operator) == 'function',
+        'operator cancel requires an authority verifier')
+    local authorized, authority_label = context.authorize_operator(
+        request.authority, 'cancel', run)
+    assert(authorized == true, authority_label or
+        'operator cancel authority was rejected')
+    local timestamp_ms = current_time(context)
+    events.publish(run.event_journal, EventType.DIAGNOSTIC_RECORDED, {
+        kind='operator_cancel',
+        content={
+            reason=request.reason,
+            authority=tostring(authority_label or 'authorized operator'),
+        },
+    }, timestamp_ms)
+    return cancel_queued(registry, run, request.reason,
+        'authorized operator', timestamp_ms)
+end
+
+---Cancels every expired external queue lease without native cleanup.
+---@param registry table
+---@param context table
+---@return table[]
+function M.expire_due_queue(registry, context)
+    local timestamp_ms = current_time(context)
+    local expired = {}
+    local index = 1
+    while index <= #registry.queue do
+        local run = assert(registry.runs[registry.queue[index]],
+            'scheduler queue references an unknown run')
+        local lease = run.queue_lease
+        if run.owner_kind == OwnerKind.EXTERNAL and lease.active and
+                timestamp_ms >= lease.expires_at_ms then
+            lease.expired = true
+            local reason = ('queue lease expired after %d ms')
+                :format(lease.timeout_ms)
+            local outcome = cancel_queued(registry, run, reason,
+                run.owner_kind, timestamp_ms)
+            table.insert(expired, outcome)
+        else
+            index = index + 1
+        end
+    end
+    return expired
+end
+
+---Renews the applicable external queue or execution lease.
+---@param registry table
+---@param request table
+---@param context table
+---@return table
+function M.renew(registry, request, context)
+    local run = authorize_owner(registry, request, 'lease renewal')
+    assert(run.owner_kind == OwnerKind.EXTERNAL,
+        'only an external owner renews a caller lease')
+    assert(not run.terminal,
+        'a terminal run does not own a renewable lease')
+    local lease
+    if run.state == RunState.QUEUED then
+        lease = run.queue_lease
+    elseif ACTIVE_STATES[run.state] then
+        lease = run.execution_lease
+    else
+        error('run state does not own a renewable lease')
+    end
+    assert(lease.active and not lease.expiring,
+        'run lease is not active')
+    local renewed_at_ms = current_time(context)
+    assert(renewed_at_ms < lease.expires_at_ms,
+        'run lease has already expired')
+    lease.renewed_at_ms = renewed_at_ms
+    lease.expires_at_ms = renewed_at_ms + lease.timeout_ms
+    return run
+end
+
+---Renews one service-owned in-process execution heartbeat.
+---@param registry table
+---@param request table
+---@param context table
+---@return table
+function M.heartbeat(registry, request, context)
+    assert(type(request) == 'table',
+        'service heartbeat request must be a table')
+    assert(request.service_instance_id == registry.service_instance_id,
+        'service heartbeat service identity does not match')
+    local run = assert(registry.runs[request.run_id],
+        'automation run was not found: ' .. tostring(request.run_id))
+    assert(run.project_id == request.project_id,
+        'service heartbeat project identity does not match run')
+    assert(run.generation == request.generation,
+        'service heartbeat generation does not match run')
+    validate_run_identity(registry, run)
+    assert(run.owner_kind == OwnerKind.IN_PROCESS,
+        'service heartbeat requires an in-process-owned run')
+    assert(ACTIVE_STATES[run.state] and not run.terminal,
+        'service heartbeat requires an active run')
+    local lease = run.execution_lease
+    assert(lease.active and lease.service_owned,
+        'in-process execution lease is not active')
+    local renewed_at_ms = current_time(context)
+    lease.renewed_at_ms = renewed_at_ms
+    lease.expires_at_ms = renewed_at_ms + lease.timeout_ms
+    return run
+end
+
+---Claims one expired active external lease for emergency abort.
+---@param registry table
+---@param context table
+---@return table|nil
+function M.claim_expired_active(registry, context)
+    if registry.active_run_id == nil then return nil end
+    local run = assert(registry.runs[registry.active_run_id],
+        'active executor references an unknown run')
+    local lease = run.execution_lease
+    if run.owner_kind ~= OwnerKind.EXTERNAL or not lease.active or
+            current_time(context) < lease.expires_at_ms then
+        return nil
+    end
+    lease.active = false
+    lease.expired = true
+    lease.expiring = true
+    return run
+end
+
+---Authorizes a capability-owned active run for normal abort.
+---@param registry table
+---@param request table
+---@return table
+function M.authorize_abort(registry, request)
+    local run = authorize_owner(registry, request, 'abort')
+    assert(type(request.reason) == 'string' and request.reason ~= '' and
+        #request.reason <= 1024,
+        'abort reason must be a nonempty bounded string')
+    assert(registry.active_run_id == run.run_id and
+        ACTIVE_STATES[run.state] and not run.terminal,
+        'only the active run can be aborted')
+    return run
 end
 
 ---Finishes and releases the active executor generation.
@@ -732,26 +1002,100 @@ function M.recover_executor(registry, request, context)
     return {recovered=true}
 end
 
----Releases one terminal project reservation for the version 1 adapter.
----The retained run and journal remain observable in the service registry.
+---Acknowledges one exact owner-retained terminal result after persistence.
 ---@param registry table
----@param run_id string
----@param generation integer
----@param owner_capability string
+---@param request table
+---@param context table
 ---@return table
-function M.acknowledge_compatibility(registry, run_id, generation,
-        owner_capability)
-    local run = assert(registry.runs[run_id],
-        'automation run was not found: ' .. tostring(run_id))
-    validate_run_identity(registry, run)
-    assert(run.generation == generation,
-        'terminal generation does not match acknowledgement')
-    assert(run.owner_capability == owner_capability,
-        'terminal owner capability does not match acknowledgement')
+function M.acknowledge(registry, request, context)
+    local run = authorize_owner(registry, request, 'acknowledgement')
     assert(run.terminal and TERMINAL_STATES[run.state] == true,
         'only a terminal run can be acknowledged')
+    assert(run.acknowledged ~= true and run.discarded ~= true,
+        'terminal run has already been released')
+    local persistence = request.persistence
+    assert(type(persistence) == 'table' and
+        persistence.succeeded == true,
+        'acknowledgement requires successful persistence')
+    assert(persistence.policy == run.result_policy,
+        'acknowledgement persistence policy does not match run')
+    if run.result_policy == ResultPolicy.FILE then
+        assert(persistence.result_path == run.result_path,
+            'acknowledgement result path does not match run')
+    end
     run.acknowledged = true
+    run.acknowledged_at_ms = current_time(context)
     registry.projects[run.project_id].outstanding_run_id = nil
+    return run
+end
+
+---Releases one exact retained terminal result through operator authority.
+---@param registry table
+---@param request table
+---@param context table
+---@return table
+function M.discard(registry, request, context)
+    local run = exact_run(registry, request, 'discard')
+    assert(run.terminal and TERMINAL_STATES[run.state] == true,
+        'only a terminal run can be discarded')
+    assert(run.acknowledged ~= true and run.discarded ~= true,
+        'terminal run has already been released')
+    assert(type(request.reason) == 'string' and request.reason ~= '' and
+        #request.reason <= 1024,
+        'discard reason must be a nonempty bounded string')
+    assert(type(request.authority) == 'table',
+        'discard requires operator authority')
+    events.copy_json(request.authority, 'discard operator authority')
+    assert(type(context.authorize_operator) == 'function',
+        'discard requires an operator authority verifier')
+    local authorized, authority_label = context.authorize_operator(
+        request.authority, 'discard', run)
+    assert(authorized == true, authority_label or
+        'discard operator authority was rejected')
+    local discarded_at_ms = current_time(context)
+    events.publish(run.event_journal, EventType.DIAGNOSTIC_RECORDED, {
+        kind='operator_discard',
+        content={
+            reason=request.reason,
+            authority=tostring(authority_label or 'authorized operator'),
+        },
+    }, discarded_at_ms)
+    run.discarded = true
+    run.discarded_at_ms = discarded_at_ms
+    run.discard_reason = request.reason
+    registry.projects[run.project_id].outstanding_run_id = nil
+    return run
+end
+
+---Authorizes an operator recovery abort without impersonating the owner.
+---@param registry table
+---@param request table
+---@param context table
+---@return table
+function M.authorize_operator_abort(registry, request, context)
+    local run = exact_run(registry, request, 'operator abort')
+    assert(registry.active_run_id == run.run_id and
+        ACTIVE_STATES[run.state] and not run.terminal,
+        'only the active run can be force-aborted')
+    assert(type(request.reason) == 'string' and request.reason ~= '' and
+        #request.reason <= 1024,
+        'operator abort reason must be a nonempty bounded string')
+    assert(type(request.authority) == 'table',
+        'operator abort requires operator authority')
+    events.copy_json(request.authority, 'operator abort authority')
+    assert(type(context.authorize_operator) == 'function',
+        'operator abort requires an authority verifier')
+    local authorized, authority_label = context.authorize_operator(
+        request.authority, 'abort', run)
+    assert(authorized == true, authority_label or
+        'operator abort authority was rejected')
+    events.publish(run.event_journal, EventType.DIAGNOSTIC_RECORDED, {
+        kind='operator_abort',
+        content={
+            reason=request.reason,
+            authority=tostring(authority_label or 'authorized operator'),
+        },
+    }, current_time(context))
     return run
 end
 

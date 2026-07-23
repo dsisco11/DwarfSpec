@@ -1,6 +1,7 @@
 -- Immutable public snapshots derived from service-owned automation state.
 
 local events = require('dwarfspec.automation.events')
+local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local schemas = require('dwarfspec.automation.schemas')
 
 local M = {}
@@ -62,7 +63,10 @@ function M.run(run, registry)
         last_sequence=last_sequence(run),
         queue_lease=run.queue_lease or {active=false},
         execution_lease=run.execution_lease or {active=false},
-        owner_kind=run.owner_kind or 'unknown',
+        owner_kind=run.owner_kind or OwnerKind.EXTERNAL,
+        acknowledged=run.acknowledged == true,
+        discarded=run.discarded == true,
+        terminal_reason=run.terminal_reason,
         cleanup_confirmed=run.cleanup_confirmed == true,
         cleanup_reason=run.cleanup_reason,
         mount_cleanup_verified=run.mount_cleanup_verified == true,

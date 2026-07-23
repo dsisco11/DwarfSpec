@@ -114,25 +114,39 @@ describe('legacy automation entrypoint contract', function()
         assert.matches('DWARFSPEC protocol=1 ' ..
             'run_id=entrypoint-contract state=starting generation=1',
             lines[1], 1, true)
-        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[2])
+        assert.matches('DWARFSPEC_OWNER owner-', lines[2], 1, true)
+        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[3])
         assert.equals('dwarfspec.run.v1', encoded[1].schema)
         assert.equals(1, encoded[1].protocol)
 
         lines = {}
         assert(loadfile(root .. '/tests/automation/support/abort.lua'))(
-            'entrypoint-contract')
+            'entrypoint-contract', run.owner_capability)
 
         assert.is_nil(registry.active_run_id)
         assert.equals(run.run_id,
             registry.latest_terminal_results[run.project_id])
         assert.equals('aborted', run.state)
         assert.is_true(run.cleanup_confirmed)
-        assert.is_true(run.terminal_observed)
+        assert.is_false(run.terminal_observed)
+        assert.equals(run.run_id,
+            registry.projects[run.project_id].outstanding_run_id)
         assert.matches('DWARFSPEC protocol=1 ' ..
             'run_id=entrypoint-contract state=aborted generation=1',
             lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[2])
         assert.equals('dwarfspec.run.v1', encoded[2].schema)
         assert.equals(1, encoded[2].protocol)
+
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/acknowledge.lua'))(
+            'entrypoint-contract', tostring(run.generation),
+            run.owner_capability)
+        assert.is_true(run.acknowledged)
+        assert.is_nil(registry.projects[run.project_id].outstanding_run_id)
+        assert.matches('acknowledged=true', lines[1], 1, true)
+        assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[2])
+        assert.equals('dwarfspec.run.v1', encoded[3].schema)
     end)
 end)

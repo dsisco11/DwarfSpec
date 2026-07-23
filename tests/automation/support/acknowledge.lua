@@ -1,14 +1,17 @@
--- Aborts one owned queued or suspended in-process automation run.
+-- Acknowledges one exact terminal generation after owner persistence succeeds.
 
-local run_id, owner_capability = ...
+local run_id, generation_text, owner_capability = ...
 assert(run_id, 'run id argument is required')
+local generation = assert(tonumber(generation_text),
+    'generation argument must be numeric')
+assert(owner_capability, 'owner capability argument is required')
 
 ---Configures pure-Lua module lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
 local function package_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
     local lua_root = source:match(
-        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]abort%.lua$')
+        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]acknowledge%.lua$')
     if lua_root then
         local separator = package.config:sub(1, 1)
         package.path = lua_root .. separator .. '?.lua;' .. lua_root ..
@@ -16,7 +19,8 @@ local function package_root()
         return lua_root, lua_root
     end
     local root = source:match(
-        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]abort%.lua$')
+        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]' ..
+            'acknowledge%.lua$')
     root = assert(root, 'could not derive DwarfSpec root from ' .. source)
     package.path = root .. '/src/?.lua;' .. root ..
         '/src/?/init.lua;' .. package.path
@@ -45,7 +49,8 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local run = host.abort(run_id, owner_capability)
-print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
+local run = host.acknowledge(run_id, generation, owner_capability)
+print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d ' ..
+    'acknowledged=true')
     :format(run.protocol_version, run.run_id, run.state, run.generation))
 print('DWARFSPEC_JSON ' .. host.encode_report(run))
