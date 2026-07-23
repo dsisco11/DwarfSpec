@@ -1,11 +1,11 @@
 rockspec_format = "3.0"
 
 package = "dwarfspec"
-version = "0.1.2-1"
+version = "0.1.3-1"
 
 source = {
     url = "git+https://github.com/dsisco11/DwarfSpec.git",
-    tag = "v0.1.2",
+    tag = "v0.1.3",
 }
 
 description = {

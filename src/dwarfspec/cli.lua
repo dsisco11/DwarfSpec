@@ -7,11 +7,11 @@ local project = require('dwarfspec.project')
 local runner = require('dwarfspec.runner')
 
 local M = {
-    version='0.1.2',
+    version='0.1.3',
 }
 
 local HELP = [[
-DwarfSpec 0.1.2 - live DFHack automation with in-process Busted
+DwarfSpec 0.1.3 - live DFHack automation with in-process Busted
 
 Usage:
   dwarfspec
