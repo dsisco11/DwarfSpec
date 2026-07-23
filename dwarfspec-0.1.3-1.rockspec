@@ -68,6 +68,10 @@ build = {
             "src/dwarfspec/automation/result_states.lua",
         ["dwarfspec.automation.run_states"] =
             "src/dwarfspec/automation/run_states.lua",
+        ["dwarfspec.automation.scheduler"] =
+            "src/dwarfspec/automation/scheduler.lua",
+        ["dwarfspec.automation.scheduler_failure_kinds"] =
+            "src/dwarfspec/automation/scheduler_failure_kinds.lua",
         ["dwarfspec.automation.schemas"] =
             "src/dwarfspec/automation/schemas.lua",
         ["dwarfspec.automation.service"] =
@@ -91,7 +95,8 @@ build = {
         ["dwarfspec.automation.overlay_registration"] = "tests/automation/support/overlay_registration.lua",
         ["dwarfspec.automation.pointer_adapter"] = "tests/automation/support/pointer_adapter.lua",
         ["dwarfspec.automation.project"] = "tests/automation/support/project.lua",
-        ["dwarfspec.automation.scheduler"] = "tests/automation/support/scheduler.lua",
+        ["dwarfspec.automation.coroutine_scheduler"] =
+            "tests/automation/support/scheduler.lua",
         ["dwarfspec.automation.system_adapter"] = "tests/automation/support/system_adapter.lua",
     },
     install = {

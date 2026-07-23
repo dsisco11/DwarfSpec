@@ -561,7 +561,7 @@ local function begin_queued_run(package_root, project_root, registry, run)
     run.started_ms = dfhack.getTickCount()
     run.started_frame = current_frame()
     local scheduler_module = load_automation_module(package_root,
-        'dwarfspec.automation.scheduler',
+        'dwarfspec.automation.coroutine_scheduler',
         'tests/automation/support/scheduler.lua')
     local scheduler
     scheduler = scheduler_module.new(run, {

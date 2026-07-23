@@ -228,42 +228,47 @@ Phase 2 exit gate:
 Goal: accept concurrent project requests while preserving one serialized live
 executor.
 
-☐ Add `dwarfspec.automation.scheduler` ownership of the global FIFO queue,
-  active executor slot, and quarantine state.
-☐ Make `submit(project_id, request)` validate the entire request before
-  modifying service state.
-☐ Assign authoritative run IDs, generations, and opaque owner capabilities at
-  admission.
-☐ Support high-entropy project-scoped request keys so retries return the same
+✔ Add `dwarfspec.automation.scheduler` ownership of the global FIFO queue,
+  active executor slot, and quarantine state. @done(26-07-23 10:28)
+✔ Make `submit(project_id, request)` validate the entire request before
+  modifying service state. @done(26-07-23 10:28)
+✔ Assign authoritative run IDs, generations, and opaque owner capabilities at
+  admission. @done(26-07-23 10:28)
+✔ Support high-entropy project-scoped request keys so retries return the same
   run and capability without duplicate queue entries.
-☐ Return `project_busy` and the existing identity for a second outstanding run
-  from the same project.
-☐ Reserve canonical file-backed result paths and return `result_path_busy` when
-  another outstanding run owns the same path.
-☐ Admit a different project's run while another project is queued, active, or
-  waiting for terminal acknowledgement.
-☐ Derive queue positions from current FIFO state without publishing an event
-  for every position change.
-☐ Revalidate project registration, compatibility, selection, and paths before
-  activation.
-☐ Cancel a queued run without invoking native cleanup and publish its complete
-  terminal event sequence.
-☐ Release the executor after confirmed cleanup even when the previous project
-  still has an unacknowledged terminal result.
-☐ Quarantine all activation after unconfirmed cleanup while keeping queued runs
-  observable and cancellable.
-☐ Require explicit clean-state proof before `recover_executor` clears
-  quarantine.
+  @done(26-07-23 10:28)
+✔ Return `project_busy` and the existing identity for a second outstanding run
+  from the same project. @done(26-07-23 10:28)
+✔ Reserve canonical file-backed result paths and return `result_path_busy` when
+  another outstanding run owns the same path. @done(26-07-23 10:28)
+✔ Admit a different project's run while another project is queued, active, or
+  waiting for terminal acknowledgement. @done(26-07-23 10:28)
+✔ Derive queue positions from current FIFO state without publishing an event
+  for every position change. @done(26-07-23 10:28)
+✔ Revalidate project registration, compatibility, selection, and paths before
+  activation. @done(26-07-23 10:28)
+✔ Cancel a queued run without invoking native cleanup and publish its complete
+  terminal event sequence. @done(26-07-23 10:28)
+✔ Release the executor after confirmed cleanup even when the previous project
+  still has an unacknowledged terminal result. @done(26-07-23 10:28)
+✔ Quarantine all activation after unconfirmed cleanup while keeping queued runs
+  observable and cancellable. @done(26-07-23 10:28)
+✔ Require explicit clean-state proof before `recover_executor` clears
+  quarantine. @done(26-07-23 10:28)
 
 Phase 3 exit gate:
 
-☐ Unit tests prove FIFO ordering across at least three projects.
-☐ Unit tests prove one project cannot flood or reorder the queue.
-☐ Unit tests prove idempotent retry, same-project rejection, cross-project
+✔ Unit tests prove FIFO ordering across at least three projects.
+  @done(26-07-23 10:28)
+✔ Unit tests prove one project cannot flood or reorder the queue.
+  @done(26-07-23 10:28)
+✔ Unit tests prove idempotent retry, same-project rejection, cross-project
   admission, result-path collision, cancellation, and quarantine behavior.
-☐ Unit tests prove at most one run owns the executor in every transition.
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes.
+  @done(26-07-23 10:28)
+✔ Unit tests prove at most one run owns the executor in every transition.
+  @done(26-07-23 10:28)
+✔ Lua syntax and formatting checks pass. @done(26-07-23 10:28)
+✔ The full unit suite passes. @done(26-07-23 10:28)
 
 ## Phase 4: Service-owned host execution and cleanup
 
@@ -517,7 +522,7 @@ one evidence category as a substitute for another.
 | 0 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 91 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 156 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; exit 6, 20 successes/1 failure/0 errors/0 pending, cleanup confirmed; existing `complete_screen_mount_live_spec.lua:194` observed `true`, expected `false` | not required | Workspace `D:\CODE\DFHack\DwarfSpec`, `origin=https://github.com/dsisco11/DwarfSpec.git`; native result `.test-results/dwarfspec/dwarfspec-93409734-57826f4c.json` |
 | 1 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 94 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 168 successes, pass | not required; supplementary full live run passed 21/21 with cleanup confirmed | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | `src/dwarfspec/automation/{service,projects}.lua`; `tests/unit/automation_service_spec.lua`; native result `.test-results/dwarfspec/dwarfspec-104270906-3877eddc.json` |
 | 2 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 107 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 190 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | service, scheduler, run, event, transport, and result fixtures validated; immutable `EventType`, `RunState`, `ResultState`, `TestStatus`, `ResultPolicy`, and `RunnerFailureKind`; version 1 report transition retained |
-| 3 | pending | pending | not required | not required | |
+| 3 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 110 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 196 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; authoritative scheduler module contract passed | global FIFO across three projects; idempotent admission; project and result-path exclusion; cross-project active and retained-terminal admission; cancellation; cleanup-gated release; quarantine and identity-bound recovery |
 | 4 | pending | pending | pending | not required | |
 | 5 | pending | pending | pending | not required | |
 | 6 | pending | pending | pending | not required | |
@@ -587,6 +592,41 @@ Phase 2 structured-contract evidence:
 - Checked-in fixtures under `tests/framework/fixtures/service_v2/` validate
   service, scheduler, run, event, transport, and every representative result
   outcome through the production readers.
+
+Phase 3 scheduler evidence:
+
+- `dwarfspec.automation.scheduler` is the only production module that mutates
+  the established registry queue, active executor identity, or quarantine
+  state after bootstrap. `dwarfspec.automation.service` remains the public
+  mutation boundary.
+- `automation_service_scheduler_spec.lua` proves deterministic FIFO activation
+  across three registered projects, including admission while another project
+  is active and while its terminal result remains unacknowledged.
+- The scheduler tests prove project-scoped idempotent retries return the same
+  run and owner capability, a changed request cannot reuse the key, a project
+  cannot add or reorder a second outstanding run, and identical canonical
+  result files remain reserved through terminal retention.
+- Submission validation tests prove malformed selections, unsafe runtime
+  values, and project-escaping relative result paths leave generation, runs,
+  and queue state unchanged.
+- Activation tests revalidate registration, compatibility, deterministic
+  selection, project and result paths, and the injected catalog-selection
+  contract before assigning the executor.
+- Cancellation tests prove the queued run publishes `run.cancelled` followed
+  by `run.finished`, confirms that native cleanup was unnecessary, and changes
+  derived queue positions without position-change events.
+- Executor tests assert at most one run owns every observed transition,
+  confirmed cleanup releases the executor despite terminal retention, and
+  unconfirmed cleanup blocks activation while preserving observation,
+  admission, and cancellation.
+- Quarantine recovery tests require the exact service, run, and generation,
+  plus an explicit JSON-safe proof accepted by an authoritative clean-state
+  verifier. Rejected or stale proof leaves quarantine unchanged.
+- `package_contract_spec.lua` proves the service scheduler and immutable
+  scheduler failure identifiers resolve from `src/dwarfspec/automation/` and
+  are packaged from those authoritative paths. The version 1 coroutine
+  scheduler remains under its explicit transitional module name until host
+  execution moves in Phase 4.
 
 ## Final acceptance
 

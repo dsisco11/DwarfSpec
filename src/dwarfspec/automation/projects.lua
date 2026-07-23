@@ -184,6 +184,42 @@ function M.normalize_root(root, filesystem)
     return candidate, identity
 end
 
+---Returns a lexically normalized absolute file path and comparison identity.
+---The path need not exist; filesystem aliases are not resolved.
+---@param path string
+---@param base_root string
+---@param filesystem table|nil
+---@return string, string
+function M.normalize_file_path(path, base_root, filesystem)
+    assert(type(path) == 'string' and path ~= '',
+        'file path must be a nonempty string')
+    assert(type(base_root) == 'string' and base_root ~= '',
+        'file path base root must be a nonempty string')
+    local candidate = path
+    local relative = not is_absolute(candidate:gsub('\\', '/'))
+    if relative then
+        candidate = base_root .. '/' .. candidate
+    end
+    candidate = normalize_absolute_path(candidate)
+    assert(is_absolute(candidate),
+        'normalized file path must be absolute: ' .. candidate)
+    local normalized_base = normalize_absolute_path(base_root)
+    local containment_path = candidate
+    local containment_base = normalized_base
+    if case_insensitive_paths(filesystem) then
+        containment_path = containment_path:lower()
+        containment_base = containment_base:lower()
+    end
+    if relative then
+        assert(containment_path:sub(1, #containment_base + 1) ==
+            containment_base .. '/',
+            'relative file path must remain beneath its project root')
+    end
+    local identity = candidate
+    if case_insensitive_paths(filesystem) then identity = identity:lower() end
+    return candidate, identity
+end
+
 ---Returns a default display name derived from one normalized root.
 ---@param normalized_root string
 ---@return string
@@ -315,6 +351,7 @@ function M.register(projects, request, context)
         result_path=normalized.result_path,
         result_policy=normalized.result_policy,
         client_compatibility=normalized.client_compatibility,
+        request_keys=existing and existing.request_keys or {},
         registered_at=existing and existing.registered_at or now_ms,
         refreshed_at=now_ms,
         outstanding_run_id=existing and existing.outstanding_run_id or nil,

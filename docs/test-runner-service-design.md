@@ -200,7 +200,8 @@ that authority belongs to its separate design.
 ### Closed contract enums
 
 Service and runner producers use immutable `RunState`, `ResultState`,
-`TestStatus`, `ResultPolicy`, `RunnerFailureKind`, and `EventType` members.
+`TestStatus`, `ResultPolicy`, `SchedulerFailureKind`, `RunnerFailureKind`, and
+`EventType` members.
 Each member is its stable wire string, so producers do not need a separate
 token-to-identifier serialization step. Producers and state-transition logic
 reference named enum members instead of repeating string literals. Readers
@@ -913,6 +914,7 @@ The implementation is expected to converge on boundaries similar to:
 | `dwarfspec.automation.service` | Public multi-project service operations and registry compatibility. |
 | `dwarfspec.automation.projects` | Project identity, registration, compatibility, and configuration. |
 | `dwarfspec.automation.scheduler` | Admission queue, leases, activation, executor release, and quarantine. |
+| `dwarfspec.automation.scheduler_failure_kinds` | Immutable scheduler conflict and blocking identifiers. |
 | `dwarfspec.automation.events` | Event construction, validation, copying, sequencing, and cursor reads. |
 | `dwarfspec.automation.event_types` | Immutable identifiers for all supported structured event types. |
 | `dwarfspec.automation.run_states` | Immutable service run-state identifiers. |

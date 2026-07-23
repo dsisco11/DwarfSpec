@@ -2,6 +2,7 @@
 
 local projects = require('dwarfspec.automation.projects')
 local events = require('dwarfspec.automation.events')
+local scheduler = require('dwarfspec.automation.scheduler')
 local schemas = require('dwarfspec.automation.schemas')
 local snapshots = require('dwarfspec.automation.snapshots')
 
@@ -57,6 +58,54 @@ end
 ---@return table|nil
 local function project_filesystem(dependencies)
     return dependencies and dependencies.filesystem or nil
+end
+
+---Returns one service-assigned run identifier.
+---@param generation integer
+---@param dependencies table|nil
+---@return string
+local function new_run_id(generation, dependencies)
+    if dependencies and dependencies.new_run_id then
+        return dependencies.new_run_id(generation)
+    end
+    return ('run-%d-%08x'):format(
+        generation, math.random(0, 0x7fffffff))
+end
+
+---Returns one opaque high-entropy owner capability.
+---@param dependencies table|nil
+---@return string
+local function new_owner_capability(dependencies)
+    if dependencies and dependencies.new_owner_capability then
+        return dependencies.new_owner_capability()
+    end
+    return ('owner-%08x-%08x-%08x-%08x'):format(
+        math.random(0, 0x7fffffff),
+        math.random(0, 0x7fffffff),
+        math.random(0, 0x7fffffff),
+        math.random(0, 0x7fffffff))
+end
+
+---Returns dependencies used by stateless scheduler mutations.
+---@param dependencies table|nil
+---@return table
+local function scheduler_context(dependencies)
+    return {
+        filesystem=project_filesystem(dependencies),
+        now_ms=function()
+            return now_ms(dependencies)
+        end,
+        new_run_id=function(generation)
+            return new_run_id(generation, dependencies)
+        end,
+        new_owner_capability=function()
+            return new_owner_capability(dependencies)
+        end,
+        validate_activation=dependencies and
+            dependencies.validate_activation or nil,
+        verify_clean_state=dependencies and
+            dependencies.verify_clean_state or nil,
+    }
 end
 
 ---Validates a service bootstrap request without changing runtime state.
@@ -299,6 +348,99 @@ end
 ---@return table
 function M.scheduler_snapshot(dependencies)
     return snapshots.scheduler(require_registry(dependencies))
+end
+
+---Admits one project run to the global scheduler FIFO.
+---@param project_id string
+---@param request table
+---@param dependencies table|nil
+---@return table
+function M.submit(project_id, request, dependencies)
+    local registry = require_registry(dependencies)
+    local outcome = scheduler.submit(registry, project_id, request,
+        scheduler_context(dependencies))
+    local response = {
+        accepted=outcome.accepted,
+        reused=outcome.reused,
+        kind=outcome.kind,
+        reason=outcome.reason,
+        identity=outcome.identity,
+        snapshot=snapshots.run(outcome.run, registry),
+    }
+    if outcome.accepted then
+        response.owner_capability = outcome.owner_capability
+    end
+    return response
+end
+
+---Activates the current FIFO head when the executor is available.
+---@param dependencies table|nil
+---@return table
+function M.activate_next(dependencies)
+    local registry = require_registry(dependencies)
+    local outcome = scheduler.activate_next(registry,
+        scheduler_context(dependencies))
+    return {
+        activated=outcome.activated,
+        kind=outcome.kind,
+        reason=outcome.reason,
+        identity=outcome.identity,
+        snapshot=outcome.run and snapshots.run(outcome.run, registry) or nil,
+    }
+end
+
+---Cancels one owned queued run without invoking native cleanup.
+---@param run_id string
+---@param owner_capability string
+---@param reason string
+---@param dependencies table|nil
+---@return table
+function M.cancel(run_id, owner_capability, reason, dependencies)
+    local registry = require_registry(dependencies)
+    local outcome = scheduler.cancel(registry, run_id, owner_capability,
+        reason, scheduler_context(dependencies))
+    return {
+        cancelled=outcome.cancelled,
+        identity=outcome.identity,
+        snapshot=snapshots.run(outcome.run, registry),
+    }
+end
+
+---Records terminal cleanup and releases the active executor generation.
+---The service-owned host will call this seam after native lifecycle handling.
+---@param run_id string
+---@param generation integer
+---@param terminal_state DwarfSpecRunState
+---@param cleanup_confirmed boolean
+---@param reason string|nil
+---@param dependencies table|nil
+---@return table
+function M.complete_active(run_id, generation, terminal_state,
+        cleanup_confirmed, reason, dependencies)
+    local registry = require_registry(dependencies)
+    local outcome = scheduler.finish_active(registry, run_id, generation,
+        terminal_state, cleanup_confirmed, reason,
+        scheduler_context(dependencies))
+    return {
+        finished=outcome.finished,
+        identity=outcome.identity,
+        snapshot=snapshots.run(outcome.run, registry),
+        scheduler=snapshots.scheduler(registry),
+    }
+end
+
+---Clears executor quarantine after explicit authoritative clean-state proof.
+---@param request table
+---@param dependencies table|nil
+---@return table
+function M.recover_executor(request, dependencies)
+    local registry = require_registry(dependencies)
+    local outcome = scheduler.recover_executor(registry, request,
+        scheduler_context(dependencies))
+    return {
+        recovered=outcome.recovered,
+        scheduler=snapshots.scheduler(registry),
+    }
 end
 
 return M

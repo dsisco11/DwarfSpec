@@ -106,6 +106,9 @@ describe('DwarfSpec package contract', function()
                 result_states=
                     'src/dwarfspec/automation/result_states.lua',
                 run_states='src/dwarfspec/automation/run_states.lua',
+                scheduler='src/dwarfspec/automation/scheduler.lua',
+                scheduler_failure_kinds=
+                    'src/dwarfspec/automation/scheduler_failure_kinds.lua',
                 schemas='src/dwarfspec/automation/schemas.lua',
                 service='src/dwarfspec/automation/service.lua',
                 snapshots='src/dwarfspec/automation/snapshots.lua',
@@ -131,6 +134,8 @@ describe('DwarfSpec package contract', function()
                 'dwarfspec.automation.result_policies',
                 'dwarfspec.automation.result_states',
                 'dwarfspec.automation.run_states',
+                'dwarfspec.automation.scheduler',
+                'dwarfspec.automation.scheduler_failure_kinds',
                 'dwarfspec.automation.schemas',
                 'dwarfspec.automation.service',
                 'dwarfspec.automation.snapshots',
