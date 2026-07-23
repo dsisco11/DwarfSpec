@@ -143,6 +143,53 @@ local function get_registry()
     return registry
 end
 
+---Verifies that a quarantined generation owns no remaining live resources.
+---@param proof table
+---@return boolean, string
+local function verify_executor_clean_state(proof)
+    if type(proof) ~= 'table' or proof.local_dfhack_run ~= true then
+        return false, 'executor recovery requires local dfhack-run proof'
+    end
+    local registry = get_registry()
+    local quarantine = registry.quarantine
+    if type(quarantine) ~= 'table' or quarantine.active ~= true then
+        return false, 'automation executor is not quarantined'
+    end
+    local run = registry.runs[quarantine.run_id]
+    if type(run) ~= 'table' or run.generation ~= quarantine.generation then
+        return false, 'quarantined automation generation was not found'
+    end
+    if registry.active_run_id ~= nil or not run.terminal then
+        return false, 'quarantined automation generation is still active'
+    end
+    local pending = run.cleanup_registry and
+        run.cleanup_module.pending_count(run.cleanup_registry) or 0
+    if pending ~= 0 or
+            run.cleanup_registry and run.cleanup_registry.cleaning then
+        return false, 'quarantined cleanup registry is not drained'
+    end
+    if run.coroutine ~= nil or run.scheduler ~= nil or
+            run.outstanding_wait ~= nil or
+            run.scheduled_timeout_id ~= nil then
+        return false, 'quarantined asynchronous execution remains active'
+    end
+    if run.mount_cleanup_probe ~= nil then
+        return false, 'quarantined mount cleanup probe remains active'
+    end
+    local mount = run.mount_cleanup_state
+    if mount and (mount.current_mount_id ~= nil or
+            mount.active_screen_count ~= 0 or mount.subject_count ~= 0 or
+            mount.pointer_active == true or mount.verified ~= true) then
+        return false, 'quarantined mount state is not clean'
+    end
+    local modules = run.module_environment_audit
+    if modules and (modules.restored ~= true or
+            modules.path_restored ~= true) then
+        return false, 'quarantined project module environment is not restored'
+    end
+    return true, 'quarantined generation has no remaining live resources'
+end
+
 ---Returns the filesystem surface used for service path validation.
 ---@return table|nil
 local function service_filesystem()
@@ -189,6 +236,7 @@ local function service_dependencies(run_id)
             return authorized, authorized and 'local dfhack-run operator' or
                 'local dfhack-run operator authority was rejected'
         end,
+        verify_clean_state=verify_executor_clean_state,
     }
     if run_id ~= nil then
         dependencies.new_run_id=function()
@@ -1050,6 +1098,24 @@ end
 ---@return table
 function M.scheduler_snapshot()
     return service.scheduler_snapshot(service_dependencies())
+end
+
+---Clears executor quarantine after authoritative live-state verification.
+---@param run_id string
+---@param generation integer
+---@param reason string
+---@return table
+function M.recover_executor(run_id, generation, reason)
+    local registry = get_registry()
+    local outcome = service.recover_executor({
+        service_instance_id=registry.service_instance_id,
+        run_id=run_id,
+        generation=generation,
+        reason=reason,
+        proof={local_dfhack_run=true},
+    }, service_dependencies())
+    M.activate_next()
+    return outcome
 end
 
 ---Aborts an owned queued or suspended run and invalidates its callbacks.

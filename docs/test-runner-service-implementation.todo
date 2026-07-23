@@ -468,42 +468,46 @@ Phase 7 exit gate:
 Goal: prove the supported concurrency contract against one real DFHack game
 instance.
 
-☐ Add a repeatable integration harness that can launch multiple project-local
+✔ Add a repeatable integration harness that can launch multiple project-local
   `dwarfspec run` commands against the same `dfhack-run` target.
-☐ Submit at least three projects concurrently and prove deterministic FIFO
-  activation with no overlapping executor ownership.
-☐ Prove queued projects remain observable while another project is active.
-☐ Prove cancelling a queued project does not alter the active project.
-☐ Prove an unacknowledged or persistence-blocked terminal project does not stop
-  another clean project's activation.
-☐ Prove cleanup failure quarantines activation for every project until explicit
-  clean-state recovery.
-☐ Prove queue-lease expiry and execution-lease expiry take their distinct
-  cancellation and abort paths.
-☐ Prove timeout, interruption, explicit abort, assertion failure, combined
+  @done(26-07-23 13:15)
+✔ Submit at least three projects concurrently and prove deterministic FIFO
+  activation with no overlapping executor ownership. @done(26-07-23 13:15)
+✔ Prove queued projects remain observable while another project is active.
+  @done(26-07-23 13:15)
+✔ Prove cancelling a queued project does not alter the active project.
+  @done(26-07-23 13:15)
+✔ Prove an unacknowledged or persistence-blocked terminal project does not stop
+  another clean project's activation. @done(26-07-23 13:15)
+✔ Prove cleanup failure quarantines activation for every project until explicit
+  clean-state recovery. @done(26-07-23 13:15)
+✔ Prove queue-lease expiry and execution-lease expiry take their distinct
+  cancellation and abort paths. @done(26-07-23 13:15)
+✔ Prove timeout, interruption, explicit abort, assertion failure, combined
   test-and-cleanup failure, and transport failure preserve their original
-  classifications and cleanup guarantees.
-☐ Prove project configuration, spec selection, custom commands, fixtures,
+  classifications and cleanup guarantees. @done(26-07-23 13:15)
+✔ Prove project configuration, spec selection, custom commands, fixtures,
   module paths, `package.loaded`, screens, pointers, pause state, waits, and
-  timers do not leak between consecutive projects.
-☐ Prove compatible adapter reload preserves registered, queued, active, and
-  retained state.
-☐ Prove an incompatible package or protocol client cannot replace the running
-  service.
-☐ Prove each project receives the correct stable result file and event journal
-  when spec names overlap.
-☐ Capture bounded diagnostics for any live failure before changing behavior or
-  retrying a fix.
+  timers do not leak between consecutive projects. @done(26-07-23 13:15)
+✔ Prove compatible adapter reload preserves registered, queued, active, and
+  retained state. @done(26-07-23 13:15)
+✔ Prove an incompatible package or protocol client cannot replace the running
+  service. @done(26-07-23 13:15)
+✔ Prove each project receives the correct stable result file and event journal
+  when spec names overlap. @done(26-07-23 13:15)
+✔ Capture bounded diagnostics for any live failure before changing behavior or
+  retrying a fix. @done(26-07-23 13:15)
 
 Phase 8 exit gate:
 
-☐ The multi-project integration harness passes repeatedly without ordering or
-  ownership flakes.
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes.
-☐ The full live automation suite passes.
-☐ Multi-project, lost-owner, quarantine, persistence-isolation, and module-
+✔ The multi-project integration harness passes repeatedly without ordering or
+  ownership flakes. @done(26-07-23 13:15)
+✔ Lua syntax and formatting checks pass. @done(26-07-23 13:15)
+✔ The full unit suite passes. @done(26-07-23 13:15)
+✔ The full live automation suite passes. @done(26-07-23 13:15)
+✔ Multi-project, lost-owner, quarantine, persistence-isolation, and module-
   isolation evidence is recorded separately in the evidence ledger.
+  @done(26-07-23 13:15)
 
 ## Phase 9: Packaging, documentation, and release readiness
 
@@ -561,7 +565,7 @@ one evidence category as a substitute for another.
 | 5 | pending | pending | pending | not required | |
 | 6 | pending | pending | pending | not required | |
 | 7 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 120 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 224 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; 21 successes/0 failures/0 errors/0 pending through `dwarfspec.transport.v2`, cleanup confirmed | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; all transport adapters present in module-list contract | Stable `tests/.test-results/dwarfspec/results.json`; `dwarfspec.result.v2`, 114 contiguous events from `run.queued` through `run.finished`, `dwarfspec.run.v2` host snapshot |
-| 8 | pending | pending | pending | not required | |
+| 8 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 136 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 224 successes, pass | 2026-07-23: `tools/Run-MultiProjectIntegration.ps1 -Iterations 2`; 14/14 scenarios across two repetitions, pass; `tools/Run-AutomationTests.ps1`; 21 successes/0 failures/0 errors/0 pending, cleanup confirmed | not required | Stable evidence `tests/.test-results/dwarfspec/multi-project-evidence.json`; three-project FIFO and non-overlap, queued observation/cancellation, retained result isolation, quarantine/recovery, distinct lease expiry, seven failure classifications, and module/resource isolation |
 | 9 | pending | pending | pending | pending | |
 
 Phase 0 characterization evidence:
@@ -727,6 +731,39 @@ Phase 7 transport and CLI evidence:
   Its stable result contained one `dwarfspec.run.v2` host snapshot and 114
   contiguous single-generation events from `run.queued` through
   `run.finished`, with cleanup confirmed.
+
+Phase 8 multi-project live evidence:
+
+- `tools/Run-MultiProjectIntegration.ps1 -Iterations 2` passed 14/14 recorded
+  scenarios across two complete repetitions against one `dfhack-run` target.
+  The stable machine-readable ledger is
+  `tests/.test-results/dwarfspec/multi-project-evidence.json`.
+- Three independent fixture projects, including one root with spaces, submitted
+  identically named specs concurrently. Both repetitions recorded strict
+  alpha, beta, gamma activation order and non-overlapping activation-to-finish
+  intervals, with queued beta and gamma visible while alpha owned the executor.
+- Queued cancellation preserved the active run and generation. An
+  unacknowledged terminal result remained retained for its project while a
+  different project activated, passed, persisted its own result, and was
+  acknowledged.
+- Injected cleanup failure quarantined the process-wide executor, blocked a
+  different project's activation, and required exact generation-bound recovery
+  after the host verified cleanup, coroutine, scheduler, wait, timer, mount,
+  subject, pointer, and module state were drained.
+- Queue-owner loss produced `cancelled` without activation. Execution-owner
+  loss produced `aborted` after activation. Timeout, interruption, explicit
+  abort, assertion, combined assertion-and-cleanup failure, and malformed
+  transport retained their distinct classifications and structured diagnostic
+  details.
+- Consecutive-project checks covered project configuration, exact spec
+  selection, project-local commands, unselected fixtures, support-module
+  identity, `package.path`, `package.loaded`, screens, subjects, pointers,
+  pause state, waits, and timers. Compatible reload preserved service identity
+  and live state; an incompatible protocol bootstrap was rejected without
+  replacing the registry.
+- Failed harness attempts wrote bounded diagnostics before correction. Harness
+  recovery is restricted to outstanding `hardening-*` runs owned by the three
+  fixture roots and does not release results belonging to unrelated projects.
 
 ## Final acceptance
 

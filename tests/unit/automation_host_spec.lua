@@ -223,6 +223,10 @@ describe('automation host ownership', function()
         assert.equals(1, aborted.mount_cleanup_state.active_screen_count)
         assert.matches('mount lifecycle verification failed',
             aborted.failure_details[1].message, 1, true)
+        assert.has_error(function()
+            host.recover_executor(aborted.run_id, aborted.generation,
+                'unsafe fixture recovery')
+        end, 'quarantined mount state is not clean')
     end)
 
     it('never confirms cleanup after an earlier cleanup action failed',
@@ -249,6 +253,11 @@ describe('automation host ownership', function()
             aborted.failure_details[1].message, 1, true)
         assert.matches('cleanup exploded', aborted.failure_details[1].message,
             1, true)
+        assert.is_true(host.scheduler_snapshot().quarantine.active)
+        local recovered = host.recover_executor(aborted.run_id,
+            aborted.generation, 'cleanup history reviewed')
+        assert.is_true(recovered.recovered)
+        assert.is_false(host.scheduler_snapshot().quarantine.active)
     end)
 
     it('builds a complete JSON-safe report for PowerShell consumption', function()

@@ -178,6 +178,8 @@ describe('DwarfSpec package contract', function()
                 discard='tests/automation/support/discard.lua',
                 event_read='tests/automation/support/events.lua',
                 recover='tests/automation/support/recover.lua',
+                recover_executor=
+                    'tests/automation/support/recover_executor.lua',
                 scheduler_status=
                     'tests/automation/support/scheduler_status.lua',
                 status='tests/automation/support/status.lua'}) do
