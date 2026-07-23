@@ -472,7 +472,10 @@ function M.submit(registry, project_id, request, context)
     }, admitted_at_ms)
     if registry.quarantine.active then
         events.publish(run.event_journal, EventType.SCHEDULER_BLOCKED, {
+            kind=SchedulerFailureKind.EXECUTOR_QUARANTINED,
             reason=registry.quarantine.reason,
+            blocking_run_id=registry.quarantine.run_id,
+            blocking_generation=registry.quarantine.generation,
         }, admitted_at_ms)
     end
 
@@ -541,6 +544,7 @@ local function reject_activation(registry, run, reason, timestamp_ms)
     run.cleanup_confirmed = true
     run.cleanup_reason = 'native execution was not started'
     events.publish(run.event_journal, EventType.SCHEDULER_BLOCKED, {
+        kind=SchedulerFailureKind.ACTIVATION_INVALID,
         reason=reason,
     }, timestamp_ms)
     events.publish(run.event_journal, EventType.RUN_FINISHED, {
@@ -964,7 +968,10 @@ function M.finish_active(registry, run_id, generation, terminal_state,
             local queued = registry.runs[queued_id]
             events.publish(queued.event_journal,
                 EventType.SCHEDULER_BLOCKED, {
+                    kind=SchedulerFailureKind.EXECUTOR_QUARANTINED,
                     reason=quarantine_reason,
+                    blocking_run_id=run_id,
+                    blocking_generation=generation,
                 }, finished_at_ms)
         end
     end

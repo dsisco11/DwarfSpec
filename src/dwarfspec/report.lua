@@ -5,6 +5,8 @@ local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
 local schemas = require('dwarfspec.automation.schemas')
 local RunState = require('dwarfspec.automation.run_states')
+local SchedulerFailureKind =
+    require('dwarfspec.automation.scheduler_failure_kinds')
 local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
 
 local PREFIX = 'DWARFSPEC_JSON '
@@ -257,6 +259,13 @@ local function format_event(event)
             payload.terminal_state,
             tostring(payload.cleanup_confirmed))
     elseif event.type == EventType.SCHEDULER_BLOCKED then
+        if payload.kind == SchedulerFailureKind.EXECUTOR_QUARANTINED then
+            return ('EXECUTOR_QUARANTINED: run %s generation %d left ' ..
+                'cleanup unconfirmed: %s. This run remains queued; press ' ..
+                'Ctrl+C and restart DFHack after confirming no live run is ' ..
+                'active'):format(payload.blocking_run_id,
+                    payload.blocking_generation, payload.reason)
+        end
         return 'SCHEDULER_BLOCKED ' .. payload.reason
     end
     return nil

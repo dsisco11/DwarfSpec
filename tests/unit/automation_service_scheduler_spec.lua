@@ -644,6 +644,9 @@ describe('multi-project automation service scheduler', function()
         assert.equals(scheduler.quarantine.reason,
             service.events(second.identity.run_id, 0,
                 dependencies).events[2].payload.reason)
+        assert.equals(SchedulerFailureKind.EXECUTOR_QUARANTINED,
+            service.events(second.identity.run_id, 0,
+                dependencies).events[2].payload.kind)
 
         local third = service.submit(projects[3].project_id,
             submission('quarantine-gamma'), dependencies)
@@ -655,6 +658,9 @@ describe('multi-project automation service scheduler', function()
         assert.equals(scheduler.quarantine.reason,
             service.events(third.identity.run_id, 0,
                 dependencies).events[2].payload.reason)
+        assert.equals(SchedulerFailureKind.EXECUTOR_QUARANTINED,
+            service.events(third.identity.run_id, 0,
+                dependencies).events[2].payload.kind)
         local blocked = service.activate_next(dependencies)
         assert.is_false(blocked.activated)
         assert.equals(SchedulerFailureKind.EXECUTOR_QUARANTINED,

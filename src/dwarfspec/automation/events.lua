@@ -2,6 +2,8 @@
 
 local EventType = require('dwarfspec.automation.event_types')
 local RunState = require('dwarfspec.automation.run_states')
+local SchedulerFailureKind =
+    require('dwarfspec.automation.scheduler_failure_kinds')
 local TestStatus = require('dwarfspec.automation.test_statuses')
 
 local M = {
@@ -274,6 +276,19 @@ function M.validate_payload(event_type, payload)
     elseif event_type == EventType.REPEAT_FINISHED then
         assert(payload.repeat_index > 0,
             'event payload repeat.finished has invalid repeat index')
+    elseif event_type == EventType.SCHEDULER_BLOCKED and
+            payload.kind ~= nil then
+        assert(payload.kind == SchedulerFailureKind.EXECUTOR_QUARANTINED or
+            payload.kind == SchedulerFailureKind.ACTIVATION_INVALID,
+            'event payload scheduler.blocked has invalid scheduler kind')
+        if payload.kind == SchedulerFailureKind.EXECUTOR_QUARANTINED then
+            assert(type(payload.blocking_run_id) == 'string' and
+                payload.blocking_run_id ~= '',
+                'event payload scheduler.blocked requires blocking run id')
+            assert(is_nonnegative_integer(payload.blocking_generation) and
+                payload.blocking_generation > 0,
+                'event payload scheduler.blocked requires blocking generation')
+        end
     end
     if event_type == EventType.REPEAT_FINISHED then
         validate_counts(payload.counts,

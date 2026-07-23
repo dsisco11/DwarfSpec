@@ -3,6 +3,8 @@
 local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
 local RunState = require('dwarfspec.automation.run_states')
+local SchedulerFailureKind =
+    require('dwarfspec.automation.scheduler_failure_kinds')
 local TestStatus = require('dwarfspec.automation.test_statuses')
 
 ---Returns one deterministic journal identity.
@@ -87,7 +89,10 @@ local function payloads()
             cleanup_confirmed=true,
         },
         [EventType.SCHEDULER_BLOCKED]={
+            kind=SchedulerFailureKind.EXECUTOR_QUARANTINED,
             reason='cleanup was not confirmed',
+            blocking_run_id='run-blocking-1',
+            blocking_generation=6,
         },
     }
 end

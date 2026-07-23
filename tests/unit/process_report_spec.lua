@@ -121,6 +121,26 @@ describe('DwarfSpec process bridge', function()
 end)
 
 describe('DwarfSpec native reports', function()
+    it('formats executor quarantine as an actionable blocked state',
+            function()
+        assert.same({
+            'EXECUTOR_QUARANTINED: run run-blocking-1 generation 6 left ' ..
+                'cleanup unconfirmed: external runner recovery. This run ' ..
+                'remains queued; press Ctrl+C and restart DFHack after ' ..
+                'confirming no live run is active',
+        }, report.format_events({
+            {
+                type='scheduler.blocked',
+                payload={
+                    kind='executor_quarantined',
+                    reason='external runner recovery',
+                    blocking_run_id='run-blocking-1',
+                    blocking_generation=6,
+                },
+            },
+        }))
+    end)
+
     it('returns a canonical adapter rejection separately from transport',
             function()
         local transport, _, response_error =
