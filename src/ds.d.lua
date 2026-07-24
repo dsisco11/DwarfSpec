@@ -24,6 +24,13 @@
 ---| 'down'
 ---| 'up'
 
+---@alias dwarfspec.ESubjectSource
+---| 'native'
+---| 'overlay'
+
+---@alias dwarfspec.NativePathSegment string|integer
+---@alias dwarfspec.NativePath dwarfspec.NativePathSegment[]
+
 ---@class dwarfspec.EMouseButtonEnum
 ---@field LEFT `left`
 ---@field RIGHT `right`
@@ -35,6 +42,14 @@
 ---@field CLICK `click`
 ---@field DOWN `down`
 ---@field UP `up`
+
+---@class dwarfspec.ESubjectSourceEnum
+---@field NATIVE `native`
+---@field OVERLAY `overlay`
+
+---@class dwarfspec.SubjectSourceOptions
+---@field source? dwarfspec.ESubjectSource
+---@field overlay? string Exact enabled overlay registry name required by the overlay source.
 
 ---@class dwarfspec.WaitOptions
 ---@field timeout_ms? integer
@@ -146,6 +161,7 @@ function Subject:raw() end
 ---@field protocol_version integer
 ---@field EMouseButton dwarfspec.EMouseButtonEnum
 ---@field EInputState dwarfspec.EInputStateEnum
+---@field ESubjectSource dwarfspec.ESubjectSourceEnum
 local DS = {}
 
 ---Waits for actual DFHack raw-frame callbacks without blocking the game.

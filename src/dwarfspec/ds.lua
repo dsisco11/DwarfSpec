@@ -95,6 +95,8 @@ local EMouseButton = load_automation_module(package_root,
     'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
 local EInputState = load_automation_module(package_root,
     'dwarfspec.input_states', '/src/dwarfspec/input_states.lua')
+local ESubjectSource = load_automation_module(package_root,
+    'dwarfspec.subject_sources', '/src/dwarfspec/subject_sources.lua')
 local EventType = load_automation_module(package_root,
     'dwarfspec.automation.event_types',
     '/src/dwarfspec/automation/event_types.lua')
@@ -271,6 +273,7 @@ local TestStatus = load_automation_module(package_root,
         protocol_version=1,
         EMouseButton=EMouseButton,
         EInputState=EInputState,
+        ESubjectSource=ESubjectSource,
     }
 
     ---Returns the exact service-owned run that currently owns the executor.

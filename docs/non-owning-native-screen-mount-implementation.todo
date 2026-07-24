@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phases 0-1 complete
+Status: in progress; Phases 0-2 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -218,32 +218,32 @@ using loose strings for behavior identifiers.
 
 ### Tasks
 
-☐ Define immutable `ESubjectSource` values `NATIVE` and `OVERLAY` with
+✔ Define immutable `ESubjectSource` values `NATIVE` and `OVERLAY` with
   `dwarfspec.immutable_enum.define`.
-☐ Export `ESubjectSource` from the same public surface as the existing DwarfSpec
+✔ Export `ESubjectSource` from the same public surface as the existing DwarfSpec
   enums.
-☐ Validate source values by enum membership and reject arbitrary strings.
-☐ Define a native path segment as either a nonempty string or a nonnegative
+✔ Validate source values by enum membership and reject arbitrary strings.
+✔ Define a native path segment as either a nonempty string or a nonnegative
   integral number.
-☐ Normalize string and segment-array paths without splitting names supplied as
+✔ Normalize string and segment-array paths without splitting names supplied as
   array segments.
-☐ Preserve existing slash-delimited component path behavior.
-☐ Define an explicit error for an ambiguous native string path whose intended
+✔ Preserve existing slash-delimited component path behavior.
+✔ Define an explicit error for an ambiguous native string path whose intended
   widget name contains `/`, directing callers to segment-array syntax.
-☐ Add optional source selection to the internal root, get, and tree-capture
+✔ Add optional source selection to the internal root, get, and tree-capture
   request shapes.
-☐ Require an exact nonempty overlay name when `OVERLAY` is selected.
-☐ Reject overlay options when they conflict with `NATIVE` selection.
-☐ Add focused tests for valid enum members, invalid values, omitted defaults,
+✔ Require an exact nonempty overlay name when `OVERLAY` is selected.
+✔ Reject overlay options when they conflict with `NATIVE` selection.
+✔ Add focused tests for valid enum members, invalid values, omitted defaults,
   path normalization, zero-based numeric segments, invalid segment types,
   negative/fractional indices, empty names, and names containing `/`.
 
 ### Phase 2 exit gate
 
-☐ Source selection cannot be controlled by unvalidated identifier strings.
-☐ Path normalization preserves existing component semantics.
-☐ Native segment arrays preserve names containing `/` exactly.
-☐ Focused enum and path-contract tests pass.
+✔ Source selection cannot be controlled by unvalidated identifier strings.
+✔ Path normalization preserves existing component semantics.
+✔ Native segment arrays preserve names containing `/` exactly.
+✔ Focused enum and path-contract tests pass.
 
 ## Phase 3: Non-owning native attachment
 
@@ -842,7 +842,46 @@ as the work proceeds.
 
 ### Phase 2 evidence
 
-- Pending.
+- Added `src/dwarfspec/subject_sources.lua`. It defines only `NATIVE` and
+  `OVERLAY` through `dwarfspec.immutable_enum.define`; the runtime `ds` table
+  exports the exact enum as `ds.ESubjectSource`, and `src/ds.d.lua` declares
+  the matching immutable public namespace.
+- Added `src/dwarfspec/subject_requests.lua` with documented root, get, and
+  tree-capture request records. Omitted source selection defaults to
+  `ESubjectSource.NATIVE`; values are accepted only when present in the enum.
+  `OVERLAY` requires and preserves one exact nonempty registry name, while
+  `NATIVE` rejects any overlay option and every request rejects unknown
+  options.
+- Added `src/dwarfspec/subject_paths.lua`. Native strings represent one
+  unambiguous name and reject `/` with an error directing callers to
+  segment-array syntax. Native arrays are copied, must be dense, and retain
+  every nonempty string or zero-based nonnegative integral child index without
+  splitting slash-bearing names.
+- Overlay requests use the Lua-view component path contract because registered
+  overlays are adapted Lua views. Existing component resolution now delegates
+  to the same component normalizer, preserving its prior slash-delimited,
+  reserved-segment, and boundary validation messages.
+- Updated the adapter-backed subject descriptor path type to allow native
+  numeric segments without changing retained descriptor copying or existing
+  Lua subject behavior.
+- Added `tests/unit/subject_contracts_spec.lua` and extended immutable-enum and
+  public-command coverage. Focused commands, run sequentially:
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec subject source and path contracts"`:
+    `9 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "immutable DwarfSpec contract enums"`:
+    `4 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec mount context"`:
+    `23 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"`:
+    `15 successes / 0 failures / 0 errors / 0 pending`.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `290 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 210 files.`
+- `git diff --check` and `git diff --cached --check` passed.
+- No native screen attachment, native widget adapter, or overlay-registry
+  lookup is implemented or claimed in this phase; those remain explicit later
+  checklist work.
 
 ### Phase 3 evidence
 

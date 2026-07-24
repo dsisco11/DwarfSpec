@@ -5,7 +5,7 @@ local M = {}
 ---@class dwarfspec.SubjectDescriptor
 ---@field mount_id integer
 ---@field source dwarfspec.SubjectSource
----@field path_segments string[]
+---@field path_segments dwarfspec.NativePathSegment[]
 ---@field adapter dwarfspec.SubjectAdapter
 ---@field captured_identity any
 ---@field control_path_for_diagnostics string
@@ -114,8 +114,8 @@ function M.release(subject)
 end
 
 ---Copies path segments so caller mutation cannot retarget a subject.
----@param path_segments string[]
----@return string[]
+---@param path_segments dwarfspec.NativePathSegment[]
+---@return dwarfspec.NativePathSegment[]
 local function copy_path(path_segments)
     local result = {}
     for index, segment in ipairs(path_segments) do result[index] = segment end

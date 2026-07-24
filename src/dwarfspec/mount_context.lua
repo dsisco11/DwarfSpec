@@ -1,5 +1,7 @@
 -- Run-owned component mount lifecycle and weak subject ownership.
 
+local subject_paths = require('dwarfspec.subject_paths')
+
 local M = {}
 
 ---Formats cleanup failures without discarding their registered names.
@@ -282,19 +284,7 @@ function M.new(options)
     ---@param control_path string
     ---@return string[]
     local function parse_control_path(control_path)
-        assert(type(control_path) == 'string' and control_path ~= '',
-            'control path must be a nonempty string')
-        assert(control_path:sub(1, 1) ~= '/' and
-            control_path:sub(-1) ~= '/',
-            'control path cannot start or end with "/"')
-        local segments = {}
-        for segment in control_path:gmatch('[^/]+') do
-            assert(segment ~= '.' and segment ~= '..',
-                ('control path contains reserved segment %q'):format(segment))
-            table.insert(segments, segment)
-        end
-        assert(#segments > 0, 'control path must contain at least one segment')
-        return segments
+        return subject_paths.component(control_path)
     end
 
     ---Resolves one strict path by walking direct mounted-component children.

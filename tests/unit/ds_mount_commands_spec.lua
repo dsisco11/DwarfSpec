@@ -234,6 +234,8 @@ describe('DwarfSpec public mount commands', function()
             subviews={child, child=child},
         })
 
+        assert.equals('native', ds.ESubjectSource.NATIVE)
+        assert.equals('overlay', ds.ESubjectSource.OVERLAY)
         assert.equals('root', mounted:raw().name)
         assert.equals(mounted:raw(), ds.root():raw())
         local selected = ds.get('child')
