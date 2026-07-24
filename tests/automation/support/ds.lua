@@ -85,8 +85,10 @@ local render_tracker_module = load_automation_module(package_root,
     'dwarfspec.render_tracker', '/src/dwarfspec/render_tracker.lua')
 local subject_module = load_automation_module(package_root,
     'dwarfspec.subject', '/src/dwarfspec/subject.lua')
-local MouseInput = load_automation_module(package_root,
-    'dwarfspec.mouse_inputs', '/src/dwarfspec/mouse_inputs.lua')
+local EMouseButton = load_automation_module(package_root,
+    'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
+local EInputState = load_automation_module(package_root,
+    'dwarfspec.input_states', '/src/dwarfspec/input_states.lua')
 local EventType = load_automation_module(package_root,
     'dwarfspec.automation.event_types',
     '/src/dwarfspec/automation/event_types.lua')
@@ -251,7 +253,8 @@ local TestStatus = load_automation_module(package_root,
         stage_overlay_registration_integration
     local ds = {
         protocol_version=1,
-        MouseInput=MouseInput,
+        EMouseButton=EMouseButton,
+        EInputState=EInputState,
     }
 
     ---Returns the exact service-owned run that currently owns the executor.
@@ -456,55 +459,57 @@ local TestStatus = load_automation_module(package_root,
         end)
     end
 
-    local mouse_inputs = {
-        [MouseInput.LEFT_CLICK]={key='_MOUSE_L'},
-        [MouseInput.LEFT_DOWN]={
-            key='_MOUSE_L_DOWN',
+    local mouse_button_fields = {
+        [EMouseButton.LEFT]={
+            click_key='_MOUSE_L',
+            down_key='_MOUSE_L_DOWN',
             down_field='mouse_lbut_down',
             lift_field='mouse_lbut_lift',
-            is_down=true,
         },
-        [MouseInput.LEFT_UP]={
-            down_field='mouse_lbut_down',
-            lift_field='mouse_lbut_lift',
-            is_down=false,
-        },
-        [MouseInput.RIGHT_CLICK]={key='_MOUSE_R'},
-        [MouseInput.RIGHT_DOWN]={
-            key='_MOUSE_R_DOWN',
+        [EMouseButton.RIGHT]={
+            click_key='_MOUSE_R',
+            down_key='_MOUSE_R_DOWN',
             down_field='mouse_rbut_down',
             lift_field='mouse_rbut_lift',
-            is_down=true,
         },
-        [MouseInput.RIGHT_UP]={
-            down_field='mouse_rbut_down',
-            lift_field='mouse_rbut_lift',
-            is_down=false,
-        },
-        [MouseInput.MIDDLE_CLICK]={key='_MOUSE_M'},
-        [MouseInput.MIDDLE_DOWN]={
-            key='_MOUSE_M_DOWN',
+        [EMouseButton.MIDDLE]={
+            click_key='_MOUSE_M',
+            down_key='_MOUSE_M_DOWN',
             down_field='mouse_mbut_down',
             lift_field='mouse_mbut_lift',
-            is_down=true,
         },
-        [MouseInput.MIDDLE_UP]={
-            down_field='mouse_mbut_down',
-            lift_field='mouse_mbut_lift',
-            is_down=false,
-        },
-        [MouseInput.SCROLL_UP]={key='CONTEXT_SCROLL_UP'},
-        [MouseInput.SCROLL_DOWN]={key='CONTEXT_SCROLL_DOWN'},
+    }
+    local mouse_wheel_keys = {
+        [EMouseButton.SCROLL_UP]='CONTEXT_SCROLL_UP',
+        [EMouseButton.SCROLL_DOWN]='CONTEXT_SCROLL_DOWN',
     }
 
     ---Sends one mouse action at the current virtual pointer position.
-    ---@param input DwarfSpecMouseInput
+    ---@param button DwarfSpecEMouseButton
+    ---@param action DwarfSpecEInputState|nil
     ---@return integer
-    function ds.mouseInput(input)
+    function ds.mouseInput(button, action)
         local screen
         _, screen = resolve_interaction_target(nil, 'mouseInput')
-        local descriptor = mouse_inputs[input]
-        assert(descriptor, 'unsupported mouse input: ' .. tostring(input))
+        local fields = mouse_button_fields[button]
+        local key = mouse_wheel_keys[button]
+        assert(fields or key,
+            'unsupported mouse button: ' .. tostring(button))
+        if fields then
+            action = action or EInputState.CLICK
+            assert(action == EInputState.CLICK or
+                    action == EInputState.DOWN or
+                    action == EInputState.UP,
+                'unsupported mouse button action: ' .. tostring(action))
+            if action == EInputState.CLICK then
+                key = fields.click_key
+            elseif action == EInputState.DOWN then
+                key = fields.down_key
+            end
+        else
+            assert(action == nil,
+                'mouse wheel input does not accept a button action')
+        end
         local x, y = pointer_adapter_module.position(context.pointer)
         return context.mount_context:mutate('mouseInput', function()
             assert(is_active(screen),
@@ -512,17 +517,17 @@ local TestStatus = load_automation_module(package_root,
             local dispatch = function()
                 pointer_adapter_module.with_interface_mouse(x, y, function()
                     require('gui').simulateInput(M.resolve_native_screen(
-                        screen, context.current_viewscreen), descriptor.key)
+                        screen, context.current_viewscreen), key)
                 end)
             end
-            if descriptor.is_down == nil then
+            if not fields or action == EInputState.CLICK then
                 dispatch()
             else
                 pointer_adapter_module.with_button_state(
                     context.pointer,
-                    descriptor.down_field,
-                    descriptor.lift_field,
-                    descriptor.is_down,
+                    fields.down_field,
+                    fields.lift_field,
+                    action == EInputState.DOWN,
                     dispatch)
             end
         end)

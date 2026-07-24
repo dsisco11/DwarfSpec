@@ -114,5 +114,19 @@ describe('DwarfSpec consumer extensions', function()
         assert.has_error(function() extensions.load(descriptor, loader) end,
             'tests/dwarfspec/config.lua: custom command conflicts with ' ..
             'ds.mouseInput')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={EMouseButton=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.EMouseButton')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={EInputState=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.EInputState')
     end)
 end)

@@ -12,31 +12,29 @@
 ---| 'right'
 ---| 'middle'
 
----@alias dwarfspec.MouseInput
----| 'left_click'
----| 'left_down'
----| 'left_up'
----| 'right_click'
----| 'right_down'
----| 'right_up'
----| 'middle_click'
----| 'middle_down'
----| 'middle_up'
+---@alias dwarfspec.EMouseButton
+---| 'left'
+---| 'right'
+---| 'middle'
 ---| 'scroll_up'
 ---| 'scroll_down'
 
----@class dwarfspec.MouseInputEnum
----@field LEFT_CLICK `left_click`
----@field LEFT_DOWN `left_down`
----@field LEFT_UP `left_up`
----@field RIGHT_CLICK `right_click`
----@field RIGHT_DOWN `right_down`
----@field RIGHT_UP `right_up`
----@field MIDDLE_CLICK `middle_click`
----@field MIDDLE_DOWN `middle_down`
----@field MIDDLE_UP `middle_up`
+---@alias dwarfspec.EInputState
+---| 'click'
+---| 'down'
+---| 'up'
+
+---@class dwarfspec.EMouseButtonEnum
+---@field LEFT `left`
+---@field RIGHT `right`
+---@field MIDDLE `middle`
 ---@field SCROLL_UP `scroll_up`
 ---@field SCROLL_DOWN `scroll_down`
+
+---@class dwarfspec.EInputStateEnum
+---@field CLICK `click`
+---@field DOWN `down`
+---@field UP `up`
 
 ---@class dwarfspec.WaitOptions
 ---@field timeout_ms? integer
@@ -138,7 +136,8 @@ function Subject:raw() end
 
 ---@class dwarfspec.DS
 ---@field protocol_version integer
----@field MouseInput dwarfspec.MouseInputEnum
+---@field EMouseButton dwarfspec.EMouseButtonEnum
+---@field EInputState dwarfspec.EInputStateEnum
 local DS = {}
 
 ---Waits for actual DFHack raw-frame callbacks without blocking the game.
@@ -204,9 +203,11 @@ function DS.hover(view, anchor) end
 function DS.input(keys, subject) end
 
 ---Sends one mouse action at the current virtual pointer position.
----@param input dwarfspec.MouseInput
+---Physical mouse buttons default to the click input state.
+---@param button dwarfspec.EMouseButton
+---@param action? dwarfspec.EInputState
 ---@return integer
-function DS.mouseInput(input) end
+function DS.mouseInput(button, action) end
 
 ---Clicks a view with a supported native mouse button and waits for render.
 ---@param view table|dwarfspec.Subject

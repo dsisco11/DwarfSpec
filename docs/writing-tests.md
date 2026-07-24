@@ -150,23 +150,25 @@ original mount remains current; unmounting that mount makes the subject stale.
 
 For mouse input that must use an already positioned pointer, call
 `ds.mouseInput(input)`. The input must be one of the immutable
-`ds.MouseInput` identifiers:
+`ds.EMouseButton` identifiers:
 
 ```lua
 ds.get('route_list'):hover()
-ds.mouseInput(ds.MouseInput.SCROLL_DOWN)
-ds.mouseInput(ds.MouseInput.RIGHT_CLICK)
+ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
+ds.mouseInput(ds.EMouseButton.RIGHT)
 ```
 
 Each left, right, and middle button exposes explicit `CLICK`, `DOWN`, and `UP`
-inputs. A `DOWN` state remains held across pointer movement and later commands
-until the matching `UP` input or run cleanup:
+actions through the immutable `ds.EInputState` enum. The state defaults to
+`CLICK` when omitted for a physical button. A `DOWN` state remains held across
+pointer movement and later commands until the matching `UP` input or run
+cleanup:
 
 ```lua
-ds.get('slider'):move_pointer('left')
-ds.mouseInput(ds.MouseInput.LEFT_DOWN)
-ds.get('slider'):move_pointer('right')
-ds.mouseInput(ds.MouseInput.LEFT_UP)
+ds.get('slider'):move_pointer('top_left')
+ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.DOWN)
+ds.get('slider'):move_pointer('top_right')
+ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.UP)
 ```
 
 Unlike `subject:click()`, `ds.mouseInput()` does not move the pointer. It sends
@@ -310,7 +312,8 @@ The first-release surface is intentionally small:
 - components: `mount`, `root`, `get`, `unmount`, `viewport`;
 - subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
   `text`, and the exceptional `raw` escape hatch;
-- positioned mouse input: `mouseInput` with `MouseInput`;
+- positioned mouse input: `mouseInput` with `EMouseButton` and
+  `EInputState`;
 - evidence: `capture_view_tree`, `capture_screen`; and
 - real registration integration: `stage_overlay_registration`.
 

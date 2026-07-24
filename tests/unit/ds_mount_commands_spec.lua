@@ -8,7 +8,8 @@ local render_tracker = assert(loadfile(
 local ds_factory = assert(loadfile(
     'tests/automation/support/ds.lua'))()
 local EventType = require('dwarfspec.automation.event_types')
-local MouseInput = require('dwarfspec.mouse_inputs')
+local EMouseButton = require('dwarfspec.mouse_buttons')
+local EInputState = require('dwarfspec.input_states')
 local TestStatus = require('dwarfspec.automation.test_statuses')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
@@ -281,7 +282,7 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function() ds.input('SELECT') end,
             'DwarfSpec input' .. suffix)
         assert.has_error(function()
-            ds.mouseInput(MouseInput.LEFT_CLICK)
+            ds.mouseInput(EMouseButton.LEFT, EInputState.CLICK)
         end, 'DwarfSpec mouseInput' .. suffix)
         assert.has_error(function() ds.click() end,
             'DwarfSpec click' .. suffix)
@@ -294,21 +295,24 @@ describe('DwarfSpec public mount commands', function()
         local mounted = ds.mount(TestWidget, {
             frame_body={x1=10, y1=20, x2=14, y2=24},
         })
-        assert.equals(MouseInput.LEFT_CLICK, ds.MouseInput.LEFT_CLICK)
-        assert.equals(MouseInput.SCROLL_DOWN, ds.MouseInput.SCROLL_DOWN)
+        assert.equals(EMouseButton.LEFT, ds.EMouseButton.LEFT)
+        assert.equals(EMouseButton.SCROLL_DOWN,
+            ds.EMouseButton.SCROLL_DOWN)
+        assert.equals(EInputState.CLICK, ds.EInputState.CLICK)
+        assert.is_nil(ds.EMouseInput)
         assert.has_error(function()
-            ds.mouseInput(MouseInput.LEFT_CLICK)
+            ds.mouseInput(EMouseButton.LEFT)
         end, 'mouse input requires a pointer position; call ' ..
             'ds.move_pointer() or subject:hover() first')
 
         mounted:hover('top_left')
         for _, input in ipairs({
-                MouseInput.LEFT_CLICK,
-                MouseInput.RIGHT_CLICK,
-                MouseInput.MIDDLE_CLICK,
-                MouseInput.SCROLL_UP,
-                MouseInput.SCROLL_DOWN}) do
-            ds.mouseInput(input)
+                {EMouseButton.LEFT},
+                {EMouseButton.RIGHT},
+                {EMouseButton.MIDDLE},
+                {EMouseButton.SCROLL_UP},
+                {EMouseButton.SCROLL_DOWN}}) do
+            ds.mouseInput(input[1], input[2])
         end
 
         assert.same({
@@ -338,7 +342,14 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(df.global.enabler.mouse_focus)
         assert.equals(0, df.global.enabler.tracking_on)
         assert.has_error(function() ds.mouseInput('unknown') end,
-            'unsupported mouse input: unknown')
+            'unsupported mouse button: unknown')
+        assert.has_error(function()
+            ds.mouseInput(EMouseButton.LEFT, 'unknown')
+        end, 'unsupported mouse button action: unknown')
+        assert.has_error(function()
+            ds.mouseInput(EMouseButton.SCROLL_DOWN,
+                EInputState.CLICK)
+        end, 'mouse wheel input does not accept a button action')
     end)
 
     it('persists explicit button-down state until matching button-up input',
@@ -350,8 +361,7 @@ describe('DwarfSpec public mount commands', function()
 
         local transitions = {
             {
-                down=MouseInput.LEFT_DOWN,
-                up=MouseInput.LEFT_UP,
+                button=EMouseButton.LEFT,
                 key='_MOUSE_L_DOWN',
                 down_field='mouse_lbut_down',
                 lift_field='mouse_lbut_lift',
@@ -359,8 +369,7 @@ describe('DwarfSpec public mount commands', function()
                 record_lift='left_lift',
             },
             {
-                down=MouseInput.RIGHT_DOWN,
-                up=MouseInput.RIGHT_UP,
+                button=EMouseButton.RIGHT,
                 key='_MOUSE_R_DOWN',
                 down_field='mouse_rbut_down',
                 lift_field='mouse_rbut_lift',
@@ -368,8 +377,7 @@ describe('DwarfSpec public mount commands', function()
                 record_lift='right_lift',
             },
             {
-                down=MouseInput.MIDDLE_DOWN,
-                up=MouseInput.MIDDLE_UP,
+                button=EMouseButton.MIDDLE,
                 key='_MOUSE_M_DOWN',
                 down_field='mouse_mbut_down',
                 lift_field='mouse_mbut_lift',
@@ -379,7 +387,7 @@ describe('DwarfSpec public mount commands', function()
         }
 
         for _, transition in ipairs(transitions) do
-            ds.mouseInput(transition.down)
+            ds.mouseInput(transition.button, EInputState.DOWN)
             local down_input = simulated_inputs[#simulated_inputs]
             assert.equals(transition.key, down_input.key)
             assert.equals(1, down_input[transition.record_down])
@@ -391,7 +399,7 @@ describe('DwarfSpec public mount commands', function()
             mounted:move_pointer('bottom_right')
             assert.equals(1, df.global.enabler[transition.down_field])
 
-            ds.mouseInput(transition.up)
+            ds.mouseInput(transition.button, EInputState.UP)
             local up_input = simulated_inputs[#simulated_inputs]
             assert.is_nil(up_input.key)
             assert.equals(0, up_input[transition.record_down])
