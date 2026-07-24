@@ -1,22 +1,27 @@
 -- External consumer configuration needed before live test discovery.
 
-local glob = require('dwarfspec.glob')
+local ErrorFormat = require('dwarfspec.error_formats')
+local config_schema = require('dwarfspec.config_schema')
 local project = require('dwarfspec.project')
+local settings_validator = require('dwarfspec.settings')
 
 local M = {
     default_test_glob=project.default_test_glob,
+    default_error_format=ErrorFormat.MSBUILD,
 }
 
----Loads the project test-file glob without executing any test file or hook.
+---Loads validated external settings without executing test files or hooks.
 ---@param project_root string
 ---@param filesystem table
 ---@param loader function|nil
----@return string
-function M.load_test_glob(project_root, filesystem, loader)
+---@return table
+function M.load(project_root, filesystem, loader)
     local relative_path = 'tests/dwarfspec/config.lua'
     local absolute_path = project.join(project_root, relative_path)
     if not filesystem.isfile(absolute_path) then
-        return M.default_test_glob
+        local settings = settings_validator.validate(nil, relative_path)
+        settings.discovery.test_glob = M.default_test_glob
+        return {settings=settings}
     end
 
     loader = loader or loadfile
@@ -26,24 +31,23 @@ function M.load_test_glob(project_root, filesystem, loader)
         tostring(load_error))
     local ok, result = xpcall(chunk, debug.traceback)
     assert(ok, relative_path .. ': module failed: ' .. tostring(result))
-    assert(type(result) == 'table', relative_path ..
-        ': module must return a table')
+    local validated = config_schema.validate(result, relative_path)
+    local settings = validated.settings
+    settings.discovery.test_glob =
+        settings.discovery.test_glob or M.default_test_glob
+    return {
+        settings=settings,
+    }
+end
 
-    local settings = result.settings or {}
-    assert(type(settings) == 'table', relative_path ..
-        ': settings must be a table')
-    local discovery = settings.discovery or {}
-    assert(type(discovery) == 'table', relative_path ..
-        ': settings.discovery must be a table')
-    for key in pairs(discovery) do
-        assert(key == 'test_glob', relative_path ..
-            ': unknown discovery setting: ' .. tostring(key))
-    end
-    local test_glob = discovery.test_glob or M.default_test_glob
-    assert(type(test_glob) == 'string' and test_glob ~= '', relative_path ..
-        ': settings.discovery.test_glob must be a nonempty string')
-    glob.compile(test_glob)
-    return test_glob
+---Loads only the project test-file glob for compatibility callers.
+---@param project_root string
+---@param filesystem table
+---@param loader function|nil
+---@return string
+function M.load_test_glob(project_root, filesystem, loader)
+    return M.load(project_root, filesystem, loader)
+        .settings.discovery.test_glob
 end
 
 return M

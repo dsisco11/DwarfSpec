@@ -1,6 +1,7 @@
 -- Unit contracts for canonical identity globs, discovery, and CLI dispatch.
 
 local cli = require('dwarfspec.cli')
+local ErrorFormat = require('dwarfspec.error_formats')
 local glob = require('dwarfspec.glob')
 local project = require('dwarfspec.project')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
@@ -87,6 +88,7 @@ describe('DwarfSpec CLI selection', function()
     local files
     local directories
     local modules
+    local module_executions
 
     before_each(function()
         output = stream()
@@ -105,6 +107,7 @@ describe('DwarfSpec CLI selection', function()
             ['project/tests/automation/integration']={'registered_spec.lua'},
         }
         modules = {}
+        module_executions = {}
         filesystem = {
             isfile=function(path) return files[path:gsub('\\', '/')] end,
             isdir=function(path)
@@ -122,9 +125,14 @@ describe('DwarfSpec CLI selection', function()
             output=output,
             errors=errors,
             loadfile=function(path)
-                local result = modules[path:gsub('\\', '/')]
+                local normalized = path:gsub('\\', '/')
+                local result = modules[normalized]
                 if result == nil then return nil, 'missing synthetic module' end
-                return function() return result end
+                return function()
+                    module_executions[normalized] =
+                        (module_executions[normalized] or 0) + 1
+                    return result
+                end
             end,
             runner={
                 run=function(options)
@@ -306,6 +314,7 @@ describe('DwarfSpec CLI selection', function()
             'tests/automation/ordinary_spec.lua'}, invoked.identities)
         assert.equals(ResultPolicy.NONE, invoked.result_policy)
         assert.is_nil(invoked.result_path)
+        assert.equals(ErrorFormat.MSBUILD, invoked.error_format)
         assert.equals('tests/automation/a_spec.lua\n' ..
             'tests/automation/ordinary_spec.lua\n', listed)
     end)
@@ -350,6 +359,87 @@ describe('DwarfSpec CLI selection', function()
         assert.equals(0, cli.main({'list'}, context))
         assert.equals('tests/automation/integration/registered_spec.lua\n',
             output.text)
+    end)
+
+    it('loads config once before discovery overrides and forwards its format',
+            function()
+        local path = 'project/tests/dwarfspec/config.lua'
+        files[path] = true
+        modules[path] = {
+            settings={
+                discovery={
+                    test_glob='tests/automation/integration/*.lua',
+                },
+                error_format=ErrorFormat.GCC,
+            },
+        }
+
+        assert.equals(0, cli.main({
+            'list', '--test-glob=tests/automation/*.lua',
+        }, context))
+        assert.equals(1, module_executions[path])
+        assert.equals('tests/automation/a_spec.lua\n' ..
+            'tests/automation/ordinary_spec.lua\n', output.text)
+
+        output.text = ''
+        assert.equals(0, cli.main({
+            'run', '--test-glob=tests/automation/*.lua', '--no-results',
+        }, context))
+        assert.equals(2, module_executions[path])
+        assert.equals(ErrorFormat.GCC, invoked.error_format)
+        assert.equals('tests/automation/*.lua', invoked.test_glob)
+        assert.same({
+            'tests/automation/a_spec.lua',
+            'tests/automation/ordinary_spec.lua',
+        }, invoked.identities)
+    end)
+
+    it('keeps environment discovery ahead of project discovery settings',
+            function()
+        local path = 'project/tests/dwarfspec/config.lua'
+        files[path] = true
+        modules[path] = {
+            settings={
+                discovery={test_glob='tests/automation/*.lua'},
+                error_format=ErrorFormat.ESLINT,
+            },
+        }
+        context.environment = {
+            getenv=function(name)
+                if name == 'DWARFSPEC_TEST_GLOB' then
+                    return 'tests/automation/integration/*.lua'
+                end
+                return nil
+            end,
+        }
+
+        assert.equals(0, cli.main({'run', '--no-results'}, context))
+
+        assert.equals(1, module_executions[path])
+        assert.equals(ErrorFormat.ESLINT, invoked.error_format)
+        assert.equals('tests/automation/integration/*.lua',
+            invoked.test_glob)
+        assert.same({
+            'tests/automation/integration/registered_spec.lua',
+        }, invoked.identities)
+    end)
+
+    it('rejects invalid project format before invoking the runner', function()
+        local path = 'project/tests/dwarfspec/config.lua'
+        files[path] = true
+        modules[path] = {
+            settings={error_format='unsupported'},
+        }
+
+        assert.equals(2, cli.main({
+            'run', '--test-glob=tests/automation/*.lua',
+        }, context))
+
+        assert.matches('tests/dwarfspec/config.lua: ' ..
+            'settings.error_format must be one of: msbuild, gcc, eslint',
+            errors.text, 1, true)
+        assert.equals(1, module_executions[path])
+        assert.is_nil(invoked)
     end)
 
     it('resolves the default latest-result file beneath the project root',

@@ -4,6 +4,7 @@ local project_module = assert(loadfile(
     'src/dwarfspec/automation/project.lua'))()
 local extensions = assert(loadfile(
     'src/dwarfspec/automation/extensions.lua'))()
+local ErrorFormat = require('dwarfspec.error_formats')
 
 describe('DwarfSpec consumer extensions', function()
     local modules
@@ -44,6 +45,7 @@ describe('DwarfSpec consumer extensions', function()
             settings={
                 wait={frame_budget=42, timeout_ms=900},
                 discovery={test_glob='tests/live/*.lua'},
+                error_format=ErrorFormat.ESLINT,
             },
             commands={tooltip_state=function() return 'tooltip' end},
         }
@@ -60,8 +62,37 @@ describe('DwarfSpec consumer extensions', function()
         assert.equals(42, loaded.settings.wait.frame_budget)
         assert.equals('tests/live/*.lua',
             loaded.settings.discovery.test_glob)
+        assert.equals(ErrorFormat.ESLINT,
+            loaded.settings.error_format)
         assert.equals('action', loaded.commands.consumer_action.callback())
         assert.equals('tooltip', loaded.commands.tooltip_state.callback())
+    end)
+
+    it('uses the shared default when no config module exists', function()
+        modules['consumer/tests/dwarfspec/commands.lua'] = {}
+        modules['consumer/tests/dwarfspec/duplicate.lua'] = {}
+
+        local loaded = extensions.load(descriptor, loader)
+
+        assert.equals(ErrorFormat.MSBUILD,
+            loaded.settings.error_format)
+    end)
+
+    it('accepts every immutable error format in process', function()
+        modules['consumer/tests/dwarfspec/commands.lua'] = {}
+        modules['consumer/tests/dwarfspec/duplicate.lua'] = {}
+        for _, error_format in ipairs({
+                ErrorFormat.MSBUILD,
+                ErrorFormat.GCC,
+                ErrorFormat.ESLINT}) do
+            modules['consumer/tests/dwarfspec/config.lua'] = {
+                settings={error_format=error_format},
+            }
+
+            local loaded = extensions.load(descriptor, loader)
+
+            assert.equals(error_format, loaded.settings.error_format)
+        end
     end)
 
     it('rejects duplicate commands with both source modules identified',
@@ -128,5 +159,50 @@ describe('DwarfSpec consumer extensions', function()
         assert.has_error(function() extensions.load(descriptor, loader) end,
             'tests/dwarfspec/config.lua: custom command conflicts with ' ..
             'ds.EInputState')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={redraw=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.redraw')
+    end)
+
+    it('matches external error-format and unknown-setting validation',
+            function()
+        modules['consumer/tests/dwarfspec/commands.lua'] = {}
+        modules['consumer/tests/dwarfspec/duplicate.lua'] = {}
+        local cases = {
+            {
+                settings={error_format={}},
+                expected='tests/dwarfspec/config.lua: ' ..
+                    'settings.error_format must be a string',
+            },
+            {
+                settings={error_format=''},
+                expected='tests/dwarfspec/config.lua: ' ..
+                    'settings.error_format must be a nonempty string',
+            },
+            {
+                settings={error_format='unknown'},
+                expected='tests/dwarfspec/config.lua: ' ..
+                    'settings.error_format must be one of: ' ..
+                    'msbuild, gcc, eslint',
+            },
+            {
+                settings={unknown=true},
+                expected='tests/dwarfspec/config.lua: ' ..
+                    'unknown setting: unknown',
+            },
+        }
+        for _, case in ipairs(cases) do
+            modules['consumer/tests/dwarfspec/config.lua'] = {
+                settings=case.settings,
+            }
+
+            assert.has_error(function()
+                extensions.load(descriptor, loader)
+            end, case.expected)
+        end
     end)
 end)

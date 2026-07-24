@@ -1,93 +1,16 @@
 -- Production consumer configuration, command, and diagnostic extension loader.
 
+local config_schema = require('dwarfspec.config_schema')
 local M = {}
-
-local RESERVED_COMMANDS = {
-    capture_screen=true,
-    capture_view_tree=true,
-    click=true,
-    get=true,
-    input=true,
-    inspect=true,
-    mouseInput=true,
-    EMouseButton=true,
-    EInputState=true,
-    mount=true,
-    move_pointer=true,
-    protocol_version=true,
-    root=true,
-    stage_overlay_registration=true,
-    type=true,
-    unmount=true,
-    wait_frames=true,
-    await=true,
-}
-
----Validates one positive integer setting when it is present.
----@param value any
----@param label string
-local function optional_positive_integer(value, label)
-    if value == nil then return end
-    assert(type(value) == 'number' and value >= 1 and value % 1 == 0,
-        label .. ' must be a positive integer')
-end
-
----Copies and validates the supported global wait settings.
----@param value any
----@param source string
----@return table
-local function validate_settings(value, source)
-    if value == nil then return {} end
-    assert(type(value) == 'table', source .. ': settings must be a table')
-    for key in pairs(value) do
-        assert(key == 'wait' or key == 'discovery',
-            source .. ': unknown setting: ' .. tostring(key))
-    end
-    local wait = value.wait or {}
-    assert(type(wait) == 'table', source .. ': settings.wait must be a table')
-    for key in pairs(wait) do
-        assert(key == 'frame_budget' or key == 'timeout_ms',
-            source .. ': unknown wait setting: ' .. tostring(key))
-    end
-    optional_positive_integer(wait.frame_budget,
-        source .. ': settings.wait.frame_budget')
-    optional_positive_integer(wait.timeout_ms,
-        source .. ': settings.wait.timeout_ms')
-    local discovery = value.discovery or {}
-    assert(type(discovery) == 'table', source ..
-        ': settings.discovery must be a table')
-    for key in pairs(discovery) do
-        assert(key == 'test_glob', source ..
-            ': unknown discovery setting: ' .. tostring(key))
-    end
-    assert(discovery.test_glob == nil or
-        type(discovery.test_glob) == 'string' and
-        discovery.test_glob ~= '', source ..
-        ': settings.discovery.test_glob must be a nonempty string')
-    return {
-        wait={
-            frame_budget=wait.frame_budget,
-            timeout_ms=wait.timeout_ms,
-        },
-        discovery={test_glob=discovery.test_glob},
-    }
-end
+local settings_validator = require('dwarfspec.settings')
 
 ---Registers one validated command map without permitting duplicates.
 ---@param target table
 ---@param callbacks any
 ---@param source string
 local function register_commands(target, callbacks, source)
-    if callbacks == nil then return end
-    assert(type(callbacks) == 'table',
-        source .. ': commands must be a table')
+    callbacks = config_schema.validate_commands(callbacks, source)
     for name, callback in pairs(callbacks) do
-        assert(type(name) == 'string' and name:match('^[%a_][%w_]*$'),
-            source .. ': invalid command name: ' .. tostring(name))
-        assert(type(callback) == 'function',
-            source .. ': commands.' .. name .. ' must be a function')
-        assert(not RESERVED_COMMANDS[name],
-            source .. ': custom command conflicts with ds.' .. name)
         local previous = target[name]
         assert(not previous, ('%s: duplicate commands %q; first registered by %s')
             :format(source, name,
@@ -125,7 +48,12 @@ function M.load(project, loader)
     assert(type(project) == 'table' and type(project.project_root) == 'string',
         'extension loading requires a project descriptor')
     loader = loader or loadfile
-    local result = {settings={}, commands={}, modules={}}
+    local result = {
+        settings=settings_validator.validate(
+            nil, 'tests/dwarfspec/config.lua'),
+        commands={},
+        modules={},
+    }
 local ok, project_module = pcall(require, 'dwarfspec.automation.project')
 if not ok then
     project_module = assert(loadfile(project.package_root ..
@@ -136,13 +64,16 @@ end
         local absolute_path = project_module.join(project.project_root,
             relative_path)
         local module = load_module(absolute_path, relative_path, loader)
+        local module_commands = module.commands
         if relative_path:match('/config%.lua$') then
-            result.settings = validate_settings(module.settings, relative_path)
+            local validated = config_schema.validate(module, relative_path)
+            result.settings = validated.settings
+            module_commands = validated.commands
         else
             assert(module.settings == nil,
                 relative_path .. ': settings are only allowed in config.lua')
         end
-        register_commands(result.commands, module.commands, relative_path)
+        register_commands(result.commands, module_commands, relative_path)
         table.insert(result.modules, relative_path)
     end
     return result

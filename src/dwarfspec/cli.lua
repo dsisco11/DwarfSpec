@@ -232,6 +232,7 @@ local function defaults(package_root)
         host_scripts=nil,
         project_root=nil,
         test_glob=nil,
+        error_format=nil,
         runner=nil,
         filters={},
         filter_out={},
@@ -479,10 +480,12 @@ end
 ---@return string[]
 local function select_identities(options, expression, context)
     local filesystem = resolve_project_environment(options, context)
+    local project_config = config.load(options.project_root, filesystem,
+        context.loadfile)
+    options.error_format = project_config.settings.error_format
     options.test_glob = options.test_glob or
         options.environment.getenv('DWARFSPEC_TEST_GLOB') or
-        config.load_test_glob(options.project_root, filesystem,
-            context.loadfile)
+        project_config.settings.discovery.test_glob
     local identities = project.discover(options.project_root, filesystem,
         options.test_glob)
     local selected = glob.select(identities, expression)

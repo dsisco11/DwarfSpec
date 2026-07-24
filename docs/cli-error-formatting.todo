@@ -1,6 +1,6 @@
 # CLI diagnostic output implementation
 
-Status: in progress; Phase 0 complete
+Status: in progress; Phases 0-1 complete
 
 Related design: `docs/test-runner-service-design.md`
 
@@ -175,35 +175,57 @@ Phase 0 characterization:
 Goal: make the selected format a validated project setting available to the
 external command.
 
-☐ Add an immutable error-format enum module with `MSBUILD`, `GCC`, and `ESLINT`
+✔ Add an immutable error-format enum module with `MSBUILD`, `GCC`, and `ESLINT`
   members whose values are `msbuild`, `gcc`, and `eslint`.
-☐ Export the default format as the enum's `MSBUILD` value rather than a
+✔ Export the default format as the enum's `MSBUILD` value rather than a
   duplicated string.
-☐ Refactor `dwarfspec.config` to load and validate the external settings needed
+✔ Refactor `dwarfspec.config` to load and validate the external settings needed
   by `list` and `run` without executing the configuration module more than once
   per command.
-☐ Preserve discovery configuration and its current default and override
+✔ Preserve discovery configuration and its current default and override
   behavior.
-☐ Validate `settings.error_format` as one of the immutable enum values.
-☐ Reject an empty, non-string, or unsupported `settings.error_format` with the
+✔ Validate `settings.error_format` as one of the immutable enum values.
+✔ Reject an empty, non-string, or unsupported `settings.error_format` with the
   exact configuration path in the diagnostic.
-☐ Update the in-process extension settings validator to accept the same
+✔ Update the in-process extension settings validator to accept the same
   setting while leaving it unused by the service and host.
-☐ Ensure the external command and in-process loader do not disagree about
+✔ Ensure the external command and in-process loader do not disagree about
   whether a configuration file is valid.
-☐ Pass the resolved enum value into the external runner options.
-☐ Keep format selection project-local so simultaneous commands from different
+✔ Pass the resolved enum value into the external runner options.
+✔ Keep format selection project-local so simultaneous commands from different
   projects can choose different formats independently.
 
 Phase 1 exit gate:
 
-☐ Unit tests cover the default and all three accepted values.
-☐ Unit tests cover invalid types, empty values, unsupported values, and
+✔ Unit tests cover the default and all three accepted values.
+✔ Unit tests cover invalid types, empty values, unsupported values, and
   unknown settings.
-☐ Unit tests prove discovery and error-format settings are loaded together
+✔ Unit tests prove discovery and error-format settings are loaded together
   without changing discovery precedence.
-☐ Unit tests prove separate project roots resolve independent formats.
-☐ Lua syntax checks and the full unit suite pass.
+✔ Unit tests prove separate project roots resolve independent formats.
+✔ Lua syntax checks and the full unit suite pass.
+
+Phase 1 evidence:
+
+- `dwarfspec.error_formats` is created through
+  `dwarfspec.immutable_enum.define` with the three locked serialized values.
+  Both exported defaults reference `ErrorFormat.MSBUILD`.
+- `dwarfspec.settings.validate` is the shared external and in-process settings
+  boundary. It validates wait, discovery, and error-format settings and
+  supplies the MSBuild default. `dwarfspec.config_schema` additionally keeps
+  complete config-module fields and command declarations consistent. No
+  service or host source reads `error_format`.
+- `dwarfspec.config.load` executes the optional project config once and returns
+  discovery plus error-format settings together. CLI selection always loads
+  it before applying the preserved CLI, environment, config, and default
+  discovery precedence.
+- `dwarfspec.cli` places the resolved immutable value in
+  `runner.run(options).error_format`. It has no CLI or environment override,
+  and config loads for separate roots do not share mutable state.
+- `.\tools\Run-UnitTests.ps1` reported 266 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-24.
+- `.\tools\Check-Lua.ps1` passed for 200 Lua files on 2026-07-24.
+- `git diff --check` passed on 2026-07-24.
 
 ## Phase 2: Structured problem source locations
 
@@ -384,7 +406,7 @@ Record evidence only after running the corresponding command.
 | Phase | Evidence | Result |
 |---|---|---|
 | 0 | Baseline repository, syntax, unit, and fixture characterization | Complete: intended root and remote confirmed; baseline 195-file syntax and 250-test unit suites passed; 4 reusable problem fixtures and 5 fixture-contract tests added; post-fixture 197-file syntax and 255-test unit suites passed on 2026-07-24 |
-| 1 | Configuration and immutable enum unit tests | Pending |
+| 1 | Configuration and immutable enum unit tests | Complete: shared validated settings and config schema, immutable identifiers, one-load CLI propagation, discovery precedence, independent roots, 266-test unit suite, and 200-file Lua checks passed on 2026-07-24 |
 | 2 | Structured source-location and event-schema unit tests | Pending |
 | 3 | Exact formatter unit tests | Pending |
 | 4 | Runner and CLI integration unit tests | Pending |
