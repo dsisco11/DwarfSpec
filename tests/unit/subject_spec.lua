@@ -2,6 +2,22 @@
 
 local subject_module = assert(loadfile('src/dwarfspec/subject.lua'))()
 
+---Creates one complete test subject descriptor.
+---@param mount_id integer
+---@return table
+local function descriptor(mount_id)
+    local adapter = {}
+    local source = {adapter=adapter}
+    return {
+        mount_id=mount_id,
+        source=source,
+        path_segments={},
+        adapter=adapter,
+        captured_identity={},
+        control_path_for_diagnostics='<root>',
+    }
+end
+
 describe('DwarfSpec subject commands', function()
     it('routes fluent mutations and scalar observations through its context',
             function()
@@ -39,10 +55,17 @@ describe('DwarfSpec subject commands', function()
                 return {view_id='status'}
             end,
         }
-        local subject = subject_module.new(context, {id=9}, {})
+        local selected_descriptor = descriptor(9)
+        local subject = subject_module.new(
+            context, {id=9}, selected_descriptor)
 
         assert.equals(9, subject.mount_id)
         assert.equals('<root>', subject.control_path)
+        assert.not_equals(selected_descriptor, subject._descriptor)
+        assert.equals(selected_descriptor.source,
+            subject._descriptor.source)
+        assert.equals(selected_descriptor.captured_identity,
+            subject._descriptor.captured_identity)
         assert.equals(subject, subject:click('right'))
         assert.same({{'click', 'right'}}, calls)
         assert.equals(subject, subject:hover('top_left'))
@@ -69,12 +92,25 @@ describe('DwarfSpec subject commands', function()
     it('rejects commands after its run-owned context is unavailable',
             function()
         local context = {subject_commands={}}
-        local subject = subject_module.new(context, {id=1}, {})
+        local subject = subject_module.new(context, {id=1}, descriptor(1))
         subject._references.context = nil
 
         assert.has_error(function() subject:click() end,
             'DwarfSpec subject is unavailable because its run has ended')
         assert.has_error(function() subject:redraw() end,
             'DwarfSpec subject is unavailable because its run has ended')
+    end)
+
+    it('releases its adapter descriptor without mutating public identity',
+            function()
+        local context = {}
+        local subject = subject_module.new(
+            context, {id=4}, descriptor(4))
+
+        assert.is_true(subject_module.release(subject))
+        assert.is_false(subject_module.release(subject))
+        assert.equals(4, subject.mount_id)
+        assert.equals('<root>', subject.control_path)
+        assert.is_nil(subject._descriptor)
     end)
 end)

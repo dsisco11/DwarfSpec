@@ -19,23 +19,50 @@ end
 local function cleanup_mount(context, mount)
     if mount.cleaned then return end
     local failures = {}
-    if mount.adapter and type(mount.adapter.unmount) == 'function' then
-        local ok, message = xpcall(function()
-            mount.adapter:unmount(mount)
-        end, debug.traceback)
+
+    ---Runs one mount cleanup callback and retains its traceback on failure.
+    ---@param callback function
+    local function attempt(callback)
+        local ok, message = xpcall(callback, debug.traceback)
         if not ok then table.insert(failures, tostring(message)) end
     end
+
+    if mount.adapter and type(mount.adapter.unmount) == 'function' then
+        attempt(function()
+            mount.adapter:unmount(mount)
+        end)
+    end
     if mount.adapter and type(mount.adapter.settle) == 'function' then
-        local ok, message = xpcall(function()
+        attempt(function()
             mount.adapter:settle(mount)
-        end, debug.traceback)
-        if not ok then table.insert(failures, tostring(message)) end
+        end)
+    end
+    for subject in pairs(mount.selected_subjects) do
+        context.subject_mounts[subject] = nil
+        attempt(function()
+            context.subject_module.release(subject)
+        end)
+    end
+    if mount.interaction_target and
+            type(mount.interaction_target.cleanup) == 'function' then
+        attempt(function()
+            mount.interaction_target:cleanup()
+        end)
+    end
+    local subject_adapter = mount.subject_source and
+        mount.subject_source.adapter or nil
+    if subject_adapter and type(subject_adapter.cleanup) == 'function' then
+        attempt(function()
+            subject_adapter:cleanup()
+        end)
     end
 
     mount.cleaned = true
     mount.alive = false
     mount.root = nil
     mount.host_screen = nil
+    mount.interaction_target = nil
+    mount.subject_source = nil
     mount.adapter = nil
     mount.cleanup_entry = nil
     mount.cleanup_entries = {}
@@ -47,9 +74,7 @@ local function cleanup_mount(context, mount)
     end
     mount.owned_views = setmetatable({}, {__mode='k'})
     mount.command_subject = nil
-    for subject in pairs(mount.selected_subjects) do
-        context.subject_mounts[subject] = nil
-    end
+    mount.selected_subjects = setmetatable({}, {__mode='k'})
     if context.current == mount then context.current = nil end
     if #failures > 0 then
         error('component adapter cleanup failed: ' ..
@@ -80,7 +105,8 @@ function M.new(options)
     assert(type(options.render_tracker_factory) == 'function',
         'mount context requires a render tracker factory')
     assert(type(options.subject_module) == 'table' and
-        type(options.subject_module.new) == 'function',
+        type(options.subject_module.new) == 'function' and
+        type(options.subject_module.release) == 'function',
         'mount context requires a subject factory')
     if options.command_observer ~= nil then
         assert(type(options.command_observer) == 'table' and
@@ -138,9 +164,35 @@ function M.new(options)
     ---Formats one parent identity for control-path validation errors.
     ---@param control_path string|nil
     ---@return string
-local function parent_identity(control_path)
+    local function parent_identity(control_path)
         if control_path == '' then return '<root>' end
         return control_path or '<anonymous>'
+    end
+
+    ---Returns the validated default subject adapter for one mount.
+    ---@param mount table
+    ---@return dwarfspec.SubjectAdapter
+    local function subject_adapter(mount)
+        local source = mount and mount.subject_source
+        local adapter = source and source.adapter
+        assert(type(adapter) == 'table' and
+            type(adapter.root) == 'function' and
+            type(adapter.resolve) == 'function' and
+            type(adapter.identity) == 'function' and
+            type(adapter.contains) == 'function' and
+            type(adapter.children) == 'function' and
+            type(adapter.name) == 'function' and
+            type(adapter.native_type) == 'function' and
+            type(adapter.bounds) == 'function' and
+            type(adapter.visible) == 'function' and
+            type(adapter.active) == 'function' and
+            type(adapter.focused) == 'function' and
+            type(adapter.text) == 'function' and
+            type(adapter.tooltip) == 'function' and
+            type(adapter.optional_fields) == 'function' and
+            type(adapter.inspect) == 'function',
+            'component mount subject adapter is incomplete')
+        return adapter
     end
 
     ---Refreshes weak ownership and validates direct child control identities.
@@ -148,6 +200,7 @@ local function parent_identity(control_path)
     function context:refresh_views(mount)
         assert(type(mount) == 'table' and not mount.cleaned,
             'cannot refresh a cleaned component mount')
+        local adapter = subject_adapter(mount)
         local owned_views = setmetatable({}, {__mode='k'})
         local visited = setmetatable({}, {__mode='k'})
 
@@ -159,8 +212,8 @@ local function parent_identity(control_path)
             visited[view] = true
             owned_views[view] = true
             local child_ids = {}
-            for _, child in ipairs(view.subviews or {}) do
-                local child_id = child.view_id
+            for _, child in ipairs(adapter:children(view)) do
+                local child_id = adapter:name(child)
                 local child_path = nil
                 if type(child_id) == 'string' and child_id ~= '' then
                     assert(not child_id:find('/', 1, true),
@@ -186,7 +239,10 @@ local function parent_identity(control_path)
             end
         end
 
-        visit(mount.root, '')
+        local root = adapter:root()
+        assert(root == mount.root,
+            'component subject source root changed during mount')
+        visit(root, '')
         for view in pairs(mount.owned_views) do
             if self.view_mounts[view] == mount.id then
                 self.view_mounts[view] = nil
@@ -200,9 +256,11 @@ local function parent_identity(control_path)
     ---@param view table
     ---@return string
     local function available_child_ids(view)
+        local mount = context:require_current('get')
+        local adapter = subject_adapter(mount)
         local ids = {}
-        for _, child in ipairs(view.subviews or {}) do
-            local child_id = child.view_id
+        for _, child in ipairs(adapter:children(view)) do
+            local child_id = adapter:name(child)
             if type(child_id) == 'string' and child_id ~= '' then
                 table.insert(ids, child_id)
             end
@@ -244,31 +302,21 @@ local function parent_identity(control_path)
     ---@return table
     function context:resolve_control_path(control_path)
         local mount = self:require_current('get')
-        local view = mount.root
-        local resolved_path = ''
-        for _, segment in ipairs(parse_control_path(control_path)) do
-            local selected = nil
-            for _, child in ipairs(view.subviews or {}) do
-                if child.view_id == segment then
-                    assert(selected == nil,
-                        ('DwarfSpec invalid component tree: parent ' ..
-                        'control_path=%q has multiple direct children with ' ..
-                        'view_id=%q'):format(parent_identity(resolved_path),
-                            segment))
-                    selected = child
-                end
-            end
-            assert(selected,
-                ('DwarfSpec get failed: control_path=%q mount=%s missing ' ..
-                'segment=%q after=%q; available children=%s')
-                    :format(control_path, tostring(mount.id), segment,
-                        parent_identity(resolved_path),
-                        available_child_ids(view)))
-            view = selected
-            resolved_path = resolved_path == '' and segment or
-                resolved_path .. '/' .. segment
+        local segments = parse_control_path(control_path)
+        local adapter = subject_adapter(mount)
+        local view, failure = adapter:resolve(segments)
+        if view then return view end
+        local resolved = {}
+        for index = 1, failure.index - 1 do
+            table.insert(resolved, segments[index])
         end
-        return view
+        local resolved_path = table.concat(resolved, '/')
+        assert(false,
+            ('DwarfSpec get failed: control_path=%q mount=%s missing ' ..
+            'segment=%q after=%q; available children=%s')
+                :format(control_path, tostring(mount.id), failure.segment,
+                    parent_identity(resolved_path),
+                    available_child_ids(failure.parent)))
     end
 
     ---Returns the current mount that owns a native view, if any.
@@ -326,9 +374,21 @@ local function parent_identity(control_path)
     ---@return table
     function context:new_subject(view, control_path)
         local mount = self:require_current('subject creation')
-        assert(self.view_mounts[view] == mount.id,
+        local source = mount.subject_source
+        local adapter = subject_adapter(mount)
+        assert(adapter:contains(view) and self.view_mounts[view] == mount.id,
             'subject view is outside the current mount')
-        local subject = self.subject_module.new(self, mount, view, control_path)
+        local diagnostic_path = control_path or '<root>'
+        local path_segments = diagnostic_path == '<root>' and {} or
+            parse_control_path(diagnostic_path)
+        local subject = self.subject_module.new(self, mount, {
+            mount_id=mount.id,
+            source=source,
+            path_segments=path_segments,
+            adapter=adapter,
+            captured_identity=adapter:identity(view),
+            control_path_for_diagnostics=diagnostic_path,
+        })
         self.subject_mounts[subject] = mount.id
         mount.selected_subjects[subject] = true
         return subject
@@ -349,11 +409,18 @@ local function parent_identity(control_path)
             ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
                 'current mount is %s'):format(operation, subject.control_path,
                     tostring(subject.mount_id), tostring(mount.id)))
-        local view = subject._references and subject._references.view
-        assert(view, ('DwarfSpec %s subject control_path=%q mount=%s native ' ..
-            'object is no longer available'):format(operation,
+        local descriptor = subject._descriptor
+        assert(descriptor and descriptor.source == mount.subject_source and
+            descriptor.adapter == subject_adapter(mount),
+            ('DwarfSpec %s subject control_path=%q mount=%s descriptor ' ..
+            'is no longer available'):format(operation,
                 subject.control_path, tostring(subject.mount_id)))
-        assert(self.view_mounts[view] == mount.id,
+        local view = descriptor.adapter:resolve(descriptor.path_segments)
+        local current_identity = view and descriptor.adapter:identity(view)
+        assert(view and
+            current_identity == descriptor.captured_identity and
+            descriptor.adapter:contains(view) and
+            self.view_mounts[view] == mount.id,
             ('DwarfSpec %s rejected subject control_path=%q mount=%s because ' ..
                 'its view is outside the current mount'):format(operation,
                     subject.control_path, tostring(subject.mount_id)))
@@ -524,6 +591,8 @@ local function parent_identity(control_path)
             component_class=classification.class,
             root=classification.input_form == 'instance' and component or nil,
             host_screen=nil,
+            interaction_target=nil,
+            subject_source=nil,
             command_subject=nil,
         }
         local prepare_ok, prepared = xpcall(function()
@@ -540,6 +609,8 @@ local function parent_identity(control_path)
             component_class=prepared.class,
             root=prepared.component,
             host_screen=nil,
+            interaction_target=nil,
+            subject_source=nil,
             render_tracker=self.render_tracker_factory(),
             adapter=adapter,
             alive=false,
@@ -569,10 +640,23 @@ local function parent_identity(control_path)
             adapter_result = adapter_result or {}
             assert(type(adapter_result) == 'table',
                 'component adapter mount() must return a table or nil')
-            assert(type(adapter_result.root or prepared.component) == 'table',
-                'component adapter root must be a native component object')
             mount.root = adapter_result.root or prepared.component
             mount.host_screen = adapter_result.host_screen
+            mount.interaction_target = adapter_result.interaction_target
+            mount.subject_source = adapter_result.subject_source
+            assert(type(mount.root) == 'table',
+                'component adapter root must be a native component object')
+            assert(type(mount.host_screen) == 'table',
+                'component adapter must return its owned host screen')
+            assert(type(mount.interaction_target) == 'table' and
+                type(mount.interaction_target.assert_current) == 'function' and
+                type(mount.interaction_target.native_screen) == 'function' and
+                type(mount.interaction_target.invalidate) == 'function' and
+                type(mount.interaction_target.cleanup) == 'function',
+                'component adapter must return a complete interaction target')
+            local source_adapter = subject_adapter(mount)
+            assert(source_adapter:root() == mount.root,
+                'component subject source must use the adapter result root')
             if mount.host_screen then
                 self.owned_screens[mount.host_screen] = true
             end

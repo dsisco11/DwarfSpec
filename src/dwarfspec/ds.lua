@@ -85,6 +85,12 @@ local render_tracker_module = load_automation_module(package_root,
     'dwarfspec.render_tracker', '/src/dwarfspec/render_tracker.lua')
 local subject_module = load_automation_module(package_root,
     'dwarfspec.subject', '/src/dwarfspec/subject.lua')
+local interaction_target_module = load_automation_module(package_root,
+    'dwarfspec.interaction_target',
+    '/src/dwarfspec/interaction_target.lua')
+local lua_view_adapter_module = load_automation_module(package_root,
+    'dwarfspec.lua_view_adapter',
+    '/src/dwarfspec/lua_view_adapter.lua')
 local EMouseButton = load_automation_module(package_root,
     'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
 local EInputState = load_automation_module(package_root,
@@ -221,6 +227,16 @@ local TestStatus = load_automation_module(package_root,
             instrumentation=render_instrumentation,
             enrich_failure=report_mount_failure,
             overlay_mount_module=overlay_mount_module,
+            interaction_target_factory=function(screen)
+                return interaction_target_module.new_owned_screen(screen, {
+                    is_active=is_active,
+                    resolve_native_screen=function(owned_screen)
+                        return M.resolve_native_screen(
+                            owned_screen, context.current_viewscreen)
+                    end,
+                })
+            end,
+            subject_source_factory=lua_view_adapter_module.new_source,
         })
     end
     context.mount_context = mount_context_module.new({
@@ -271,17 +287,19 @@ local TestStatus = load_automation_module(package_root,
     ---Resolves a subject or omitted target against the implicit mount.
     ---@param value any
     ---@param operation string
-    ---@return any, table|nil, table|nil
+    ---@return any, dwarfspec.InteractionTarget|nil, table|nil, dwarfspec.SubjectAdapter|nil
     local function resolve_interaction_target(value, operation)
         if value == nil then
             local mount = context.mount_context:require_current(operation)
-            return mount.root, mount.host_screen, mount
+            local adapter = mount.subject_source.adapter
+            return adapter:root(), mount.interaction_target, mount, adapter
         end
         if context.mount_context.subject_mounts[value] then
             local view = context.mount_context:resolve_subject(value,
                 operation)
-            return view, context.mount_context.current.host_screen,
-                context.mount_context.current
+            local mount = context.mount_context.current
+            return view, mount.interaction_target, mount,
+                value._descriptor.adapter
         end
         error(('DwarfSpec %s requires a subject from the current mount; ' ..
             'use ds.get(control_path) or ds.root()'):format(operation), 2)
@@ -392,8 +410,9 @@ local TestStatus = load_automation_module(package_root,
     ---@param view table
     ---@return table
     function ds.inspect(view)
-        view = resolve_interaction_target(view, 'inspect')
-        return diagnostics.inspect_view(view)
+        local adapter
+        view, _, _, adapter = resolve_interaction_target(view, 'inspect')
+        return diagnostics.inspect_view(view, adapter)
     end
 
     ---Redraws a subject's mounted screen and optionally skips render wait.
@@ -401,8 +420,8 @@ local TestStatus = load_automation_module(package_root,
     ---@param options table|nil
     ---@return any
     function ds.redraw(view, options)
-        local screen
-        _, screen = resolve_interaction_target(view, 'redraw')
+        local interaction_target
+        _, interaction_target = resolve_interaction_target(view, 'redraw')
         assert(type(options) == 'table' or options == nil,
             'redraw options must be a table')
         options = options or {}
@@ -412,10 +431,8 @@ local TestStatus = load_automation_module(package_root,
         end
         assert(options.wait == nil or type(options.wait) == 'boolean',
             'redraw wait option must be a boolean')
-        assert(type(screen.invalidate) == 'function',
-            'mounted screen does not support redraw')
         return context.mount_context:mutate('redraw', function()
-            return screen:invalidate()
+            return interaction_target:invalidate()
         end, {
             wait_for_render=options.wait ~= false,
         })
@@ -425,12 +442,14 @@ local TestStatus = load_automation_module(package_root,
     ---@param name string
     ---@return table
     function ds.capture_view_tree(name)
-        local root = context.mount_context:require_current(
-            'capture_view_tree').root
+        local mount = context.mount_context:require_current(
+            'capture_view_tree')
+        local adapter = mount.subject_source.adapter
+        local root = adapter:root()
         assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
             'capture name must be a relative identifier')
         context.run.captures = context.run.captures or {}
-        local tree = diagnostics.capture_view_tree(root)
+        local tree = diagnostics.capture_view_tree(root, nil, adapter)
         context.run.captures[name] = tree
         return tree
     end
@@ -440,8 +459,11 @@ local TestStatus = load_automation_module(package_root,
     ---@param anchor string|nil
     ---@return integer, integer
     function ds.move_pointer(view, anchor)
-        view = resolve_interaction_target(view, 'move_pointer')
-        local body = assert(view.frame_body, 'view has no live frame body')
+        local adapter
+        view, _, _, adapter = resolve_interaction_target(
+            view, 'move_pointer')
+        local body = assert(adapter:bounds(view),
+            'view has no live frame body')
         anchor = anchor or 'center'
         local x = math.floor((body.x1 + body.x2) / 2)
         local y = math.floor((body.y1 + body.y2) / 2)
@@ -475,12 +497,11 @@ local TestStatus = load_automation_module(package_root,
     ---@param subject table|nil
     ---@return integer
     function ds.input(keys, subject)
-        local screen
-        _, screen = resolve_interaction_target(subject, 'input')
+        local interaction_target
+        _, interaction_target = resolve_interaction_target(subject, 'input')
         return context.mount_context:mutate('input', function()
-            assert(is_active(screen), 'input screen is not currently active')
-            require('gui').simulateInput(M.resolve_native_screen(
-                screen, context.current_viewscreen), keys)
+            require('gui').simulateInput(
+                interaction_target:native_screen('input'), keys)
         end)
     end
 
@@ -514,8 +535,8 @@ local TestStatus = load_automation_module(package_root,
     ---@param action DwarfSpecEInputState|nil
     ---@return integer
     function ds.mouseInput(button, action)
-        local screen
-        _, screen = resolve_interaction_target(nil, 'mouseInput')
+        local interaction_target
+        _, interaction_target = resolve_interaction_target(nil, 'mouseInput')
         local fields = mouse_button_fields[button]
         local key = mouse_wheel_keys[button]
         assert(fields or key,
@@ -537,12 +558,10 @@ local TestStatus = load_automation_module(package_root,
         end
         local x, y = pointer_adapter_module.position(context.pointer)
         return context.mount_context:mutate('mouseInput', function()
-            assert(is_active(screen),
-                'mouse input screen is not currently active')
             local dispatch = function()
                 pointer_adapter_module.with_interface_mouse(x, y, function()
-                    require('gui').simulateInput(M.resolve_native_screen(
-                        screen, context.current_viewscreen), key)
+                    require('gui').simulateInput(
+                        interaction_target:native_screen('mouse input'), key)
                 end)
             end
             if not fields or action == EInputState.CLICK then
@@ -564,16 +583,16 @@ local TestStatus = load_automation_module(package_root,
     ---@return integer
     function ds.click(view, button)
         local requested_view = view
-        local screen
-        view, screen = resolve_interaction_target(view, 'click')
+        local interaction_target
+        view, interaction_target = resolve_interaction_target(view, 'click')
         local key = ({left='_MOUSE_L', right='_MOUSE_R',
             middle='_MOUSE_M'})[button or 'left']
         assert(key, 'unsupported mouse button: ' .. tostring(button))
         local x, y = ds.move_pointer(requested_view)
         return context.mount_context:mutate('click', function()
             pointer_adapter_module.with_interface_mouse(x, y, function()
-                require('gui').simulateInput(M.resolve_native_screen(
-                    screen, context.current_viewscreen), key)
+                require('gui').simulateInput(
+                    interaction_target:native_screen('click'), key)
             end)
         end)
     end
@@ -583,16 +602,16 @@ local TestStatus = load_automation_module(package_root,
     ---@param subject table|nil
     ---@return integer
     function ds.type(text, subject)
-        local screen
-        _, screen = resolve_interaction_target(subject, 'type')
+        local interaction_target
+        _, interaction_target = resolve_interaction_target(subject, 'type')
         return context.mount_context:mutate('type', function()
             assert(type(text) == 'string', 'text input must be a string')
             local gui = require('gui')
             for index = 1, #text do
                 assert(text:byte(index) >= 1,
                     'text input cannot contain NUL bytes')
-                gui.simulateInput(M.resolve_native_screen(
-                    screen, context.current_viewscreen),
+                gui.simulateInput(
+                    interaction_target:native_screen('type'),
                         ('STRING_A%03d'):format(text:byte(index)))
             end
         end)

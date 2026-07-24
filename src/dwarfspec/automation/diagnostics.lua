@@ -11,7 +11,8 @@ local DEFAULT_TREE_MAX_NODES = 128
 local function get_value(value)
     if type(value) ~= 'function' then return value end
     local ok, result = pcall(value)
-    return ok and result or '<unavailable>'
+    if not ok then return '<unavailable>' end
+    return result
 end
 
 ---Returns a stable class label without retaining userdata text addresses.
@@ -55,11 +56,17 @@ local function text_value(text)
     return '<' .. type(text) .. '>'
 end
 
----Inspects one live view without mutating it.
----@param view table
+---Inspects one live view through an adapter or the legacy Lua-view fields.
+---@param view any
+---@param adapter dwarfspec.SubjectAdapter|nil
 ---@return table
-function M.inspect_view(view)
+function M.inspect_view(view, adapter)
     assert(view, 'cannot inspect a nil view')
+    if adapter then
+        assert(type(adapter.inspect) == 'function',
+            'subject adapter must provide inspect()')
+        return adapter:inspect(view)
+    end
     local focused = not not view.focus
     if type(view.hasFocus) == 'function' then
         local ok, value = pcall(view.hasFocus, view)
@@ -78,40 +85,44 @@ function M.inspect_view(view)
     }
 end
 
----Captures one bounded view subtree through ordered native child arrays.
----@param view table
+---Captures one bounded view subtree through its selected adapter.
+---@param view any
 ---@param options table
 ---@param state table
 ---@param depth integer
+---@param adapter dwarfspec.SubjectAdapter|nil
 ---@return table
-local function capture_view_subtree(view, options, state, depth)
-    local node = M.inspect_view(view)
+local function capture_view_subtree(view, options, state, depth, adapter)
+    local node = M.inspect_view(view, adapter)
     node.children = {}
     state.node_count = state.node_count + 1
+    local children = adapter and adapter:children(view) or
+        (view.subviews or {})
     if depth >= options.max_depth then
-        if #(view.subviews or {}) > 0 then
+        if #children > 0 then
             node.truncated = true
             state.truncated = true
         end
         return node
     end
-    for _, child in ipairs(view.subviews or {}) do
+    for _, child in ipairs(children) do
         if state.node_count >= options.max_nodes then
             node.truncated = true
             state.truncated = true
             break
         end
         table.insert(node.children, capture_view_subtree(
-            child, options, state, depth + 1))
+            child, options, state, depth + 1, adapter))
     end
     return node
 end
 
 ---Recursively captures a bounded view tree with explicit capture metadata.
----@param view table
+---@param view any
 ---@param options table|nil
+---@param adapter dwarfspec.SubjectAdapter|nil
 ---@return table
-function M.capture_view_tree(view, options)
+function M.capture_view_tree(view, options, adapter)
     options = options or {}
     local bounds = {
         max_depth=options.max_depth or DEFAULT_TREE_MAX_DEPTH,
@@ -124,7 +135,7 @@ function M.capture_view_tree(view, options)
         bounds.max_nodes % 1 == 0,
         'view-tree max nodes must be a positive integer')
     local state = {node_count=0, truncated=false}
-    local root = capture_view_subtree(view, bounds, state, 0)
+    local root = capture_view_subtree(view, bounds, state, 0, adapter)
     root.capture_bounds = {
         max_depth=bounds.max_depth,
         max_nodes=bounds.max_nodes,
@@ -182,10 +193,12 @@ end
 ---@param failure any
 ---@return table
 function M.capture_mount_failure(mount, operation, failure)
-    local root = mount.host_screen or mount.root
+    local adapter = mount.subject_source and
+        mount.subject_source.adapter or nil
+    local root = adapter and adapter:root() or mount.root
     local tree = nil
     if root then
-        local ok, value = pcall(M.capture_view_tree, root)
+        local ok, value = pcall(M.capture_view_tree, root, nil, adapter)
         if ok then tree = value end
     end
     local screen = {width=0, height=0, cells={}}

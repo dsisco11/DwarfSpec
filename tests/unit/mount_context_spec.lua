@@ -8,6 +8,8 @@ local mount_context = assert(loadfile(
 local render_tracker = assert(loadfile(
     'src/dwarfspec/render_tracker.lua'))()
 local subject = assert(loadfile('src/dwarfspec/subject.lua'))()
+local lua_view_adapter = assert(loadfile(
+    'src/dwarfspec/lua_view_adapter.lua'))()
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
 ---@param parent table|nil
@@ -39,6 +41,7 @@ describe('DwarfSpec mount context', function()
     local registry
     local events
     local screens
+    local interaction_targets
     local context
     local fail_activation
     local invalid_result
@@ -53,6 +56,7 @@ describe('DwarfSpec mount context', function()
         registry = cleanup.new({run_id='mount-context-test'})
         events = {}
         screens = {}
+        interaction_targets = {}
         fail_activation = false
         invalid_result = false
         fail_subject = false
@@ -79,6 +83,7 @@ describe('DwarfSpec mount context', function()
                     if fail_subject then error('subject creation exploded') end
                     return subject.new(...)
                 end,
+                release=subject.release,
             },
             adapter_factory=function(category)
                 assert.equals('widget', category)
@@ -97,6 +102,27 @@ describe('DwarfSpec mount context', function()
                             error('activation exploded for ' .. screen.name)
                         end
                         if invalid_result then return 'invalid adapter result' end
+                        local interaction_target = {
+                            cleaned=false,
+                            assert_current=function(self)
+                                assert.is_false(self.cleaned)
+                                assert.is_true(screen.active)
+                                return screen
+                            end,
+                            native_screen=function(self)
+                                return self:assert_current()
+                            end,
+                            invalidate=function(self)
+                                return self:assert_current()
+                            end,
+                            cleanup=function(self)
+                                if self.cleaned then return false end
+                                self.cleaned = true
+                                return true
+                            end,
+                        }
+                        table.insert(interaction_targets,
+                            interaction_target)
                         if fail_render then
                             mount.render_tracker:failed(
                                 'render exploded for ' .. screen.name)
@@ -106,6 +132,9 @@ describe('DwarfSpec mount context', function()
                         return {
                             root=prepared.component,
                             host_screen=screen,
+                            interaction_target=interaction_target,
+                            subject_source=lua_view_adapter.new_source(
+                                prepared.component),
                         }
                     end,
                     unmount=function(_, mount)
@@ -151,6 +180,12 @@ describe('DwarfSpec mount context', function()
         assert.equals('first', root_subject:raw().name)
         assert.equals('first', mounted.root.name)
         assert.equals(screens[1], mounted.host_screen)
+        assert.equals(interaction_targets[1],
+            mounted.interaction_target)
+        assert.equals(mounted.root,
+            mounted.subject_source.adapter:root())
+        assert.is_nil(context.owned_screens[mounted.interaction_target])
+        assert.is_nil(context.owned_screens[mounted.subject_source])
         assert.is_true(mounted.alive)
         assert.is_nil(mounted.active)
         assert.is_true(screens[1].active)
@@ -224,6 +259,31 @@ describe('DwarfSpec mount context', function()
             context:resolve_control_path('nested/dynamic')
         end, 'DwarfSpec get failed: control_path="nested/dynamic" mount=1 ' ..
             'missing segment="dynamic" after="nested"; available children=<none>')
+    end)
+
+    it('rejects a retained subject when its path is rebound',
+            function()
+        local original = {view_id='status', subviews={}}
+        context:mount(TestWidget, {
+            name='replacement-root',
+            subviews={original},
+        })
+        local selected = context:new_subject(original, 'status')
+        local replacement = {view_id='status', subviews={}}
+
+        context:mutate('replace child', function()
+            context.current.root.subviews[1] = replacement
+            context.current.render_tracker:completed()
+        end)
+
+        assert.equals(replacement,
+            context:resolve_control_path('status'))
+        assert.has_error(function() selected:raw() end,
+            'DwarfSpec subject raw access rejected subject ' ..
+            'control_path="status" mount=1 because its view is outside ' ..
+            'the current mount')
+        assert.equals(replacement,
+            context:new_subject(replacement, 'status'):raw())
     end)
 
     it('resolves only explicit direct-child control paths', function()
@@ -464,6 +524,7 @@ describe('DwarfSpec mount context', function()
         }, events)
         assert.is_true(constructed)
         assert.is_false(screens[1].active)
+        assert.is_true(interaction_targets[1].cleaned)
         assert.is_true(screens[2].active)
         assert.equals(2, context.current.id)
         assert.equals('second', second_subject:raw().name)
@@ -486,11 +547,18 @@ describe('DwarfSpec mount context', function()
     it('explicitly unmounts once and remains cleanup-idempotent', function()
         local root_subject = context:mount(TestWidget, {name='explicit'})
         local mounted = context.current
+        local mounted_target = mounted.interaction_target
+        local mounted_subject_adapter =
+            mounted.subject_source.adapter
 
         context:unmount()
 
         assert.is_nil(context.current)
         assert.is_false(mounted.alive)
+        assert.is_true(mounted_target.cleaned)
+        assert.has_error(function() mounted_subject_adapter:root() end,
+            'Lua view subject source is no longer available')
+        assert.is_nil(root_subject._descriptor)
         assert.is_nil(mounted.active)
         assert.is_false(screens[1].active)
         assert.equals(0, cleanup.pending_count(registry))

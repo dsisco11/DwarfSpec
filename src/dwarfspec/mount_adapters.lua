@@ -161,6 +161,11 @@ function M.new(options)
         function(_, _, failure) return tostring(failure) end
     local define_class = options.define_class or defclass
     local HostScreen = create_host_class(gui_module, define_class)
+    local interaction_target_factory = assert(
+        options.interaction_target_factory,
+        'mount adapters require an interaction target factory')
+    local subject_source_factory = assert(options.subject_source_factory,
+        'mount adapters require a subject source factory')
     local overlay_mount_module = options.overlay_mount_module or
         require('dwarfspec.overlay_mount')
     local overlay_factory = options.overlay_factory or
@@ -174,6 +179,26 @@ function M.new(options)
         })
 
     local host_adapter = {}
+
+    ---Builds the independent ownership, interaction, and subject result.
+    ---@param root table
+    ---@param screen table
+    ---@return table
+    local function mounted_result(root, screen)
+        local interaction_target = interaction_target_factory(screen)
+        local subject_source = subject_source_factory(root)
+        assert(type(interaction_target) == 'table',
+            'interaction target factory must return a table')
+        assert(type(subject_source) == 'table' and
+            type(subject_source.adapter) == 'table',
+            'subject source factory must return an adapted source')
+        return {
+            root=root,
+            host_screen=screen,
+            interaction_target=interaction_target,
+            subject_source=subject_source,
+        }
+    end
 
     ---Shows one widget component in an instrumented DwarfSpec host screen.
     ---@param mount table
@@ -189,7 +214,7 @@ function M.new(options)
         prepare_screen(mount, screen, instrumentation, register_cleanup,
             enrich_failure)
         screen:show(prepared.options.backing_viewscreen)
-        return {root=prepared.component, host_screen=screen}
+        return mounted_result(prepared.component, screen)
     end
 
     ---Dismisses a widget host if scoped cleanup has not already done so.
@@ -230,7 +255,7 @@ function M.new(options)
             function() controller:disable() end)
         controller:enable()
         screen:show(prepared.options.backing_viewscreen)
-        return {root=prepared.component, host_screen=screen}
+        return mounted_result(prepared.component, screen)
     end
 
     ---Dismisses an overlay host if scoped cleanup has not already done so.
@@ -265,7 +290,7 @@ function M.new(options)
         prepare_screen(mount, screen, instrumentation, register_cleanup,
             enrich_failure)
         screen:show(prepared.options.backing_viewscreen)
-        return {root=screen, host_screen=screen}
+        return mounted_result(screen, screen)
     end
 
     ---Dismisses a complete screen if scoped cleanup has not already done so.

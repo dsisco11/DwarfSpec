@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phase 0 complete
+Status: in progress; Phases 0-1 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -175,39 +175,39 @@ preserving all existing component behavior.
 
 ### Tasks
 
-☐ Define a documented interaction-target contract with native-screen access,
+✔ Define a documented interaction-target contract with native-screen access,
   current-target validation, invalidation, and cleanup behavior.
-☐ Define a documented subject-adapter contract for root resolution, traversal,
+✔ Define a documented subject-adapter contract for root resolution, traversal,
   identity, containment, children, names, native type, bounds, state, text,
   tooltip, and optional inspection fields.
-☐ Replace the raw-table-only `Subject` payload with a documented descriptor
+✔ Replace the raw-table-only `Subject` payload with a documented descriptor
   containing mount identity, source, path segments, adapter, captured identity,
   and diagnostic path.
-☐ Refactor `Subject` methods to resolve through the selected adapter before
+✔ Refactor `Subject` methods to resolve through the selected adapter before
   reading or interacting with the target.
-☐ Preserve the fluent public subject API and current failure behavior where
+✔ Preserve the fluent public subject API and current failure behavior where
   the proposal does not deliberately change it.
-☐ Implement the Lua-view adapter over current component behavior:
+✔ Implement the Lua-view adapter over current component behavior:
   `subviews`, `view_id`, `frame_body`, evaluated `visible`/`active`, text, and
   existing diagnostics.
-☐ Refactor existing component mounts to provide an interaction target and Lua
+✔ Refactor existing component mounts to provide an interaction target and Lua
   subject source while retaining their owned `ZScreen`.
-☐ Ensure only screens actually created by DwarfSpec enter
+✔ Ensure only screens actually created by DwarfSpec enter
   `mount_context.owned_screens`.
-☐ Preserve current component show, resize, render instrumentation, dismissal,
+✔ Preserve current component show, resize, render instrumentation, dismissal,
   and cleanup behavior.
-☐ Add focused regression tests for component root lookup, nested paths,
+✔ Add focused regression tests for component root lookup, nested paths,
   retained subjects, raw access, input, redraw, and cleanup.
-☐ Add LuaDoc annotations for every changed contract and implementation.
+✔ Add LuaDoc annotations for every changed contract and implementation.
 
 ### Phase 1 exit gate
 
-☐ All existing component-mount and subject tests pass without weakened
+✔ All existing component-mount and subject tests pass without weakened
   assertions.
-☐ Component raw subjects still return exact Lua tables.
-☐ Ownership evidence still reports and cleans up DwarfSpec-owned component
+✔ Component raw subjects still return exact Lua tables.
+✔ Ownership evidence still reports and cleans up DwarfSpec-owned component
   screens correctly.
-☐ No native attachment behavior is exposed publicly yet.
+✔ No native attachment behavior is exposed publicly yet.
 
 ## Phase 2: Subject-source enum and path contracts
 
@@ -772,7 +772,73 @@ as the work proceeds.
 
 ### Phase 1 evidence
 
-- Pending.
+- Added `src/dwarfspec/interaction_target.lua` with a documented
+  `dwarfspec.InteractionTarget` contract:
+  `assert_current(operation)`, `native_screen(operation)`, `invalidate()`, and
+  idempotent non-owning `cleanup()`.
+- Added `src/dwarfspec/lua_view_adapter.lua` with documented
+  `dwarfspec.SubjectAdapter`, `dwarfspec.SubjectSource`, and
+  `dwarfspec.LuaViewAdapter` contracts. The adapter owns component traversal,
+  exact identity, containment, child names, class labels, bounds, evaluated
+  visibility/activity, focus, text, tooltip, optional inspection fields, and
+  stable inspection.
+- `Subject` now retains a copied descriptor containing mount ID, source, path
+  segments, adapter, captured identity, and diagnostic path. It no longer
+  retains a weak raw-view field or requires the raw target to be a table.
+- Every subject command still enters through `resolve_subject()`. Resolution
+  now reacquires the path through the descriptor adapter, compares exact
+  captured identity, verifies containment, and rejects removal or replacement
+  at the same path.
+- Mount cleanup releases every retained descriptor, then releases the
+  interaction target and subject adapter without asking either abstraction to
+  dismiss or mutate the component screen.
+- All widget, overlay, and complete-screen adapters now return independent
+  `host_screen`, `interaction_target`, and `subject_source` values.
+  `host_screen` remains the owning lifecycle and viewport value;
+  public input/redraw commands no longer read it.
+- `owned_screens` receives only the adapter's owning `host_screen`.
+  Tests explicitly prove that neither the interaction target nor subject source
+  is entered into ownership evidence.
+- Public inspection, pointer geometry, tree capture, keyboard input, mouse
+  input, clicks, text input, and redraw now route through the selected subject
+  adapter or interaction target.
+- Diagnostics accept an optional subject adapter and capture the component
+  source root instead of treating the owned host screen as the subject root.
+  The legacy no-adapter path remains available for existing direct diagnostics
+  callers.
+- Lazy Lua-view properties now preserve a successful boolean `false` result
+  instead of converting it to the prior unavailable-value sentinel. This is
+  required for the adapter's evaluated visibility/activity contract and is
+  covered directly.
+- Added `tests/unit/interaction_target_spec.lua` and
+  `tests/unit/lua_view_adapter_spec.lua`. Extended the existing subject, mount
+  context, mount adapter, and public-command suites without removing behavioral
+  assertions.
+- Added explicit coverage for:
+  interaction currentness and native resolution; invalidation; cleanup without
+  dismissal; inactive-screen rejection; adapter traversal and inspection;
+  exact raw identity; descriptor release; dynamic nested lookup; removal;
+  replacement at the same path; root/source identity; input and redraw routing;
+  pointer behavior; owned-screen counts; full component cleanup; and continued
+  rejection of `ds.mount()` with no component.
+- Focused command:
+  `.\tools\Run-UnitTests.ps1 --filter <contract filter>`, run sequentially for
+  `owned%-screen interaction target`, `Lua view subject adapter`,
+  `DwarfSpec subject commands`, `DwarfSpec mount context`,
+  `DwarfSpec mount adapters`, `DwarfSpec public mount commands`, and
+  `automation mount diagnostics`.
+  Result: 51 successes total, zero failures, errors, or pending tests.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `281 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 206 files.`
+- `git diff HEAD --check` passed.
+- No native attachment overload, subject-source enum, native userdata adapter,
+  or native render observer is exposed in this work. The public-command suite
+  proves that `ds.mount()` with no component still returns the existing
+  unsupported-component error.
+- No live DFHack run or package build was claimed for this internal refactor;
+  neither is a Phase 1 exit-gate requirement.
 
 ### Phase 2 evidence
 

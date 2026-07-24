@@ -7,6 +7,10 @@ local render_tracker = assert(loadfile(
     'src/dwarfspec/render_tracker.lua'))()
 local ds_factory = assert(loadfile(
     'src/dwarfspec/ds.lua'))()
+local interaction_target = assert(loadfile(
+    'src/dwarfspec/interaction_target.lua'))()
+local lua_view_adapter = assert(loadfile(
+    'src/dwarfspec/lua_view_adapter.lua'))()
 local EventType = require('dwarfspec.automation.event_types')
 local EMouseButton = require('dwarfspec.mouse_buttons')
 local EInputState = require('dwarfspec.input_states')
@@ -169,6 +173,23 @@ describe('DwarfSpec public mount commands', function()
                             return {
                                 root=prepared.component,
                                 host_screen=screen,
+                                interaction_target=
+                                    interaction_target.new_owned_screen(
+                                        screen, {
+                                            is_active=function(candidate)
+                                                return candidate:isActive()
+                                            end,
+                                            resolve_native_screen=
+                                                function(candidate)
+                                                    return ds_factory.resolve_native_screen(
+                                                        candidate, function()
+                                                            return native_screen
+                                                        end)
+                                                end,
+                                        }),
+                                subject_source=
+                                    lua_view_adapter.new_source(
+                                        prepared.component),
                             }
                         end,
                         unmount=function()
@@ -246,6 +267,13 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(first_screen.active)
         assert.is_true(screen.active)
         assert.equals('second', second:raw().name)
+    end)
+
+    it('does not expose no-component native attachment yet', function()
+        assert.has_error(function() ds.mount() end,
+            'unsupported component input (nil); expected a DFHack defclass ' ..
+            'derived from widgets.Widget, overlay.OverlayWidget, or ' ..
+            'gui.ZScreen, or an instance of one of those classes')
     end)
 
     it('reports missing control paths with current mount identity',

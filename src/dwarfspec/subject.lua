@@ -1,10 +1,19 @@
--- Weak, run-owned references to one component inside a mount.
+-- Adapter-backed references to one subject inside a run-owned mount.
 
 local M = {}
+
+---@class dwarfspec.SubjectDescriptor
+---@field mount_id integer
+---@field source dwarfspec.SubjectSource
+---@field path_segments string[]
+---@field adapter dwarfspec.SubjectAdapter
+---@field captured_identity any
+---@field control_path_for_diagnostics string
 
 ---@class dwarfspec.Subject
 ---@field mount_id integer
 ---@field control_path string
+---@field _descriptor dwarfspec.SubjectDescriptor|nil
 ---@field _references table
 local Subject = {}
 Subject.__index = Subject
@@ -84,8 +93,8 @@ function Subject:text()
     return state.text
 end
 
----Returns the native object after validating current mount ownership.
----@return table
+---Returns the exact adapted object after validating current mount ownership.
+---@return any
 function Subject:raw()
     local context = self._references.context
     assert(context,
@@ -93,23 +102,62 @@ function Subject:raw()
     return context:resolve_subject(self, 'subject raw access')
 end
 
----Creates a weak subject for a native object in one mount.
+---Releases one retained descriptor after its owning mount is cleaned.
+---@param subject dwarfspec.Subject
+---@return boolean
+function M.release(subject)
+    assert(type(subject) == 'table',
+        'subject release requires a subject table')
+    if not subject._descriptor then return false end
+    subject._descriptor = nil
+    return true
+end
+
+---Copies path segments so caller mutation cannot retarget a subject.
+---@param path_segments string[]
+---@return string[]
+local function copy_path(path_segments)
+    local result = {}
+    for index, segment in ipairs(path_segments) do result[index] = segment end
+    return result
+end
+
+---Creates an adapter-backed subject descriptor for one mount.
 ---@param context table
 ---@param mount table
----@param view table
----@param control_path string|nil
+---@param descriptor dwarfspec.SubjectDescriptor
 ---@return dwarfspec.Subject
-function M.new(context, mount, view, control_path)
+function M.new(context, mount, descriptor)
     assert(type(context) == 'table' and type(mount) == 'table',
         'subject requires an owning mount context')
-    assert(type(view) == 'table', 'subject requires a native component object')
+    assert(type(descriptor) == 'table' and
+        descriptor.mount_id == mount.id,
+        'subject requires a descriptor for its owning mount')
+    assert(type(descriptor.source) == 'table' and
+        type(descriptor.adapter) == 'table',
+        'subject descriptor requires a source and adapter')
+    assert(type(descriptor.path_segments) == 'table',
+        'subject descriptor requires path segments')
+    assert(descriptor.captured_identity ~= nil,
+        'subject descriptor requires captured identity')
+    assert(type(descriptor.control_path_for_diagnostics) == 'string',
+        'subject descriptor requires a diagnostic control path')
+    local retained_descriptor = {
+        mount_id=descriptor.mount_id,
+        source=descriptor.source,
+        path_segments=copy_path(descriptor.path_segments),
+        adapter=descriptor.adapter,
+        captured_identity=descriptor.captured_identity,
+        control_path_for_diagnostics=
+            descriptor.control_path_for_diagnostics,
+    }
     local subject = setmetatable({
         mount_id=mount.id,
-        control_path=control_path or '<root>',
+        control_path=retained_descriptor.control_path_for_diagnostics,
+        _descriptor=retained_descriptor,
         _references=setmetatable({
             context=context,
             mount=mount,
-            view=view,
         }, {__mode='v'}),
     }, Subject)
     return subject

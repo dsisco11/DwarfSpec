@@ -4,6 +4,10 @@ local mount_adapters = assert(loadfile(
     'src/dwarfspec/mount_adapters.lua'))()
 local instrumentation = assert(loadfile(
     'src/dwarfspec/render_instrumentation.lua'))()
+local interaction_target = assert(loadfile(
+    'src/dwarfspec/interaction_target.lua'))()
+local lua_view_adapter = assert(loadfile(
+    'src/dwarfspec/lua_view_adapter.lua'))()
 
 ---Resolves a literal or zero-argument lazy widget property.
 ---@param value any
@@ -115,6 +119,17 @@ describe('DwarfSpec mount adapters', function()
             gui_module={ZScreen=screen_base()},
             define_class=define_class,
             instrumentation=instrumentation,
+            interaction_target_factory=function(screen)
+                return interaction_target.new_owned_screen(screen, {
+                    is_active=function(candidate)
+                        return candidate:isActive()
+                    end,
+                    resolve_native_screen=function(candidate)
+                        return candidate
+                    end,
+                })
+            end,
+            subject_source_factory=lua_view_adapter.new_source,
             enrich_failure=function(_, operation, failure)
                 return operation .. ': ' .. failure
             end,
@@ -177,6 +192,10 @@ describe('DwarfSpec mount adapters', function()
 
             assert.equals(component, result.root)
             assert.not_equals(component, result.host_screen)
+            assert.equals(result.host_screen,
+                result.interaction_target:native_screen('input'))
+            assert.equals(component,
+                result.subject_source.adapter:root())
             assert.equals(component, result.host_screen.subviews[1])
             assert.is_true(result.host_screen.active)
             assert.is_false(result.host_screen.initial_pause)
@@ -281,6 +300,9 @@ describe('DwarfSpec mount adapters', function()
         end)
 
         assert.equals(component, result.root)
+        assert.equals(component, result.subject_source.adapter:root())
+        assert.equals(result.host_screen,
+            result.interaction_target:assert_current('input'))
         assert.equals(component, result.host_screen.subviews[1])
         assert.equals(backing, result.host_screen.shown_parent)
         assert.equals(last_overlay_controller,
@@ -358,6 +380,9 @@ describe('DwarfSpec mount adapters', function()
 
         assert.equals(screen, result.root)
         assert.equals(screen, result.host_screen)
+        assert.equals(screen,
+            result.interaction_target:native_screen('input'))
+        assert.equals(screen, result.subject_source.adapter:root())
         assert.equals(backing, screen.shown_parent)
         assert.equals(44, screen.layout_width)
         assert.equals(18, screen.layout_height)
