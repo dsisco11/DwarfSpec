@@ -209,7 +209,17 @@ describe('automation version 2 schemas and snapshots', function()
     it('validates retained-run inspection and log envelopes', function()
         local run = run_record()
         local service = registry(run)
+        events.publish(run.event_journal, EventType.PROBLEM_RECORDED, {
+            kind='failure',
+            name='retained problem',
+            message='original message',
+            trace='original trace',
+            source_identity='tests/schema.ds.lua',
+            line=23,
+            column=5,
+        }, 101)
         local snapshot = snapshots.run(run, service)
+        local retained = events.read(run.event_journal, 0)
         local inspection = {
             schema='dwarfspec.run-inspection.v1',
             protocol=2,
@@ -217,8 +227,8 @@ describe('automation version 2 schemas and snapshots', function()
             found=true,
             run_id=run.run_id,
             snapshot=snapshot,
-            events={},
-            last_sequence=0,
+            events=retained.events,
+            last_sequence=retained.last_sequence,
             project_name='Schema Project',
             project_root='D:/Clients/Schema',
         }
@@ -237,6 +247,15 @@ describe('automation version 2 schemas and snapshots', function()
 
         assert.same(inspection,
             schemas.validate_run_inspection(inspection))
+        assert.same({
+            kind='failure',
+            name='retained problem',
+            message='original message',
+            trace='original trace',
+            source_identity='tests/schema.ds.lua',
+            line=23,
+            column=5,
+        }, inspection.events[1].payload)
         assert.same(logs, schemas.validate_run_logs(logs))
         assert.same({
             schema='dwarfspec.run-inspection.v1',

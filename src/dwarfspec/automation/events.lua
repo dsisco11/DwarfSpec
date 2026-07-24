@@ -93,6 +93,38 @@ local function is_nonnegative_integer(value)
     return type(value) == 'number' and value >= 0 and value % 1 == 0
 end
 
+---Returns whether a value is a positive integer.
+---@param value any
+---@return boolean
+local function is_positive_integer(value)
+    return is_nonnegative_integer(value) and value > 0
+end
+
+---Validates optional structured fields on one problem record.
+---@param payload table
+---@param path string|nil
+---@return table
+function M.validate_problem(payload, path)
+    path = path or 'problem'
+    assert(type(payload) == 'table', path .. ' must be a table')
+    if payload.source_identity ~= nil then
+        assert(type(payload.source_identity) == 'string' and
+            payload.source_identity ~= '',
+            path .. '.source_identity must be a nonempty string')
+    end
+    if payload.line ~= nil then
+        assert(is_positive_integer(payload.line),
+            path .. '.line must be a positive integer')
+    end
+    if payload.column ~= nil then
+        assert(is_positive_integer(payload.column),
+            path .. '.column must be a positive integer')
+        assert(payload.line ~= nil,
+            path .. '.column requires line')
+    end
+    return payload
+end
+
 ---Validates one typed required field.
 ---@param value any
 ---@param expected_type string
@@ -289,6 +321,9 @@ function M.validate_payload(event_type, payload)
                 payload.blocking_generation > 0,
                 'event payload scheduler.blocked requires blocking generation')
         end
+    end
+    if event_type == EventType.PROBLEM_RECORDED then
+        M.validate_problem(payload, 'event payload problem.recorded')
     end
     if event_type == EventType.REPEAT_FINISHED then
         validate_counts(payload.counts,

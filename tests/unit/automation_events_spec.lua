@@ -51,6 +51,9 @@ local function payloads()
             name='suite test',
             message='expected true',
             trace='trace',
+            source_identity='tests/example.ds.lua',
+            line=12,
+            column=4,
         },
         [EventType.COMMAND_STARTED]={
             name='click',
@@ -200,6 +203,54 @@ describe('automation structured events', function()
         assert.has_error(function()
             events.validate(event, identity())
         end, 'automation event identity mismatch: run_id')
+    end)
+
+    it('validates every optional problem location field combination',
+            function()
+        local base = {
+            kind='failure',
+            name='suite test',
+            message='expected true',
+        }
+        for _, location in ipairs({
+                {},
+                {source_identity='tests/example.ds.lua'},
+                {line=12},
+                {source_identity='tests/example.ds.lua', line=12},
+                {line=12, column=4},
+                {
+                    source_identity='tests/example.ds.lua',
+                    line=12,
+                    column=4,
+                },
+            }) do
+            local payload = events.copy_json(base)
+            for field, value in pairs(location) do payload[field] = value end
+            assert.same(payload,
+                events.validate_problem(payload, 'fixture problem'))
+        end
+
+        local invalid = {
+            {source_identity=''},
+            {source_identity=7},
+            {line=0},
+            {line=-1},
+            {line=1.5},
+            {line='12'},
+            {column=4},
+            {line=1, column=0},
+            {line=1, column=-1},
+            {line=1, column=1.5},
+            {line=1, column='4'},
+        }
+        for _, location in ipairs(invalid) do
+            local payload = events.copy_json(base)
+            for field, value in pairs(location) do payload[field] = value end
+            assert.has_error(function()
+                events.validate_payload(
+                    EventType.PROBLEM_RECORDED, payload)
+            end)
+        end
     end)
 
     it('provides immutable event-type enum values', function()

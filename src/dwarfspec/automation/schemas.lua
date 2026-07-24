@@ -290,6 +290,8 @@ function M.validate_run(value)
             require_string(failure, field,
                 'automation run failure ' .. index)
         end
+        events.validate_problem(
+            failure, 'automation run failure ' .. index)
     end
     assert(type(value.cleanup_confirmed) == 'boolean',
         'automation run cleanup confirmation must be boolean')

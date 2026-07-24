@@ -87,6 +87,7 @@ describe('automation Busted output collection', function()
     it('records progress, classifications, and stable failure details',
             function()
         local run = {
+            project_root='D:/Project Root',
             counts={successes=0, failures=0, errors=0, pending=0},
             totals={successes=0, failures=0, errors=0, pending=0},
             output_lines={},
@@ -103,13 +104,19 @@ describe('automation Busted output collection', function()
                 })
             end,
         })
-        local test = {name='suite records events'}
+        local test = {
+            name='suite records events',
+            source='tests/events.ds.lua',
+            currentline=14,
+        }
 
         handler.baseSuiteReset()
         handler.baseSuiteStart({}, 1, 1)
         handler.baseTestStart(test, {})
         handler.baseTestEnd(test, {}, 'success')
         handler.baseTestFailure(test, {}, 'expected failure', {
+            source='@D:\\Project Root\\tests\\events.ds.lua',
+            currentline=18,
             traceback='trace text',
         })
         handler.baseTestError(test, {}, 'unexpected error', 'raw trace')
@@ -127,6 +134,9 @@ describe('automation Busted output collection', function()
         assert.equals(3, #run.failure_details)
         assert.same('failure', run.failure_details[1].kind)
         assert.same('trace text', run.failure_details[1].trace)
+        assert.same('tests/events.ds.lua',
+            run.failure_details[1].source_identity)
+        assert.equals(18, run.failure_details[1].line)
         assert.same('error', run.failure_details[2].kind)
         assert.same('raw trace', run.failure_details[2].trace)
         assert.same('error', run.failure_details[3].kind)
@@ -141,6 +151,9 @@ describe('automation Busted output collection', function()
             'problem.recorded',
             'repeat.finished',
         }, published_types(published))
+        assert.same(run.failure_details[1], published[4].payload)
+        assert.same('expected failure', published[4].payload.message)
+        assert.same('trace text', published[4].payload.trace)
         assert.is_nil(table.concat(run.output_lines, '\n')
             :find('owner-secret', 1, true))
         assert.is_nil(require('dkjson').encode(published)

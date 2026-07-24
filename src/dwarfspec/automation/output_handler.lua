@@ -1,6 +1,7 @@
 -- In-memory Busted output handler for live automation runs.
 
 local EventType = require('dwarfspec.automation.event_types')
+local problem_source = require('dwarfspec.automation.problem_source')
 local TestStatus = require('dwarfspec.automation.test_statuses')
 
 local M = {}
@@ -53,23 +54,38 @@ local function trace_text(trace)
     return trace.traceback or trace.short_src
 end
 
----Copies an ordinary Busted failure or error into the live run object.
+---Creates one stable structured Busted problem record.
 ---@param run table
 ---@param kind string
 ---@param handler table
 ---@param element table
 ---@param message any
 ---@param trace any
-local function record_problem(run, kind, handler, element, message, trace)
+---@return table
+local function problem_record(run, kind, handler, element, message, trace)
     local detail = {
         kind=kind,
         name=handler.getFullName(element),
         message=tostring(message),
         trace=trace_text(trace),
     }
+    local source = problem_source.extract(run.project_root,
+        element.source or element.short_src, element, trace)
+    if source ~= nil then
+        detail.source_identity = source.source_identity
+        detail.line = source.line
+        detail.column = source.column
+    end
+    return detail
+end
+
+---Copies one ordinary Busted problem into the live run object.
+---@param run table
+---@param detail table
+local function record_problem(run, detail)
     table.insert(run.failure_details, detail)
     append_line(run, ('%s %s: %s'):format(
-        kind:upper(), detail.name, detail.message))
+        detail.kind:upper(), detail.name, detail.message))
 end
 
 ---Creates and subscribes a Busted base handler backed by an in-memory run.
@@ -180,13 +196,10 @@ function M.new(busted, run, publisher)
     function handler.baseTestFailure(element, parent, message, trace)
         local first, second = base_test_failure(
             element, parent, message, trace)
-        record_problem(run, 'failure', handler, element, message, trace)
-        publish(publisher, EventType.PROBLEM_RECORDED, {
-            kind='failure',
-            name=handler.getFullName(element),
-            message=tostring(message),
-            trace=trace_text(trace),
-        })
+        local detail = problem_record(
+            run, 'failure', handler, element, message, trace)
+        record_problem(run, detail)
+        publish(publisher, EventType.PROBLEM_RECORDED, detail)
         return first, second
     end
 
@@ -197,13 +210,10 @@ function M.new(busted, run, publisher)
     ---@param trace any
     function handler.baseTestError(element, parent, message, trace)
         local first, second = base_test_error(element, parent, message, trace)
-        record_problem(run, 'error', handler, element, message, trace)
-        publish(publisher, EventType.PROBLEM_RECORDED, {
-            kind='error',
-            name=handler.getFullName(element),
-            message=tostring(message),
-            trace=trace_text(trace),
-        })
+        local detail = problem_record(
+            run, 'error', handler, element, message, trace)
+        record_problem(run, detail)
+        publish(publisher, EventType.PROBLEM_RECORDED, detail)
         return first, second
     end
 
@@ -217,13 +227,10 @@ function M.new(busted, run, publisher)
         if element.descriptor ~= 'it' then
             run.counts.errors = run.counts.errors + 1
             run.totals.errors = run.totals.errors + 1
-            record_problem(run, 'error', handler, element, message, trace)
-            publish(publisher, EventType.PROBLEM_RECORDED, {
-                kind='error',
-                name=handler.getFullName(element),
-                message=tostring(message),
-                trace=trace_text(trace),
-            })
+            local detail = problem_record(
+                run, 'error', handler, element, message, trace)
+            record_problem(run, detail)
+            publish(publisher, EventType.PROBLEM_RECORDED, detail)
         end
         return first, second
     end

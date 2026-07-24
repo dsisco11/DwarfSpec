@@ -89,6 +89,10 @@ describe('service-owned automation host boundary', function()
                 kind='failure',
                 name='service-owned test',
                 message='originating assertion',
+                trace='tests/live/example.ds.lua:22: assertion',
+                source_identity='tests/live/example.ds.lua',
+                line=22,
+                column=3,
             }, dependencies)
         service.begin_cleanup(identity.run_id, identity.generation,
             'suite completion', 1, dependencies)
@@ -125,6 +129,20 @@ describe('service-owned automation host boundary', function()
         assert.is_false(snapshot.cleanup_confirmed)
         assert.is_true(service.scheduler_snapshot(
             dependencies).quarantine.active)
+        local retained = service.events(
+            identity.run_id, 0, dependencies).events[7].payload
+        assert.same({
+            kind='failure',
+            name='service-owned test',
+            message='originating assertion',
+            trace='tests/live/example.ds.lua:22: assertion',
+            source_identity='tests/live/example.ds.lua',
+            line=22,
+            column=3,
+        }, retained)
+        local transport = service.transport(
+            identity.run_id, 0, dependencies)
+        assert.same(retained, transport.events[7].payload)
     end)
 
     it('rejects stale scheduled, callback, cleanup, and terminal identities',

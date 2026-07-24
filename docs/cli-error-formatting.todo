@@ -1,6 +1,6 @@
 # CLI diagnostic output implementation
 
-Status: in progress; Phases 0-1 complete
+Status: in progress; Phases 0-2 complete
 
 Related design: `docs/test-runner-service-design.md`
 
@@ -232,41 +232,61 @@ Phase 1 evidence:
 Goal: give the external formatter structured location data instead of making
 it recover locations from already formatted CLI text.
 
-☐ Extend the `problem.recorded` payload contract with optional
+✔ Extend the `problem.recorded` payload contract with optional
   `source_identity`, `line`, and `column` fields.
-☐ Keep `source_identity` canonical and project-relative when the location is
+✔ Keep `source_identity` canonical and project-relative when the location is
   inside the owning project.
-☐ Validate nonempty source identities and positive integer line and column
+✔ Validate nonempty source identities and positive integer line and column
   values when those fields are present.
-☐ Require `line` whenever `column` is present.
-☐ Extract structured Busted trace fields before considering rendered trace
+✔ Require `line` whenever `column` is present.
+✔ Extract structured Busted trace fields before considering rendered trace
   text.
-☐ Prefer a location in the selected test file over DwarfSpec, Busted, Lua, or
+✔ Prefer a location in the selected test file over DwarfSpec, Busted, Lua, or
   cleanup implementation frames.
-☐ Use the test element's source location as the fallback when the trace does
+✔ Use the test element's source location as the fallback when the trace does
   not provide a more precise project-owned location.
-☐ Add a bounded fallback parser only for callback forms that Busted exposes as
+✔ Add a bounded fallback parser only for callback forms that Busted exposes as
   strings.
-☐ Normalize both slash styles without requiring the source file to exist on
+✔ Normalize both slash styles without requiring the source file to exist on
   the external command's filesystem at formatting time.
-☐ Leave all location fields absent when no trustworthy project-owned source
+✔ Leave all location fields absent when no trustworthy project-owned source
   location can be determined.
-☐ Preserve the original `message` and `trace` values in the event payload.
-☐ Ensure cursor reads, result persistence, and run-history inspection retain
+✔ Preserve the original `message` and `trace` values in the event payload.
+✔ Ensure cursor reads, result persistence, and run-history inspection retain
   the new location fields unchanged.
 
 Phase 2 exit gate:
 
-☐ Unit tests cover structured traces, string traces, element fallback, missing
+✔ Unit tests cover structured traces, string traces, element fallback, missing
   locations, mixed separators, paths with spaces, and internal-frame
   rejection.
-☐ Event-schema tests cover valid optional locations and every invalid
+✔ Event-schema tests cover valid optional locations and every invalid
   field combination.
-☐ Unit tests prove the original message and trace remain available after
+✔ Unit tests prove the original message and trace remain available after
   adding structured locations.
-☐ No output format names or VS Code concepts appear in the service-side
+✔ No output format names or VS Code concepts appear in the service-side
   source-location extractor.
-☐ Lua syntax checks and the full unit suite pass.
+✔ Lua syntax checks and the full unit suite pass.
+
+Phase 2 evidence:
+
+- `dwarfspec.automation.problem_source` performs bounded, lexical,
+  filesystem-independent extraction. It prefers structured Busted fields,
+  rejects external and implementation frames, parses at most 128 lines and
+  65,536 bytes of rendered trace text, and falls back to the selected
+  element's definition.
+- All three Busted problem callbacks now build one shared problem record for
+  the live run and `problem.recorded` journal event. Original message and
+  rendered trace text remain unchanged while canonical project-relative
+  location fields are added when trustworthy.
+- Event and snapshot schemas validate nonempty source identities, positive
+  integer lines and columns, and the column-requires-line relationship.
+  Cursor transport, persisted result, and retained-run inspection tests prove
+  the fields survive unchanged.
+- `.\tools\Run-UnitTests.ps1` reported 274 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-24.
+- `.\tools\Check-Lua.ps1` passed for 202 Lua files on 2026-07-24.
+- `git diff --check` passed on 2026-07-24.
 
 ## Phase 3: Standard diagnostic formatters
 
@@ -407,7 +427,7 @@ Record evidence only after running the corresponding command.
 |---|---|---|
 | 0 | Baseline repository, syntax, unit, and fixture characterization | Complete: intended root and remote confirmed; baseline 195-file syntax and 250-test unit suites passed; 4 reusable problem fixtures and 5 fixture-contract tests added; post-fixture 197-file syntax and 255-test unit suites passed on 2026-07-24 |
 | 1 | Configuration and immutable enum unit tests | Complete: shared validated settings and config schema, immutable identifiers, one-load CLI propagation, discovery precedence, independent roots, 266-test unit suite, and 200-file Lua checks passed on 2026-07-24 |
-| 2 | Structured source-location and event-schema unit tests | Pending |
+| 2 | Structured source-location and event-schema unit tests | Complete: bounded presentation-neutral extraction, callback integration, optional-field validation, cursor/result/history retention, 274-test unit suite, and 202-file Lua checks passed on 2026-07-24 |
 | 3 | Exact formatter unit tests | Pending |
 | 4 | Runner and CLI integration unit tests | Pending |
 | 5 | Documentation and editor-example review | Pending |

@@ -4,6 +4,8 @@ local json = require('dkjson')
 local lfs = require('lfs')
 local ResultState = require('dwarfspec.automation.result_states')
 local result_store = require('dwarfspec.automation.result_store')
+local events = require('dwarfspec.automation.events')
+local EventType = require('dwarfspec.automation.event_types')
 
 ---Builds one complete terminal result fixture.
 ---@param root string
@@ -12,6 +14,22 @@ local result_store = require('dwarfspec.automation.result_store')
 ---@return table
 local function result(root, run_id, state)
     state = state or ResultState.PASSED
+    local journal = events.new_journal({
+        service_instance_id='service-result-store',
+        project_id='project-' .. run_id,
+        run_id=run_id,
+        generation=1,
+        admitted_at_ms=0,
+    })
+    events.publish(journal, EventType.PROBLEM_RECORDED, {
+        kind='failure',
+        name='retained problem',
+        message='original message',
+        trace='original trace',
+        source_identity='tests/live/shared_spec.ds.lua',
+        line=17,
+        column=2,
+    }, 1)
     return result_store.build({
         service_instance_id='service-result-store',
         project_id='project-' .. run_id,
@@ -27,7 +45,7 @@ local function result(root, run_id, state)
         finished_at='2026-07-23T11:00:02Z',
         queue_wait_ms=1,
         host_report={state=state},
-        events={},
+        events=journal.events,
     })
 end
 
@@ -80,6 +98,15 @@ describe('automation result store', function()
 
         local persisted = read_result(path)
         assert.equals('second-invocation', persisted.run_id)
+        assert.same({
+            kind='failure',
+            name='retained problem',
+            message='original message',
+            trace='original trace',
+            source_identity='tests/live/shared_spec.ds.lua',
+            line=17,
+            column=2,
+        }, persisted.events[1].payload)
         assert.is_nil(io.open(path .. '.tmp', 'rb'))
         cleanup(path)
     end)
