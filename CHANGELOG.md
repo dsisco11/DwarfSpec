@@ -52,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `EInputState` identifiers, including persistent button-down and button-up
   transitions and wheel input.
 
+### Changed
+
+- Require version 2 runner transport and result contracts. Legacy
+  `dwarfspec.run.v1` reports and formatted progress protocol lines are no
+  longer parsed or emitted.
+
 ### Fixed
 
 - Install one portable command script and let LuaRocks generate the appropriate

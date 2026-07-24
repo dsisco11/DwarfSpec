@@ -154,3 +154,11 @@ On timeout, interruption, or malformed transport after bootstrap, the command
 asks the service to recover from authoritative current state. A queued run is
 cancelled without native cleanup; an active run is aborted with cleanup. If
 recovery also fails, the original runner failure remains primary.
+
+## Protocol compatibility
+
+All bundled commands and adapters use `dwarfspec.transport.v2`, structured
+`dwarfspec.event.v1` events, `dwarfspec.run.v2` snapshots, and
+`dwarfspec.result.v2` results. Legacy `dwarfspec.run.v1` reports and formatted
+progress lines are not accepted. Readers reject unknown schemas and protocols
+instead of guessing.

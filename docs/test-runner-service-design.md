@@ -673,10 +673,9 @@ The JSON payload uses `dwarfspec.transport.v2` and contains:
 }
 ```
 
-`OUTPUT`, `DETAIL`, `HOST_ERROR`, and similar formatted protocol lines become
-diagnostic compatibility output only and can be removed after the version 2
-consumer is authoritative. The canonical JSON line remains sufficient to
-reconstruct all command feedback.
+`OUTPUT`, `DETAIL`, `HOST_ERROR`, and similar formatted protocol lines are not
+part of the service transport and are neither emitted nor parsed. The
+canonical JSON line contains all command feedback.
 
 The transport parser validates schema, protocol, service instance, project ID,
 run ID, generation, event sequence continuity, and required fields before
@@ -906,10 +905,12 @@ timeout, and abort classifications remain available. Queue cancellation and
 queue timeout receive distinct classifications without changing existing code
 meanings.
 
-The `dwarfspec.run.v1` native report can be accepted during transition, but
-new adapters and persistence use the version 2 transport, snapshot, event, and
-result schemas. Schema changes require an explicit version increment; readers
-must reject unknown major versions instead of guessing.
+Native run snapshots use `dwarfspec.run.v2`; adapters use
+`dwarfspec.transport.v2`; event envelopes use `dwarfspec.event.v1`; and
+persisted results use `dwarfspec.result.v2`. Legacy `dwarfspec.run.v1` reports
+and formatted progress lines are unsupported. Schema identifiers version each
+document type independently; readers reject unknown versions instead of
+guessing.
 
 The service-assigned run ID correlates external commands, project state,
 events, results, and diagnostics. Generation remains required to prevent a

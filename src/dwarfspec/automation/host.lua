@@ -9,8 +9,7 @@ local SchedulerFailureKind =
 local service = require('dwarfspec.automation.service')
 
 local M = {
-    protocol_version=1,
-    service_protocol_version=2,
+    protocol_version=2,
     package_version='0.2.0',
 }
 
@@ -139,7 +138,7 @@ end
 local function get_registry()
     local registry = dfhack.dwarfspec
     assert(type(registry) == 'table' and
-        registry.protocol_version == M.service_protocol_version and
+        registry.protocol_version == M.protocol_version and
         registry.schema == service.schema,
         'compatible automation service has not been bootstrapped')
     return registry
@@ -807,7 +806,6 @@ local function initialize_runtime(run, package_root, project_root, options)
         'dwarfspec.automation.cleanup',
         'src/dwarfspec/automation/cleanup.lua')
     local created_ms = dfhack.getTickCount()
-    run.protocol_version = M.protocol_version
     run.package_root = package_root
     run.project_root = project_root
     run.options = options
@@ -914,7 +912,7 @@ function M.start(package_root, project_root, options)
     validate_run_id(options.run_id)
     local dependencies = service_dependencies(options.run_id)
     service.bootstrap({
-        protocol_version=M.service_protocol_version,
+        protocol_version=M.protocol_version,
         package_root=package_root,
         package_version=M.package_version,
     }, dependencies)
@@ -934,12 +932,12 @@ function M.start(package_root, project_root, options)
         result_policy=options.result_policy or ResultPolicy.NONE,
         result_path=options.result_path,
         client_compatibility={
-            protocol=M.service_protocol_version,
+            protocol=M.protocol_version,
             package_version=M.package_version,
         },
     }, dependencies)
     local outcome = service.submit(project.project_id, {
-        request_key='version1-request:' .. options.run_id,
+        request_key='run-request:' .. options.run_id,
         owner_kind=options.owner_kind or OwnerKind.EXTERNAL,
         queue_lease_ms=options.queue_lease_ms or
             options.lease_timeout_ms or 5000,
@@ -1214,58 +1212,6 @@ local JSON_NULL = '\0'
 ---@return string
 function M.encode_transport(transport)
     return require('json').encode(transport, {
-        pretty=false,
-        null=JSON_NULL,
-    })
-end
-
----Builds one JSON-safe machine-readable live automation report.
----@param run table
----@return table
-function M.report_data(run)
-    local failures = {}
-    for _, detail in ipairs(run.failure_details) do
-        table.insert(failures, {
-            kind=detail.kind,
-            name=detail.name,
-            message=detail.message,
-            trace=detail.trace or JSON_NULL,
-        })
-    end
-    return {
-        schema='dwarfspec.run.v1',
-        protocol=run.protocol_version,
-        service_instance_id=run.service_instance_id,
-        project_id=run.project_id,
-        run_id=run.run_id,
-        state=run.state,
-        terminal=M.is_terminal(run),
-        generation=run.generation,
-        project_root=run.project_root,
-        selection=run.selection,
-        submitted_at_ms=run.submitted_at_ms,
-        activated_at_ms=run.activated_at_ms or JSON_NULL,
-        finished_at_ms=run.finished_at_ms or JSON_NULL,
-        queue_wait_ms=run.queue_wait_ms or JSON_NULL,
-        events=run.event_journal and run.event_journal.events or {},
-        counts=run.counts,
-        totals=run.totals,
-        current_test=run.current_test or JSON_NULL,
-        output_count=#run.output_lines,
-        cleanup_confirmed=run.cleanup_confirmed,
-        cleanup_reason=run.cleanup_reason or JSON_NULL,
-        mount_cleanup_state=run.mount_cleanup_state or JSON_NULL,
-        host_error=run.host_error or JSON_NULL,
-        host_trace=run.host_trace or JSON_NULL,
-        failures=failures,
-    }
-end
-
----Encodes one complete machine-readable live automation report with DFHack JSON.
----@param run table
----@return string
-function M.encode_report(run)
-    return require('json').encode(M.report_data(run), {
         pretty=false,
         null=JSON_NULL,
     })

@@ -290,46 +290,6 @@ describe('automation host ownership', function()
         assert.is_nil(registry.runs['must-not-be-admitted'])
     end)
 
-    it('builds a complete JSON-safe report for PowerShell consumption', function()
-        local report = host.report_data({
-            protocol_version=1,
-            run_id='json-run',
-            state=RunState.FAILED,
-            generation=7,
-            counts={successes=1, failures=1, errors=0, pending=0},
-            totals={successes=1, failures=1, errors=0, pending=0},
-            current_test='suite "quoted"',
-            output_lines={'one'},
-            cleanup_confirmed=true,
-            cleanup_reason='suite completion',
-            mount_cleanup_state={
-                active_screen_count=0,
-                tracked_screen_count=1,
-                subject_count=0,
-                pointer_active=false,
-                verified=true,
-            },
-            host_error=nil,
-            host_trace=nil,
-            failure_details={{
-                kind='failure',
-                name='suite "quoted"',
-                message='line one\nline two',
-                trace=nil,
-            }},
-        })
-
-        assert.equals('dwarfspec.run.v1', report.schema)
-        assert.equals(1, report.protocol)
-        assert.equals('json-run', report.run_id)
-        assert.is_true(report.terminal)
-        assert.equals('suite "quoted"', report.current_test)
-        assert.equals('line one\nline two', report.failures[1].message)
-        assert.equals('\0', report.failures[1].trace)
-        assert.is_true(report.cleanup_confirmed)
-        assert.is_true(report.mount_cleanup_state.verified)
-    end)
-
     it('normalizes filters and loads exact safe externally selected specs',
             function()
         local filters = host.filter_options({

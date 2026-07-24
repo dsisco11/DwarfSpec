@@ -4,24 +4,12 @@ local M = {}
 local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
 local schemas = require('dwarfspec.automation.schemas')
-local RunState = require('dwarfspec.automation.run_states')
 local SchedulerFailureKind =
     require('dwarfspec.automation.scheduler_failure_kinds')
 local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
 
 local PREFIX = 'DWARFSPEC_JSON '
 local OWNER_PREFIX = 'DWARFSPEC_OWNER '
-
-local RUN_STATE_TERMINAL = {
-    [RunState.QUEUED]=false,
-    [RunState.STARTING]=false,
-    [RunState.RUNNING]=false,
-    [RunState.CLEANING]=false,
-    [RunState.PASSED]=true,
-    [RunState.FAILED]=true,
-    [RunState.ABORTED]=true,
-    [RunState.CANCELLED]=true,
-}
 
 ---Validates one canonical adapter error response.
 ---@param report table
@@ -45,34 +33,6 @@ local function validate_error(report)
             'DwarfSpec quarantine error requires blocking generation')
         assert(type(report.reason) == 'string' and report.reason ~= '',
             'DwarfSpec quarantine error requires a reason')
-    end
-    return report
-end
-
----Validates one transitional version 1 native report.
----@param report table
----@param expected table
----@return table
-local function validate_version_one(report, expected)
-    events.copy_json(report, 'version 1 report')
-    for _, field in ipairs({
-            'schema', 'protocol', 'run_id', 'state', 'terminal', 'generation',
-            'counts', 'totals', 'output_count', 'cleanup_confirmed',
-            'failures'}) do
-        assert(report[field] ~= nil,
-            'DwarfSpec JSON report is missing field: ' .. field)
-    end
-    assert(report.protocol == 1,
-        'unsupported DwarfSpec protocol: ' .. tostring(report.protocol))
-    local terminal = RUN_STATE_TERMINAL[report.state]
-    assert(terminal ~= nil,
-        'unsupported DwarfSpec run state: ' .. tostring(report.state))
-    assert(report.terminal == terminal,
-        'DwarfSpec terminal flag does not match run state')
-    if expected.run_id ~= nil then
-        assert(report.run_id == expected.run_id,
-            ('DwarfSpec report run id %q does not match %q')
-                :format(tostring(report.run_id), expected.run_id))
     end
     return report
 end
@@ -120,33 +80,11 @@ function M.owner_capability(lines)
     return found
 end
 
----Validates one supported native or service transport report.
----@param report table
----@param expected table|string|nil
----@return table
-function M.validate(report, expected)
-    assert(type(report) == 'table', 'DwarfSpec JSON report must be a table')
-    if type(expected) == 'string' then expected = {run_id=expected} end
-    expected = expected or {}
-    if report.schema == 'dwarfspec.run.v1' then
-        return validate_version_one(report, expected)
-    end
-    if report.schema == 'dwarfspec.transport.v2' then
-        return schemas.validate_transport(report, expected)
-    end
-    if report.schema == 'dwarfspec.error.v1' then
-        return validate_error(report)
-    end
-    error('unsupported DwarfSpec report schema: ' ..
-        tostring(report.schema), 0)
-end
-
----Decodes and validates one native DwarfSpec report.
+---Decodes one canonical native DwarfSpec report.
 ---@param lines string[]
----@param expected table|string|nil
 ---@param decoder function|nil
 ---@return table, string
-function M.parse(lines, expected, decoder)
+local function decode_report(lines, decoder)
     local payload = report_line(lines)
     local decode = decoder or function(text)
         return require('dkjson').decode(text, 1, nil)
@@ -154,7 +92,8 @@ function M.parse(lines, expected, decoder)
     local report, _, decode_error = decode(payload)
     assert(report, 'DFHack emitted invalid DwarfSpec JSON: ' ..
         tostring(decode_error))
-    return M.validate(report, expected), payload
+    assert(type(report) == 'table', 'DwarfSpec JSON report must be a table')
+    return report, payload
 end
 
 ---Decodes either a version 2 transport or a canonical adapter error.
@@ -163,13 +102,15 @@ end
 ---@param decoder function|nil
 ---@return table|nil, string, table|nil
 function M.parse_transport_response(lines, expected, decoder)
-    local report, payload = M.parse(lines, expected, decoder)
+    local report, payload = decode_report(lines, decoder)
     if report.schema == 'dwarfspec.error.v1' then
-        return nil, payload, report
+        return nil, payload, validate_error(report)
     end
-    assert(report.schema == 'dwarfspec.transport.v2',
-        'DFHack output did not contain version 2 transport data')
-    return report, payload, nil
+    if report.schema ~= 'dwarfspec.transport.v2' then
+        error('unsupported DwarfSpec report schema: ' ..
+            tostring(report.schema), 0)
+    end
+    return schemas.validate_transport(report, expected or {}), payload, nil
 end
 
 ---Decodes and validates exactly one canonical version 2 transport response.
@@ -362,45 +303,11 @@ function M.format_run_inspection(inspection)
     return lines
 end
 
----Decodes every native DwarfSpec report in transport order.
----@param lines string[]
----@param expected table|string|nil
----@param decoder function|nil
----@return table[]
-function M.parse_all(lines, expected, decoder)
-    local decode = decoder or function(text)
-        return require('dkjson').decode(text, 1, nil)
-    end
-    local parsed = {}
-    for _, payload in ipairs(report_payloads(lines)) do
-        local report, _, decode_error = decode(payload)
-        assert(report, 'DFHack emitted invalid DwarfSpec JSON: ' ..
-            tostring(decode_error))
-        table.insert(parsed, {
-            report=M.validate(report, expected),
-            payload=payload,
-        })
-    end
-    return parsed
-end
-
 ---Validates one version 2 persisted result document.
 ---@param result table
 ---@return table
 function M.validate_result(result)
     return schemas.validate_result(result)
-end
-
----Returns newly streamed Busted output lines without protocol framing.
----@param lines string[]
----@return string[]
-function M.progress(lines)
-    local progress = {}
-    for _, line in ipairs(lines) do
-        local _, _, text = line:find('^OUTPUT %d+ (.*)$')
-        if text then table.insert(progress, text) end
-    end
-    return progress
 end
 
 ---Formats one structured event for terminal progress output.

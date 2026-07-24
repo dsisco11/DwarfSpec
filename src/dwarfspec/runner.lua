@@ -199,7 +199,7 @@ local function verify_connection(runner, options, invoke)
     end
     if result.exit_code ~= 0 or
             result.lines[#result.lines] ~=
-                'DWARFSPEC_PROBE protocol=1 core=true timeout=function' then
+                'DWARFSPEC_PROBE protocol=2 core=true timeout=function' then
         fail(RunnerFailureKind.CONNECTION,
             'DFHack is not running or did not provide a healthy core Lua ' ..
                 'context')

@@ -195,73 +195,38 @@ describe('DwarfSpec native reports', function()
         assert.equals(1, transport.last_sequence)
     end)
 
-    it('does not accept a transitional version 1 report as transport',
-            function()
-        assert.has_error(function()
-            report.parse_transport({'DWARFSPEC_JSON ignored'}, 'run',
-                function()
-                    return {
-                        schema='dwarfspec.run.v1',
-                        protocol=1,
-                        run_id='run',
-                        state=RunState.PASSED,
-                        terminal=true,
-                        generation=1,
-                        counts={},
-                        totals={},
-                        output_count=0,
-                        cleanup_confirmed=true,
-                        failures={},
-                    }
-                end)
-        end, 'DFHack output did not contain version 2 transport data')
-    end)
-
-    it('rejects duplicated canonical JSON and extracts diagnostics', function()
+    it('rejects duplicated canonical JSON', function()
         local lines = {
-            'DWARFSPEC_JSON {"protocol":1,"run_id":"old"}',
-            'OUTPUT 1 START suite example',
-            'OUTPUT 2 SUCCESS suite example',
+            'DWARFSPEC_JSON first',
             'DWARFSPEC_JSON final',
         }
         assert.has_error(function()
-            report.parse(lines, 'run')
+            report.parse_transport(lines, {after_sequence=0})
         end, 'DFHack output contained 2 DWARFSPEC_JSON reports; expected one')
-        assert.same({'START suite example', 'SUCCESS suite example'},
-            report.progress(lines))
     end)
 
-    it('rejects malformed and foreign reports', function()
-        assert.has_error(function() report.parse({}, 'run') end,
+    it('rejects missing and unsupported reports', function()
+        assert.has_error(function()
+            report.parse_transport({}, {after_sequence=0})
+        end,
             'DFHack output did not contain a DWARFSPEC_JSON report')
         assert.has_error(function()
-            report.parse({'DWARFSPEC_JSON ignored'}, 'run', function()
+            report.parse_transport({'DWARFSPEC_JSON ignored'}, {
+                after_sequence=0,
+            }, function()
                 return {
                     schema='dwarfspec.run.v1',
                     protocol=1,
-                    run_id='other',
-            state=RunState.PASSED,
-                    terminal=true,
-                    generation=1,
-                    counts={}, totals={}, output_count=0,
-                    cleanup_confirmed=true, failures={},
                 }
             end)
-        end, 'DwarfSpec report run id "other" does not match "run"')
-    end)
-
-    it('rejects foreign report schemas', function()
+        end, 'unsupported DwarfSpec report schema: dwarfspec.run.v1')
         assert.has_error(function()
-            report.parse({'DWARFSPEC_JSON ignored'}, 'run', function()
+            report.parse_transport({'DWARFSPEC_JSON ignored'}, {
+                after_sequence=0,
+            }, function()
                 return {
                     schema='another.schema',
-                    protocol=1,
-                    run_id='run',
-            state=RunState.PASSED,
-                    terminal=true,
-                    generation=1,
-                    counts={}, totals={}, output_count=0,
-                    cleanup_confirmed=true, failures={},
+                    protocol=2,
                 }
             end)
         end, 'unsupported DwarfSpec report schema: another.schema')
@@ -269,7 +234,7 @@ describe('DwarfSpec native reports', function()
 
     it('accepts and validates version 2 transport identities', function()
         local contents = read_contract_fixture('transport_failed.json')
-        local parsed = report.parse(
+        local parsed = report.parse_transport(
             {'DWARFSPEC_JSON ' .. contents}, {
                 service_instance_id='service-fixture-1',
                 project_id='project-alpha',
@@ -282,7 +247,7 @@ describe('DwarfSpec native reports', function()
         assert.equals(RunState.FAILED,
             parsed.snapshot.state)
         assert.has_error(function()
-            report.parse({'DWARFSPEC_JSON ' .. contents}, {
+            report.parse_transport({'DWARFSPEC_JSON ' .. contents}, {
                 run_id='foreign-run',
                 after_sequence=0,
             })
@@ -299,7 +264,9 @@ describe('DwarfSpec native reports', function()
     it('formats every inspected event with its sequence and payload',
             function()
         local contents = read_contract_fixture('transport_failed.json')
-        local transport = report.parse({'DWARFSPEC_JSON ' .. contents}, {
+        local transport = report.parse_transport({
+            'DWARFSPEC_JSON ' .. contents,
+        }, {
             after_sequence=0,
         })
         local inspection = {
