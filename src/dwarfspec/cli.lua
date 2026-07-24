@@ -307,9 +307,48 @@ local function parser_message(message)
         'unknown option: %1')
 end
 
+---Rejects an empty inline assignment before argparse normalizes it away.
+---@param arguments string[]
+---@param allowed table
+local function reject_empty_inline_assignments(arguments, allowed)
+    for _, argument in ipairs(arguments) do
+        local name, value = argument:match('^%-%-([%w-]+)=(.*)$')
+        if name and allowed[name] and value == '' then
+            error('--' .. name .. ' must not be empty', 2)
+        end
+    end
+end
+
+---Rejects an empty value supplied to a value-taking command option.
+---@param name string
+---@param value string|string[]|nil
+local function require_nonempty_option_value(name, value)
+    if type(value) == 'table' then
+        for _, item in ipairs(value) do
+            require_nonempty_option_value(name, item)
+        end
+        return
+    end
+    assert(value == nil or value ~= '', '--' .. name .. ' must not be empty')
+end
+
 ---Validates parsed command values that have DwarfSpec-specific semantics.
 ---@param options table
 local function validate_options(options)
+    for name, value in pairs({
+            ['project-root']=options.project_root,
+            ['test-glob']=options.test_glob,
+            runner=options.runner,
+            filter=options.filters,
+            ['filter-out']=options.filter_out,
+            name=options.names,
+            tag=options.tags,
+            ['exclude-tag']=options.exclude_tags,
+            results=options.result_path,
+            ['run-id']=options.run_id,
+            reason=options.reason}) do
+        require_nonempty_option_value(name, value)
+    end
     if options.test_glob then glob.compile(options.test_glob) end
     if options.repeat_count then
         options.repeat_count = positive_integer('repeat', options.repeat_count)
@@ -364,6 +403,7 @@ end
 local function parse_options(argv, start_index, package_root, allowed)
     local arguments = {}
     for index = start_index, #argv do table.insert(arguments, argv[index]) end
+    reject_empty_inline_assignments(arguments, allowed)
     local parsed_ok, parsed = command_parser(argv[1], allowed):pparse(arguments)
     assert(parsed_ok, 'command syntax: ' .. parser_message(parsed))
     local options = defaults(package_root)
@@ -622,6 +662,8 @@ function M.main(argv, context)
             message:match('unknown option:') or
             message:match('accepts at most') or message:match('requires') or
             message:match('does not accept') or message:match('must be') or
+            message:match('must not') or
+            message:match('contains unsupported') or
             message:match('unknown command:') or
             message:match('unknown help topic:') then
         return runner.exit_codes[runner.failure_kinds.USAGE]

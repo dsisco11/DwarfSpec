@@ -274,6 +274,26 @@ describe('DwarfSpec CLI selection', function()
         assert.is_nil(invoked)
     end)
 
+    it('prints command help and version without opening a project', function()
+        context.filesystem = nil
+        assert.equals(0, cli.main({'help', 'run'}, context))
+        assert.matches('Usage: dwarfspec run', output.text, 1, true)
+        output.text = ''
+        assert.equals(0, cli.main({'version'}, context))
+        assert.equals('DwarfSpec 0.2.0\n', output.text)
+        assert.is_nil(invoked)
+    end)
+
+    it('rejects invalid help and version invocations', function()
+        assert.equals(2, cli.main({'help', 'unknown-topic'}, context))
+        assert.matches('unknown help topic:', errors.text, 1, true)
+        errors.text = ''
+        assert.equals(2, cli.main({'version', 'extra'}, context))
+        assert.matches('version does not accept arguments', errors.text,
+            1, true)
+        assert.is_nil(invoked)
+    end)
+
     it('uses identical ordered selections for list and run', function()
         local expression = 'tests/automation/*.lua'
         assert.equals(0, cli.main({'list', expression,
@@ -497,5 +517,175 @@ describe('DwarfSpec CLI selection', function()
         }, context))
         assert.is_nil(invoked.queue_timeout_seconds)
         assert.equals(ResultPolicy.NONE, invoked.result_policy)
+    end)
+
+    it('accepts options before the selection and honors end of options',
+            function()
+        assert.equals(0, cli.main({
+            'run', '--test-glob=tests/automation/*.lua', '--no-results',
+            'tests/automation/*',
+        }, context))
+        assert.same({'tests/automation/a_spec.lua',
+            'tests/automation/ordinary_spec.lua'}, invoked.identities)
+
+        output.text = ''
+        errors.text = ''
+        invoked = nil
+        assert.equals(3, cli.main({'list', '--', '--not-an-option'}, context))
+        assert.matches('glob matched no DwarfSpec tests:', errors.text,
+            1, true)
+        assert.is_nil(errors.text:find('unknown option:', 1, true))
+        assert.is_nil(invoked)
+    end)
+
+    it('preserves last-value wins for repeated scalar options', function()
+        assert.equals(0, cli.main({
+            'run', '--runner=first-runner', '--runner=second-runner',
+            '--test-glob=tests/automation/*.lua', '--no-results',
+        }, context))
+        assert.equals('second-runner', invoked.runner)
+    end)
+
+    it('gives no-results safety precedence over an explicit result path',
+            function()
+        for _, arguments in ipairs({
+                {'run', '--results=first.json', '--no-results',
+                    '--test-glob=tests/automation/*.lua'},
+                {'run', '--no-results', '--results=second.json',
+                    '--test-glob=tests/automation/*.lua'}}) do
+            assert.equals(0, cli.main(arguments, context))
+            assert.equals(ResultPolicy.NONE, invoked.result_policy)
+            assert.is_nil(invoked.result_path)
+        end
+    end)
+
+    it('rejects empty values and invalid DwarfSpec option values early',
+            function()
+        local cases = {
+            {{'run', '--project-root='}, '--project-root must not be empty'},
+            {{'run', '--filter='}, '--filter must not be empty'},
+            {{'run', '--results='}, '--results must not be empty'},
+            {{'run', '--run-id=unsafe/id'},
+                '--run-id contains unsupported characters'},
+            {{'run', '--repeat=0'}, '--repeat must be a positive integer'},
+            {{'run', '--repeat=1.5'}, '--repeat must be a positive integer'},
+            {{'run', '--timeout=0'}, '--timeout must be positive'},
+            {{'run', '--queue-timeout=-1'},
+                '--queue-timeout must be positive'},
+            {{'run', '--poll-interval-ms=0'},
+                '--poll-interval-ms must be a positive integer'},
+            {{'run', '--startup-delay-frames=0'},
+                '--startup-delay-frames must be a positive integer'},
+            {{'run', '--lease-timeout-ms=0'},
+                '--lease-timeout-ms must be a positive integer'},
+            {{'run', '--lease-check-frames=0'},
+                '--lease-check-frames must be a positive integer'},
+            {{'list', '--test-glob=tests/***/bad'}, 'malformed glob:'},
+            {{'recover-executor', 'run-id', '--generation=0'},
+                '--generation must be a positive integer'},
+            {{'recover-executor', 'run-id', '--reason='},
+                '--reason must not be empty'},
+            {{'recover-executor', 'run-id', '--reason=' .. string.rep('x',
+                1025)}, '--reason must not exceed 1024 bytes'},
+        }
+        context.filesystem = nil
+        for _, case in ipairs(cases) do
+            errors.text = ''
+            invoked = nil
+            assert.equals(2, cli.main(case[1], context), table.concat(case[1],
+                ' '))
+            assert.matches(case[2], errors.text, 1, true)
+            assert.is_nil(invoked)
+        end
+    end)
+
+    it('enforces positional arity for every command', function()
+        local cases = {
+            {{'list', 'one', 'two'}, 'list accepts at most one glob'},
+            {{'run', 'one', 'two'}, 'run accepts at most one glob'},
+            {{'status', 'extra'}, 'status does not accept arguments'},
+            {{'history', 'extra'}, 'history does not accept arguments'},
+            {{'show'}, 'show requires exactly one run id'},
+            {{'show', 'one', 'two'}, 'show requires exactly one run id'},
+            {{'logs'}, 'logs requires exactly one run id'},
+            {{'logs', 'one', 'two'}, 'logs requires exactly one run id'},
+            {{'abort'}, 'abort requires exactly one run id'},
+            {{'abort', 'one', 'two'}, 'abort requires exactly one run id'},
+            {{'recover-executor', 'one', 'two', '--generation=1'},
+                'recover-executor requires exactly one run id'},
+        }
+        for _, case in ipairs(cases) do
+            errors.text = ''
+            invoked = nil
+            assert.equals(2, cli.main(case[1], context))
+            assert.matches(case[2], errors.text, 1, true)
+            assert.is_nil(invoked)
+        end
+    end)
+
+    it('forwards runner failures and suppresses missing query payloads',
+            function()
+        local commands = {
+            status='status',
+            history='history',
+            show='inspect',
+            logs='logs',
+            abort='abort',
+            ['recover-executor']='recover_executor',
+        }
+        for command, method in pairs(commands) do
+            context.runner[method] = function()
+                return {exit_code=19, error={message=command .. ' failed'}}
+            end
+            output.text = ''
+            errors.text = ''
+            local arguments
+            if command == 'recover-executor' then
+                arguments = {command, 'run-id', '--generation=1'}
+            elseif command == 'show' or command == 'logs' or
+                    command == 'abort' then
+                arguments = {command, 'run-id'}
+            else
+                arguments = {command}
+            end
+            assert.equals(19, cli.main(arguments, context))
+            assert.equals('', output.text)
+            assert.equals(command .. ' failed\n', errors.text)
+        end
+
+        context.runner.inspect = function()
+            return {exit_code=0, inspection={found=false}}
+        end
+        output.text = ''
+        errors.text = ''
+        assert.equals(0, cli.main({'show', 'missing-run'}, context))
+        assert.equals('', output.text)
+
+        context.runner.logs = function()
+            return {exit_code=0, logs={found=false}}
+        end
+        output.text = ''
+        errors.text = ''
+        assert.equals(0, cli.main({'logs', 'missing-run'}, context))
+        assert.equals('', output.text)
+
+        context.runner.run = function()
+            return {exit_code=19, error={message='run failed'}}
+        end
+        output.text = ''
+        errors.text = ''
+        assert.equals(19, cli.main({
+            'run', '--test-glob=tests/automation/*.lua',
+        }, context))
+        assert.equals('', output.text)
+        assert.equals('run failed\n', errors.text)
+
+        context.runner.status = function() return {exit_code=0} end
+        context.runner.history = function() return {exit_code=0} end
+        output.text = ''
+        assert.equals(0, cli.main({'status'}, context))
+        assert.equals('', output.text)
+        assert.equals(0, cli.main({'history'}, context))
+        assert.equals('', output.text)
     end)
 end)
