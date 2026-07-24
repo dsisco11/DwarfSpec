@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phases 0-6 complete
+Status: in progress; Phases 0-7 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -416,40 +416,40 @@ while retaining subject geometry and exact pointer cleanup.
 
 ### Tasks
 
-☐ Resolve all top-level and subject input commands through
+☑ Resolve all top-level and subject input commands through
   `mount.interaction_target`.
-☐ Dispatch keyboard and mouse keys with
+☑ Dispatch keyboard and mouse keys with
   `gui.simulateInput(attached_native_screen, keys)`.
-☐ Preserve normal overlay interposition and unhandled native-screen input
+☑ Preserve normal overlay interposition and unhandled native-screen input
   fall-through.
-☐ Never call a native widget callback or overlay `onInput()` directly.
-☐ Extend `ds.move_pointer()` with the `(x, y)` overload.
-☐ Validate coordinate arguments as integral zero-based coordinates within the
+☑ Never call a native widget callback or overlay `onInput()` directly.
+☑ Extend `ds.move_pointer()` with the `(x, y)` overload.
+☑ Validate coordinate arguments as integral zero-based coordinates within the
   current window.
-☐ Use normalized subject bounds for named pointer positions and clicks.
-☐ Include subject source, path, native type, and bounds in pointer failure
+☑ Use normalized subject bounds for named pointer positions and clicks.
+☑ Include subject source, path, native type, and bounds in pointer failure
   diagnostics where available.
-☐ Preserve the existing `EMouseButton` and `EInputState` contracts, including
+☑ Preserve the existing `EMouseButton` and `EInputState` contracts, including
   default `CLICK` behavior.
-☐ Route click, explicit down, explicit up, and wheel input at the currently set
+☑ Route click, explicit down, explicit up, and wheel input at the currently set
   pointer position.
-☐ Preserve virtual pointer, GPS pointer, mouse focus/tracking, and button state
+☑ Preserve virtual pointer, GPS pointer, mouse focus/tracking, and button state
   through the existing pointer adapter.
-☐ Wait for completed rendering after interaction when the existing command
+☑ Wait for completed rendering after interaction when the existing command
   contract requires it.
-☐ Add tests for top-level input, subject input, native clicks, overlay clicks,
+☑ Add tests for top-level input, subject input, native clicks, overlay clicks,
   arbitrary coordinates, each pointer position, invalid bounds, invalid
   coordinates, click/down/up/wheel states, overlay fall-through, screen
   staleness, and pointer restoration after injected failures.
 
 ### Phase 7 exit gate
 
-☐ Native and overlay interactions both traverse the pinned native screen's
+☑ Native and overlay interactions both traverse the pinned native screen's
   normal input path.
-☐ Arbitrary and subject-derived coordinates reach the existing pointer state
+☑ Arbitrary and subject-derived coordinates reach the existing pointer state
   consistently.
-☐ All pointer and button state restores on success and failure.
-☐ Focused input and pointer tests pass.
+☑ All pointer and button state restores on success and failure.
+☑ Focused input and pointer tests pass.
 
 ## Phase 8: Native render observation and redraw
 
@@ -1016,7 +1016,50 @@ as the work proceeds.
 
 ### Phase 7 evidence
 
-- Pending.
+- `src/dwarfspec/ds.lua` now accepts
+  `ds.move_pointer(x, y)`, validates nonnegative integral coordinates against
+  the current positive integral window dimensions, validates the pinned
+  interaction target before and after the window query, and declares the
+  overload in `src/ds.d.lua`.
+- Subject-derived pointer placement reads current adapter bounds, uses an
+  adapter-specific interaction rectangle when available, clips the normalized
+  inclusive rectangle to the current window, and reports bounded source, path,
+  native type, and normalized bounds when no usable interaction area remains.
+- Top-level keyboard and mouse commands, native subjects, and explicit overlay
+  subjects all retain one route through `mount.interaction_target` and
+  `gui.simulateInput()` with the pinned native viewscreen. Production code does
+  not invoke a native callback or overlay `onInput()` directly.
+- The DFHack 53.15-r1 source contract was inspected:
+  `library/lua/gui.lua` delegates `simulateInput()` to
+  `dscreen._doSimulateInput()`;
+  `library/LuaApi.cpp` sends those keys through `screen->feed()`; and
+  `plugins/overlay.cpp` interposes that feed, dispatches registered overlays,
+  and calls the backing native feed only when overlay input is unhandled.
+- Existing `EMouseButton` and `EInputState` values are unchanged. Physical
+  buttons still default to `CLICK`; explicit down/up and wheel paths retain
+  their current virtual pointer, temporary GPS pointer, focus/tracking, and
+  run-scoped button-state restoration through the existing pointer adapter.
+- Extended `tests/unit/ds_mount_commands_spec.lua` with coverage for:
+  arbitrary coordinates and all boundaries; all five named subject anchors;
+  clipped, inverted, and offscreen bounds with source-aware diagnostics;
+  top-level, native-subject, and overlay-subject keyboard/text input; native
+  and overlay clicks through the pinned viewscreen; overlay interposition and
+  unhandled fall-through; default click plus explicit down/up and wheel input;
+  native screen staleness; temporary GPS/focus/button restoration after
+  injected dispatch failures; and virtual pointer restoration on cleanup.
+- Focused commands, run sequentially:
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"`:
+    `33 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "automation interaction support"`:
+    `5 successes / 0 failures / 0 errors / 0 pending`.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `340 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 216 files.`
+- `git diff --check` passed.
+- No package build or live DFHack run is claimed for this phase. The routing
+  boundary is covered by unit tests and confirmed against the checked-out
+  DFHack source; native render observation remains Phase 8 work.
 
 ### Phase 8 evidence
 

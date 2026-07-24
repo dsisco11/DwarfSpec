@@ -71,6 +71,8 @@ describe('DwarfSpec public mount commands', function()
     local original_overlay_plugin
     local overlay_state
     local simulated_inputs
+    local simulate_input_failure
+    local simulate_input_dispatch
     local wait_until_calls
     local component_mount_calls
     local native_widget_lookup_calls
@@ -88,6 +90,8 @@ describe('DwarfSpec public mount commands', function()
         component_mount_calls = 0
         native_widget_lookup_calls = 0
         simulated_inputs = {}
+        simulate_input_failure = nil
+        simulate_input_dispatch = nil
         wait_until_calls = 0
         rawset(_G, 'dfhack', {
             screen={
@@ -133,6 +137,9 @@ describe('DwarfSpec public mount commands', function()
         })
         package.loaded.gui = {
             simulateInput=function(native_screen, key)
+                if simulate_input_failure then
+                    error(simulate_input_failure)
+                end
                 table.insert(simulated_inputs, {
                     screen=native_screen,
                     key=key,
@@ -147,6 +154,9 @@ describe('DwarfSpec public mount commands', function()
                     middle_down=df.global.enabler.mouse_mbut_down,
                     middle_lift=df.global.enabler.mouse_mbut_lift,
                 })
+                if simulate_input_dispatch then
+                    simulate_input_dispatch(native_screen, key)
+                end
                 current_tracker:completed()
             end,
         }
@@ -662,12 +672,90 @@ describe('DwarfSpec public mount commands', function()
         })
         assert.has_error(function()
             ds.move_pointer(ds.get('Invalid'))
-        end, 'view has no usable live bounds for pointer placement')
+        end, 'DwarfSpec pointer placement failed: source="native" ' ..
+            'path="{\\"Invalid\\"}" native_type="df.widget" ' ..
+            'bounds=<unavailable> reason="no usable live bounds within the ' ..
+                'current window"')
         assert.has_error(function()
             ds.move_pointer(ds.get('Offscreen'))
-        end, 'view has no usable live bounds for pointer placement')
+        end, 'DwarfSpec pointer placement failed: source="native" ' ..
+            'path="{\\"Offscreen\\"}" native_type="df.widget" ' ..
+            'bounds={x1=90,y1=30,x2=100,y2=40} reason="no usable live ' ..
+                'bounds within the current window"')
         assert.same({x1=90, y1=30, x2=100, y2=40},
             ds.get('Offscreen'):inspect().body)
+    end)
+
+    it('supports arbitrary in-window pointer coordinates', function()
+        ds.mount()
+
+        assert.same({0, 0}, {ds.move_pointer(0, 0)})
+        assert.same({79, 24}, {ds.move_pointer(79, 24)})
+        assert.same({79, 24}, {dfhack.screen.getMousePos()})
+    end)
+
+    it('rejects invalid arbitrary pointer coordinates explicitly', function()
+        ds.mount()
+        local cases = {
+            {
+                invoke=function() ds.move_pointer(-1, 0) end,
+                expected='pointer x coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function() ds.move_pointer(0.5, 0) end,
+                expected='pointer x coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function() ds.move_pointer(0, -1) end,
+                expected='pointer y coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function() ds.move_pointer(0, 0.5) end,
+                expected='pointer y coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function() ds.move_pointer(0, nil) end,
+                expected='pointer y coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function() ds.move_pointer(80, 0) end,
+                expected='pointer x coordinate 80 is outside the current ' ..
+                    'window width 80',
+            },
+            {
+                invoke=function() ds.move_pointer(0, 25) end,
+                expected='pointer y coordinate 25 is outside the current ' ..
+                    'window height 25',
+            },
+        }
+        for _, case in ipairs(cases) do
+            assert.has_error(case.invoke, case.expected)
+        end
+    end)
+
+    it('places the pointer at every subject anchor', function()
+        local target = make_native_widget(
+            'Target', 'df.widget', nil, {
+                rect={x1=10, y1=12, x2=14, y2=18},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        native_root.children = {target}
+        ds.mount()
+        local subject = ds.get('Target')
+        local expected = {
+            center={12, 15},
+            top_left={10, 12},
+            top_right={14, 12},
+            bottom_left={10, 18},
+            bottom_right={14, 18},
+        }
+
+        for anchor, coordinates in pairs(expected) do
+            assert.same(coordinates, {ds.move_pointer(subject, anchor)})
+        end
     end)
 
     it('makes a retained native subject stale after removal', function()
@@ -898,6 +986,123 @@ describe('DwarfSpec public mount commands', function()
         end, 'mouse wheel input does not accept a button action')
     end)
 
+    it('routes native and overlay subject input through the pinned screen',
+            function()
+        local native_callback_calls = 0
+        local overlay_callback_calls = 0
+        local native_control = make_native_widget(
+            'NativeControl', 'df.widget_button', nil, {
+                rect={x1=2, y1=3, x2=5, y2=6},
+                onInput=function()
+                    native_callback_calls = native_callback_calls + 1
+                end,
+            })
+        native_root.children = {native_control}
+        local overlay_control = {
+            view_id='OverlayControl',
+            subviews={},
+            frame_body={x1=20, y1=10, x2=24, y2=12},
+            visible=true,
+            active=true,
+            onInput=function()
+                overlay_callback_calls = overlay_callback_calls + 1
+            end,
+        }
+        local overlay_root = {
+            view_id='OverlayRoot',
+            subviews={overlay_control},
+            frame_body={x1=19, y1=9, x2=25, y2=13},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.InputOverlay'] = {
+            widget=overlay_root,
+        }
+        overlay_state.config['gui/example.InputOverlay'] = {enabled=true}
+        ds.mount()
+        local native_subject = ds.get('NativeControl')
+        local overlay_subject = ds.get('OverlayControl', {
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.InputOverlay',
+        })
+
+        ds.input('TOP_LEVEL')
+        native_subject:input('NATIVE_SUBJECT')
+        overlay_subject:input('OVERLAY_SUBJECT')
+        overlay_subject:type('A')
+        native_subject:click()
+        overlay_subject:click()
+
+        assert.same({
+            'TOP_LEVEL',
+            'NATIVE_SUBJECT',
+            'OVERLAY_SUBJECT',
+            'STRING_A065',
+            '_MOUSE_L',
+            '_MOUSE_L',
+        }, {
+            simulated_inputs[1].key,
+            simulated_inputs[2].key,
+            simulated_inputs[3].key,
+            simulated_inputs[4].key,
+            simulated_inputs[5].key,
+            simulated_inputs[6].key,
+        })
+        for _, input in ipairs(simulated_inputs) do
+            assert.equals(native_screen, input.screen)
+        end
+        assert.same({3, 4}, {
+            simulated_inputs[5].x,
+            simulated_inputs[5].y,
+        })
+        assert.same({22, 11}, {
+            simulated_inputs[6].x,
+            simulated_inputs[6].y,
+        })
+        assert.equals(0, native_callback_calls)
+        assert.equals(0, overlay_callback_calls)
+    end)
+
+    it('preserves overlay interposition and unhandled input fall-through',
+            function()
+        local overlay_calls = 0
+        local backing_calls = 0
+        local overlay_handles = false
+        local overlay_root = {
+            view_id='InputOverlay',
+            subviews={},
+            frame_body={x1=8, y1=6, x2=12, y2=8},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.FallthroughOverlay'] = {
+            widget=overlay_root,
+        }
+        overlay_state.config['gui/example.FallthroughOverlay'] = {
+            enabled=true,
+        }
+        simulate_input_dispatch = function(received_screen, key)
+            assert.equals(native_screen, received_screen)
+            assert.equals('_MOUSE_L', key)
+            overlay_calls = overlay_calls + 1
+            if not overlay_handles then
+                backing_calls = backing_calls + 1
+            end
+        end
+        ds.mount()
+        local subject = ds.root({
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.FallthroughOverlay',
+        })
+
+        subject:click()
+        overlay_handles = true
+        subject:click()
+
+        assert.equals(2, overlay_calls)
+        assert.equals(1, backing_calls)
+    end)
+
     it('persists explicit button-down state until matching button-up input',
             function()
         local mounted = ds.mount(TestWidget, {
@@ -955,6 +1160,70 @@ describe('DwarfSpec public mount commands', function()
             assert.is_false(df.global.enabler.mouse_focus)
             assert.equals(0, df.global.enabler.tracking_on)
         end
+    end)
+
+    it('restores temporary pointer and button state after input failures',
+            function()
+        local mounted = ds.mount(TestWidget, {
+            frame_body={x1=10, y1=20, x2=14, y2=24},
+        })
+        mounted:move_pointer('top_left')
+        simulate_input_failure = 'injected simulateInput failure'
+
+        local click_ok, click_failure = pcall(
+            ds.mouseInput, EMouseButton.LEFT)
+        assert.is_false(click_ok)
+        assert.matches('injected simulateInput failure',
+            click_failure, 1, true)
+        assert.same({4, 5}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+        })
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+
+        local down_ok, down_failure = pcall(
+            ds.mouseInput, EMouseButton.LEFT, EInputState.DOWN)
+        assert.is_false(down_ok)
+        assert.matches('injected simulateInput failure',
+            down_failure, 1, true)
+        assert.equals(0, df.global.enabler.mouse_lbut_down)
+        assert.equals(0, df.global.enabler.mouse_lbut_lift)
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+
+        ds.unmount()
+
+        assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.equals(0, df.global.enabler.mouse_lbut_down)
+        assert.equals(0, df.global.enabler.mouse_lbut_lift)
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+    end)
+
+    it('rejects input and pointer operations after a native screen change',
+            function()
+        local mounted = ds.mount()
+        ds.move_pointer(4, 5)
+        current_native_screen = {
+            name='replacement-screen',
+            widgets={kind='replacement-root'},
+        }
+
+        for _, operation in ipairs({
+                function() ds.input('SELECT') end,
+                function() ds.mouseInput(EMouseButton.LEFT) end,
+                function() mounted:click() end,
+                function() ds.move_pointer(4, 5) end}) do
+            local ok, failure = pcall(operation)
+            assert.is_false(ok)
+            assert.matches('rejected stale native%-screen mount',
+                failure)
+        end
+        assert.same({4, 5}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+        })
     end)
 
     it('routes input to a native child while retaining the mounted root',

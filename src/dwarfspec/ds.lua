@@ -131,6 +131,8 @@ local TestStatus = load_automation_module(package_root,
         run=scheduler.run,
         current_viewscreen=mount_dependencies.current_viewscreen or
             function() return dfhack.gui.getCurViewscreen(true) end,
+        get_window_size=mount_dependencies.get_window_size or
+            function() return dfhack.screen.getWindowSize() end,
     }
     local publisher = context.run.event_publisher
 
@@ -638,22 +640,125 @@ local TestStatus = load_automation_module(package_root,
         return tree
     end
 
-    ---Moves the virtual pointer to an anchor inside one live view body.
-    ---@param view table
-    ---@param anchor string|nil
+    ---Formats one rectangle without inspecting arbitrary adapted fields.
+    ---@param rect table|nil
+    ---@return string
+    local function format_pointer_rect(rect)
+        if type(rect) ~= 'table' then return '<unavailable>' end
+        return ('{x1=%s,y1=%s,x2=%s,y2=%s}'):format(
+            tostring(rect.x1), tostring(rect.y1),
+            tostring(rect.x2), tostring(rect.y2))
+    end
+
+    ---Returns the current positive integral native window dimensions.
+    ---@param target dwarfspec.InteractionTarget
+    ---@param operation string
+    ---@return integer, integer
+    local function current_window_size(target, operation)
+        target:native_screen(operation)
+        local ok, width, height = pcall(context.get_window_size)
+        target:native_screen(operation)
+        assert(ok, ('DwarfSpec %s could not query the current window: %s')
+            :format(operation, tostring(width)))
+        assert(type(width) == 'number' and width % 1 == 0 and width > 0 and
+                type(height) == 'number' and height % 1 == 0 and height > 0,
+            ('DwarfSpec %s received invalid current window dimensions: ' ..
+                'width=%s height=%s'):format(operation, tostring(width),
+                    tostring(height)))
+        return width, height
+    end
+
+    ---Returns bounded diagnostics for one pointer subject or source root.
+    ---@param requested_subject table|nil
+    ---@param source dwarfspec.SubjectSource
+    ---@param adapter dwarfspec.SubjectAdapter
+    ---@param view any
+    ---@param bounds table|nil
+    ---@return string
+    local function pointer_subject_diagnostics(requested_subject, source,
+            adapter, view, bounds)
+        local descriptor = requested_subject and
+            requested_subject._descriptor or nil
+        local path = descriptor and
+            descriptor.control_path_for_diagnostics or '<root>'
+        local ok, native_type = pcall(adapter.native_type, adapter, view)
+        if not ok then native_type = '<unavailable>' end
+        local source_name = source.kind
+        if source.overlay then
+            source_name = source_name .. ':' .. source.overlay
+        end
+        return ('source=%q path=%q native_type=%q bounds=%s'):format(
+            tostring(source_name), tostring(path), tostring(native_type),
+            format_pointer_rect(bounds))
+    end
+
+    ---Clips normalized inclusive subject bounds to the current window.
+    ---@param bounds table|nil
+    ---@param width integer
+    ---@param height integer
+    ---@return table|nil
+    local function clip_pointer_bounds(bounds, width, height)
+        if type(bounds) ~= 'table' then return nil end
+        for _, field in ipairs({'x1', 'y1', 'x2', 'y2'}) do
+            local value = bounds[field]
+            if type(value) ~= 'number' or value % 1 ~= 0 then return nil end
+        end
+        local clipped = {
+            x1=math.max(0, bounds.x1),
+            y1=math.max(0, bounds.y1),
+            x2=math.min(width - 1, bounds.x2),
+            y2=math.min(height - 1, bounds.y2),
+        }
+        if clipped.x1 > clipped.x2 or clipped.y1 > clipped.y2 then return nil end
+        return clipped
+    end
+
+    ---Moves the virtual pointer to coordinates or an anchor inside a subject.
+    ---@overload fun(x: integer, y: integer): integer, integer
+    ---@param view table|integer|nil
+    ---@param anchor string|integer|nil
     ---@return integer, integer
     function ds.move_pointer(view, anchor)
+        if type(view) == 'number' then
+            local target
+            _, target = resolve_interaction_target(nil, 'move_pointer')
+            local x = view
+            local y = anchor
+            assert(x % 1 == 0 and x >= 0,
+                'pointer x coordinate must be a nonnegative integer')
+            assert(type(y) == 'number' and y % 1 == 0 and y >= 0,
+                'pointer y coordinate must be a nonnegative integer')
+            local width, height = current_window_size(target, 'move_pointer')
+            assert(x < width,
+                ('pointer x coordinate %d is outside the current window ' ..
+                    'width %d'):format(x, width))
+            assert(y < height,
+                ('pointer y coordinate %d is outside the current window ' ..
+                    'height %d'):format(y, height))
+            context.mount_context:mutate('move_pointer', function()
+                pointer_adapter_module.set(context.pointer, x, y)
+            end)
+            return x, y
+        end
+        local requested_subject = view
         local adapter
-        view, _, _, adapter = resolve_interaction_target(
+        local target
+        local mount
+        view, target, mount, adapter = resolve_interaction_target(
             view, 'move_pointer')
-        local body
+        local source = requested_subject and
+            requested_subject._descriptor.source or mount.subject_source
+        local raw_bounds = adapter:bounds(view)
+        local body = raw_bounds
         if type(adapter.interaction_bounds) == 'function' then
             body = adapter:interaction_bounds(view)
-        else
-            body = adapter:bounds(view)
         end
-        body = assert(body,
-            'view has no usable live bounds for pointer placement')
+        local width, height = current_window_size(target, 'move_pointer')
+        body = clip_pointer_bounds(body, width, height)
+        assert(body, 'DwarfSpec pointer placement failed: ' ..
+            pointer_subject_diagnostics(requested_subject, source, adapter,
+                view, raw_bounds) ..
+            ' reason="no usable live bounds within the current window"')
         anchor = anchor or 'center'
         local x = math.floor((body.x1 + body.x2) / 2)
         local y = math.floor((body.y1 + body.y2) / 2)

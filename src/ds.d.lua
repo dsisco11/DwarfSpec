@@ -224,6 +224,7 @@ function DS.redraw(view, options) end
 function DS.capture_view_tree(name, options) end
 
 ---Moves the virtual pointer to an anchor inside one live view body.
+---@overload fun(x: integer, y: integer): integer, integer
 ---@param view? table|dwarfspec.Subject
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return integer x
