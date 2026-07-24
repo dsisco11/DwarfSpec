@@ -101,7 +101,7 @@ local function host_script(options, name)
     local scripts = options.host_scripts or {}
     if scripts[name] then return scripts[name] end
     return project.join(options.package_root,
-        'tests/automation/support/' .. name .. '.lua')
+        'src/dwarfspec/automation/' .. name .. '.lua')
 end
 
 ---Resolves the shared Lua module root for source and installed layouts.

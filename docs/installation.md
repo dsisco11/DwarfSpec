@@ -16,8 +16,10 @@ luarocks install .\dist\dwarfspec-0.2.0-1.all.rock
 The VS Code `Publish` task, or `tools/Publish.ps1`, produces that portable
 artifact with LuaRocks configured as `arch = 'all'`. The
 `LuaRocks: Install locally built package` task runs `Publish` first and then
-force-installs the generated artifact, so repeated development installs of the
-same package version replace the previous installation. This is deliberate:
+removes and replaces the exact generated package version, so repeated
+development installs recover cleanly even when files were renamed within that
+version. Other installed versions are not part of the pre-install cleanup.
+This is deliberate:
 DwarfSpec contains only Lua modules plus a portable Lua command script. It does
 not contain a compiled module. LuaRocks generates the platform-specific command
 launcher when it installs the rock. On Windows, add the selected rock tree's

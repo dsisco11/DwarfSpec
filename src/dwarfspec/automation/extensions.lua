@@ -1,4 +1,4 @@
--- Isolated consumer configuration, command, and diagnostic extension loader.
+-- Production consumer configuration, command, and diagnostic extension loader.
 
 local M = {}
 
@@ -129,7 +129,7 @@ function M.load(project, loader)
 local ok, project_module = pcall(require, 'dwarfspec.automation.project')
 if not ok then
     project_module = assert(loadfile(project.package_root ..
-        '/tests/automation/support/project.lua'))()
+        '/src/dwarfspec/automation/project.lua'))()
 end
     for _, relative_path in ipairs(
             project_module.discover_config_modules(project)) do

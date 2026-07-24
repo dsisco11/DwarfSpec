@@ -1,4 +1,4 @@
--- DFHack core-context adapter for the LuaSystem surface used by Busted.
+-- Production DFHack adapter for the LuaSystem surface used by Busted.
 
 local M = {
     _VERSION='DFHack automation adapter 1',

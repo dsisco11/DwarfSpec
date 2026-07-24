@@ -1,9 +1,9 @@
 -- Unit contracts for isolated consumer configuration and ds extensions.
 
 local project_module = assert(loadfile(
-    'tests/automation/support/project.lua'))()
+    'src/dwarfspec/automation/project.lua'))()
 local extensions = assert(loadfile(
-    'tests/automation/support/extensions.lua'))()
+    'src/dwarfspec/automation/extensions.lua'))()
 
 describe('DwarfSpec consumer extensions', function()
     local modules

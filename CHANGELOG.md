@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-24
+
 ### Added
 
 - Deterministic 128 by 64 DF-cell viewports for mounted components, explicit
@@ -46,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Read-only `dwarfspec history`, `dwarfspec show RUN_ID`, and
   `dwarfspec logs RUN_ID` access to cross-project run history, structured
   events, and captured output retained by the current DFHack service instance.
+- Explicit pointer-position mouse input through immutable `EMouseButton` and
+  `EInputState` identifiers, including persistent button-down and button-up
+  transitions and wheel input.
 
 ### Fixed
 
@@ -53,3 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   platform launcher instead of publishing overlapping command entries.
 - Reject executor quarantine before project registration or run admission and
   report the blocking run, generation, reason, and recovery command.
+- Preserve the active Lua interpreter in isolated LuaRocks publish
+  configuration and recover same-version local installs after packaged files
+  are renamed.

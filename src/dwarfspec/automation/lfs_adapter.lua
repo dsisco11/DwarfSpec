@@ -1,4 +1,4 @@
--- DFHack filesystem adapter for the LuaFileSystem surface used by Penlight.
+-- Production DFHack adapter for the LuaFileSystem surface used by Penlight.
 
 local M = {}
 

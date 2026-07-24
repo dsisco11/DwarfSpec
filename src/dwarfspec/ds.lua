@@ -1,4 +1,4 @@
--- Live-game interaction namespace exported into isolated Busted specs.
+-- Production live-game namespace exported into isolated Busted specs.
 
 local M = {}
 
@@ -63,13 +63,13 @@ function M.new(package_root, project, scheduler_module, scheduler,
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
 local diagnostics = load_automation_module(package_root,
     'dwarfspec.automation.diagnostics',
-    '/tests/automation/support/diagnostics.lua')
+    '/src/dwarfspec/automation/diagnostics.lua')
 local pointer_adapter_module = load_automation_module(package_root,
     'dwarfspec.automation.pointer_adapter',
-    '/tests/automation/support/pointer_adapter.lua')
+    '/src/dwarfspec/automation/pointer_adapter.lua')
 local overlay_registration = load_automation_module(package_root,
     'dwarfspec.automation.overlay_registration',
-    '/tests/automation/support/overlay_registration.lua')
+    '/src/dwarfspec/automation/overlay_registration.lua')
 local component_module = load_automation_module(package_root,
     'dwarfspec.component', '/src/dwarfspec/component.lua')
 local mount_context_module = load_automation_module(package_root,

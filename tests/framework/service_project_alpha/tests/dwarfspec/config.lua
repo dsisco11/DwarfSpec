@@ -2,6 +2,6 @@
 
 return {
     settings={
-        wait={frame_budget=300, timeout_ms=10000},
+        wait={frame_budget=900, timeout_ms=10000},
     },
 }

@@ -1,4 +1,4 @@
--- Starts an in-process Busted automation run and returns immediately.
+-- Production adapter that starts an in-process Busted automation run.
 
 local arguments = {...}
 
@@ -171,7 +171,7 @@ local function emit_error(value)
                 value.reason, value.blocking_run_id,
                 value.blocking_generation)
     end
-    print('DWARFSPEC_JSON ' .. json.encode(response))
+    print('DWARFSPEC_JSON ' .. json.encode(response, {pretty=false}))
 end
 
 ---Registers one run without emitting a partial success response.

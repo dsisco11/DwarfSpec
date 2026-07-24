@@ -1,9 +1,7 @@
--- Acknowledges one exact terminal generation after owner persistence succeeds.
+-- Production adapter that polls a run through cursor-based transport.
 
-local run_id, generation_text, owner_capability, after_sequence_text = ...
+local run_id, owner_capability, after_sequence_text = ...
 assert(run_id, 'run id argument is required')
-local generation = assert(tonumber(generation_text),
-    'generation argument must be numeric')
 assert(owner_capability, 'owner capability argument is required')
 local after_sequence = assert(tonumber(after_sequence_text),
     'event cursor argument must be numeric')
@@ -13,7 +11,7 @@ local after_sequence = assert(tonumber(after_sequence_text),
 local function package_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
     local lua_root = source:match(
-        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]acknowledge%.lua$')
+        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]status%.lua$')
     if lua_root then
         local separator = package.config:sub(1, 1)
         package.path = lua_root .. separator .. '?.lua;' .. lua_root ..
@@ -21,8 +19,7 @@ local function package_root()
         return lua_root, lua_root
     end
     local root = source:match(
-        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]' ..
-            'acknowledge%.lua$')
+        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]status%.lua$')
     root = assert(root, 'could not derive DwarfSpec root from ' .. source)
     package.path = root .. '/src/?.lua;' .. root ..
         '/src/?/init.lua;' .. package.path
@@ -51,10 +48,10 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local run = host.acknowledge(run_id, generation, owner_capability)
-local transport = host.transport(run.run_id, after_sequence)
-print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d ' ..
-    'acknowledged=true')
+local poll_ok, transport = pcall(host.poll_transport, run_id,
+    owner_capability, after_sequence)
+if not poll_ok then qerror(transport) end
+print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
     :format(transport.protocol, transport.run_id,
         transport.snapshot.state, transport.generation))
 print('DWARFSPEC_JSON ' .. host.encode_transport(transport))

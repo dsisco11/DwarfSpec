@@ -1,6 +1,6 @@
 # Test runner service and structured event design
 
-Status: proposed
+Status: implemented for the 0.2.0 release candidate
 
 ## Summary
 

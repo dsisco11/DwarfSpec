@@ -55,6 +55,18 @@ local function create_host_class(gui_module, define_class)
         end
     end
 
+    ---Routes overlay input first and forwards declined input to the backing screen.
+    ---@param keys table
+    ---@return boolean
+    function HostScreen:onInput(keys)
+        if self.overlay_controller then
+            if self.overlay_controller:input(keys) then return true end
+            self:sendInputToParent(keys)
+            return true
+        end
+        return HostScreen.super.onInput(self, keys)
+    end
+
     ---Feeds overlay input with its active and visible lifecycle checks.
     ---@param keys table
     ---@return boolean

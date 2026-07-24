@@ -38,6 +38,35 @@ end
 ---@return table
 function M.current()
     local lua_root = M.lua_root()
+    local package_root, source_suffix_count = lua_root:gsub(
+        '[/\\]src$', '')
+
+    if source_suffix_count == 1 then
+        return {
+            package_root=package_root,
+            host_scripts={
+                bootstrap=join(package_root,
+                    'src/dwarfspec/automation/bootstrap.lua'),
+                status=join(package_root,
+                    'src/dwarfspec/automation/status.lua'),
+                recover=join(package_root,
+                    'src/dwarfspec/automation/recover.lua'),
+                recover_executor=join(package_root,
+                    'src/dwarfspec/automation/recover_executor.lua'),
+                scheduler_status=join(package_root,
+                    'src/dwarfspec/automation/scheduler_status.lua'),
+                run_query=join(package_root,
+                    'src/dwarfspec/automation/run_query.lua'),
+                abort=join(package_root,
+                    'src/dwarfspec/automation/abort.lua'),
+                acknowledge=join(package_root,
+                    'src/dwarfspec/automation/acknowledge.lua'),
+                probe=join(package_root,
+                    'src/dwarfspec/automation/probe.lua'),
+            },
+        }
+    end
+
     local installed_bootstrap = join(lua_root,
         'dwarfspec/automation/bootstrap.lua')
     if is_file(installed_bootstrap) then
@@ -61,26 +90,8 @@ function M.current()
         }
     end
 
-    local package_root = lua_root:gsub('[/\\]src$', '')
-    return {
-        package_root=package_root,
-        host_scripts={
-            bootstrap=join(package_root,
-                'tests/automation/support/bootstrap.lua'),
-            status=join(package_root, 'tests/automation/support/status.lua'),
-            recover=join(package_root, 'tests/automation/support/recover.lua'),
-            recover_executor=join(package_root,
-                'tests/automation/support/recover_executor.lua'),
-            scheduler_status=join(package_root,
-                'tests/automation/support/scheduler_status.lua'),
-            run_query=join(package_root,
-                'tests/automation/support/run_query.lua'),
-            abort=join(package_root, 'tests/automation/support/abort.lua'),
-            acknowledge=join(package_root,
-                'tests/automation/support/acknowledge.lua'),
-            probe=join(package_root, 'tests/automation/support/probe.lua'),
-        },
-    }
+    error(('DwarfSpec package layout is incomplete under %s.'):format(
+        lua_root))
 end
 
 return M

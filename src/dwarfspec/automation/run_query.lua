@@ -1,4 +1,4 @@
--- Reads retained automation run history, details, or captured logs.
+-- Production adapter for retained run history, details, and logs.
 
 local operation, run_id = ...
 

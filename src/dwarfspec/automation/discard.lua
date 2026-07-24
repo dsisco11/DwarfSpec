@@ -1,18 +1,18 @@
--- Reads scheduler state alongside one retained run transport envelope.
+-- Production adapter that discards one retained terminal result.
 
-local run_id, after_sequence_text = ...
-local after_sequence
-if run_id ~= nil then
-    after_sequence = assert(tonumber(after_sequence_text),
-        'event cursor argument must be numeric')
-end
+local run_id, generation_text, after_sequence_text, reason = ...
+assert(run_id, 'run id argument is required')
+local generation = assert(tonumber(generation_text),
+    'generation argument must be numeric')
+local after_sequence = assert(tonumber(after_sequence_text),
+    'event cursor argument must be numeric')
 
 ---Configures pure-Lua lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
 local function package_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
     local lua_root = source:match(
-        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]scheduler_status%.lua$')
+        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]discard%.lua$')
     if lua_root then
         local separator = package.config:sub(1, 1)
         package.path = lua_root .. separator .. '?.lua;' .. lua_root ..
@@ -20,8 +20,7 @@ local function package_root()
         return lua_root, lua_root
     end
     local root = assert(source:match(
-        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]' ..
-            'scheduler_status%.lua$'),
+        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]discard%.lua$'),
         'could not derive DwarfSpec root from ' .. source)
     package.path = root .. '/src/?.lua;' .. root ..
         '/src/?/init.lua;' .. package.path
@@ -44,16 +43,7 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-if run_id == nil then
-    local loaded = dfhack.dwarfspec ~= nil
-    print('DWARFSPEC_JSON ' .. require('json').encode({
-        schema='dwarfspec.status.v1',
-        protocol=2,
-        service_loaded=loaded,
-        scheduler=loaded and host.scheduler_snapshot() or nil,
-    }))
-else
-    local transport = host.transport(run_id, after_sequence)
-    transport.scheduler = host.scheduler_snapshot()
-    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
-end
+local run = host.discard(run_id, generation,
+    reason or 'local operator discarded retained result')
+local transport = host.transport(run.run_id, after_sequence)
+print('DWARFSPEC_JSON ' .. host.encode_transport(transport))

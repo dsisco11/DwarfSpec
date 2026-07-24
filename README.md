@@ -288,6 +288,11 @@ structured events, and `dwarfspec logs RUN_ID` to print its captured output.
 These reads cover all concurrent projects without changing leases or scheduler
 state. The in-memory history is cleared when DFHack exits.
 
+The in-game runner UI is a separate design and implementation effort. It will
+consume the same presentation-neutral service directly inside DFHack, but no
+UI source or UI completion criterion is part of the test-runner service
+release.
+
 By default, the latest invocation result is written to:
 
 ```text

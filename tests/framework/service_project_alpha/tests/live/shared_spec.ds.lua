@@ -11,7 +11,7 @@ describe('service project alpha', function()
         local polls = 0
         ds.await('alpha FIFO hold', function()
             polls = polls + 1
-            return polls >= 300
+            return polls >= 600
         end)
     end)
 end)

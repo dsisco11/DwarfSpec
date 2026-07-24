@@ -3,9 +3,9 @@
 local cleanup = assert(loadfile(
     'src/dwarfspec/automation/cleanup.lua'))()
 local diagnostics = assert(loadfile(
-    'tests/automation/support/diagnostics.lua'))()
+    'src/dwarfspec/automation/diagnostics.lua'))()
 local pointer_adapter = assert(loadfile(
-    'tests/automation/support/pointer_adapter.lua'))()
+    'src/dwarfspec/automation/pointer_adapter.lua'))()
 
 describe('automation interaction support', function()
     local original_dfhack

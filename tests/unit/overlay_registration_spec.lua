@@ -3,7 +3,7 @@
 local cleanup = assert(loadfile(
     'src/dwarfspec/automation/cleanup.lua'))()
 local overlay_registration = assert(loadfile(
-    'tests/automation/support/overlay_registration.lua'))()
+    'src/dwarfspec/automation/overlay_registration.lua'))()
 
 describe('DwarfSpec overlay registration integration support', function()
     local files

@@ -10,6 +10,7 @@ describe('legacy automation entrypoint contract', function()
     local active_callbacks
     local lines
     local encoded
+    local encode_options
     local tick
 
     before_each(function()
@@ -22,6 +23,7 @@ describe('legacy automation entrypoint contract', function()
         active_callbacks = {}
         lines = {}
         encoded = {}
+        encode_options = {}
         tick = 0
 
         rawset(_G, 'dfhack', {
@@ -37,8 +39,9 @@ describe('legacy automation entrypoint contract', function()
         end)
         package.preload.json = function()
             return {
-                encode=function(value)
+                encode=function(value, options)
                     table.insert(encoded, value)
+                    table.insert(encode_options, options or {})
                     return '{"legacy":true}'
                 end,
             }
@@ -89,10 +92,11 @@ describe('legacy automation entrypoint contract', function()
         local root = require('lfs').currentdir()
 
         assert(loadfile(root ..
-            '/tests/automation/support/scheduler_status.lua'))()
+            '/src/dwarfspec/automation/scheduler_status.lua'))()
 
         assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[1])
         assert.equals('dwarfspec.status.v1', encoded[1].schema)
+        assert.is_false(encode_options[1].pretty)
         assert.is_false(encoded[1].service_loaded)
         assert.is_nil(encoded[1].scheduler)
         assert.is_nil(dfhack.dwarfspec)
@@ -102,7 +106,7 @@ describe('legacy automation entrypoint contract', function()
             function()
         local root = require('lfs').currentdir()
         assert(loadfile(root ..
-            '/tests/automation/support/bootstrap.lua'))(
+            '/src/dwarfspec/automation/bootstrap.lua'))(
             'entrypoint-contract',
             '--project-root=tests/framework/service project beta',
             '--repeat=2',
@@ -133,7 +137,7 @@ describe('legacy automation entrypoint contract', function()
         assert.equals(2, encoded[1].protocol)
 
         lines = {}
-        assert(loadfile(root .. '/tests/automation/support/abort.lua'))(
+        assert(loadfile(root .. '/src/dwarfspec/automation/abort.lua'))(
             'entrypoint-contract', run.owner_capability)
 
         assert.is_nil(registry.active_run_id)
@@ -153,7 +157,7 @@ describe('legacy automation entrypoint contract', function()
 
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/acknowledge.lua'))(
+            '/src/dwarfspec/automation/acknowledge.lua'))(
             'entrypoint-contract', tostring(run.generation),
             run.owner_capability, tostring(#run.event_journal.events))
         assert.is_true(run.acknowledged)
@@ -165,12 +169,13 @@ describe('legacy automation entrypoint contract', function()
         registry.package_version = '0.1.3'
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/bootstrap.lua'))(
+            '/src/dwarfspec/automation/bootstrap.lua'))(
             'entrypoint-version-rejection')
         assert.same({'DWARFSPEC_JSON {"legacy":true}'}, lines)
         assert.equals('dwarfspec.error.v1', encoded[4].schema)
         assert.equals(2, encoded[4].protocol)
         assert.equals('registration', encoded[4].kind)
+        assert.is_false(encode_options[4].pretty)
         assert.matches('incompatible automation package version: ' ..
             'expected 0.1.3, found 0.2.0', encoded[4].message, 1, true)
         assert.is_nil(registry.runs['entrypoint-version-rejection'])
@@ -184,7 +189,7 @@ describe('legacy automation entrypoint contract', function()
         }
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/bootstrap.lua'))(
+            '/src/dwarfspec/automation/bootstrap.lua'))(
             'entrypoint-quarantine-rejection')
         assert.same({'DWARFSPEC_JSON {"legacy":true}'}, lines)
         assert.equals('dwarfspec.error.v1', encoded[5].schema)
@@ -210,7 +215,7 @@ describe('legacy automation entrypoint contract', function()
                 lease_check_frames=4,
             })
 
-        assert(loadfile(root .. '/tests/automation/support/cancel.lua'))(
+        assert(loadfile(root .. '/src/dwarfspec/automation/cancel.lua'))(
             queued.run_id, queued.owner_capability, '0', 'fixture cancel')
         assert.equals('cancelled', queued.state)
         assert.equals('dwarfspec.transport.v2',
@@ -218,7 +223,7 @@ describe('legacy automation entrypoint contract', function()
         assert.equals('cancelled', encoded[#encoded].snapshot.state)
 
         lines = {}
-        assert(loadfile(root .. '/tests/automation/support/events.lua'))(
+        assert(loadfile(root .. '/src/dwarfspec/automation/event_read.lua'))(
             queued.run_id, tostring(encoded[#encoded].last_sequence))
         assert.equals(1, #lines)
         assert.equals('dwarfspec.transport.v2',
@@ -227,7 +232,7 @@ describe('legacy automation entrypoint contract', function()
 
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/scheduler_status.lua'))(
+            '/src/dwarfspec/automation/scheduler_status.lua'))(
             queued.run_id, tostring(encoded[#encoded].last_sequence))
         assert.equals('dwarfspec.scheduler.v2',
             encoded[#encoded].scheduler.schema)
@@ -235,7 +240,7 @@ describe('legacy automation entrypoint contract', function()
 
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/run_query.lua'))('history')
+            '/src/dwarfspec/automation/run_query.lua'))('history')
         assert.equals('dwarfspec.history.v1', encoded[#encoded].schema)
         assert.is_true(encoded[#encoded].service_loaded)
         assert.equals(1, #encoded[#encoded].runs)
@@ -243,7 +248,7 @@ describe('legacy automation entrypoint contract', function()
 
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/run_query.lua'))(
+            '/src/dwarfspec/automation/run_query.lua'))(
             'show', queued.run_id)
         assert.equals('dwarfspec.run-inspection.v1',
             encoded[#encoded].schema)
@@ -252,7 +257,7 @@ describe('legacy automation entrypoint contract', function()
 
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/run_query.lua'))(
+            '/src/dwarfspec/automation/run_query.lua'))(
             'logs', queued.run_id)
         assert.equals('dwarfspec.run-logs.v1', encoded[#encoded].schema)
         assert.is_true(encoded[#encoded].found)
@@ -263,13 +268,13 @@ describe('legacy automation entrypoint contract', function()
 
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/run_query.lua'))(
+            '/src/dwarfspec/automation/run_query.lua'))(
             'show', 'missing-run')
         assert.is_false(encoded[#encoded].found)
         assert.is_nil(encoded[#encoded].snapshot)
 
         lines = {}
-        assert(loadfile(root .. '/tests/automation/support/discard.lua'))(
+        assert(loadfile(root .. '/src/dwarfspec/automation/discard.lua'))(
             queued.run_id, tostring(queued.generation),
             tostring(query_cursor), 'fixture discard')
         assert.is_true(queued.discarded)
@@ -285,7 +290,7 @@ describe('legacy automation entrypoint contract', function()
             })
         local cursor = #active.event_journal.events
         lines = {}
-        assert(loadfile(root .. '/tests/automation/support/recover.lua'))(
+        assert(loadfile(root .. '/src/dwarfspec/automation/recover.lua'))(
             active.run_id, active.owner_capability, tostring(cursor),
             'fixture recovery')
         assert.equals('aborted', active.state)
@@ -296,7 +301,7 @@ describe('legacy automation entrypoint contract', function()
         dfhack.dwarfspec.quarantine = {active=false}
         lines = {}
         assert(loadfile(root ..
-            '/tests/automation/support/scheduler_status.lua'))()
+            '/src/dwarfspec/automation/scheduler_status.lua'))()
         assert.equals('DWARFSPEC_JSON {"legacy":true}', lines[1])
         assert.equals('dwarfspec.status.v1',
             encoded[#encoded].schema)

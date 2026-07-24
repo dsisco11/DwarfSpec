@@ -1,9 +1,7 @@
--- Discards one retained terminal result through local operator authority.
+-- Production adapter that reads events without renewing a run lease.
 
-local run_id, generation_text, after_sequence_text, reason = ...
+local run_id, after_sequence_text = ...
 assert(run_id, 'run id argument is required')
-local generation = assert(tonumber(generation_text),
-    'generation argument must be numeric')
 local after_sequence = assert(tonumber(after_sequence_text),
     'event cursor argument must be numeric')
 
@@ -12,7 +10,7 @@ local after_sequence = assert(tonumber(after_sequence_text),
 local function package_root()
     local source = debug.getinfo(1, 'S').source:gsub('^@', '')
     local lua_root = source:match(
-        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]discard%.lua$')
+        '^(.*)[/\\]dwarfspec[/\\]automation[/\\]event_read%.lua$')
     if lua_root then
         local separator = package.config:sub(1, 1)
         package.path = lua_root .. separator .. '?.lua;' .. lua_root ..
@@ -20,7 +18,7 @@ local function package_root()
         return lua_root, lua_root
     end
     local root = assert(source:match(
-        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]discard%.lua$'),
+        '^(.*)[/\\]tests[/\\]automation[/\\]support[/\\]events%.lua$'),
         'could not derive DwarfSpec root from ' .. source)
     package.path = root .. '/src/?.lua;' .. root ..
         '/src/?/init.lua;' .. package.path
@@ -43,7 +41,5 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local run = host.discard(run_id, generation,
-    reason or 'local operator discarded retained result')
-local transport = host.transport(run.run_id, after_sequence)
+local transport = host.transport(run_id, after_sequence)
 print('DWARFSPEC_JSON ' .. host.encode_transport(transport))

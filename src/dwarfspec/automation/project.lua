@@ -1,4 +1,4 @@
--- Resolves consumer-project test assets without product-specific assumptions.
+-- Production resolver for consumer-project test assets.
 
 local glob_ok, glob = pcall(require, 'dwarfspec.glob')
 if not glob_ok then

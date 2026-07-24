@@ -234,11 +234,11 @@ $controlScript = Join-Path $projectRoot `
 $scenarioRunner = Join-Path $projectRoot `
     'tests\integration\support\scenario_runner.lua'
 $bootstrapScript = Join-Path $projectRoot `
-    'tests\automation\support\bootstrap.lua'
-$abortScript = Join-Path $projectRoot 'tests\automation\support\abort.lua'
-$discardScript = Join-Path $projectRoot 'tests\automation\support\discard.lua'
+    'src\dwarfspec\automation\bootstrap.lua'
+$abortScript = Join-Path $projectRoot 'src\dwarfspec\automation\abort.lua'
+$discardScript = Join-Path $projectRoot 'src\dwarfspec\automation\discard.lua'
 $recoverExecutorScript = Join-Path $projectRoot `
-    'tests\automation\support\recover_executor.lua'
+    'src\dwarfspec\automation\recover_executor.lua'
 $luaModuleRoot = Join-Path $projectRoot '.luarocks\share\lua\5.4'
 
 if (-not (Test-Path -LiteralPath $dfhackRunner -PathType Leaf)) {
@@ -647,7 +647,7 @@ function Invoke-ManualBootstrap {
         [string] $Project,
         [Parameter(Mandatory)]
         [string] $RunId,
-        [int] $LeaseMilliseconds = 5000,
+        [int] $LeaseMilliseconds = 10000,
         [string] $Spec = 'live/shared_spec.ds.lua'
     )
 
@@ -1056,28 +1056,37 @@ try {
             'Cleanup failure did not quarantine the executor.'
         Assert-Integration (-not $cleanupResult.host_report.cleanup_confirmed) `
             'Cleanup failure incorrectly confirmed cleanup.'
-        $blockedId = "$prefix-quarantine-blocked"
-        $blocked = Start-DwarfSpecRun -Project $betaRoot -RunId $blockedId
-        $blockedSnapshot = Wait-RunState -RunId $blockedId -States @('queued')
+        $rejectedId = "$prefix-quarantine-rejected"
+        $rejected = Start-DwarfSpecRun -Project $betaRoot -RunId $rejectedId
+        $rejectedResult = Complete-CapturedProcess -Handle $rejected `
+            -ExpectedExitCodes @(5)
+        $rejectedOutput = (
+            $rejectedResult.StandardOutput + "`n" +
+                $rejectedResult.StandardError)
         Assert-Integration `
-            $blockedSnapshot.harness.registry.quarantine.active `
-            'Queued follower did not observe executor quarantine.'
+            ($rejectedOutput -match 'executor is quarantined') `
+            'New run did not report the executor quarantine explicitly.'
+        Assert-Integration ($rejectedOutput -match [regex]::Escape($cleanupId)) `
+            'Quarantine rejection omitted the blocking run identity.'
         $recovered = Invoke-ExecutorRecovery -Transport $quarantined `
             -Reason 'integration verified drained cleanup resources'
         Assert-Integration (-not $recovered.scheduler.quarantine.active) `
             'Explicit clean-state recovery did not clear quarantine.'
-        [void](Complete-CapturedProcess -Handle $blocked)
-        $blockedResult = Read-RunResult -Path (
-            Get-DefaultResultPath $betaRoot) -RunId $blockedId
-        Assert-Integration ($blockedResult.state -eq 'passed') `
-            'Recovered executor did not activate queued follower.'
+        $followerId = "$prefix-quarantine-follower"
+        $follower = Start-DwarfSpecRun -Project $betaRoot -RunId $followerId
+        [void](Complete-CapturedProcess -Handle $follower)
+        $followerResult = Read-RunResult -Path (
+            Get-DefaultResultPath $betaRoot) -RunId $followerId
+        Assert-Integration ($followerResult.state -eq 'passed') `
+            'Recovered executor did not admit a new follower.'
         Add-ScenarioEvidence -Name "quarantine-$iteration" -Data (
             [ordered]@{
                 failed_run_id = $cleanupId
-                blocked_run_id = $blockedId
+                rejected_run_id = $rejectedId
+                follower_run_id = $followerId
                 quarantine_observed = $true
                 recovery_verified = $true
-                follower_state = $blockedResult.state
+                follower_state = $followerResult.state
             })
 
         $leaseActiveId = "$prefix-queue-lease-active"

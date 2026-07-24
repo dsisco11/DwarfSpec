@@ -1,7 +1,7 @@
 -- Unit contracts for bounded live automation diagnostics.
 
 local diagnostics = assert(loadfile(
-    'tests/automation/support/diagnostics.lua'))()
+    'src/dwarfspec/automation/diagnostics.lua'))()
 
 ---Builds a single-child view chain with stable propagated IDs.
 ---@param count integer

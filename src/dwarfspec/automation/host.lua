@@ -301,10 +301,10 @@ local function configure_dependencies(package_root, configured_lua_root)
 
     local system_adapter = load_automation_module(package_root,
         'dwarfspec.automation.system_adapter',
-        'tests/automation/support/system_adapter.lua')
+        'src/dwarfspec/automation/system_adapter.lua')
     local lfs_adapter = load_automation_module(package_root,
         'dwarfspec.automation.lfs_adapter',
-        'tests/automation/support/lfs_adapter.lua')
+        'src/dwarfspec/automation/lfs_adapter.lua')
     package.preload.system = function() return system_adapter end
     package.preload.lfs = function() return lfs_adapter end
     package.loaded.system = system_adapter
@@ -468,12 +468,12 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     require('busted')(busted)
     local project_module = load_automation_module(package_root,
         'dwarfspec.automation.project',
-        'tests/automation/support/project.lua')
+        'src/dwarfspec/automation/project.lua')
     local project = project_module.new(project_root, package_root,
         dfhack.filesystem)
     local extensions_module = load_automation_module(package_root,
         'dwarfspec.automation.extensions',
-        'tests/automation/support/extensions.lua')
+        'src/dwarfspec/automation/extensions.lua')
     local restore_project_modules, module_audit =
         M.configure_project_modules(project_root, dependency_entries)
     run.module_environment_audit = module_audit
@@ -488,7 +488,7 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
         specs = project_module.discover_specs(project, configured_glob)
     end
     local ds_factory = load_automation_module(package_root, 'dwarfspec.ds',
-        'tests/automation/support/ds.lua')
+        'src/dwarfspec/ds.lua')
     local ds, reset = ds_factory.new(package_root, project, scheduler_module,
         scheduler, run.cleanup_module, run.cleanup_registry, extensions)
     busted.export('ds', ds)

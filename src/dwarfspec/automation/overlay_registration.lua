@@ -1,4 +1,4 @@
--- Reversible run-scoped staging for real DFHack overlay registration tests.
+-- Production staging boundary for real DFHack overlay registration tests.
 
 local M = {}
 
@@ -11,7 +11,7 @@ local function resolve_source(project, source_path)
         'dwarfspec.automation.project')
     if not ok then
         project_module = assert(loadfile(project.package_root ..
-            '/tests/automation/support/project.lua'))()
+            '/src/dwarfspec/automation/project.lua'))()
     end
     local relative_path = project_module.relative_path(source_path)
     assert(relative_path:match('%.lua$'),

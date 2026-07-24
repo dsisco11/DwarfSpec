@@ -6,7 +6,7 @@ local component = assert(loadfile('src/dwarfspec/component.lua'))()
 local render_tracker = assert(loadfile(
     'src/dwarfspec/render_tracker.lua'))()
 local ds_factory = assert(loadfile(
-    'tests/automation/support/ds.lua'))()
+    'src/dwarfspec/ds.lua'))()
 local EventType = require('dwarfspec.automation.event_types')
 local EMouseButton = require('dwarfspec.mouse_buttons')
 local EInputState = require('dwarfspec.input_states')

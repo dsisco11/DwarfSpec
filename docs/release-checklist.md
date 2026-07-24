@@ -7,8 +7,9 @@
 4. Run the VS Code `Publish` task, or `tools/Publish.ps1`. It validates that
    the rockspec filename matches its declared version, lints it, and builds
    the binary release rock with LuaRocks configured as `arch = 'all'`. The
-   archive contains only Lua code and the paired Unix and Windows text
-   launchers; it is written to `dist/<package>-<version>.all.rock`.
+   archive contains only Lua code and one portable command script; it is
+   written to `dist/<package>-<version>.all.rock`. LuaRocks generates the
+   platform launcher during installation.
 5. Inspect the archive manifest and confirm it contains no native library.
 6. Install the binary rock into an empty LuaRocks tree and run command and
    module smoke checks from that tree on Windows and Linux.

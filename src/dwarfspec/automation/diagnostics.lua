@@ -1,4 +1,4 @@
--- Stable read-only view and screen diagnostics for live automation failures.
+-- Production read-only diagnostics for live automation failures.
 
 local M = {}
 

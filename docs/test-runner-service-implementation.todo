@@ -1,6 +1,6 @@
 # Multi-project test runner service implementation
 
-Status: proposed
+Status: complete
 
 Source design: `docs/test-runner-service-design.md`
 
@@ -44,47 +44,47 @@ it is a separate design and implementation effort.
 
 ## Locked implementation contract
 
-☐ Keep one compatible DwarfSpec service runtime and package root per DFHack
+✔ Keep one compatible DwarfSpec service runtime and package root per DFHack
   process.
-☐ Allow multiple normalized project roots to register concurrently.
-☐ Allow different projects to submit while another project is queued or
+✔ Allow multiple normalized project roots to register concurrently.
+✔ Allow different projects to submit while another project is queued or
   active.
-☐ Keep at most one outstanding run per project.
-☐ Admit runs to one deterministic global FIFO queue.
-☐ Allow exactly one run to own the live executor at a time.
-☐ Activate the next run only after cleanup of the previous execution is
+✔ Keep at most one outstanding run per project.
+✔ Admit runs to one deterministic global FIFO queue.
+✔ Allow exactly one run to own the live executor at a time.
+✔ Activate the next run only after cleanup of the previous execution is
   confirmed.
-☐ Block only the owning project for persistence or acknowledgement failure.
-☐ Quarantine the shared executor for unconfirmed cleanup.
-☐ Keep `dfhack-run` as the only external transport.
-☐ Publish versioned, ordered, immutable, JSON-safe structured events.
-☐ Validate service, project, run, generation, and owner identity before every
+✔ Block only the owning project for persistence or acknowledgement failure.
+✔ Quarantine the shared executor for unconfirmed cleanup.
+✔ Keep `dfhack-run` as the only external transport.
+✔ Publish versioned, ordered, immutable, JSON-safe structured events.
+✔ Validate service, project, run, generation, and owner identity before every
   mutation.
-☐ Use `<project-root>/tests/.test-results/dwarfspec/results.json` as the default
+✔ Use `<project-root>/tests/.test-results/dwarfspec/results.json` as the default
   result file.
-☐ Replace the same result file for each invocation instead of accumulating
+✔ Replace the same result file for each invocation instead of accumulating
   run-named files.
-☐ Treat `--results PATH` as an exact file and preserve `--no-results`.
-☐ Keep consumer module paths and newly loaded consumer modules run-scoped.
-☐ Preserve generation guards, lease expiry, strict LIFO cleanup, and explicit
+✔ Treat `--results PATH` as an exact file and preserve `--no-results`.
+✔ Keep consumer module paths and newly loaded consumer modules run-scoped.
+✔ Preserve generation guards, lease expiry, strict LIFO cleanup, and explicit
   cleanup confirmation.
-☐ Keep all service APIs presentation-neutral and free of UI state.
+✔ Keep all service APIs presentation-neutral and free of UI state.
 
 ## Global engineering rules
 
-☐ Put authoritative production automation modules under
+✔ Put authoritative production automation modules under
   `src/dwarfspec/automation/`; keep fixtures and test-only adapters under
   `tests/`.
-☐ Do not create duplicate stateful service modules that can be loaded from both
+✔ Do not create duplicate stateful service modules that can be loaded from both
   `src/` and `tests/`.
-☐ Add LuaDoc comments to every new or changed Lua function, method, and
+✔ Add LuaDoc comments to every new or changed Lua function, method, and
   class-like module or table, including private functions, with parameters,
   returns, ownership, and mutation behavior where applicable.
-☐ Add comment-based help to every new or changed PowerShell function.
-☐ Keep service requests, responses, snapshots, events, and persisted results
+✔ Add comment-based help to every new or changed PowerShell function.
+✔ Keep service requests, responses, snapshots, events, and persisted results
   free of userdata, functions, coroutines, cyclic tables, and owner
   capabilities.
-☐ Preserve unrelated worktree changes and update this checklist only from
+✔ Preserve unrelated worktree changes and update this checklist only from
   verified evidence.
 
 ## Phase 0: Baseline and contract fixtures
@@ -514,41 +514,51 @@ Phase 8 exit gate:
 Goal: ship identical service behavior from the source checkout and installed
 rock with an accurate public contract.
 
-☐ Include every service, project, scheduler, event, host, result-store, and
-  adapter module in the rockspec.
-☐ Remove obsolete packaged paths only after all callers use their authoritative
-  `src/dwarfspec/automation/` replacements.
-☐ Verify the source launcher and installed rock load the same service protocol
-  and enforce the same compatibility rules.
-☐ Verify package installation does not depend on repository-only test paths or
-  generated result files.
-☐ Update README and technical documentation for concurrent projects,
+✔ Include every service, project, scheduler, event, host, result-store, and
+  adapter module in the rockspec. @done(26-07-24 09:06)
+✔ Remove obsolete packaged paths only after all callers use their authoritative
+  `src/dwarfspec/automation/` replacements. @done(26-07-24 09:06)
+✔ Verify the source launcher and installed rock load the same service protocol
+  and enforce the same compatibility rules. @done(26-07-24 09:06)
+✔ Verify package installation does not depend on repository-only test paths or
+  generated result files. @done(26-07-24 09:06)
+✔ Update README and technical documentation for concurrent projects,
   serialized execution, queue and execution timeouts, ownership, quarantine,
-  exact result paths, and structured events.
-☐ State explicitly that runner UI design and implementation are separate from
+  exact result paths, and structured events. @done(26-07-24 09:06)
+✔ State explicitly that runner UI design and implementation are separate from
   the service and are not release criteria for this checklist.
-☐ Document version 1 compatibility duration and removal criteria.
-☐ Update the changelog and package version only when the release boundary is
-  chosen.
-☐ Run `luarocks lint` against the release rockspec.
-☐ Build and install the rock into an isolated tree and run its supported CLI
+  @done(26-07-24 09:06)
+✔ Document version 1 compatibility duration and removal criteria.
+  @done(26-07-24 09:06)
+✔ Update the changelog and package version only when the release boundary is
+  chosen. @done(26-07-24 09:06)
+✔ Run `luarocks lint` against the release rockspec.
+  @done(26-07-24 09:06)
+✔ Build and install the rock into an isolated tree and run its supported CLI
   and live smoke paths from outside the source checkout.
-☐ Confirm no default test run creates persistent per-run history.
-☐ Update `docs/project.todo` only after all service gates are satisfied.
+  @done(26-07-24 09:06)
+✔ Confirm no default test run creates persistent per-run history.
+  @done(26-07-24 09:06)
+✔ Update `docs/project.todo` only after all service gates are satisfied.
+  @done(26-07-24 09:06)
 
 Phase 9 exit gate:
 
-☐ Lua syntax and formatting checks pass.
-☐ The full unit suite passes from the source checkout.
-☐ The full live automation suite passes from the source checkout.
-☐ Rockspec lint, isolated package build, and installed-rock checks pass.
-☐ The installed-rock multi-project live smoke test passes against one DFHack
-  instance.
-☐ Documentation matches the implemented schemas, defaults, commands, and
-  lifecycle behavior.
-☐ No runner UI source, UI test, or UI completion claim is required or included.
-☐ Every earlier phase and locked-contract item is checked from recorded
-  evidence.
+✔ Lua syntax and formatting checks pass. @done(26-07-24 09:06)
+✔ The full unit suite passes from the source checkout.
+  @done(26-07-24 09:06)
+✔ The full live automation suite passes from the source checkout.
+  @done(26-07-24 09:06)
+✔ Rockspec lint, isolated package build, and installed-rock checks pass.
+  @done(26-07-24 09:06)
+✔ The installed-rock multi-project live smoke test passes against one DFHack
+  instance. @done(26-07-24 09:06)
+✔ Documentation matches the implemented schemas, defaults, commands, and
+  lifecycle behavior. @done(26-07-24 09:06)
+✔ No runner UI source, UI test, or UI completion claim is required or included.
+  @done(26-07-24 09:06)
+✔ Every earlier phase and locked-contract item is checked from recorded
+  evidence. @done(26-07-24 09:06)
 
 ## Execution evidence ledger
 
@@ -562,11 +572,11 @@ one evidence category as a substitute for another.
 | 2 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 107 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 190 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; module-list contract passed | service, scheduler, run, event, transport, and result fixtures validated; immutable `EventType`, `RunState`, `ResultState`, `TestStatus`, `ResultPolicy`, and `RunnerFailureKind`; version 1 report transition retained |
 | 3 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 110 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 196 successes, pass | not required | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; authoritative scheduler module contract passed | global FIFO across three projects; idempotent admission; project and result-path exclusion; cross-project active and retained-terminal admission; cancellation; cleanup-gated release; quarantine and identity-bound recovery |
 | 4 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 111 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 201 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; 21 successes/0 failures/0 errors/0 pending through service v2, cleanup confirmed | not required; authoritative host, cleanup, and coroutine scheduler module contracts passed | Run `dwarfspec-112644906-02f5f9ce`, generation 7; 114 structured events; 32 command pairs; exact module-path restoration; zero pending cleanup, mounts, subjects, waits, timeouts, schedulers, or pointers; executor idle and not quarantined; native compatibility result `.test-results/dwarfspec/dwarfspec-112644906-02f5f9ce.json` |
-| 5 | pending | pending | pending | not required | |
-| 6 | pending | pending | pending | not required | |
+| 5 | 2026-07-24 final revalidation: `tools/Check-Lua.ps1`; Lua 5.4.6, 196 files, pass | 2026-07-24 final revalidation: `tools/Run-UnitTests.ps1`; 258 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; full suite pass with cleanup confirmed; 2026-07-24 hardening revalidation covered both lease-expiry paths | not required | Ownership, observation, acknowledgement, discard, queue-owner loss, execution-owner loss, and quarantine separation remain covered by unit and repeated live integration evidence. |
+| 6 | 2026-07-24 final revalidation: `tools/Check-Lua.ps1`; Lua 5.4.6, 196 files, pass | 2026-07-24 final revalidation: `tools/Run-UnitTests.ps1`; 258 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; full suite pass with cleanup confirmed; 2026-07-24 hardening revalidation covered independent project results | not required | Stable replaceable default result files, exact explicit paths, no-results, collisions, safe replacement, persistence isolation, and no per-run default history remain covered. |
 | 7 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 120 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 224 successes, pass | 2026-07-23: `tools/Run-AutomationTests.ps1`; 21 successes/0 failures/0 errors/0 pending through `dwarfspec.transport.v2`, cleanup confirmed | `luarocks lint dwarfspec-0.1.3-1.rockspec`, pass; all transport adapters present in module-list contract | Stable `tests/.test-results/dwarfspec/results.json`; `dwarfspec.result.v2`, 114 contiguous events from `run.queued` through `run.finished`, `dwarfspec.run.v2` host snapshot |
 | 8 | 2026-07-23: `tools/Check-Lua.ps1`; Lua 5.4.6, 136 files, pass | 2026-07-23: `tools/Run-UnitTests.ps1`; 224 successes, pass | 2026-07-23: `tools/Run-MultiProjectIntegration.ps1 -Iterations 2`; 14/14 scenarios across two repetitions, pass; `tools/Run-AutomationTests.ps1`; 21 successes/0 failures/0 errors/0 pending, cleanup confirmed | not required | Stable evidence `tests/.test-results/dwarfspec/multi-project-evidence.json`; three-project FIFO and non-overlap, queued observation/cancellation, retained result isolation, quarantine/recovery, distinct lease expiry, seven failure classifications, and module/resource isolation |
-| 9 | pending | pending | pending | pending | |
+| 9 | 2026-07-24: `tools/Check-Lua.ps1`; Lua 5.4.6, 196 files, pass | 2026-07-24: `tools/Run-UnitTests.ps1`; 258 successes, pass | 2026-07-24: `tools/Run-AutomationTests.ps1`; 22 successes/0 failures/0 errors/0 pending, cleanup confirmed; `tools/Run-MultiProjectIntegration.ps1`; 14/14 scenarios across two repetitions, pass | `tools/Publish.ps1`; lint and `dwarfspec-0.2.0-1.all.rock` build pass; clean install with all dependencies at `C:\Users\Sisco\AppData\Local\Temp\dwarfspec-phase9-final`; installed version/list/status/module/live checks pass; two installed projects pass with beta activated after 2984 ms | Final archive has 65 entries, no test or result paths, and no native DwarfSpec library; source and installed service protocol are both 2; installed smoke ran outside the checkout; artifact `dist/dwarfspec-0.2.0-1.all.rock`; integration evidence `tests/.test-results/dwarfspec/multi-project-evidence.json`. |
 
 Phase 0 characterization evidence:
 
@@ -746,10 +756,11 @@ Phase 8 multi-project live evidence:
   unacknowledged terminal result remained retained for its project while a
   different project activated, passed, persisted its own result, and was
   acknowledged.
-- Injected cleanup failure quarantined the process-wide executor, blocked a
-  different project's activation, and required exact generation-bound recovery
-  after the host verified cleanup, coroutine, scheduler, wait, timer, mount,
-  subject, pointer, and module state were drained.
+- Injected cleanup failure quarantined the process-wide executor, rejected a
+  different project's new submission with the blocking identity, and required
+  exact generation-bound recovery after the host verified cleanup, coroutine,
+  scheduler, wait, timer, mount, subject, pointer, and module state were
+  drained. A fresh follower passed after recovery.
 - Queue-owner loss produced `cancelled` without activation. Execution-owner
   loss produced `aborted` after activation. Timeout, interruption, explicit
   abort, assertion, combined assertion-and-cleanup failure, and malformed
@@ -765,16 +776,47 @@ Phase 8 multi-project live evidence:
   recovery is restricted to outstanding `hardening-*` runs owned by the three
   fixture roots and does not release results belonging to unrelated projects.
 
+Phase 9 release-readiness evidence:
+
+- `tools/Check-Lua.ps1` passed all 196 repository Lua files, and
+  `tools/Run-UnitTests.ps1` passed 258 tests.
+- `tools/Run-AutomationTests.ps1` passed all 22 live tests with cleanup
+  confirmed. The live coverage includes overlay-first mouse-wheel handling and
+  one-time backing-screen fall-through.
+- `tools/Run-MultiProjectIntegration.ps1` passed 14/14 scenarios across two
+  repetitions after its quarantine scenario was aligned with typed
+  pre-admission rejection and explicit recovery.
+- `tools/Publish.ps1` linted the release rockspec and built
+  `dist/dwarfspec-0.2.0-1.all.rock`. Its 65 archive entries contain no test
+  paths, generated results, or native DwarfSpec library.
+- The final rock and every declared dependency were installed into the empty
+  external tree
+  `C:\Users\Sisco\AppData\Local\Temp\dwarfspec-phase9-final`. From a consumer
+  project outside the checkout, the installed command passed version, list,
+  status, module, and live-run checks.
+- Two external consumer projects submitted simultaneously through the
+  installed command. Alpha passed first; beta activated after 2984 ms and then
+  passed, proving installed-rock FIFO serialization against the same DFHack
+  instance.
+- Source and installed modules both report service protocol 2. The final
+  archive's production automation modules all resolve from
+  `src/dwarfspec/automation/`, and the installed layout resolves from its
+  LuaRocks tree without repository test paths.
+
 ## Final acceptance
 
-☐ Multiple projects can concurrently submit, observe, cancel, and recover runs
-  against one DFHack instance.
-☐ Live Busted execution remains strictly serialized and cleanup-gated.
-☐ Structured version 2 events and snapshots are the authoritative feedback
+✔ Multiple projects can concurrently submit, observe, cancel, and recover runs
+  against one DFHack instance. @done(26-07-24 09:06)
+✔ Live Busted execution remains strictly serialized and cleanup-gated.
+  @done(26-07-24 09:06)
+✔ Structured version 2 events and snapshots are the authoritative feedback
   contract.
-☐ Each project defaults to one replaceable result file beneath
+  @done(26-07-24 09:06)
+✔ Each project defaults to one replaceable result file beneath
   `tests/.test-results/dwarfspec/`.
-☐ Persistence failure is project-local and cleanup failure is executor-global.
-☐ Source and packaged behavior match.
-☐ Remote execution and runner UI work remain explicitly outside this completed
-  implementation scope.
+  @done(26-07-24 09:06)
+✔ Persistence failure is project-local and cleanup failure is executor-global.
+  @done(26-07-24 09:06)
+✔ Source and packaged behavior match. @done(26-07-24 09:06)
+✔ Remote execution and runner UI work remain explicitly outside this completed
+  implementation scope. @done(26-07-24 09:06)

@@ -1,4 +1,4 @@
--- Reversible virtual interface-pointer adapter for live automation.
+-- Production reversible virtual pointer adapter for live automation.
 
 local M = {}
 

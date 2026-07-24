@@ -57,6 +57,15 @@ local function screen_base()
                 view.frame_body = {width=width, height=height}
             end
         end,
+        onInput=function(self, keys)
+            return self:inputToSubviews(keys)
+        end,
+        inputToSubviews=function()
+            return false
+        end,
+        sendInputToParent=function(self, keys)
+            self.forwarded_keys = keys
+        end,
         dismiss=function(self)
             self.active = false
         end,
@@ -112,7 +121,7 @@ describe('DwarfSpec mount adapters', function()
                     controller.input = function(self, keys)
                         table.insert(self.calls, 'input')
                         self.keys = keys
-                        return true
+                        return self.consume_input ~= false
                     end
                     last_overlay_controller = controller
                     return controller
@@ -224,9 +233,16 @@ describe('DwarfSpec mount adapters', function()
         assert.equals('layout', last_overlay_controller.calls[#last_overlay_controller.calls])
         result.host_screen:renderSubviews({})
         result.host_screen:onIdle()
-        assert.is_true(result.host_screen:inputToSubviews({SELECT=true}))
+        local consumed_keys = {SELECT=true}
+        assert.is_true(result.host_screen:onInput(consumed_keys))
+        assert.is_nil(result.host_screen.forwarded_keys)
+        last_overlay_controller.consume_input = false
+        local forwarded_keys = {CONTEXT_SCROLL_DOWN=true}
+        assert.is_true(result.host_screen:onInput(forwarded_keys))
+        assert.equals(forwarded_keys, result.host_screen.forwarded_keys)
         assert.same({'enable', 'layout', 'layout', 'render', 'update', 'input'},
-            last_overlay_controller.calls)
+            {table.unpack(last_overlay_controller.calls, 1, 6)})
+        assert.equals('input', last_overlay_controller.calls[7])
         assert.equals(4, #cleanups)
         assert.matches('restore overlay component state',
             cleanups[1].name, 1, true)
@@ -235,7 +251,7 @@ describe('DwarfSpec mount adapters', function()
 
         for index=#cleanups,1,-1 do cleanups[index].action() end
         assert.same({
-            'enable', 'layout', 'layout', 'render', 'update', 'input',
+            'enable', 'layout', 'layout', 'render', 'update', 'input', 'input',
             'disable', 'restore',
         }, last_overlay_controller.calls)
         assert.is_false(result.host_screen.active)

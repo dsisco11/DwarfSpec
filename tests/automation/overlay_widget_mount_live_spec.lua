@@ -1,7 +1,73 @@
 -- Product-independent live proof for isolated overlay component mounting.
 
+local gui = require('gui')
 local widgets = require('gui.widgets')
 local overlay = require('plugins.overlay')
+
+---@class tests.MouseInputBacking: gui.ZScreen
+local MouseInputBacking = defclass(nil, gui.ZScreen)
+MouseInputBacking.ATTRS{
+    focus_path='dwarfspec/mouse-input-backing',
+    initial_pause=false,
+}
+
+---Creates the native list used to prove pointer-dependent wheel routing.
+function MouseInputBacking:init()
+    self.wheel_count = 0
+    local choices = {}
+    for index=1,12 do
+        table.insert(choices, ('Native row %02d'):format(index))
+    end
+    self:addviews{
+        widgets.List{
+            view_id='native_list',
+            frame={l=8, t=8, w=24, h=4},
+            choices=choices,
+        },
+    }
+end
+
+---Counts wheel input delivered to the backing screen before normal dispatch.
+---@param keys table
+---@return boolean
+function MouseInputBacking:onInput(keys)
+    if keys.CONTEXT_SCROLL_DOWN then
+        self.wheel_count = self.wheel_count + 1
+    end
+    return MouseInputBacking.super.onInput(self, keys)
+end
+
+---@class tests.MouseInputOverlay: overlay.OverlayWidget
+local MouseInputOverlay = defclass(nil, overlay.OverlayWidget)
+MouseInputOverlay.ATTRS{
+    default_pos={x=1, y=1},
+    frame={w=40, h=20},
+    full_interface=true,
+    overlay_onupdate_max_freq_seconds=0,
+}
+
+---Creates a transparent pointer target aligned with the native list.
+function MouseInputOverlay:init()
+    self.consume_wheel = true
+    self.wheel_count = 0
+    self:addviews{
+        widgets.Panel{
+            view_id='native_list_pointer_target',
+            frame={l=8, t=8, w=24, h=4},
+        },
+    }
+end
+
+---Consumes configured wheel input before otherwise delegating normally.
+---@param keys table
+---@return boolean
+function MouseInputOverlay:onInput(keys)
+    if keys.CONTEXT_SCROLL_DOWN then
+        self.wheel_count = self.wheel_count + 1
+        if self.consume_wheel then return true end
+    end
+    return MouseInputOverlay.super.onInput(self, keys)
+end
 
 ---@class tests.OverlayWidgetHarness: overlay.OverlayWidget
 local OverlayWidgetHarness = defclass(nil, overlay.OverlayWidget)
@@ -76,6 +142,69 @@ function OverlayWidgetHarness:submit()
 end
 
 describe('overlay widget component host', function()
+    it('routes positioned wheel input overlay-first and falls through once',
+            function()
+        local backing = MouseInputBacking{}
+        backing:show()
+        local mounted = false
+        local ok, failure = xpcall(function()
+            local window_width, window_height =
+                dfhack.screen.getWindowSize()
+            local root = ds.mount(MouseInputOverlay, {
+                backing_viewscreen=backing._native,
+                frame={w=window_width, h=window_height},
+            })
+            mounted = true
+            local instance = root:raw()
+            local list = backing.subviews.native_list
+            local target = ds.get('native_list_pointer_target')
+            local target_view = target:raw()
+            target_view.frame.l = list.frame_body.x1 - instance.frame_body.x1
+            target_view.frame.t = list.frame_body.y1 - instance.frame_body.y1
+            target_view:updateLayout()
+
+            target:hover('top_left')
+            local pointer_x, pointer_y = dfhack.screen.getMousePos()
+            local list_x, list_y = list:getMousePos()
+            assert.is_not_nil(list_x,
+                ('virtual pointer %s,%s must be over native list %s,%s-%s,%s; ' ..
+                    'target=%s,%s-%s,%s overlay=%s,%s-%s,%s')
+                    :format(tostring(pointer_x), tostring(pointer_y),
+                        list.frame_body.x1, list.frame_body.y1,
+                        list.frame_body.x2, list.frame_body.y2,
+                        target_view.frame_body.x1, target_view.frame_body.y1,
+                        target_view.frame_body.x2, target_view.frame_body.y2,
+                        instance.frame_body.x1, instance.frame_body.y1,
+                        instance.frame_body.x2, instance.frame_body.y2))
+            assert.is_not_nil(list_y,
+                'virtual pointer must be over the rendered native list')
+
+            ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
+            assert.equals(1, instance.wheel_count)
+            assert.equals(0, backing.wheel_count)
+            assert.equals(1, list.page_top)
+
+            instance.consume_wheel = false
+            ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
+            assert.equals(2, instance.wheel_count)
+            assert.equals(1, backing.wheel_count)
+            assert.equals(2, list.page_top)
+        end, debug.traceback)
+
+        local unmounted, unmount_failure = true, nil
+        if mounted then
+            unmounted, unmount_failure = pcall(ds.unmount)
+        end
+        local backing_revealed = backing:isActive()
+        if backing_revealed then backing:dismiss() end
+        assert.is_true(unmounted, unmount_failure)
+        assert.is_true(backing_revealed,
+            'unmount must reveal the native backing screen')
+        assert.is_false(backing:isActive(),
+            'native backing screen must be dismissed during cleanup')
+        assert.is_true(ok, failure)
+    end)
+
     it('mounts a class with scaled lifecycle, interaction, and cleanup',
             function()
         local backing = dfhack.gui.getCurViewscreen(true)
