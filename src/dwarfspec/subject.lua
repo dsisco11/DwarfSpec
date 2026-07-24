@@ -94,7 +94,8 @@ function Subject:text()
 end
 
 ---Returns the exact adapted object after validating current mount ownership.
----@return any
+---Native widget subjects return typed DF userdata; Lua views return tables.
+---@return table|userdata
 function Subject:raw()
     local context = self._references.context
     assert(context,

@@ -17,7 +17,7 @@ for _, value in pairs(ESubjectSource) do source_members[value] = true end
 ---@field overlay string|nil
 
 ---@class dwarfspec.SubjectGetRequest: dwarfspec.SubjectSourceRequest
----@field path_segments dwarfspec.NativePathSegmentArray
+---@field path_segments dwarfspec.NativePath
 
 ---Validates one optional source-selection table and applies native defaults.
 ---@param options any
@@ -56,7 +56,7 @@ function M.root(options)
 end
 
 ---Creates one validated source-specific path selection request.
----@param control_path string|dwarfspec.NativePathSegmentArray
+---@param control_path string|dwarfspec.NativePath
 ---@param options dwarfspec.SubjectSourceOptions|nil
 ---@return dwarfspec.SubjectGetRequest
 function M.get(control_path, options)

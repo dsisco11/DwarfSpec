@@ -153,11 +153,11 @@ end)
 ```
 
 DwarfSpec accepts `widgets.Widget`, `overlay.OverlayWidget`, and `gui.ZScreen`
-classes or instances through the same entry point. It owns the host,
-instruments successful renders automatically, and cleans up the current mount
-after each example. Every mount uses a 128 by 64 DF-cell viewport by default;
-pass `viewport={width=..., height=...}` to select another size. Reusable
-factories remain ordinary Lua helpers.
+classes or instances through the same component entry point. Component mounts
+own their UI host, instrument successful renders automatically, and use a 128
+by 64 DF-cell viewport by default; pass
+`viewport={width=..., height=...}` to select another size. Reusable factories
+remain ordinary Lua helpers.
 
 ```lua
 local gui = require('gui')
@@ -168,8 +168,19 @@ local SearchScreen = defclass(nil, gui.ZScreen)
 ds.mount(SearchScreen, {initial_pause=false})
 ```
 
-Mounts are automatically removed after each example, even when an assertion
-fails. Call `ds.unmount()` when a test specifically needs to remove one early.
+Calling `ds.mount()` without a component instead borrows the current native DF
+viewscreen. Native widget controls exposed by DFHack can then be selected
+without creating, showing, or dismissing a DwarfSpec screen:
+
+```lua
+ds.mount()
+local menu = ds.get('menu')
+assert.is_table(menu:inspect().body)
+```
+
+All mounts or attachments are automatically cleaned after each example, even
+when an assertion fails. Call `ds.unmount()` when a test specifically needs to
+release one early.
 
 ## Wait for live state
 
@@ -204,26 +215,29 @@ frames is itself part of the behavior being tested.
 |---|---|
 | `ds.await(description, query, options)` | Poll a condition between live frames. |
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
+| `ds.mount()` | Attach non-owningly to the current native DF viewscreen and return its widget-root subject. |
 | `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject. |
-| `ds.root()` | Return a subject for the implicit current mount root. |
-| `ds.get(control_path)` | Select one direct-child control path from the implicit current mount. |
+| `ds.root(options)` | Return the selected native, registered-overlay, or component root subject. |
+| `ds.get(control_path, options)` | Select one strict direct-child path from the chosen subject source. |
 | `ds.unmount()` | Cleanly remove and settle the implicit current mount. |
 | `ds.viewport(width, height)` | Change the mounted viewport in DF cells and wait for its render. |
 | `subject:inspect()` | Return stable, read-only information about the selected view. |
 | `subject:text()` | Return the selected view's inspected text value. |
 | `subject:raw()` | Access the native object as an exceptional escape hatch. |
+| `ds.move_pointer(x, y)` | Move the pointer to exact zero-based native screen coordinates. |
 | `subject:move_pointer(anchor)` | Move the pointer into the selected view. |
 | `subject:hover(anchor)` | Hover the selected view and preserve the subject. |
 | `subject:click(button)` | Click the selected view and preserve the subject. |
 | `subject:input(keys)` | Send native DFHack input through the mounted screen. |
 | `subject:type(text)` | Type ASCII text through the mounted screen. |
 | `ds.mouseInput(button, action)` | Send an `EMouseButton` action at the current pointer position; physical buttons default to `EInputState.CLICK`. |
-| `ds.capture_view_tree(name)` | Retain the implicit mount's structured view tree. |
+| `ds.redraw(subject, options)` | Invalidate the mounted screen and wait by default; use `{wait=false}` to skip the wait. |
+| `ds.capture_view_tree(name, options)` | Retain the selected source's structured view tree. |
 | `ds.capture_screen(name, options)` | Retain a bounded screen-cell capture. |
 | `ds.stage_overlay_registration(source, name)` | Stage a run-owned script only for separately selected real-registration integration coverage. |
 
-See [Writing live tests](docs/writing-tests.md) for component and overlay
-contracts.
+See [Writing live tests](docs/writing-tests.md) for owned-component, borrowed
+native-screen, and external-overlay contracts.
 
 ## Project configuration and custom commands
 

@@ -529,6 +529,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Mounts a component or non-owningly attaches when no argument is present.
+    ---The native form borrows the current screen without showing a ZScreen.
     ---@param ... any
     ---@return table
     function ds.mount(...)
@@ -612,8 +613,8 @@ local TestStatus = load_automation_module(package_root,
             view, diagnostic_path, path_segments, source)
     end
 
-    ---Returns a stable read-only diagnostic table for one live view.
-    ---@param view table
+    ---Returns a stable read-only diagnostic table for one live subject.
+    ---@param view table|nil Defaults to the current source root.
     ---@return table
     function ds.inspect(view)
         local adapter
@@ -621,8 +622,8 @@ local TestStatus = load_automation_module(package_root,
         return diagnostics.inspect_view(view, adapter)
     end
 
-    ---Redraws a subject's mounted screen and optionally skips render wait.
-    ---@param view table
+    ---Invalidates a subject's mounted screen and waits by default.
+    ---@param view table|nil Defaults to the current source root.
     ---@param options table|nil
     ---@return any
     function ds.redraw(view, options)

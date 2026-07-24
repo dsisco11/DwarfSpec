@@ -122,8 +122,9 @@ mount and returns a subject for its root. `ds.get(control_path)` returns another
 subject by walking direct children from that root. A path such as
 `form/editor` selects `editor` only when it is a direct child of `form`, and
 `form` is a direct child of the mounted component. DwarfSpec never performs a
-global descendant-ID search. Calling `ds.mount()` again while the mount remains
-current is an error; call `ds.unmount()` before mounting another component.
+global descendant-ID search. Calling either form of `ds.mount` again while the
+mount remains current is an error; call `ds.unmount()` before mounting another
+component or attaching to the current native screen.
 
 Every path segment is an exact `view_id`. `/` is reserved as the separator;
 paths cannot start or end with `/`, contain empty segments, `.` or `..`, or
@@ -149,8 +150,8 @@ the selection; call `ds.get` to obtain a different subject. A subject is valid
 only while its original mount remains current; unmounting that mount makes the
 subject stale.
 
-`subject:redraw()` requests a repaint of the DwarfSpec-owned host screen.
-It waits for render instrumentation to confirm a later completed render before
+`subject:redraw()` requests a repaint of the mount's interaction screen. It
+waits for render instrumentation to confirm a later completed render before
 returning, so assertions after it observe the requested repaint:
 
 ```lua
@@ -192,13 +193,124 @@ Unlike `subject:click()`, `ds.mouseInput()` does not move the pointer. It sends
 the selected button or wheel input at the position established by
 `subject:hover()` or `subject:move_pointer()`.
 
-`subject:raw()` exposes the underlying DFHack object for an exceptional native
-API that DwarfSpec does not model. Normal selection, interaction, inspection,
-capture, synchronization, and assertions do not require this escape hatch.
+`subject:raw()` exposes the underlying object for an exceptional API that
+DwarfSpec does not model. It returns a Lua table for a Lua-view subject and
+typed DF userdata for a native widget subject. Both are borrowed references
+whose lifetime is bounded by the mount. Normal selection, interaction,
+inspection, capture, synchronization, and assertions do not require this
+escape hatch.
 
 Mount-scoped evidence also uses the implicit context. For example,
 `ds.capture_view_tree('before-submit')` captures the current component root;
 callers do not pass a root or screen.
+
+## Borrowed native game screens
+
+Call `ds.mount()` with no arguments to attach to the current native DF
+viewscreen. This is a non-owning attachment: DwarfSpec does not create or show
+a `ZScreen`, change DFHack focus, alter the screen stack, or dismiss the
+borrowed screen. The returned root subject wraps the exact native widget
+container exposed by the current viewscreen.
+
+DFHack exposes many base-game controls as typed native widget objects. For
+those objects, DwarfSpec can traverse direct children, inspect names, types,
+bounds, visibility, activity, supported text, and selected or scroll state.
+Some base-game interfaces still draw controls procedurally without exposing
+widget nodes. Their rendered cells can appear in a screen capture, but they
+cannot be selected by `ds.get()` merely because text or pixels are visible.
+
+`subject:inspect()` keeps the common bounded fields and may add
+`native_type`, `name`, `effective_visible`, `effective_active`,
+`scroll_position`, `visible_row_count`, and `selected_index` when applicable.
+It does not expose an unbounded map of native fields or invoke arbitrary widget
+callbacks.
+
+Native paths are strict direct-child paths. A string selects one named child.
+Use a segment array for nested traversal, a zero-based child index, or a widget
+name containing `/`:
+
+```lua
+local native_root = ds.mount()
+local named = ds.get('menu')
+local nested = ds.get({'menu', 'confirm'})
+local indexed = ds.get({'menu', 0})
+local slash_name = ds.get({'stockpiles/animals'})
+
+assert.equals(native_root:raw(), ds.root():raw())
+assert.is_userdata(named:raw())
+assert.is_table(named:inspect().body)
+```
+
+The path array itself uses ordinary one-based Lua array positions; integer
+segments inside it are zero-based native child indices. Empty names, negative
+or fractional indices, gaps in the array, ambiguous slash-containing string
+paths, and missing children fail explicitly with bounded path and child
+diagnostics.
+
+An attached native screen can also select an enabled widget from DFHack's live
+overlay registry. This source is externally owned and must be named exactly:
+
+```lua
+local overlay_options = {
+    source=ds.ESubjectSource.OVERLAY,
+    overlay='my-plugin/route-panel',
+}
+local overlay_root = ds.root(overlay_options)
+local overlay_button = ds.get('confirm', overlay_options)
+local overlay_tree = ds.capture_view_tree('route-overlay', overlay_options)
+```
+
+Omitting source options, or specifying
+`{source=ds.ESubjectSource.NATIVE}`, selects the borrowed native hierarchy.
+Source options are not accepted for DwarfSpec-owned component mounts.
+Selecting an unknown, disabled, malformed, or non-view overlay fails without
+enabling it or changing its registration.
+An overlay subject becomes stale if its registered instance is disabled,
+removed, or replaced. Overlay subjects expose their Lua view tables through
+`subject:raw()`; they do not become native DF userdata.
+
+Native and overlay subjects use the same interaction API. Subject input is
+sent through the pinned native viewscreen, while overlay rendering and input
+continue through DFHack's normal overlay registry:
+
+```lua
+ds.get('menu'):input('SELECT')
+
+ds.move_pointer(17, 9)
+ds.mouseInput(ds.EMouseButton.LEFT) -- defaults to EInputState.CLICK
+ds.mouseInput(ds.EMouseButton.RIGHT, ds.EInputState.DOWN)
+ds.mouseInput(ds.EMouseButton.RIGHT, ds.EInputState.UP)
+ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
+
+ds.get('menu'):move_pointer('center'):click()
+ds.redraw()                         -- waits for a completed render
+ds.get('menu'):redraw()             -- also waits
+ds.redraw(nil, {wait=false})        -- invalidates without waiting
+```
+
+Absolute pointer coordinates are zero-based DF screen cells and must be inside
+the current window. DwarfSpec restores the pointer and button state captured
+at attachment during cleanup. `ds.viewport()` is intentionally unavailable
+because DwarfSpec does not own or resize the native game window.
+
+The attached viewscreen and native widget hierarchy are pinned. If game input,
+a script, or another system changes the current viewscreen, subsequent subject
+inspection, input, pointer movement, capture, or redraw fails with an explicit
+stale-screen error. DwarfSpec never follows the transition or navigates back.
+Call `ds.unmount()`, establish the desired game screen, and call `ds.mount()`
+again to create a new attachment.
+
+Attachment also fails explicitly when there is no current native viewscreen,
+the viewscreen has no usable widget container, or render observation cannot be
+installed. Invalid source options, unresolved paths, unusable subject bounds,
+and out-of-window pointer coordinates likewise report the rejected operation
+instead of silently falling back to another screen or source.
+
+Cleanup removes DwarfSpec's render observer and retained references, restores
+pointer instrumentation and input state, and leaves the borrowed screen,
+DFHack focus, screen stack, and external overlay registry intact. In contrast,
+component mounts own the component and any DwarfSpec-created host screen and
+therefore tear those resources down during unmount.
 
 ## Condition waits
 

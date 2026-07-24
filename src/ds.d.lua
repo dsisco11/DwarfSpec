@@ -28,7 +28,9 @@
 ---| 'native'
 ---| 'overlay'
 
+---An exact nonempty native widget name or zero-based direct-child index.
 ---@alias dwarfspec.NativePathSegment string|integer
+---A nonempty sequence of exact native widget path segments.
 ---@alias dwarfspec.NativePath dwarfspec.NativePathSegment[]
 
 ---@class dwarfspec.EMouseButtonEnum
@@ -43,13 +45,25 @@
 ---@field DOWN `down`
 ---@field UP `up`
 
+---Immutable identifiers for inspectable native and registered-overlay sources.
 ---@class dwarfspec.ESubjectSourceEnum
 ---@field NATIVE `native`
 ---@field OVERLAY `overlay`
 
----@class dwarfspec.SubjectSourceOptions
----@field source? dwarfspec.ESubjectSource
----@field overlay? string Exact enabled overlay registry name required by the overlay source.
+---Selects the borrowed native widget hierarchy, which is the default source.
+---@class dwarfspec.NativeSubjectSourceOptions
+---@field source? `native`
+---@field overlay? nil
+
+---Selects one externally owned widget from DFHack's live overlay registry.
+---@class dwarfspec.OverlaySubjectSourceOptions
+---@field source `overlay`
+---@field overlay string Exact enabled overlay registry name.
+
+---@alias dwarfspec.SubjectSourceOptions dwarfspec.NativeSubjectSourceOptions|dwarfspec.OverlaySubjectSourceOptions
+---@alias dwarfspec.RootSourceOptions dwarfspec.SubjectSourceOptions
+---@alias dwarfspec.GetSourceOptions dwarfspec.SubjectSourceOptions
+---@alias dwarfspec.CaptureViewTreeSourceOptions dwarfspec.SubjectSourceOptions
 
 ---@class dwarfspec.WaitOptions
 ---@field timeout_ms? integer
@@ -160,7 +174,8 @@ function Subject:inspect() end
 ---@return string|nil
 function Subject:text() end
 
----Returns the exact Lua view table or typed native DF object for this subject.
+---Returns the exact Lua view table or typed native DF userdata for this subject.
+---The returned object is borrowed and becomes invalid with its subject.
 ---@return table|userdata
 function Subject:raw() end
 
@@ -185,7 +200,8 @@ function DS.wait_frames(count, options) end
 ---@return T
 function DS.await(description, query, options) end
 
----Attaches to the native screen when omitted or mounts one component.
+---Attaches non-owningly to the current native screen when called with no arguments.
+---The no-argument form neither creates nor shows a ZScreen.
 ---@overload fun(): dwarfspec.Subject
 ---@param component any
 ---@param options? dwarfspec.MountOptions
@@ -193,46 +209,51 @@ function DS.await(description, query, options) end
 function DS.mount(component, options) end
 
 ---Returns a subject for the selected current-mount root.
----@param options? dwarfspec.SubjectSourceOptions
+---Source options are accepted only by a borrowed native-screen mount.
+---@param options? dwarfspec.RootSourceOptions
 ---@return dwarfspec.Subject
 function DS.root(options) end
 
----Unmounts and settles the current component.
+---Releases the current native attachment or mounted component.
 function DS.unmount() end
 
----Selects one strict source-specific path from the implicit current mount.
+---Selects one strict direct-child path from the implicit current mount.
+---Native strings select one named child; arrays support nested names, zero-based
+---indices, and names containing "/". Source options require a native mount.
 ---@param control_path string|dwarfspec.NativePath
----@param options? dwarfspec.SubjectSourceOptions
+---@param options? dwarfspec.GetSourceOptions
 ---@return dwarfspec.Subject
 function DS.get(control_path, options) end
 
----Returns a stable read-only diagnostic table for one live view or subject.
----@param view? table|dwarfspec.Subject
+---Returns a stable read-only diagnostic table for one live subject.
+---@param view? dwarfspec.Subject Defaults to the current source root.
 ---@return dwarfspec.SubjectInspectState
 function DS.inspect(view) end
 
----Redraws a subject's mounted screen and waits by default.
----@param view table|dwarfspec.Subject
+---Invalidates the mounted screen and waits for a completed render by default.
+---Pass `{wait=false}` to return after invalidation without waiting.
+---@param view? dwarfspec.Subject Defaults to the current source root.
 ---@param options? dwarfspec.RedrawOptions
 ---@return any
 function DS.redraw(view, options) end
 
 ---Captures the current implicit mount tree under one evidence name.
+---Source options are accepted only by a borrowed native-screen mount.
 ---@param name string
----@param options? dwarfspec.SubjectSourceOptions
+---@param options? dwarfspec.CaptureViewTreeSourceOptions
 ---@return table
 function DS.capture_view_tree(name, options) end
 
----Moves the virtual pointer to an anchor inside one live view body.
+---Moves the virtual pointer to an anchor inside a subject or exact screen cells.
 ---@overload fun(x: integer, y: integer): integer, integer
----@param view? table|dwarfspec.Subject
+---@param view? dwarfspec.Subject Defaults to the current source root.
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return integer x
 ---@return integer y
 function DS.move_pointer(view, anchor) end
 
 ---Moves the virtual pointer over a subject and waits for its render.
----@param view? table|dwarfspec.Subject
+---@param view? dwarfspec.Subject
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return integer x
 ---@return integer y
@@ -252,7 +273,7 @@ function DS.input(keys, subject) end
 function DS.mouseInput(button, action) end
 
 ---Clicks a view with a supported native mouse button and waits for render.
----@param view table|dwarfspec.Subject
+---@param view dwarfspec.Subject
 ---@param button? dwarfspec.MouseButton
 ---@return integer
 function DS.click(view, button) end

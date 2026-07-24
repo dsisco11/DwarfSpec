@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phases 0-7 complete
+Status: in progress; Phases 0-10 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -543,36 +543,36 @@ runtime feature with the separate runner UI.
 
 ### Tasks
 
-☐ Add the no-component `DS.mount()` overload to `src/ds.d.lua`.
-☐ Declare native path segment and segment-array path types.
-☐ Declare immutable `ESubjectSource` and its `NATIVE` and `OVERLAY` members.
-☐ Declare source-option types for `DS.root()`, `DS.get()`, and
+☒ Add the no-component `DS.mount()` overload to `src/ds.d.lua`.
+☒ Declare native path segment and segment-array path types.
+☒ Declare immutable `ESubjectSource` and its `NATIVE` and `OVERLAY` members.
+☒ Declare source-option types for `DS.root()`, `DS.get()`, and
   `DS.capture_view_tree()`.
-☐ Document that native `Subject:raw()` returns typed DF userdata and Lua-view
+☒ Document that native `Subject:raw()` returns typed DF userdata and Lua-view
   subjects return Lua tables.
-☐ Add documented optional native inspection fields without exposing an
+☒ Add documented optional native inspection fields without exposing an
   unbounded raw-widget map.
-☐ Declare and document the `DS.move_pointer(x, y)` overload.
-☐ Document wait-by-default redraw and `{wait=false}` for native mounts.
-☐ Document the non-owning screen, overlay, staleness, and cleanup contracts.
-☐ Add examples for native named paths, numeric path segments, names containing
+☒ Declare and document the `DS.move_pointer(x, y)` overload.
+☒ Document wait-by-default redraw and `{wait=false}` for native mounts.
+☒ Document the non-owning screen, overlay, staleness, and cleanup contracts.
+☒ Add examples for native named paths, numeric path segments, names containing
   `/`, overlay source selection, arbitrary coordinates, input, mouse input, and
   redraw.
-☐ Document explicit failure cases and the requirement to remount after a
+☒ Document explicit failure cases and the requirement to remount after a
   viewscreen transition.
-☐ Keep runner-service and runner-UI documentation unchanged except for a
+☒ Keep runner-service and runner-UI documentation unchanged except for a
   narrowly scoped cross-reference if one is genuinely required.
-☐ Review every new or changed API declaration against the implementation and
+☒ Review every new or changed API declaration against the implementation and
   LuaDoc comments.
 
 ### Phase 10 exit gate
 
-☐ `src/ds.d.lua`, LuaDoc, examples, and runtime validation describe the same
+☒ `src/ds.d.lua`, LuaDoc, examples, and runtime validation describe the same
   API.
-☐ Documentation clearly distinguishes borrowed native screens, external
+☒ Documentation clearly distinguishes borrowed native screens, external
   overlays, and DwarfSpec-owned component screens.
-☐ Documentation does not imply runner-UI implementation work.
-☐ Documentation links and Mermaid diagrams, if any, render correctly.
+☒ Documentation does not imply runner-UI implementation work.
+☒ Documentation links and Mermaid diagrams, if any, render correctly.
 
 ## Phase 11: Verification and live DFHack acceptance
 
@@ -1161,7 +1161,33 @@ as the work proceeds.
 
 ### Phase 10 evidence
 
-- Pending.
+- `src/ds.d.lua` now declares the no-argument native attachment overload,
+  immutable native/overlay source identifiers, strict native path types,
+  operation-specific source-option aliases, optional bounded native inspection
+  fields, typed `Subject:raw()` results, absolute pointer placement, and
+  wait-by-default redraw with its wait opt-out.
+- Runtime LuaDoc in `src/dwarfspec/ds.lua`, `subject.lua`,
+  `subject_paths.lua`, and `subject_requests.lua` was reviewed and aligned with
+  the public declaration names, optional root-subject behavior, and native
+  versus Lua-view raw values.
+- `docs/writing-tests.md` documents borrowed native screens, the boundary
+  between exposed widget objects and procedurally rendered game UI, named and
+  indexed paths, slash-bearing names, external overlay sources, bounded
+  inspection, coordinates, input, mouse input, redraw, failure and staleness
+  behavior, remounting, viewport rejection, and exact cleanup ownership.
+- `README.md` and `docs/architecture.md` now distinguish DwarfSpec-owned
+  component hosts from borrowed native screens and externally owned registered
+  overlays. Runner-service and runner-UI documentation was not changed.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `363 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 220 files.`
+- A relative-link check passed for `README.md`, `docs/writing-tests.md`, and
+  `docs/architecture.md`. No diagrams were added or changed; the changed
+  documents contain no Mermaid blocks.
+- `git diff --check` passed.
+- No live DFHack result is claimed for this documentation and declaration
+  phase.
 
 ### Phase 11 evidence
 

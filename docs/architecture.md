@@ -42,14 +42,14 @@ globals but retain their own global writes. Their commands are bound only onto
 the run-scoped `ds` object, so product-specific inspection remains outside the
 library.
 
-## Component mount ownership
+## Mount ownership
 
 `ds.mount(component, options)` is the only component entry point. The
 component boundary classifies a `widgets.Widget`, `overlay.OverlayWidget`, or
 `gui.ZScreen` class or existing instance and normalizes mount-only options. A
-run owns at most one implicit current mount. Calling `ds.mount()` while that
-mount remains current is an error; the test must call `ds.unmount()` before
-mounting another component.
+run owns at most one implicit current mount. Calling either `ds.mount` form
+while that mount remains current is an error; the test must call
+`ds.unmount()` before selecting another mount.
 
 The mount context assigns identity, owns the component root and host screen,
 validates direct child control IDs, retains weak subject ownership, captures
@@ -86,6 +86,20 @@ operation synchronously in the live Busted coroutine, and wait across DFHack
 frames for a later completed render before returning. Construction, first
 render, and command failures receive bounded mount, selection, component-tree,
 and screen diagnostics while preserving the original cause.
+
+The no-argument `ds.mount()` form instead creates a borrowed native attachment.
+It pins the current DF viewscreen and its native widget container without
+showing, dismissing, or owning a screen. Native subjects traverse only widget
+objects exposed by DFHack; pixels and procedurally rendered controls do not
+become subjects. A separately selected overlay source borrows an enabled
+registry widget while dispatch remains owned by DFHack's normal overlay path.
+Neither borrowed source is enabled, disabled, or dismissed by DwarfSpec.
+
+The native render observer records the post-native-overlay completion boundary
+for wait-by-default redraw. A changed viewscreen makes the attachment and all
+of its subjects stale instead of retargeting them. Cleanup removes observers
+and retained references and restores pointer state while preserving the
+original focus, screen stack, viewscreen, and overlay registration.
 
 Every mount resource is registered before it can escape. Example completion,
 assertion failure, command timeout, external timeout, lease expiry, explicit

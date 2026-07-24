@@ -3,7 +3,7 @@
 local M = {}
 
 ---@alias dwarfspec.NativePathSegment string|integer
----@alias dwarfspec.NativePathSegmentArray dwarfspec.NativePathSegment[]
+---@alias dwarfspec.NativePath dwarfspec.NativePathSegment[]
 
 ---Copies and validates one dense one-based caller array.
 ---@param path table
@@ -70,7 +70,7 @@ end
 
 ---Normalizes an unambiguous native name or authoritative segment array.
 ---@param control_path any
----@return dwarfspec.NativePathSegmentArray
+---@return dwarfspec.NativePath
 function M.native(control_path)
     if type(control_path) == 'string' then
         assert(control_path ~= '',
@@ -92,7 +92,7 @@ function M.native(control_path)
 end
 
 ---Formats a complete normalized native path for diagnostics.
----@param path_segments dwarfspec.NativePathSegmentArray
+---@param path_segments dwarfspec.NativePath
 ---@return string
 function M.format_native(path_segments)
     assert(type(path_segments) == 'table',
