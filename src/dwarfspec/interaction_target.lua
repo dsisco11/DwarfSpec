@@ -2,6 +2,8 @@
 
 local M = {}
 
+local identity_labels = require('dwarfspec.identity_labels')
+
 ---@class dwarfspec.InteractionTarget
 ---@field _screen table|nil
 ---@field _is_active fun(screen: table): boolean
@@ -80,8 +82,10 @@ end
 
 ---Returns the pinned native viewscreen only while it remains exactly current.
 ---@param operation string
+---@param diagnostics table|nil
 ---@return any
-function BorrowedNativeInteractionTarget:assert_current(operation)
+function BorrowedNativeInteractionTarget:assert_current(
+        operation, diagnostics)
     assert(type(operation) == 'string' and operation ~= '',
         'interaction operation must be a nonempty string')
     assert(not self._cleaned and self._screen and
@@ -91,9 +95,19 @@ function BorrowedNativeInteractionTarget:assert_current(operation)
     assert(ok,
         ('DwarfSpec %s could not query the current viewscreen: %s')
             :format(operation, tostring(current)))
+    local context = ''
+    if diagnostics then
+        context = (' mount_kind=%q source=%q path=%q mount=%s;')
+            :format(tostring(diagnostics.mount_kind),
+                tostring(diagnostics.source), tostring(diagnostics.path),
+                tostring(diagnostics.mount_id))
+    end
     assert(current == self._screen,
-        ('DwarfSpec %s rejected stale native-screen mount; pinned ' ..
-        'viewscreen is no longer current'):format(operation))
+        ('DwarfSpec %s rejected stale native-screen mount;%s pinned ' ..
+        'viewscreen is no longer current; captured_screen=%s ' ..
+        'current_screen=%s'):format(operation, context,
+            identity_labels.of(self._screen),
+            identity_labels.of(current)))
     return self._screen
 end
 

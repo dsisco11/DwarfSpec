@@ -52,11 +52,19 @@ function NativeAttachment:attach()
         return self._subject_source_factory(root, interaction_target)
     end, debug.traceback)
     if not source_ok then
+        local message = tostring(subject_source)
         if interaction_target and
                 type(interaction_target.cleanup) == 'function' then
-            interaction_target:cleanup()
+            local cleanup_ok, cleanup_failure =
+                xpcall(function()
+                    interaction_target:cleanup()
+                end, debug.traceback)
+            if not cleanup_ok then
+                message = message .. '; partial target cleanup failed: ' ..
+                    tostring(cleanup_failure)
+            end
         end
-        error(subject_source, 0)
+        error(message, 0)
     end
     return {
         root=root,

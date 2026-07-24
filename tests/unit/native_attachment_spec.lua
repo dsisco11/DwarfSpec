@@ -153,6 +153,34 @@ describe('DwarfSpec native viewscreen attachment', function()
         assert.equals(1, cleaned)
     end)
 
+    it('preserves source failure when partial target cleanup also fails',
+            function()
+        attachment = native_attachment.new({
+            get_current_viewscreen=function() return current end,
+            get_native_viewscreen=function() return native end,
+            is_widget_root=function(root)
+                return root and root.kind == 'widget-root'
+            end,
+            interaction_target_factory=function()
+                return {
+                    cleanup=function()
+                        error('target cleanup exploded', 0)
+                    end,
+                }
+            end,
+            subject_source_factory=function()
+                error('source construction exploded', 0)
+            end,
+        })
+
+        local ok, failure = pcall(attachment.attach, attachment)
+
+        assert.is_false(ok)
+        assert.matches('source construction exploded', failure, 1, true)
+        assert.matches('partial target cleanup failed:', failure, 1, true)
+        assert.matches('target cleanup exploded', failure, 1, true)
+    end)
+
     it('makes the root and interaction target stale after a transition',
             function()
         local result = attachment:attach()
@@ -160,14 +188,20 @@ describe('DwarfSpec native viewscreen attachment', function()
             widgets={kind='widget-root'},
         }
 
-        assert.has_error(function()
+        local root_ok, root_failure = pcall(function()
             result.subject_source.adapter:root()
-        end, 'DwarfSpec native root access rejected stale native-screen ' ..
-            'mount; pinned viewscreen is no longer current')
-        assert.has_error(function()
+        end)
+        assert.is_false(root_ok)
+        assert.matches('DwarfSpec native root access rejected stale ' ..
+            'native%-screen mount; pinned viewscreen is no longer current;',
+            root_failure)
+        local redraw_ok, redraw_failure = pcall(function()
             result.interaction_target:invalidate()
-        end, 'DwarfSpec redraw rejected stale native-screen mount; pinned ' ..
-            'viewscreen is no longer current')
+        end)
+        assert.is_false(redraw_ok)
+        assert.matches('DwarfSpec redraw rejected stale native%-screen ' ..
+            'mount; pinned viewscreen is no longer current;',
+            redraw_failure)
         assert.equals(0, invalidations)
     end)
 end)

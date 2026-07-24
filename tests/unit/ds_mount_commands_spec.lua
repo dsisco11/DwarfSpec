@@ -78,6 +78,9 @@ describe('DwarfSpec public mount commands', function()
     local native_widget_lookup_calls
     local native_invalidation_count
     local original_native_render_dispatcher
+    local native_render_failure
+    local suppress_native_render
+    local wait_until_failure
 
     before_each(function()
         original_dfhack = rawget(_G, 'dfhack')
@@ -89,6 +92,9 @@ describe('DwarfSpec public mount commands', function()
             get_state=function() return overlay_state end,
         }
         overlay_plugin.render_viewscreen_widgets=function(...)
+            if native_render_failure then
+                error(native_render_failure, 0)
+            end
             return ...
         end
         original_native_render_dispatcher =
@@ -98,6 +104,9 @@ describe('DwarfSpec public mount commands', function()
         component_mount_calls = 0
         native_widget_lookup_calls = 0
         native_invalidation_count = 0
+        native_render_failure = nil
+        suppress_native_render = false
+        wait_until_failure = nil
         simulated_inputs = {}
         simulate_input_failure = nil
         simulate_input_dispatch = nil
@@ -202,6 +211,9 @@ describe('DwarfSpec public mount commands', function()
             wait_frames=function() return 1 end,
             wait_until=function(_, _, query)
                 wait_until_calls = wait_until_calls + 1
+                if wait_until_failure then
+                    error(wait_until_failure, 0)
+                end
                 local result = query()
                 if not result and current_tracker then
                     current_tracker:completed()
@@ -248,6 +260,7 @@ describe('DwarfSpec public mount commands', function()
                 invalidate_native_screen=function()
                     native_invalidation_count =
                         native_invalidation_count + 1
+                    if suppress_native_render then return end
                     return package.loaded['plugins.overlay']
                         .render_viewscreen_widgets(
                             'native-screen', current_native_screen)
@@ -399,8 +412,14 @@ describe('DwarfSpec public mount commands', function()
             current_mount_id=1,
             active_screen_count=0,
             tracked_screen_count=0,
+            owned_screen_count=0,
+            borrowed_native_screen_count=1,
+            native_attachment_count=1,
+            native_screen_dismissal_count=0,
             subject_count=2,
             pointer_active=false,
+            button_state_active=false,
+            render_observer_active=true,
         }, run.mount_cleanup_probe())
         assert.has_error(function()
             ds.viewport(80, 25)
@@ -458,6 +477,211 @@ describe('DwarfSpec public mount commands', function()
             package.loaded['plugins.overlay'].render_viewscreen_widgets)
     end)
 
+    it('cleans native reversible state in explicit LIFO layers', function()
+        local overlay_root = {
+            view_id='overlay-root',
+            subviews={},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.CleanupOverlay'] = {
+            widget=overlay_root,
+        }
+        overlay_state.config['gui/example.CleanupOverlay'] = {
+            enabled=true,
+        }
+        local native_subject = ds.mount()
+        local overlay_subject = ds.root({
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.CleanupOverlay',
+        })
+        ds.move_pointer(7, 8)
+        ds.mouseInput(EMouseButton.LEFT, EInputState.DOWN)
+
+        local names = {}
+        for _, entry in ipairs(registry.entries) do
+            table.insert(names, entry.name)
+        end
+        assert.same({
+            'detach native screen 1',
+            'clear native subject descriptors 1',
+            'restore native render observation 1',
+            'virtual pointer',
+            'mouse button state',
+        }, names)
+        assert.equals(1, df.global.enabler.mouse_lbut_down)
+
+        ds.unmount()
+
+        assert.is_nil(native_subject._descriptor)
+        assert.is_nil(overlay_subject._descriptor)
+        assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.equals(0, df.global.enabler.mouse_lbut_down)
+        assert.equals(0, df.global.enabler.mouse_lbut_lift)
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+        assert.equals(original_native_render_dispatcher,
+            package.loaded['plugins.overlay'].render_viewscreen_widgets)
+        assert.equals(0, cleanup.pending_count(registry))
+        local state = run.mount_cleanup_probe()
+        assert.is_nil(state.current_mount_id)
+        assert.equals(0, state.owned_screen_count)
+        assert.equals(0, state.tracked_screen_count)
+        assert.equals(0, state.borrowed_native_screen_count)
+        assert.equals(1, state.native_attachment_count)
+        assert.equals(0, state.native_screen_dismissal_count)
+        assert.equals(0, state.subject_count)
+        assert.is_false(state.pointer_active)
+        assert.is_false(state.button_state_active)
+        assert.is_false(state.render_observer_active)
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.navigation_calls)
+    end)
+
+    it('cleans native state after assertion, input, render, and timeout errors',
+            function()
+        local scenarios = {
+            {
+                name='assertion failure',
+                fail=function()
+                    error('injected assertion failure', 0)
+                end,
+            },
+            {
+                name='input error',
+                prepare=function()
+                    simulate_input_failure =
+                        'injected terminal input failure'
+                end,
+                fail=function()
+                    ds.input('SELECT')
+                end,
+            },
+            {
+                name='render error',
+                prepare=function()
+                    native_render_failure =
+                        'injected terminal render failure'
+                end,
+                fail=function()
+                    ds.redraw()
+                end,
+            },
+            {
+                name='redraw timeout',
+                prepare=function()
+                    suppress_native_render = true
+                    wait_until_failure =
+                        'injected native redraw timeout'
+                end,
+                fail=function()
+                    ds.redraw()
+                end,
+            },
+        }
+        for _, scenario in ipairs(scenarios) do
+            local retained = ds.mount()
+            ds.move_pointer(2, 3)
+            ds.mouseInput(EMouseButton.LEFT, EInputState.DOWN)
+            if scenario.prepare then scenario.prepare() end
+
+            local ok = pcall(scenario.fail)
+            assert.is_false(ok, scenario.name)
+            reset('after ' .. scenario.name)
+
+            assert.is_nil(retained._descriptor, scenario.name)
+            assert.equals(0, cleanup.pending_count(registry),
+                scenario.name)
+            assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.equals(0, df.global.enabler.mouse_lbut_down,
+                scenario.name)
+            assert.equals(original_native_render_dispatcher,
+                package.loaded['plugins.overlay']
+                    .render_viewscreen_widgets)
+            local state = run.mount_cleanup_probe()
+            assert.is_nil(state.current_mount_id, scenario.name)
+            assert.equals(0, state.owned_screen_count, scenario.name)
+            assert.equals(0, state.borrowed_native_screen_count,
+                scenario.name)
+            assert.equals(0, state.subject_count, scenario.name)
+            assert.equals(0, state.native_screen_dismissal_count,
+                scenario.name)
+            assert.is_false(state.button_state_active, scenario.name)
+            assert.is_false(state.render_observer_active, scenario.name)
+            simulate_input_failure = nil
+            native_render_failure = nil
+            suppress_native_render = false
+            wait_until_failure = nil
+        end
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.navigation_calls)
+    end)
+
+    it('drains native mounts for scheduler abort and runner recovery',
+            function()
+        for _, reason in ipairs({
+                'scheduler abort',
+                'external runner recovery',
+            }) do
+            local retained = ds.mount()
+            ds.move_pointer(4, 6)
+            ds.mouseInput(EMouseButton.RIGHT, EInputState.DOWN)
+
+            assert.is_true(cleanup.run(registry, reason))
+
+            assert.is_nil(retained._descriptor, reason)
+            assert.equals(0, cleanup.pending_count(registry), reason)
+            assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.equals(0, df.global.enabler.mouse_rbut_down,
+                reason)
+            assert.equals(original_native_render_dispatcher,
+                package.loaded['plugins.overlay']
+                    .render_viewscreen_widgets)
+            local state = run.mount_cleanup_probe()
+            assert.is_nil(state.current_mount_id, reason)
+            assert.equals(0, state.owned_screen_count, reason)
+            assert.equals(0, state.borrowed_native_screen_count,
+                reason)
+            assert.equals(0, state.subject_count, reason)
+            assert.is_false(state.button_state_active, reason)
+            assert.is_false(state.render_observer_active, reason)
+        end
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.navigation_calls)
+    end)
+
+    it('does not accumulate state across repeated native attachments',
+            function()
+        for iteration = 1, 5 do
+            local retained = ds.mount()
+            ds.move_pointer(iteration, iteration)
+            ds.mouseInput(EMouseButton.MIDDLE, EInputState.DOWN)
+
+            ds.unmount()
+
+            assert.is_nil(retained._descriptor)
+            assert.equals(0, cleanup.pending_count(registry))
+            assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.equals(0, df.global.enabler.mouse_mbut_down)
+            assert.equals(original_native_render_dispatcher,
+                package.loaded['plugins.overlay']
+                    .render_viewscreen_widgets)
+            local state = run.mount_cleanup_probe()
+            assert.is_nil(state.current_mount_id)
+            assert.equals(0, state.owned_screen_count)
+            assert.equals(0, state.tracked_screen_count)
+            assert.equals(0, state.borrowed_native_screen_count)
+            assert.equals(iteration, state.native_attachment_count)
+            assert.equals(0, state.native_screen_dismissal_count)
+            assert.equals(0, state.subject_count)
+            assert.is_false(state.pointer_active)
+            assert.is_false(state.button_state_active)
+            assert.is_false(state.render_observer_active)
+        end
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.navigation_calls)
+    end)
+
     it('rejects native subject access immediately after a screen transition',
             function()
         local mounted = ds.mount()
@@ -466,9 +690,14 @@ describe('DwarfSpec public mount commands', function()
             widgets={kind='next-widget-root'},
         }
 
-        assert.has_error(function() mounted:raw() end,
-            'DwarfSpec native subject resolution rejected stale ' ..
-            'native-screen mount; pinned viewscreen is no longer current')
+        local ok, failure = pcall(mounted.raw, mounted)
+        assert.is_false(ok)
+        assert.matches('DwarfSpec subject raw access rejected stale ' ..
+            'native%-screen mount;', failure)
+        assert.matches('mount_kind="native" source="native" ' ..
+            'path="<root>" mount=1;', failure, 1, true)
+        assert.matches('captured_screen=table#%d+ current_screen=table#%d+',
+            failure)
         assert.equals(0, native_screen.dismiss_calls)
     end)
 
@@ -808,10 +1037,14 @@ describe('DwarfSpec public mount commands', function()
         local selected = ds.get('Status')
         native_root.children = {}
 
-        assert.has_error(function() selected:raw() end,
-            'DwarfSpec subject raw access rejected stale native subject ' ..
+        local ok, failure = pcall(selected.raw, selected)
+        assert.is_false(ok)
+        assert.matches('DwarfSpec subject raw access rejected stale native ' ..
+            'subject ' ..
             'path={"Status"} mount=1 because the widget no longer resolves; ' ..
-                'call ds.get(path) to select it again')
+                'call ds.get(path) to select it again', failure, 1, true)
+        assert.matches('mount_kind="native" source="native" ' ..
+            'captured_identity=table#%d+ current_identity=<nil>', failure)
     end)
 
     it('requires a new native subject after same-path replacement', function()
@@ -824,10 +1057,16 @@ describe('DwarfSpec public mount commands', function()
             'Status', 'df.widget_textst')
         native_root.children = {replacement}
 
-        assert.has_error(function() selected:raw() end,
-            'DwarfSpec subject raw access rejected stale native subject ' ..
+        local ok, failure = pcall(selected.raw, selected)
+        assert.is_false(ok)
+        assert.matches('DwarfSpec subject raw access rejected stale native ' ..
+            'subject ' ..
             'path={"Status"} mount=1 because the widget was replaced; call ' ..
-                'ds.get(path) to select the replacement')
+                'ds.get(path) to select the replacement',
+            failure, 1, true)
+        assert.matches('mount_kind="native" source="native" ' ..
+            'captured_identity=table#%d+ current_identity=table#%d+',
+            failure)
         assert.equals(replacement, ds.get('Status'):raw())
     end)
 
@@ -1247,6 +1486,7 @@ describe('DwarfSpec public mount commands', function()
             function()
         local mounted = ds.mount()
         ds.move_pointer(4, 5)
+        local lookup_count = native_widget_lookup_calls
         current_native_screen = {
             name='replacement-screen',
             widgets={kind='replacement-root'},
@@ -1266,6 +1506,19 @@ describe('DwarfSpec public mount commands', function()
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
         })
+        assert.equals(lookup_count, native_widget_lookup_calls)
+
+        ds.unmount()
+
+        assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.equals(original_native_render_dispatcher,
+            package.loaded['plugins.overlay'].render_viewscreen_widgets)
+        assert.equals(0, native_screen.show_calls)
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.resize_calls)
+        assert.equals(0, native_screen.replace_calls)
+        assert.equals(0, native_screen.navigation_calls)
+        assert.equals(0, cleanup.pending_count(registry))
     end)
 
     it('routes input to a native child while retaining the mounted root',

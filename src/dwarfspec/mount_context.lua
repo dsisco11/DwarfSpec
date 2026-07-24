@@ -2,6 +2,7 @@
 
 local subject_paths = require('dwarfspec.subject_paths')
 local ESubjectSource = require('dwarfspec.subject_sources')
+local identity_labels = require('dwarfspec.identity_labels')
 
 local M = {}
 
@@ -14,6 +15,40 @@ local function format_cleanup_failures(failures)
         table.insert(messages, failure.name .. ': ' .. failure.message)
     end
     return table.concat(messages, '; ')
+end
+
+---Releases every retained descriptor without dereferencing adapted objects.
+---@param context table
+---@param mount table
+---@return boolean
+local function release_mount_subjects(context, mount)
+    local released = false
+    local failures = {}
+    for subject in pairs(mount.selected_subjects) do
+        context.subject_mounts[subject] = nil
+        local ok, failure = xpcall(function()
+            context.subject_module.release(subject)
+        end, debug.traceback)
+        if not ok then table.insert(failures, tostring(failure)) end
+        released = true
+    end
+    mount.command_subject = nil
+    mount.selected_subjects = setmetatable({}, {__mode='k'})
+    if #failures > 0 then
+        error('subject descriptor cleanup failed: ' ..
+            table.concat(failures, '; '), 0)
+    end
+    return released
+end
+
+---Returns the bounded semantic kind for one adapted subject source.
+---@param source dwarfspec.SubjectSource
+---@return string
+local function source_kind(source)
+    if type(source.kind) == 'string' and source.kind ~= '' then
+        return source.kind
+    end
+    return 'component'
 end
 
 ---Calls optional adapter teardown and always drops mount-owned references.
@@ -40,18 +75,7 @@ local function cleanup_mount(context, mount)
             mount.adapter:settle(mount)
         end)
     end
-    for subject in pairs(mount.selected_subjects) do
-        context.subject_mounts[subject] = nil
-        attempt(function()
-            context.subject_module.release(subject)
-        end)
-    end
-    if mount.interaction_target and
-            type(mount.interaction_target.cleanup) == 'function' then
-        attempt(function()
-            mount.interaction_target:cleanup()
-        end)
-    end
+    attempt(function() release_mount_subjects(context, mount) end)
     local cleaned_adapters = {}
     local sources = mount.subject_sources or {}
     if mount.subject_source then sources[mount.subject_source] = true end
@@ -63,7 +87,23 @@ local function cleanup_mount(context, mount)
             attempt(function() adapter:cleanup() end)
         end
     end
+    if mount.interaction_target and
+            type(mount.interaction_target.cleanup) == 'function' then
+        attempt(function()
+            mount.interaction_target:cleanup()
+        end)
+    end
 
+    if mount.host_screen and context.owned_screens[mount.host_screen] then
+        context.owned_screens[mount.host_screen] = nil
+        context.owned_screen_count =
+            math.max(0, context.owned_screen_count - 1)
+    end
+    if mount.attachment_counted then
+        context.borrowed_native_screen_count =
+            math.max(0, context.borrowed_native_screen_count - 1)
+        mount.attachment_counted = false
+    end
     mount.cleaned = true
     mount.alive = false
     mount.root = nil
@@ -83,8 +123,6 @@ local function cleanup_mount(context, mount)
         end
     end
     mount.owned_views = setmetatable({}, {__mode='k'})
-    mount.command_subject = nil
-    mount.selected_subjects = setmetatable({}, {__mode='k'})
     if context.current == mount then context.current = nil end
     if #failures > 0 then
         error('component adapter cleanup failed: ' ..
@@ -145,6 +183,10 @@ function M.new(options)
         subject_commands={},
         view_mounts=setmetatable({}, {__mode='k'}),
         owned_screens=setmetatable({}, {__mode='k'}),
+        owned_screen_count=0,
+        borrowed_native_screen_count=0,
+        native_attachment_count=0,
+        native_screen_dismissal_count=0,
     }
 
     ---Returns plain lifecycle counts suitable for terminal cleanup evidence.
@@ -171,6 +213,12 @@ function M.new(options)
             current_mount_id=self.current and self.current.id or nil,
             active_screen_count=active_screen_count,
             tracked_screen_count=tracked_screen_count,
+            owned_screen_count=self.owned_screen_count,
+            borrowed_native_screen_count=
+                self.borrowed_native_screen_count,
+            native_attachment_count=self.native_attachment_count,
+            native_screen_dismissal_count=
+                self.native_screen_dismissal_count,
             subject_count=subject_count,
         }
     end
@@ -497,35 +545,66 @@ function M.new(options)
             ('DwarfSpec %s subject control_path=%q mount=%s descriptor ' ..
             'is no longer available'):format(operation,
                 subject.control_path, tostring(subject.mount_id)))
+        if mount.category == 'native' then
+            mount.interaction_target:assert_current(operation, {
+                mount_kind=mount.category,
+                source=source_kind(descriptor.source),
+                path=subject.control_path,
+                mount_id=subject.mount_id,
+            })
+        end
         local view = descriptor.adapter:resolve(descriptor.path_segments)
         if uses_native_subjects(mount, descriptor.source) then
-            assert(view,
-                ('DwarfSpec %s rejected stale native subject path=%s ' ..
-                'mount=%s because the widget no longer resolves; call ' ..
-                'ds.get(path) to select it again'):format(operation,
-                    subject.control_path, tostring(subject.mount_id)))
-            local current_identity = descriptor.adapter:identity(view)
-            assert(current_identity == descriptor.captured_identity,
-                ('DwarfSpec %s rejected stale native subject path=%s ' ..
-                'mount=%s because the widget was replaced; call ' ..
-                'ds.get(path) to select the replacement'):format(operation,
-                    subject.control_path, tostring(subject.mount_id)))
-            assert(descriptor.adapter:contains(view),
-                ('DwarfSpec %s rejected native subject path=%s mount=%s ' ..
-                'because the widget is outside the pinned hierarchy')
+            if not view then
+                error(('DwarfSpec %s rejected stale native subject path=%s ' ..
+                    'mount=%s because the widget no longer resolves; call ' ..
+                    'ds.get(path) to select it again; mount_kind=%q ' ..
+                    'source=%q captured_identity=%s current_identity=%s')
                     :format(operation, subject.control_path,
-                        tostring(subject.mount_id)))
+                        tostring(subject.mount_id), mount.category,
+                        source_kind(descriptor.source),
+                        identity_labels.of(descriptor.captured_identity),
+                        identity_labels.of(nil)), 0)
+            end
+            local current_identity = descriptor.adapter:identity(view)
+            if current_identity ~= descriptor.captured_identity then
+                error(('DwarfSpec %s rejected stale native subject path=%s ' ..
+                    'mount=%s because the widget was replaced; call ' ..
+                    'ds.get(path) to select the replacement; mount_kind=%q ' ..
+                    'source=%q captured_identity=%s current_identity=%s')
+                    :format(operation, subject.control_path,
+                        tostring(subject.mount_id), mount.category,
+                        source_kind(descriptor.source),
+                        identity_labels.of(descriptor.captured_identity),
+                        identity_labels.of(current_identity)), 0)
+            end
+            if not descriptor.adapter:contains(view) then
+                error(('DwarfSpec %s rejected native subject path=%s ' ..
+                    'mount=%s because the widget is outside the pinned ' ..
+                    'hierarchy; mount_kind=%q source=%q captured_identity=%s ' ..
+                    'current_identity=%s'):format(operation,
+                        subject.control_path, tostring(subject.mount_id),
+                        mount.category, source_kind(descriptor.source),
+                        identity_labels.of(descriptor.captured_identity),
+                        identity_labels.of(current_identity)), 0)
+            end
             return view
         end
         local current_identity = view and descriptor.adapter:identity(view)
-        assert(view and
-            current_identity == descriptor.captured_identity and
-            descriptor.adapter:contains(view) and
-            (uses_overlay_subjects(descriptor.source) or
-                self.view_mounts[view] == mount.id),
-            ('DwarfSpec %s rejected subject control_path=%q mount=%s because ' ..
-                'its view is outside the current mount'):format(operation,
-                    subject.control_path, tostring(subject.mount_id)))
+        if not (view and
+                current_identity == descriptor.captured_identity and
+                descriptor.adapter:contains(view) and
+                (uses_overlay_subjects(descriptor.source) or
+                    self.view_mounts[view] == mount.id)) then
+            error(('DwarfSpec %s rejected subject control_path=%q mount=%s ' ..
+                'because its view is outside the current mount; ' ..
+                'mount_kind=%q source=%q captured_identity=%s ' ..
+                'current_identity=%s'):format(operation,
+                    subject.control_path, tostring(subject.mount_id),
+                    mount.category, source_kind(descriptor.source),
+                    identity_labels.of(descriptor.captured_identity),
+                    identity_labels.of(current_identity)), 0)
+        end
         return view
     end
 
@@ -712,7 +791,11 @@ function M.new(options)
             owned_views=setmetatable({}, {__mode='k'}),
             command_subject=nil,
             options={},
+            attachment_counted=true,
         }
+        self.borrowed_native_screen_count =
+            self.borrowed_native_screen_count + 1
+        self.native_attachment_count = self.native_attachment_count + 1
         if mount.subject_source then
             mount.subject_sources[mount.subject_source] = true
         end
@@ -754,6 +837,29 @@ function M.new(options)
         end
         mount.cleanup_entry = cleanup_entry
         table.insert(mount.cleanup_entries, mount.cleanup_entry)
+        local descriptor_registration_ok, descriptor_entry =
+            xpcall(function()
+                return self.cleanup_module.push(
+                    self.cleanup_registry,
+                    ('clear native subject descriptors %d')
+                        :format(mount.id),
+                    function()
+                        release_mount_subjects(self, mount)
+                    end)
+            end, debug.traceback)
+        if not descriptor_registration_ok then
+            local cleanup_ok, failures = self.cleanup_module.run_from(
+                self.cleanup_registry, mount.cleanup_marker,
+                'failed native subject cleanup registration')
+            local message = 'DwarfSpec native mount failed to register ' ..
+                'subject cleanup: ' .. tostring(descriptor_entry)
+            if not cleanup_ok then
+                message = message .. '; cleanup failed: ' ..
+                    format_cleanup_failures(failures)
+            end
+            error(message, 2)
+        end
+        table.insert(mount.cleanup_entries, descriptor_entry)
         self.current = mount
 
         local ok, root_subject = xpcall(function()
@@ -915,6 +1021,7 @@ function M.new(options)
                 'component subject source must use the adapter result root')
             if mount.host_screen then
                 self.owned_screens[mount.host_screen] = true
+                self.owned_screen_count = self.owned_screen_count + 1
             end
             mount.render_tracker:wait_after(captured, 'component mount render')
             self:refresh_views(mount)

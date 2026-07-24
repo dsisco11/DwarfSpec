@@ -128,7 +128,8 @@ describe('automation host ownership', function()
             return {
                 current_mount_id=nil,
                 active_screen_count=cleaned and 0 or 1,
-                tracked_screen_count=1,
+                tracked_screen_count=cleaned and 0 or 1,
+                owned_screen_count=cleaned and 0 or 1,
                 subject_count=cleaned and 0 or 1,
                 pointer_active=not cleaned,
             }
@@ -186,7 +187,8 @@ describe('automation host ownership', function()
             return {
                 current_mount_id=nil,
                 active_screen_count=cleaned and 0 or 1,
-                tracked_screen_count=1,
+                tracked_screen_count=cleaned and 0 or 1,
+                owned_screen_count=cleaned and 0 or 1,
                 subject_count=cleaned and 0 or 1,
                 pointer_active=not cleaned,
             }
@@ -212,6 +214,7 @@ describe('automation host ownership', function()
                 current_mount_id=1,
                 active_screen_count=1,
                 tracked_screen_count=1,
+                owned_screen_count=1,
                 subject_count=1,
                 pointer_active=true,
             }
@@ -228,6 +231,33 @@ describe('automation host ownership', function()
         assert.has_error(function()
             host.recover_executor(aborted.run_id, aborted.generation,
                 'unsafe fixture recovery')
+        end, 'quarantined mount state is not clean')
+    end)
+
+    it('refuses cleanup confirmation for retained ownership evidence',
+            function()
+        local run = host.start('.', '.', options('retained-ownership'))
+        run.mount_cleanup_probe = function()
+            return {
+                current_mount_id=nil,
+                active_screen_count=0,
+                tracked_screen_count=1,
+                owned_screen_count=1,
+                borrowed_native_screen_count=1,
+                native_attachment_count=1,
+                native_screen_dismissal_count=1,
+                subject_count=0,
+                pointer_active=false,
+            }
+        end
+
+        local aborted = host.abort(run.run_id, run.owner_capability)
+
+        assert.is_false(aborted.cleanup_confirmed)
+        assert.is_false(aborted.mount_cleanup_state.verified)
+        assert.has_error(function()
+            host.recover_executor(aborted.run_id, aborted.generation,
+                'unsafe retained ownership recovery')
         end, 'quarantined mount state is not clean')
     end)
 

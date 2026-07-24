@@ -179,8 +179,16 @@ local function verify_executor_clean_state(proof)
     end
     local mount = run.mount_cleanup_state
     if mount and (mount.current_mount_id ~= nil or
-            mount.active_screen_count ~= 0 or mount.subject_count ~= 0 or
-            mount.pointer_active == true or mount.verified ~= true) then
+            mount.active_screen_count ~= 0 or
+            (mount.tracked_screen_count or 0) ~= 0 or
+            (mount.owned_screen_count or 0) ~= 0 or
+            (mount.borrowed_native_screen_count or 0) ~= 0 or
+            (mount.native_screen_dismissal_count or 0) ~= 0 or
+            mount.subject_count ~= 0 or
+            mount.pointer_active == true or
+            mount.button_state_active == true or
+            mount.render_observer_active == true or
+            mount.verified ~= true) then
         return false, 'quarantined mount state is not clean'
     end
     local modules = run.module_environment_audit
@@ -585,8 +593,14 @@ local function clean_run(run, reason)
             mount_state = result
             mount_ok = result.current_mount_id == nil and
                 result.active_screen_count == 0 and
+                (result.tracked_screen_count or 0) == 0 and
+                (result.owned_screen_count or 0) == 0 and
+                (result.borrowed_native_screen_count or 0) == 0 and
+                (result.native_screen_dismissal_count or 0) == 0 and
                 result.subject_count == 0 and
-                result.pointer_active ~= true
+                result.pointer_active ~= true and
+                result.button_state_active ~= true and
+                result.render_observer_active ~= true
         else
             mount_ok = false
             mount_state = {probe_error=tostring(result)}

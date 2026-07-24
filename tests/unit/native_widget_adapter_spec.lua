@@ -156,14 +156,20 @@ describe('DwarfSpec native widget adapter', function()
         local service_call_count = #calls
         current = {}
 
-        assert.has_error(function()
+        local resolve_ok, resolve_failure = pcall(function()
             adapter:resolve({'Missing'})
-        end, 'DwarfSpec native subject resolution rejected stale ' ..
-            'native-screen mount; pinned viewscreen is no longer current')
-        assert.has_error(function()
+        end)
+        assert.is_false(resolve_ok)
+        assert.matches('DwarfSpec native subject resolution rejected stale ' ..
+            'native%-screen mount; pinned viewscreen is no longer current;',
+            resolve_failure)
+        local children_ok, children_failure = pcall(function()
             adapter:children(root)
-        end, 'DwarfSpec native child enumeration rejected stale ' ..
-            'native-screen mount; pinned viewscreen is no longer current')
+        end)
+        assert.is_false(children_ok)
+        assert.matches('DwarfSpec native child enumeration rejected stale ' ..
+            'native%-screen mount; pinned viewscreen is no longer current;',
+            children_failure)
         assert.equals(service_call_count, #calls)
     end)
 

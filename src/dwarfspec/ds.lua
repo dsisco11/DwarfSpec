@@ -393,6 +393,11 @@ local TestStatus = load_automation_module(package_root,
     context.run.mount_cleanup_probe = function()
         local state = context.mount_context:cleanup_state()
         state.pointer_active = context.pointer.patched_get_mouse_pos ~= nil
+        state.button_state_active =
+            context.pointer.button_cleanup_entry ~= nil
+        state.render_observer_active =
+            context.mount_context.current ~= nil and
+            context.mount_context.current.render_observer ~= nil
         return state
     end
     ---Stages one real overlay-registration source through run-owned cleanup.

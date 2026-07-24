@@ -53,6 +53,9 @@ describe('DwarfSpec mount context', function()
     local native_observer_restores
     local native_observer_install_failure
     local native_observer_restore_failure
+    local cleanup_push_count
+    local cleanup_push_failure_at
+    local native_cleanup_events
 
     before_each(function()
         Widget = make_class()
@@ -71,15 +74,29 @@ describe('DwarfSpec mount context', function()
         native_observer_restores = 0
         native_observer_install_failure = nil
         native_observer_restore_failure = nil
+        cleanup_push_count = 0
+        cleanup_push_failure_at = nil
+        native_cleanup_events = {}
         local boundary = component.new({
             Widget=Widget,
             OverlayWidget=OverlayWidget,
             ZScreen=ZScreen,
         })
+        local cleanup_services = {
+            mark=cleanup.mark,
+            run_from=cleanup.run_from,
+            push=function(...)
+                cleanup_push_count = cleanup_push_count + 1
+                if cleanup_push_count == cleanup_push_failure_at then
+                    error('injected cleanup registration failure', 0)
+                end
+                return cleanup.push(...)
+            end,
+        }
         context = mount_context.new({
             run=registry.run,
             boundary=boundary,
-            cleanup_module=cleanup,
+            cleanup_module=cleanup_services,
             cleanup_registry=registry,
             render_tracker_factory=function()
                 return render_tracker.new({
@@ -95,6 +112,7 @@ describe('DwarfSpec mount context', function()
                     error(native_observer_install_failure, 0)
                 end
                 return function()
+                    table.insert(native_cleanup_events, 'observer')
                     native_observer_restores =
                         native_observer_restores + 1
                     if native_observer_restore_failure then
@@ -108,7 +126,10 @@ describe('DwarfSpec mount context', function()
                     if fail_subject then error('subject creation exploded') end
                     return subject.new(...)
                 end,
-                release=subject.release,
+                release=function(value)
+                    table.insert(native_cleanup_events, 'subject')
+                    return subject.release(value)
+                end,
             },
             adapter_factory=function(category)
                 assert.equals('widget', category)
@@ -230,6 +251,10 @@ describe('DwarfSpec mount context', function()
             current_mount_id=1,
             active_screen_count=1,
             tracked_screen_count=1,
+            owned_screen_count=1,
+            borrowed_native_screen_count=0,
+            native_attachment_count=0,
+            native_screen_dismissal_count=0,
             subject_count=1,
         }, context:cleanup_state())
     end)
@@ -268,10 +293,15 @@ describe('DwarfSpec mount context', function()
         assert.is_false(resolved)
         assert.matches('missing segment="original"', missing, 1, true)
         assert.is_nil(context.view_mounts[original])
-        assert.has_error(function() original_subject:raw() end,
-            'DwarfSpec subject raw access rejected subject ' ..
+        local stale_ok, stale_failure =
+            pcall(original_subject.raw, original_subject)
+        assert.is_false(stale_ok)
+        assert.matches('DwarfSpec subject raw access rejected subject ' ..
                 'control_path="nested/original" mount=1 because its view is outside ' ..
-                'the current mount')
+                'the current mount', stale_failure, 1, true)
+        assert.matches('mount_kind="widget" source="component" ' ..
+            'captured_identity=table#%d+ current_identity=<nil>',
+            stale_failure)
 
         context:mutate('reparent dynamic child', function()
             table.remove(nested.subviews, 1)
@@ -303,10 +333,14 @@ describe('DwarfSpec mount context', function()
 
         assert.equals(replacement,
             context:resolve_control_path('status'))
-        assert.has_error(function() selected:raw() end,
-            'DwarfSpec subject raw access rejected subject ' ..
+        local stale_ok, stale_failure = pcall(selected.raw, selected)
+        assert.is_false(stale_ok)
+        assert.matches('DwarfSpec subject raw access rejected subject ' ..
             'control_path="status" mount=1 because its view is outside ' ..
-            'the current mount')
+            'the current mount', stale_failure, 1, true)
+        assert.matches('mount_kind="widget" source="component" ' ..
+            'captured_identity=table#%d+ current_identity=table#%d+',
+            stale_failure)
         assert.equals(replacement,
             context:new_subject(replacement, 'status'):raw())
     end)
@@ -597,7 +631,11 @@ describe('DwarfSpec mount context', function()
         assert.same({
             current_mount_id=nil,
             active_screen_count=0,
-            tracked_screen_count=1,
+            tracked_screen_count=0,
+            owned_screen_count=0,
+            borrowed_native_screen_count=0,
+            native_attachment_count=0,
+            native_screen_dismissal_count=0,
             subject_count=0,
         }, context:cleanup_state())
         assert.is_true(cleanup.run(registry, 'post-unmount reset'))
@@ -703,17 +741,27 @@ describe('DwarfSpec mount context', function()
                 context.current.render_tracker:completed()
             end,
         })
+        local original_target_cleanup = target.cleanup
+        target.cleanup = function(self)
+            table.insert(native_cleanup_events, 'attachment')
+            return original_target_cleanup(self)
+        end
+        local source = native_widget_adapter.new_source(root, target, {
+            get_widget=function() return nil end,
+            get_children=function() return {} end,
+        })
+        local original_source_cleanup = source.adapter.cleanup
+        source.adapter.cleanup = function(self)
+            table.insert(native_cleanup_events, 'source')
+            return original_source_cleanup(self)
+        end
 
         local mounted = context:mount_native(function()
             return {
                 root=root,
                 pinned_screen=pinned,
                 interaction_target=target,
-                subject_source=
-                    native_widget_adapter.new_source(root, target, {
-                        get_widget=function() return nil end,
-                        get_children=function() return {} end,
-                    }),
+                subject_source=source,
             }
         end)
 
@@ -728,6 +776,10 @@ describe('DwarfSpec mount context', function()
             current_mount_id=1,
             active_screen_count=0,
             tracked_screen_count=0,
+            owned_screen_count=0,
+            borrowed_native_screen_count=1,
+            native_attachment_count=1,
+            native_screen_dismissal_count=0,
             subject_count=1,
         }, context:cleanup_state())
 
@@ -735,6 +787,12 @@ describe('DwarfSpec mount context', function()
 
         assert.is_true(target._cleaned)
         assert.equals(1, native_observer_restores)
+        assert.same({
+            'observer',
+            'subject',
+            'source',
+            'attachment',
+        }, native_cleanup_events)
         assert.equals(0, pinned.dismissals)
         assert.equals(0, cleanup.pending_count(registry))
     end)
@@ -904,6 +962,10 @@ describe('DwarfSpec mount context', function()
             current_mount_id=nil,
             active_screen_count=0,
             tracked_screen_count=0,
+            owned_screen_count=0,
+            borrowed_native_screen_count=0,
+            native_attachment_count=1,
+            native_screen_dismissal_count=0,
             subject_count=0,
         }, context:cleanup_state())
     end)
@@ -943,6 +1005,164 @@ describe('DwarfSpec mount context', function()
         assert.equals(1, source_cleanups)
         assert.is_nil(context.current)
         assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('cleans every partially registered native attachment layer',
+            function()
+        local cases = {
+            {name='detach', failing_push=1},
+            {name='subject descriptors', failing_push=2},
+            {name='observer restoration', failing_push=3},
+        }
+        for _, case in ipairs(cases) do
+            local root = {kind='native-root-' .. case.name}
+            local pinned = {widgets=root}
+            local target = interaction_target.new_borrowed_native(pinned, {
+                get_current_viewscreen=function() return pinned end,
+                invalidate_screen=function() end,
+            })
+            local source = native_widget_adapter.new_source(root, target, {
+                get_widget=function() return nil end,
+                get_children=function() return {} end,
+            })
+            cleanup_push_failure_at =
+                cleanup_push_count + case.failing_push
+
+            local ok, failure = pcall(
+                context.mount_native, context, function()
+                    return {
+                        root=root,
+                        pinned_screen=pinned,
+                        interaction_target=target,
+                        subject_source=source,
+                    }
+                end)
+
+            assert.is_false(ok, case.name)
+            assert.matches('injected cleanup registration failure',
+                failure, 1, true)
+            assert.is_true(target._cleaned, case.name)
+            assert.is_true(source.adapter._cleaned, case.name)
+            assert.is_nil(context.current, case.name)
+            assert.equals(0, cleanup.pending_count(registry), case.name)
+            assert.equals(0,
+                context:cleanup_state().borrowed_native_screen_count,
+                case.name)
+            cleanup_push_failure_at = nil
+        end
+        assert.equals(1, native_observer_installs)
+        assert.equals(1, native_observer_restores)
+    end)
+
+    it('cleans an observed native attachment when root subject creation fails',
+            function()
+        local root = {kind='native-root'}
+        local pinned = {widgets=root}
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return pinned end,
+            invalidate_screen=function()
+                context.current.render_tracker:completed()
+            end,
+        })
+        local source = native_widget_adapter.new_source(root, target, {
+            get_widget=function() return nil end,
+            get_children=function() return {} end,
+        })
+        fail_subject = true
+
+        local ok, failure = pcall(
+            context.mount_native, context, function()
+                return {
+                    root=root,
+                    pinned_screen=pinned,
+                    interaction_target=target,
+                    subject_source=source,
+                }
+            end)
+
+        assert.is_false(ok)
+        assert.matches('subject creation exploded', failure, 1, true)
+        assert.equals(1, native_observer_installs)
+        assert.equals(1, native_observer_restores)
+        assert.is_true(target._cleaned)
+        assert.is_true(source.adapter._cleaned)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('cleans native state when initial hierarchy refresh fails', function()
+        local root = {kind='native-root'}
+        local pinned = {widgets=root}
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return pinned end,
+            invalidate_screen=function() end,
+        })
+        local source = native_widget_adapter.new_source(root, target, {
+            get_widget=function() return nil end,
+            get_children=function()
+                error('native hierarchy refresh exploded', 0)
+            end,
+        })
+
+        local ok, failure = pcall(
+            context.mount_native, context, function()
+                return {
+                    root=root,
+                    pinned_screen=pinned,
+                    interaction_target=target,
+                    subject_source=source,
+                }
+            end)
+
+        assert.is_false(ok)
+        assert.matches('native hierarchy refresh exploded',
+            failure, 1, true)
+        assert.equals(1, native_observer_installs)
+        assert.equals(1, native_observer_restores)
+        assert.is_true(target._cleaned)
+        assert.is_true(source.adapter._cleaned)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('drains all entries when partial unwind cleanup itself fails',
+            function()
+        local root = {kind='native-root'}
+        local pinned = {widgets=root}
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return pinned end,
+            invalidate_screen=function() end,
+        })
+        target.cleanup = function()
+            error('borrowed target cleanup exploded', 0)
+        end
+        local source = native_widget_adapter.new_source(root, target, {
+            get_widget=function() return nil end,
+            get_children=function() return {} end,
+        })
+
+        local ok, failure = pcall(
+            context.mount_native, context, function()
+                return {
+                    root=root,
+                    pinned_screen=pinned,
+                    interaction_target=target,
+                    subject_source=source,
+                }
+            end)
+
+        assert.is_false(ok)
+        assert.matches('native render capability check failed',
+            failure, 1, true)
+        assert.matches('cleanup failed:', failure, 1, true)
+        assert.matches('borrowed target cleanup exploded',
+            failure, 1, true)
+        assert.equals(1, native_observer_restores)
+        assert.is_true(source.adapter._cleaned)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
+        assert.equals(0,
+            context:cleanup_state().borrowed_native_screen_count)
     end)
 
     it('does not create mount state when native acquisition fails',

@@ -504,35 +504,35 @@ screen and externally owned overlays were never owned or dismissed.
 
 ### Tasks
 
-☐ Register cleanup actions in LIFO order for pointer/button state, native
+☒ Register cleanup actions in LIFO order for pointer/button state, native
   render observation, subject descriptors, and mount attachment.
-☐ Restore pointer and explicit button state before removing render
+☒ Restore pointer and explicit button state before removing render
   observation.
-☐ Clear all retained native and overlay subject descriptors during unmount.
-☐ Release the borrowed attachment without registering a screen dismissal.
-☐ Preserve exact cleanup behavior for normal unmount, assertion failure,
+☒ Clear all retained native and overlay subject descriptors during unmount.
+☒ Release the borrowed attachment without registering a screen dismissal.
+☒ Preserve exact cleanup behavior for normal unmount, assertion failure,
   input error, render error, redraw timeout, scheduler abort, and runner
   recovery.
-☐ If input changes the current viewscreen, reject further operations without
+☒ If input changes the current viewscreen, reject further operations without
   navigating back during cleanup.
-☐ Avoid dereferencing retained native userdata after a screen transition.
-☐ Extend cleanup and leak evidence so a native mount explicitly reports zero
+☒ Avoid dereferencing retained native userdata after a screen transition.
+☒ Extend cleanup and leak evidence so a native mount explicitly reports zero
   DwarfSpec-owned screens.
-☐ Keep test-owned overlay registration cleanup separate from native mount
+☒ Keep test-owned overlay registration cleanup separate from native mount
   cleanup.
-☐ Include mount kind, source, path, and relevant captured/current identities in
+☒ Include mount kind, source, path, and relevant captured/current identities in
   stale-state diagnostics without unbounded userdata serialization.
-☐ Add tests for every cleanup entry point and for injected failures at each
+☒ Add tests for every cleanup entry point and for injected failures at each
   partially completed attachment step.
-☐ Add repeated mount/unmount tests that prove no observer, pointer, subject, or
+☒ Add repeated mount/unmount tests that prove no observer, pointer, subject, or
   ownership state accumulates.
 
 ### Phase 9 exit gate
 
-☐ Cleanup tests cover every installed piece of reversible state.
-☐ Native mounts always report zero owned screens and zero screen dismissals.
-☐ Screen transitions produce explicit stale errors and no navigation.
-☐ Repeated native attachment leaves no DwarfSpec state behind.
+☒ Cleanup tests cover every installed piece of reversible state.
+☒ Native mounts always report zero owned screens and zero screen dismissals.
+☒ Screen transitions produce explicit stale errors and no navigation.
+☒ Repeated native attachment leaves no DwarfSpec state behind.
 
 ## Phase 10: Public declarations and documentation
 
@@ -1111,7 +1111,53 @@ as the work proceeds.
 
 ### Phase 9 evidence
 
-- Pending.
+- Native mount cleanup is now registered as explicit reverse-ownership layers:
+  borrowed attachment, subject descriptors, render observer, then any
+  subsequently claimed pointer and button state. The cleanup registry executes
+  those entries in strict LIFO order.
+- `mount_context` releases retained native and overlay subject descriptors
+  without resolving their adapted objects. Source adapters are cleared before
+  the borrowed interaction target, so cleanup never needs to dereference a
+  stale native widget or navigate back to a prior screen.
+- Cleanup evidence now reports active, tracked, and currently owned screen
+  counts; borrowed native screen count; cumulative native attachment count;
+  native dismissal count; subject count; pointer/button claims; and active
+  native render observation. Host cleanup and executor recovery reject any
+  retained ownership, dismissal, pointer/button, observer, or subject state.
+- Native mounts contribute zero owned screens and never register a screen
+  dismissal action. Unit spies prove zero show, dismiss, resize, replacement,
+  and navigation calls across normal, failed, transitioned, and repeated
+  native mounts.
+- Stale-screen subject access validates the pinned screen before native lookup.
+  Diagnostics include mount kind, subject source, path, mount ID, and bounded
+  opaque captured/current screen or widget identities.
+  `src/dwarfspec/identity_labels.lua` never invokes compound-value
+  serialization and bounds scalar labels.
+- Test-owned overlay registration remains owned by its independent run-scoped
+  staging cleanup. Native unmount only clears borrowed overlay subject adapters
+  and leaves registry entries and configuration untouched.
+- Extended `tests/unit/ds_mount_commands_spec.lua` with native lifecycle
+  coverage for strict cleanup registration order; retained native and overlay
+  descriptors; normal unmount; assertion, input, render, and redraw-timeout
+  failures; scheduler abort; external runner recovery; screen transition
+  cleanup without navigation or further native lookup; explicit ownership
+  evidence; and five repeated attach/input/unmount cycles.
+- Extended `tests/unit/mount_context_spec.lua` with observed cleanup execution
+  order and failures at detach registration, subject-cleanup registration,
+  observer-cleanup registration, root subject creation, hierarchy refresh, and
+  cleanup during partial unwind.
+- Extended `tests/unit/native_attachment_spec.lua` so source construction
+  remains the primary failure when partial target cleanup also fails. Extended
+  `tests/unit/automation_host_spec.lua` to reject retained tracked, owned,
+  borrowed, or dismissal evidence. Added bounded identity-label unit coverage.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `363 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 220 files.`
+- `git diff --check` passed.
+- No live DFHack run is claimed or required for this phase; cleanup entry
+  points, injected failures, and ownership invariants are deterministic unit
+  contracts.
 
 ### Phase 10 evidence
 

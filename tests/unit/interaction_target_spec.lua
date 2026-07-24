@@ -114,12 +114,21 @@ describe('borrowed native-screen interaction target', function()
         })
         current = {}
 
-        assert.has_error(function() target:native_screen('input') end,
-            'DwarfSpec input rejected stale native-screen mount; pinned ' ..
-                'viewscreen is no longer current')
-        assert.has_error(function() target:invalidate() end,
-            'DwarfSpec redraw rejected stale native-screen mount; pinned ' ..
-                'viewscreen is no longer current')
+        local input_ok, input_failure =
+            pcall(target.native_screen, target, 'input')
+        assert.is_false(input_ok)
+        assert.matches('DwarfSpec input rejected stale native%-screen ' ..
+            'mount; pinned viewscreen is no longer current;',
+            input_failure)
+        assert.matches('captured_screen=table#%d+ current_screen=table#%d+',
+            input_failure)
+        local redraw_ok, redraw_failure = pcall(target.invalidate, target)
+        assert.is_false(redraw_ok)
+        assert.matches('DwarfSpec redraw rejected stale native%-screen ' ..
+            'mount; pinned viewscreen is no longer current;',
+            redraw_failure)
+        assert.matches('captured_screen=table#%d+ current_screen=table#%d+',
+            redraw_failure)
         assert.is_false(invalidated)
     end)
 end)
