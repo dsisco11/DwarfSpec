@@ -281,6 +281,12 @@ dwarfspec recover-executor RUN_ID --generation N
 Recovery remains gated by DFHack-side clean-state verification and has no
 force mode. Healthy concurrent projects continue to wait in the shared FIFO.
 
+Use `dwarfspec history` to list every run retained by the current DFHack service
+instance, `dwarfspec show RUN_ID` to examine its immutable snapshot and
+structured events, and `dwarfspec logs RUN_ID` to print its captured output.
+These reads cover all concurrent projects without changing leases or scheduler
+state. The in-memory history is cleared when DFHack exits.
+
 By default, the latest invocation result is written to:
 
 ```text
@@ -288,7 +294,8 @@ tests/.test-results/dwarfspec/results.json
 ```
 
 Each invocation safely replaces that one project-local file; normal runs do
-not accumulate run-ID-named history. Use `--results PATH` to choose an exact
+not accumulate run-ID-named files. The read-only session history above is
+independent of result persistence. Use `--results PATH` to choose an exact
 file, with relative paths resolved beneath the project root, or `--no-results`
 to disable file writes. The `dwarfspec.result.v2` document includes the whole
 invocation state, classified errors, native host report, structured events,

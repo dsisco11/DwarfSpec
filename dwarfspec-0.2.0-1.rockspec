@@ -106,6 +106,8 @@ build = {
             "tests/automation/support/recover_executor.lua",
         ["dwarfspec.automation.scheduler_status"] =
             "tests/automation/support/scheduler_status.lua",
+        ["dwarfspec.automation.run_query"] =
+            "tests/automation/support/run_query.lua",
         ["dwarfspec.automation.probe"] = "tests/automation/support/probe.lua",
         ["dwarfspec.automation.status"] = "tests/automation/support/status.lua",
         ["dwarfspec.automation.diagnostics"] = "tests/automation/support/diagnostics.lua",

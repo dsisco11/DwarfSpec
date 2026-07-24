@@ -228,6 +228,47 @@ function M.parse_status(lines, decoder)
     return status, payload
 end
 
+---Decodes one read-only retained-run response with a supplied validator.
+---@param lines string[]
+---@param decoder function|nil
+---@param validator function
+---@return table, string
+local function parse_read_response(lines, decoder, validator)
+    local payload = report_line(lines)
+    local decode = decoder or function(text)
+        return require('dkjson').decode(text, 1, nil)
+    end
+    local response, _, decode_error = decode(payload)
+    assert(response, 'DFHack emitted invalid DwarfSpec JSON: ' ..
+        tostring(decode_error))
+    return validator(response), payload
+end
+
+---Decodes and validates one retained-run listing.
+---@param lines string[]
+---@param decoder function|nil
+---@return table, string
+function M.parse_run_history(lines, decoder)
+    return parse_read_response(lines, decoder, schemas.validate_run_history)
+end
+
+---Decodes and validates one retained-run inspection.
+---@param lines string[]
+---@param decoder function|nil
+---@return table, string
+function M.parse_run_inspection(lines, decoder)
+    return parse_read_response(lines, decoder,
+        schemas.validate_run_inspection)
+end
+
+---Decodes and validates one retained-run log response.
+---@param lines string[]
+---@param decoder function|nil
+---@return table, string
+function M.parse_run_logs(lines, decoder)
+    return parse_read_response(lines, decoder, schemas.validate_run_logs)
+end
+
 ---Formats one scheduler snapshot for terminal status output.
 ---@param scheduler table
 ---@return string[]
@@ -262,6 +303,63 @@ end
 function M.format_status(status)
     if not status.service_loaded then return {'SERVICE not loaded'} end
     return M.format_scheduler(status.scheduler)
+end
+
+---Formats retained runs as a compact newest-first terminal listing.
+---@param history table
+---@return string[]
+function M.format_run_history(history)
+    schemas.validate_run_history(history)
+    if not history.service_loaded then
+        return {'SERVICE not loaded', 'HISTORY 0'}
+    end
+    local lines = {
+        ('HISTORY %d service=%s'):format(#history.runs,
+            history.service_instance_id),
+    }
+    for _, run in ipairs(history.runs) do
+        table.insert(lines,
+            ('RUN %s state=%s generation=%d project=%s logs=%d'):format(
+                run.run_id, run.state, run.generation, run.project_id,
+                run.log_line_count))
+        if run.project_root then
+            table.insert(lines, '  ROOT ' .. run.project_root)
+        end
+    end
+    return lines
+end
+
+---Formats one retained run and its structured event journal.
+---@param inspection table
+---@return string[]
+function M.format_run_inspection(inspection)
+    schemas.validate_run_inspection(inspection)
+    local run = inspection.snapshot
+    local lines = {
+        ('RUN %s generation=%d'):format(run.run_id, run.generation),
+        ('PROJECT %s'):format(run.project_id),
+        ('STATE %s terminal=%s'):format(run.state, tostring(run.terminal)),
+        ('COUNTS successes=%d failures=%d errors=%d pending=%d'):format(
+            run.totals.successes, run.totals.failures, run.totals.errors,
+            run.totals.pending),
+        ('CLEANUP confirmed=%s mount_verified=%s'):format(
+            tostring(run.cleanup_confirmed),
+            tostring(run.mount_cleanup_verified)),
+        ('EVENTS %d'):format(#inspection.events),
+    }
+    if inspection.project_name then
+        table.insert(lines, 3, 'NAME ' .. inspection.project_name)
+    end
+    if inspection.project_root then
+        table.insert(lines, inspection.project_name and 4 or 3,
+            'ROOT ' .. inspection.project_root)
+    end
+    for _, event in ipairs(inspection.events) do
+        local payload = assert(require('dkjson').encode(event.payload))
+        table.insert(lines, ('EVENT %d %s %s'):format(
+            event.sequence, event.type, payload))
+    end
+    return lines
 end
 
 ---Decodes every native DwarfSpec report in transport order.

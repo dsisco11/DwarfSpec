@@ -154,6 +154,96 @@ describe('DwarfSpec CLI selection', function()
                         scheduler=scheduler,
                     }}
                 end,
+                ---Returns one synthetic retained-run listing.
+                ---@param options table
+                ---@return table
+                history=function(options)
+                    invoked = {command='history', options=options}
+                    return {exit_code=0, history={
+                        schema='dwarfspec.history.v1',
+                        protocol=2,
+                        service_loaded=true,
+                        service_instance_id='service-cli-fixture',
+                        runs={{
+                            run_id='retained-run',
+                            project_id='project-cli-fixture',
+                            project_root='project',
+                            generation=2,
+                            state='passed',
+                            terminal=true,
+                            submitted_at_ms=100,
+                            finished_at_ms=110,
+                            cleanup_confirmed=true,
+                            acknowledged=true,
+                            discarded=false,
+                            log_line_count=2,
+                        }},
+                    }}
+                end,
+                ---Returns one synthetic retained-run inspection.
+                ---@param options table
+                ---@param run_id string
+                ---@return table
+                inspect=function(options, run_id)
+                    invoked = {
+                        command='show', options=options, run_id=run_id,
+                    }
+                    return {exit_code=0, inspection={
+                        schema='dwarfspec.run-inspection.v1',
+                        protocol=2,
+                        service_loaded=true,
+                        found=true,
+                        run_id=run_id,
+                        snapshot={
+                            schema='dwarfspec.run.v2',
+                            protocol_version=2,
+                            service_instance_id='service-cli-fixture',
+                            project_id='project-cli-fixture',
+                            run_id=run_id,
+                            generation=2,
+                            state='passed',
+                            terminal=true,
+                            submitted_at_ms=100,
+                            last_sequence=0,
+                            counts={successes=1, failures=0, errors=0,
+                                pending=0},
+                            totals={successes=1, failures=0, errors=0,
+                                pending=0},
+                            queue_lease={active=false},
+                            execution_lease={active=false},
+                            owner_kind='external',
+                            acknowledged=true,
+                            discarded=false,
+                            cleanup_confirmed=true,
+                            mount_cleanup_verified=true,
+                            failures={},
+                        },
+                        events={},
+                        last_sequence=0,
+                        project_root='project',
+                    }}
+                end,
+                ---Returns synthetic captured output for one retained run.
+                ---@param options table
+                ---@param run_id string
+                ---@return table
+                logs=function(options, run_id)
+                    invoked = {
+                        command='logs', options=options, run_id=run_id,
+                    }
+                    return {exit_code=0, logs={
+                        schema='dwarfspec.run-logs.v1',
+                        protocol=2,
+                        service_loaded=true,
+                        found=true,
+                        service_instance_id='service-cli-fixture',
+                        project_id='project-cli-fixture',
+                        run_id=run_id,
+                        generation=2,
+                        state='passed',
+                        lines={'START example', 'SUCCESS example'},
+                    }}
+                end,
                 recover_executor=function(options, run_id, generation, reason)
                     invoked = {
                         command='recover-executor',
@@ -306,6 +396,32 @@ describe('DwarfSpec CLI selection', function()
             output.text, 1, true)
         assert.matches('EXECUTOR idle', output.text, 1, true)
         assert.matches('QUARANTINE none', output.text, 1, true)
+    end)
+
+    it('lists retained runs across projects', function()
+        assert.equals(0, cli.main({'history'}, context))
+        assert.equals('history', invoked.command)
+        assert.matches('HISTORY 1 service=service-cli-fixture',
+            output.text, 1, true)
+        assert.matches('RUN retained-run state=passed generation=2',
+            output.text, 1, true)
+        assert.matches('ROOT project', output.text, 1, true)
+    end)
+
+    it('shows structured retained-run details', function()
+        assert.equals(0, cli.main({'show', 'retained-run'}, context))
+        assert.equals('show', invoked.command)
+        assert.equals('retained-run', invoked.run_id)
+        assert.matches('STATE passed terminal=true', output.text, 1, true)
+        assert.matches('COUNTS successes=1 failures=0 errors=0 pending=0',
+            output.text, 1, true)
+        assert.matches('EVENTS 0', output.text, 1, true)
+    end)
+
+    it('prints captured retained-run logs verbatim', function()
+        assert.equals(0, cli.main({'logs', 'retained-run'}, context))
+        assert.equals('logs', invoked.command)
+        assert.equals('START example\nSUCCESS example\n', output.text)
     end)
 
     it('forwards exact executor recovery identity and reason', function()

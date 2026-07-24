@@ -130,6 +130,7 @@ local function validate_dependencies(options)
             host_script(options, 'recover'),
             host_script(options, 'recover_executor'),
             host_script(options, 'scheduler_status'),
+            host_script(options, 'run_query'),
             host_script(options, 'abort'),
             host_script(options, 'acknowledge'),
             host_script(options, 'probe')}) do
@@ -805,6 +806,102 @@ function M.status(options)
         status=status,
         scheduler=status.scheduler,
     }
+end
+
+---Invokes one read-only retained-run query through dfhack-run.
+---@param options table
+---@param operation string
+---@param run_id string|nil
+---@param parser function
+---@return table
+local function read_run_query(options, operation, run_id, parser)
+    local invoke = options.invoke or process.invoke
+    local query_script = host_script(options, 'run_query')
+    if not is_file(query_script) then
+        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
+            error=failure(RunnerFailureKind.DEPENDENCY,
+                'DwarfSpec dependency was not found: ' .. query_script)}
+    end
+    local ok, resolved_runner = pcall(process.resolve_runner, options,
+        options.environment)
+    if not ok then
+        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
+            error=failure(RunnerFailureKind.DEPENDENCY,
+                clean_message(resolved_runner))}
+    end
+    if options.verbose and options.emit then
+        options.emit('DFHack runner: ' .. resolved_runner)
+    end
+    local connected, connection_error = pcall(verify_connection,
+        resolved_runner, options, invoke)
+    if not connected then
+        local detail = type(connection_error) == 'table' and
+            connection_error or
+            failure(RunnerFailureKind.CONNECTION,
+                clean_message(connection_error))
+        return {exit_code=detail.exit_code, error=detail}
+    end
+    local arguments = {'lua', '-f', query_script, operation}
+    if run_id ~= nil then table.insert(arguments, run_id) end
+    local result = invoke(resolved_runner, arguments)
+    if result.exit_code ~= 0 then
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST,
+                ('DwarfSpec %s query exited with %d'):format(
+                    operation, result.exit_code))}
+    end
+    local parsed, response = pcall(parser, result.lines,
+        options.decode_json)
+    if not parsed then
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST,
+                clean_message(response))}
+    end
+    if response.found == false then
+        local message = response.service_loaded and
+            ('DwarfSpec run was not found: ' .. tostring(run_id)) or
+            ('DwarfSpec service is not loaded; run was not found: ' ..
+                tostring(run_id))
+        return {exit_code=exit_codes[RunnerFailureKind.HOST],
+            error=failure(RunnerFailureKind.HOST, message),
+            response=response}
+    end
+    return {
+        exit_code=exit_codes[RunnerFailureKind.SUCCESS],
+        response=response,
+    }
+end
+
+---Lists all runs retained by the current DFHack service instance.
+---@param options table
+---@return table
+function M.history(options)
+    local outcome = read_run_query(options, 'history', nil,
+        reports.parse_run_history)
+    outcome.history = outcome.response
+    return outcome
+end
+
+---Inspects one retained run without renewing its lease.
+---@param options table
+---@param run_id string
+---@return table
+function M.inspect(options, run_id)
+    local outcome = read_run_query(options, 'show', run_id,
+        reports.parse_run_inspection)
+    outcome.inspection = outcome.response
+    return outcome
+end
+
+---Reads captured output for one retained run without changing service state.
+---@param options table
+---@param run_id string
+---@return table
+function M.logs(options, run_id)
+    local outcome = read_run_query(options, 'logs', run_id,
+        reports.parse_run_logs)
+    outcome.logs = outcome.response
+    return outcome
 end
 
 ---Recovers one exact quarantined executor after host clean-state verification.

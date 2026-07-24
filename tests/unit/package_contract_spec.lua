@@ -182,6 +182,7 @@ describe('DwarfSpec package contract', function()
                     'tests/automation/support/recover_executor.lua',
                 scheduler_status=
                     'tests/automation/support/scheduler_status.lua',
+                run_query='tests/automation/support/run_query.lua',
                 status='tests/automation/support/status.lua'}) do
             assert.matches(('["dwarfspec.automation.%s"]'):format(name),
                 rockspec, 1, true)
@@ -206,5 +207,21 @@ describe('DwarfSpec package contract', function()
         assert.matches("arch = 'all'", publish, 1, true)
         assert.matches('--pack-binary-rock', publish, 1, true)
         assert.matches("$OutputDir = 'dist'", publish, 1, true)
+    end)
+
+    it('provides a sequential task for installing the locally built rock',
+            function()
+        local tasks = read_repository_file('.vscode/tasks.json')
+        local installer = read_repository_file(
+            'tools/Install-LocalPackage.ps1')
+        assert.matches(
+            '"label": "LuaRocks: Install locally built package"',
+            tasks, 1, true)
+        assert.matches('"dependsOrder": "sequence"', tasks, 1, true)
+        assert.matches('"Publish"', tasks, 1, true)
+        assert.matches('Install-LocalPackage.ps1', tasks, 1, true)
+        assert.matches('"dist\\$artifactStem.all.rock"', installer, 1, true)
+        assert.matches('luarocks install $artifactPath --force',
+            installer, 1, true)
     end)
 end)

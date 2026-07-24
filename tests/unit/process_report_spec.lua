@@ -295,4 +295,29 @@ describe('DwarfSpec native reports', function()
         assert(value, decode_error)
         assert.equals(value, report.validate_result(value))
     end)
+
+    it('formats every inspected event with its sequence and payload',
+            function()
+        local contents = read_contract_fixture('transport_failed.json')
+        local transport = report.parse({'DWARFSPEC_JSON ' .. contents}, {
+            after_sequence=0,
+        })
+        local inspection = {
+            schema='dwarfspec.run-inspection.v1',
+            protocol=2,
+            service_loaded=true,
+            found=true,
+            run_id=transport.run_id,
+            snapshot=transport.snapshot,
+            events=transport.events,
+            last_sequence=transport.last_sequence,
+        }
+
+        local lines = report.format_run_inspection(inspection)
+
+        assert.equals('EVENTS ' .. tostring(#transport.events),
+            lines[6])
+        assert.matches('^EVENT 1 ', lines[7])
+        assert.matches('"', lines[7], 1, true)
+    end)
 end)

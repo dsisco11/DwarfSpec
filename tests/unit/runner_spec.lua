@@ -859,6 +859,108 @@ describe('DwarfSpec external runner', function()
             outcome.scheduler.quarantine.run_id)
     end)
 
+    it('lists, inspects, and reads logs through the read-only adapter',
+            function()
+        local run_options = options('unused-query-id')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            end
+            assert.matches('run_query%.lua$', arguments[3])
+            local operation = arguments[4]
+            if operation == 'history' then
+                return {exit_code=0, lines={'DWARFSPEC_JSON ' ..
+                    json.encode({
+                        schema='dwarfspec.history.v1',
+                        protocol=2,
+                        service_loaded=true,
+                        service_instance_id='service-runner-fixture',
+                        runs={{
+                            run_id='retained-run',
+                            project_id='project-runner-fixture',
+                            project_root='D:/Clients/Fixture',
+                            generation=2,
+                            state=RunState.PASSED,
+                            terminal=true,
+                            submitted_at_ms=100,
+                            finished_at_ms=110,
+                            cleanup_confirmed=true,
+                            acknowledged=true,
+                            discarded=false,
+                            log_line_count=2,
+                        }},
+                    })}}
+            elseif operation == 'show' then
+                local transport = assert(json.decode(
+                    report_lines('retained-run', RunState.PASSED,
+                        true)[1]:sub(#'DWARFSPEC_JSON ' + 1)))
+                return {exit_code=0, lines={'DWARFSPEC_JSON ' ..
+                    json.encode({
+                        schema='dwarfspec.run-inspection.v1',
+                        protocol=2,
+                        service_loaded=true,
+                        found=true,
+                        run_id='retained-run',
+                        snapshot=transport.snapshot,
+                        events=transport.events,
+                        last_sequence=transport.last_sequence,
+                        project_root='D:/Clients/Fixture',
+                    })}}
+            end
+            assert.equals('logs', operation)
+            return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                schema='dwarfspec.run-logs.v1',
+                protocol=2,
+                service_loaded=true,
+                found=true,
+                service_instance_id='service-runner-fixture',
+                project_id='project-runner-fixture',
+                run_id='retained-run',
+                generation=1,
+                state=RunState.PASSED,
+                lines={'START example', 'SUCCESS example'},
+            })}}
+        end
+
+        local listed = runner.history(run_options)
+        local inspected = runner.inspect(run_options, 'retained-run')
+        local logged = runner.logs(run_options, 'retained-run')
+
+        assert.equals(0, listed.exit_code)
+        assert.equals('retained-run', listed.history.runs[1].run_id)
+        assert.equals(0, inspected.exit_code)
+        assert.equals(RunState.PASSED,
+            inspected.inspection.snapshot.state)
+        assert.equals(0, logged.exit_code)
+        assert.same({'START example', 'SUCCESS example'},
+            logged.logs.lines)
+    end)
+
+    it('reports missing retained runs explicitly', function()
+        local run_options = options('unused-missing-id')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=1 core=true timeout=function'}}
+            end
+            return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                schema='dwarfspec.run-inspection.v1',
+                protocol=2,
+                service_loaded=true,
+                found=false,
+                run_id='missing-run',
+            })}}
+        end
+
+        local outcome = runner.inspect(run_options, 'missing-run')
+
+        assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
+            outcome.exit_code)
+        assert.equals('DwarfSpec run was not found: missing-run',
+            outcome.error.message)
+    end)
+
     it('recovers one exact quarantined generation through host verification',
             function()
         local run_options = options('unused-recovery-id')

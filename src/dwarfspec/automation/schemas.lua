@@ -299,6 +299,158 @@ function M.validate_run(value)
     return value
 end
 
+---Validates one retained-run history entry.
+---@param entry table
+local function validate_history_entry(entry)
+    assert(type(entry) == 'table',
+        'automation run history entry must be a table')
+    for _, field in ipairs({'run_id', 'project_id', 'state'}) do
+        require_string(entry, field, 'automation run history entry')
+    end
+    assert(RUN_STATE_TERMINAL[entry.state] ~= nil,
+        'automation run history entry has unsupported state: ' ..
+            tostring(entry.state))
+    assert(type(entry.terminal) == 'boolean' and
+        entry.terminal == RUN_STATE_TERMINAL[entry.state],
+        'automation run history terminal flag does not match state')
+    for _, field in ipairs({
+            'generation', 'submitted_at_ms', 'log_line_count'}) do
+        require_integer(entry, field, 'automation run history entry')
+    end
+    assert(entry.generation > 0,
+        'automation run history generation must be positive')
+    for _, field in ipairs({'activated_at_ms', 'finished_at_ms'}) do
+        if entry[field] ~= nil then
+            require_integer(entry, field, 'automation run history entry')
+        end
+    end
+    for _, field in ipairs({
+            'cleanup_confirmed', 'acknowledged', 'discarded'}) do
+        assert(type(entry[field]) == 'boolean',
+            'automation run history entry has invalid field: ' .. field)
+    end
+    for _, field in ipairs({'project_name', 'project_root'}) do
+        if entry[field] ~= nil then
+            require_string(entry, field, 'automation run history entry')
+        end
+    end
+end
+
+---Validates one read-only retained-run listing envelope.
+---@param value table
+---@return table
+function M.validate_run_history(value)
+    require_schema(value, 'dwarfspec.history.v1', 'automation run history')
+    assert(value.protocol == M.protocol_version,
+        'unsupported automation run history protocol: ' ..
+            tostring(value.protocol))
+    assert(type(value.service_loaded) == 'boolean',
+        'automation run history must declare whether the service is loaded')
+    require_table(value, 'runs', 'automation run history')
+    if value.service_loaded then
+        require_string(value, 'service_instance_id',
+            'automation run history')
+    else
+        assert(value.service_instance_id == nil,
+            'unloaded automation run history cannot identify a service')
+        assert(#value.runs == 0,
+            'unloaded automation run history cannot contain runs')
+    end
+    local previous_generation
+    for _, entry in ipairs(value.runs) do
+        validate_history_entry(entry)
+        if previous_generation ~= nil then
+            assert(entry.generation < previous_generation,
+                'automation run history must be newest-first')
+        end
+        previous_generation = entry.generation
+    end
+    events.copy_json(value, 'automation run history')
+    return value
+end
+
+---Validates one read-only retained-run inspection envelope.
+---@param value table
+---@return table
+function M.validate_run_inspection(value)
+    require_schema(value, 'dwarfspec.run-inspection.v1',
+        'automation run inspection')
+    assert(value.protocol == M.protocol_version,
+        'unsupported automation run inspection protocol: ' ..
+            tostring(value.protocol))
+    assert(type(value.service_loaded) == 'boolean',
+        'automation run inspection must declare whether the service is loaded')
+    assert(type(value.found) == 'boolean',
+        'automation run inspection must declare whether the run was found')
+    require_string(value, 'run_id', 'automation run inspection')
+    if not value.found then
+        assert(value.snapshot == nil and value.events == nil,
+            'missing automation run inspection cannot contain run data')
+        return events.copy_json(value, 'automation run inspection')
+    end
+    assert(value.service_loaded,
+        'automation run inspection cannot find a run in an unloaded service')
+    require_table(value, 'snapshot', 'automation run inspection')
+    require_table(value, 'events', 'automation run inspection')
+    require_integer(value, 'last_sequence', 'automation run inspection')
+    M.validate_run(value.snapshot)
+    assert(value.snapshot.run_id == value.run_id,
+        'automation run inspection identity mismatch')
+    local transport = {
+        schema='dwarfspec.transport.v2',
+        protocol=M.protocol_version,
+        service_instance_id=value.snapshot.service_instance_id,
+        project_id=value.snapshot.project_id,
+        run_id=value.snapshot.run_id,
+        generation=value.snapshot.generation,
+        snapshot=value.snapshot,
+        events=value.events,
+        last_sequence=value.last_sequence,
+    }
+    M.validate_transport(transport, {after_sequence=0})
+    if value.project_name ~= nil then
+        require_string(value, 'project_name', 'automation run inspection')
+    end
+    if value.project_root ~= nil then
+        require_string(value, 'project_root', 'automation run inspection')
+    end
+    return events.copy_json(value, 'automation run inspection')
+end
+
+---Validates one read-only retained-run log envelope.
+---@param value table
+---@return table
+function M.validate_run_logs(value)
+    require_schema(value, 'dwarfspec.run-logs.v1',
+        'automation run logs')
+    assert(value.protocol == M.protocol_version,
+        'unsupported automation run logs protocol: ' ..
+            tostring(value.protocol))
+    assert(type(value.service_loaded) == 'boolean',
+        'automation run logs must declare whether the service is loaded')
+    assert(type(value.found) == 'boolean',
+        'automation run logs must declare whether the run was found')
+    require_string(value, 'run_id', 'automation run logs')
+    if not value.found then
+        assert(value.lines == nil,
+            'missing automation run logs cannot contain lines')
+        return events.copy_json(value, 'automation run logs')
+    end
+    assert(value.service_loaded,
+        'automation run logs cannot find a run in an unloaded service')
+    for _, field in ipairs({
+            'service_instance_id', 'project_id', 'state'}) do
+        require_string(value, field, 'automation run logs')
+    end
+    require_integer(value, 'generation', 'automation run logs')
+    require_table(value, 'lines', 'automation run logs')
+    for index, line in ipairs(value.lines) do
+        assert(type(line) == 'string',
+            'automation run logs has invalid line at ' .. index)
+    end
+    return events.copy_json(value, 'automation run logs')
+end
+
 ---Validates one event through the shared envelope contract.
 ---@param value table
 ---@param expected table|nil

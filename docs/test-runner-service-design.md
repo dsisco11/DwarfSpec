@@ -536,16 +536,21 @@ renew a lease belonging to another owner, or discard journal entries.
 
 ### Retention
 
-The service retains the complete journal for every queued or active run. It
-also retains the most recent unacknowledged terminal run for each project.
+The service retains the immutable snapshot, complete event journal, and
+captured output lines for every run admitted during the current service
+instance. Retention is process-local and ends when DFHack exits.
 
-Once a project's terminal result has been persisted and acknowledged, the
-service may discard that journal and admit a replacement project run. Other
-projects do not wait for that acknowledgement when the executor is clean.
+Acknowledging or explicitly discarding a terminal result releases the
+project's outstanding-run admission gate but does not remove its read-only
+session record. Other projects do not wait for that acknowledgement when the
+executor is clean.
 
-This design intentionally provides one latest retained run per project, not
-history. A future history feature requires an explicit storage policy and is
-not inferred from the in-memory journals.
+The read-only `history`, `show`, and `logs` queries expose these records across
+all projects in the service instance. They never renew a lease, acknowledge a
+result, mutate queue position, or discard a journal. This session history is
+not persistent history: the stable project result file remains replace-in-place
+and no per-run files are created. Persistent or bounded cross-session history
+requires a separate explicit storage policy.
 
 ## Snapshots
 
@@ -628,9 +633,9 @@ run according to current state.
 
 ## `dfhack-run` transport adapters
 
-Project registration, bootstrap, status, cancel, abort, and acknowledgement use
-thin `dfhack-run` adapters over the service. UI loading is outside this
-transport and outside this implementation scope.
+Project registration, bootstrap, status, retained-run queries, cancel, abort,
+and acknowledgement use thin `dfhack-run` adapters over the service. UI
+loading is outside this transport and outside this implementation scope.
 
 The bootstrap adapter verifies package compatibility and executor health,
 then registers or refreshes its project and submits a run. It does not fail
@@ -638,10 +643,12 @@ merely because another project is active, but rejects quarantine before
 project registration or run admission. The status adapter can retrieve any
 retained run by service-assigned run ID, while the read-only service status
 envelope exposes the executor, queue, and quarantine without a run ID. The
-cancellation adapter distinguishes queued cancellation from active abort
-through the service state. Executor recovery requires the exact quarantined
-run and generation and succeeds only after authoritative clean-state
-verification.
+retained-run query adapter lists newest-first cross-project summaries, returns
+one immutable snapshot with its structured journal, or returns captured output
+lines. The cancellation adapter distinguishes queued cancellation from active
+abort through the service state. Executor recovery requires the exact
+quarantined run and generation and succeeds only after authoritative
+clean-state verification.
 
 The external transport continues to emit one canonical prefixed JSON line so
 unrelated DFHack console output cannot be mistaken for protocol data:
@@ -929,7 +936,7 @@ The implementation is expected to converge on boundaries similar to:
 | `dwarfspec.automation.test_statuses` | Immutable Busted result-status identifiers. |
 | `dwarfspec.automation.result_policies` | Immutable result-persistence policies. |
 | `dwarfspec.automation.schemas` | Versioned service, scheduler, run, transport, event, and result validation. |
-| `dwarfspec.automation.snapshots` | Immutable run and scheduler snapshot construction. |
+| `dwarfspec.automation.snapshots` | Immutable run, history, and scheduler snapshot construction. |
 | `dwarfspec.automation.host` | Busted execution, native state transitions, and cleanup. |
 | `dwarfspec.automation.output_handler` | Translation from Busted callbacks into service events. |
 | `dwarfspec.automation.result_store` | Per-project result schema and safe replacement writes. |

@@ -178,6 +178,81 @@ describe('automation version 2 schemas and snapshots', function()
         assert.same({}, active.queue)
     end)
 
+    it('builds and validates immutable retained-run history', function()
+        local run = run_record()
+        run.output_lines = {'START example', 'SUCCESS example'}
+        local service = registry(run)
+        local older = run_record(RunState.PASSED, true)
+        older.run_id = 'run-schema-older'
+        older.generation = 2
+        older.cleanup_confirmed = true
+        older.mount_cleanup_verified = true
+        older.output_lines = {'SUCCESS older'}
+        service.runs[older.run_id] = older
+
+        local history = {
+            schema='dwarfspec.history.v1',
+            protocol=2,
+            service_loaded=true,
+            service_instance_id=service.service_instance_id,
+            runs=snapshots.history(service),
+        }
+
+        assert.equals(history, schemas.validate_run_history(history))
+        assert.equals('run-schema-1', history.runs[1].run_id)
+        assert.equals(2, history.runs[1].log_line_count)
+        assert.equals('run-schema-older', history.runs[2].run_id)
+        history.runs[1].state = RunState.PASSED
+        assert.equals(RunState.QUEUED, run.state)
+    end)
+
+    it('validates retained-run inspection and log envelopes', function()
+        local run = run_record()
+        local service = registry(run)
+        local snapshot = snapshots.run(run, service)
+        local inspection = {
+            schema='dwarfspec.run-inspection.v1',
+            protocol=2,
+            service_loaded=true,
+            found=true,
+            run_id=run.run_id,
+            snapshot=snapshot,
+            events={},
+            last_sequence=0,
+            project_name='Schema Project',
+            project_root='D:/Clients/Schema',
+        }
+        local logs = {
+            schema='dwarfspec.run-logs.v1',
+            protocol=2,
+            service_loaded=true,
+            found=true,
+            service_instance_id=run.service_instance_id,
+            project_id=run.project_id,
+            run_id=run.run_id,
+            generation=run.generation,
+            state=run.state,
+            lines={'START example', 'SUCCESS example'},
+        }
+
+        assert.same(inspection,
+            schemas.validate_run_inspection(inspection))
+        assert.same(logs, schemas.validate_run_logs(logs))
+        assert.same({
+            schema='dwarfspec.run-inspection.v1',
+            protocol=2,
+            service_loaded=false,
+            found=false,
+            run_id='missing',
+        }, schemas.validate_run_inspection({
+            schema='dwarfspec.run-inspection.v1',
+            protocol=2,
+            service_loaded=false,
+            found=false,
+            run_id='missing',
+        }))
+    end)
+
     it('validates transport identity and contiguous cursor responses',
             function()
         local run = run_record(RunState.FAILED, true)

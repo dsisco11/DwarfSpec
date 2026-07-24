@@ -77,6 +77,52 @@ function M.run(run, registry)
     return events.copy_json(snapshot, 'run snapshot')
 end
 
+---Orders retained run records from newest to oldest generation.
+---@param left table
+---@param right table
+---@return boolean
+local function newer_generation(left, right)
+    return left.generation > right.generation
+end
+
+---Returns one detached summary for a retained run.
+---@param run table
+---@param registry table
+---@return table
+local function history_entry(run, registry)
+    local project = registry.projects[run.project_id]
+    return {
+        run_id=run.run_id,
+        project_id=run.project_id,
+        project_name=project and project.display_name or nil,
+        project_root=project and project.normalized_project_root or nil,
+        generation=run.generation,
+        state=run.state,
+        terminal=run.terminal == true,
+        submitted_at_ms=run.submitted_at_ms,
+        activated_at_ms=run.activated_at_ms,
+        finished_at_ms=run.finished_at_ms,
+        cleanup_confirmed=run.cleanup_confirmed == true,
+        acknowledged=run.acknowledged == true,
+        discarded=run.discarded == true,
+        log_line_count=#(run.output_lines or {}),
+    }
+end
+
+---Returns immutable retained-run summaries in newest-first order.
+---@param registry table
+---@return table[]
+function M.history(registry)
+    assert(type(registry) == 'table',
+        'automation service registry must be a table')
+    local runs = {}
+    for _, run in pairs(registry.runs or {}) do
+        table.insert(runs, history_entry(run, registry))
+    end
+    table.sort(runs, newer_generation)
+    return events.copy_json(runs, 'run history')
+end
+
 ---Returns one public scheduler queue entry.
 ---@param registry table
 ---@param run_id string

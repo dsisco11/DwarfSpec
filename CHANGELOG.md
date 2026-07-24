@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Read-only `dwarfspec status` inspection and exact
   `dwarfspec recover-executor` recovery guarded by authoritative DFHack
   clean-state verification.
+- Read-only `dwarfspec history`, `dwarfspec show RUN_ID`, and
+  `dwarfspec logs RUN_ID` access to cross-project run history, structured
+  events, and captured output retained by the current DFHack service instance.
 
 ### Fixed
 

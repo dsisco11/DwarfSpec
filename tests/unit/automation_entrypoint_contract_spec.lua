@@ -231,11 +231,47 @@ describe('legacy automation entrypoint contract', function()
             queued.run_id, tostring(encoded[#encoded].last_sequence))
         assert.equals('dwarfspec.scheduler.v2',
             encoded[#encoded].scheduler.schema)
+        local query_cursor = encoded[#encoded].last_sequence
+
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/run_query.lua'))('history')
+        assert.equals('dwarfspec.history.v1', encoded[#encoded].schema)
+        assert.is_true(encoded[#encoded].service_loaded)
+        assert.equals(1, #encoded[#encoded].runs)
+        assert.equals(queued.run_id, encoded[#encoded].runs[1].run_id)
+
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/run_query.lua'))(
+            'show', queued.run_id)
+        assert.equals('dwarfspec.run-inspection.v1',
+            encoded[#encoded].schema)
+        assert.is_true(encoded[#encoded].found)
+        assert.equals(queued.run_id, encoded[#encoded].snapshot.run_id)
+
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/run_query.lua'))(
+            'logs', queued.run_id)
+        assert.equals('dwarfspec.run-logs.v1', encoded[#encoded].schema)
+        assert.is_true(encoded[#encoded].found)
+        assert.same({'CANCELLED fixture cancel'},
+            encoded[#encoded].lines)
+        encoded[#encoded].lines[1] = 'mutated query result'
+        assert.same({'CANCELLED fixture cancel'}, queued.output_lines)
+
+        lines = {}
+        assert(loadfile(root ..
+            '/tests/automation/support/run_query.lua'))(
+            'show', 'missing-run')
+        assert.is_false(encoded[#encoded].found)
+        assert.is_nil(encoded[#encoded].snapshot)
 
         lines = {}
         assert(loadfile(root .. '/tests/automation/support/discard.lua'))(
             queued.run_id, tostring(queued.generation),
-            tostring(encoded[#encoded].last_sequence), 'fixture discard')
+            tostring(query_cursor), 'fixture discard')
         assert.is_true(queued.discarded)
         assert.equals('dwarfspec.transport.v2',
             encoded[#encoded].schema)

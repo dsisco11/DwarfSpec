@@ -1112,6 +1112,35 @@ function M.scheduler_snapshot()
     return service.scheduler_snapshot(service_dependencies())
 end
 
+---Returns immutable summaries for every retained service run.
+---@return table[]
+function M.run_history()
+    return service.run_history(service_dependencies())
+end
+
+---Returns an immutable full inspection of one retained service run.
+---@param run_id string
+---@return table
+function M.run_inspection(run_id)
+    local transport = M.transport(run_id, 0)
+    local registry = get_registry()
+    local project = registry.projects[transport.project_id]
+    return {
+        snapshot=transport.snapshot,
+        events=transport.events,
+        last_sequence=transport.last_sequence,
+        project_name=project and project.display_name or nil,
+        project_root=project and project.normalized_project_root or nil,
+    }
+end
+
+---Returns immutable captured output for one retained service run.
+---@param run_id string
+---@return table
+function M.run_logs(run_id)
+    return service.run_logs(run_id, service_dependencies())
+end
+
 ---Clears executor quarantine after authoritative live-state verification.
 ---@param run_id string
 ---@param generation integer

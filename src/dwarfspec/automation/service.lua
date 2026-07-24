@@ -471,6 +471,34 @@ function M.scheduler_snapshot(dependencies)
     return snapshots.scheduler(require_registry(dependencies))
 end
 
+---Returns all detached retained-run summaries in newest-first order.
+---@param dependencies table|nil
+---@return table[]
+function M.run_history(dependencies)
+    return snapshots.history(require_registry(dependencies))
+end
+
+---Returns detached captured output for one retained run.
+---@param run_id string
+---@param dependencies table|nil
+---@return table
+function M.run_logs(run_id, dependencies)
+    assert(type(run_id) == 'string' and run_id ~= '',
+        'run id must be a nonempty string')
+    local registry = require_registry(dependencies)
+    local run = registry.runs[run_id]
+    assert(type(run) == 'table',
+        'automation run was not found: ' .. run_id)
+    return events.copy_json({
+        service_instance_id=registry.service_instance_id,
+        project_id=run.project_id,
+        run_id=run.run_id,
+        generation=run.generation,
+        state=run.state,
+        lines=run.output_lines or {},
+    }, 'automation run logs')
+end
+
 ---Admits one project run to the global scheduler FIFO.
 ---@param project_id string
 ---@param request table

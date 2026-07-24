@@ -20,6 +20,9 @@ Usage:
   dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
   dwarfspec run [glob] [options]
   dwarfspec status [--project-root PATH] [--runner PATH]
+  dwarfspec history [--project-root PATH] [--runner PATH]
+  dwarfspec show RUN_ID [--project-root PATH] [--runner PATH]
+  dwarfspec logs RUN_ID [--project-root PATH] [--runner PATH]
   dwarfspec abort RUN_ID [--project-root PATH] [--runner PATH]
   dwarfspec recover-executor RUN_ID --generation N [options]
   dwarfspec help [command]
@@ -29,6 +32,9 @@ Commands:
   list     List canonical live-spec identities without executing Lua files.
   run      Run all live specs or the identities selected by one glob.
   status   Show the shared executor, queue, and quarantine state.
+  history  List runs retained by the current DFHack service instance.
+  show     Inspect one retained run and its structured events.
+  logs     Print captured output for one retained run.
   abort    Abort one active run and require confirmed cleanup.
   recover-executor
            Clear quarantine only after authoritative host verification.
@@ -107,6 +113,30 @@ service state. The output identifies the active run, queue depth, quarantine,
 and the exact recovery command when recovery is required.
 ]]
 
+local HISTORY_HELP = [[
+Usage: dwarfspec history [--project-root PATH] [--runner PATH] [--verbose]
+
+Lists all runs retained by the current process-wide DwarfSpec service, newest
+first and across every registered project. This is in-memory session history:
+it is cleared when DFHack exits and does not create persistent result files.
+]]
+
+local SHOW_HELP = [[
+Usage: dwarfspec show RUN_ID [--project-root PATH] [--runner PATH] [--verbose]
+
+Shows one immutable run snapshot followed by its structured event journal.
+The read does not renew a lease, acknowledge a result, or change scheduler
+state. Only runs retained by the current DFHack service instance are available.
+]]
+
+local LOGS_HELP = [[
+Usage: dwarfspec logs RUN_ID [--project-root PATH] [--runner PATH] [--verbose]
+
+Prints the captured Busted, host, and cleanup output lines for one retained run.
+The output is read-only and is available only during the current DFHack service
+instance.
+]]
+
 local RECOVER_EXECUTOR_HELP = [[
 Usage: dwarfspec recover-executor RUN_ID --generation N [options]
 
@@ -125,6 +155,7 @@ unsafe force mode.
 local LIST_OPTIONS = {['project-root']=true, ['test-glob']=true}
 local ABORT_OPTIONS = {['project-root']=true, runner=true, verbose=true}
 local STATUS_OPTIONS = {['project-root']=true, runner=true, verbose=true}
+local READ_OPTIONS = {['project-root']=true, runner=true, verbose=true}
 local RECOVER_EXECUTOR_OPTIONS = {
     ['project-root']=true,
     runner=true,
@@ -342,6 +373,12 @@ local function help(topic, output)
         write(output, ABORT_HELP)
     elseif topic == 'status' then
         write(output, STATUS_HELP)
+    elseif topic == 'history' then
+        write(output, HISTORY_HELP)
+    elseif topic == 'show' then
+        write(output, SHOW_HELP)
+    elseif topic == 'logs' then
+        write(output, LOGS_HELP)
     elseif topic == 'recover-executor' then
         write(output, RECOVER_EXECUTOR_HELP)
     else
@@ -456,6 +493,63 @@ function M.main(argv, context)
                 for _, line in ipairs(
                         require('dwarfspec.report').format_status(
                             outcome.status)) do
+                    write(output, line)
+                end
+            end
+            if outcome.error then write(errors, outcome.error.message) end
+            return outcome.exit_code
+        elseif command == 'history' then
+            local options, positionals = parse_options(argv, 2, package_root,
+                READ_OPTIONS)
+            assert(#positionals == 0, 'history does not accept arguments')
+            resolve_project_environment(options, context)
+            options.host_scripts = context.host_scripts
+            options.invoke = context.invoke
+            options.decode_json = context.decode_json
+            options.emit = function(line) write(output, line) end
+            local outcome = (context.runner or runner).history(options)
+            if outcome.history then
+                for _, line in ipairs(
+                        require('dwarfspec.report').format_run_history(
+                            outcome.history)) do
+                    write(output, line)
+                end
+            end
+            if outcome.error then write(errors, outcome.error.message) end
+            return outcome.exit_code
+        elseif command == 'show' then
+            local options, positionals = parse_options(argv, 2, package_root,
+                READ_OPTIONS)
+            assert(#positionals == 1, 'show requires exactly one run id')
+            resolve_project_environment(options, context)
+            options.host_scripts = context.host_scripts
+            options.invoke = context.invoke
+            options.decode_json = context.decode_json
+            options.emit = function(line) write(output, line) end
+            local outcome = (context.runner or runner).inspect(options,
+                positionals[1])
+            if outcome.inspection and outcome.inspection.found then
+                for _, line in ipairs(
+                        require('dwarfspec.report').format_run_inspection(
+                            outcome.inspection)) do
+                    write(output, line)
+                end
+            end
+            if outcome.error then write(errors, outcome.error.message) end
+            return outcome.exit_code
+        elseif command == 'logs' then
+            local options, positionals = parse_options(argv, 2, package_root,
+                READ_OPTIONS)
+            assert(#positionals == 1, 'logs requires exactly one run id')
+            resolve_project_environment(options, context)
+            options.host_scripts = context.host_scripts
+            options.invoke = context.invoke
+            options.decode_json = context.decode_json
+            options.emit = function(line) write(output, line) end
+            local outcome = (context.runner or runner).logs(options,
+                positionals[1])
+            if outcome.logs and outcome.logs.found then
+                for _, line in ipairs(outcome.logs.lines) do
                     write(output, line)
                 end
             end

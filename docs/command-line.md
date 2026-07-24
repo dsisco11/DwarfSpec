@@ -39,6 +39,9 @@ diagnostics. Multiple matches retain the deterministic order printed by
 dwarfspec list [glob] [--project-root PATH] [--test-glob GLOB]
 dwarfspec run [glob] [options]
 dwarfspec status [--project-root PATH] [--runner PATH]
+dwarfspec history [--project-root PATH] [--runner PATH]
+dwarfspec show RUN_ID [--project-root PATH] [--runner PATH]
+dwarfspec logs RUN_ID [--project-root PATH] [--runner PATH]
 dwarfspec abort RUN_ID [--project-root PATH] [--runner PATH]
 dwarfspec recover-executor RUN_ID --generation N [options]
 dwarfspec help [command]
@@ -62,6 +65,24 @@ queue or execution lease applies.
 whether the service is loaded, the active run, queue depth, and quarantine
 state. An active quarantine includes the exact blocking run and generation
 plus the corresponding recovery command.
+
+`dwarfspec history` lists all runs retained by the current process-wide service,
+across every project and in newest-first generation order. Each entry includes
+the run and project identities, state, generation, captured log count, and the
+project root when that project is still registered.
+
+`dwarfspec show RUN_ID` prints an immutable snapshot and the complete
+structured event journal for one retained run. `dwarfspec logs RUN_ID` prints
+that run's captured Busted, host, and cleanup output lines verbatim. These
+commands are read-only: they do not renew leases, acknowledge results, alter
+queue position, or discard events.
+
+Run history and logs are session-scoped service data. They are available only
+while the current DFHack service instance is alive and are cleared when DFHack
+exits. They do not create run-ID-named files or change the one-file result
+policy described below. An unloaded service produces an empty `history`
+listing;
+`show` and `logs` report the requested run as unavailable.
 
 `dwarfspec recover-executor RUN_ID --generation N` clears quarantine only
 after the local DFHack host verifies that no DwarfSpec mount, screen, pointer,
@@ -120,11 +141,11 @@ Exit codes are stable:
 
 | Code | Meaning |
 |---:|---|
-| 0 | Help, version, listing, or a passing run with confirmed cleanup |
+| 0 | Help, version, listing, successful inspection, or a passing run with confirmed cleanup |
 | 2 | Invalid command, option, argument, or malformed glob |
 | 3 | Missing dependency, invalid project, or no selected tests |
 | 4 | DFHack connection or core-context failure |
-| 5 | Registration rejection, executor quarantine, host, report, status, or result persistence failure |
+| 5 | Registration rejection, executor quarantine, missing retained run, host, report, status, or result persistence failure |
 | 6 | Busted failure/error or unconfirmed cleanup |
 | 7 | Execution timeout or the distinct queue-timeout classification |
 | 8 | Active abort or the distinct pre-activation cancellation classification |
