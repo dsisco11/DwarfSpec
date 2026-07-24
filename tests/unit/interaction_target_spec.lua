@@ -68,3 +68,58 @@ describe('owned-screen interaction target', function()
         assert.is_false(resolved)
     end)
 end)
+
+describe('borrowed native-screen interaction target', function()
+    it('routes input and invalidation without dismissing the pinned screen',
+            function()
+        local current
+        local invalidations = 0
+        local screen = {
+            dismissals=0,
+            ---Records a forbidden native-screen dismissal.
+            ---@param self table
+            dismiss=function(self)
+                self.dismissals = self.dismissals + 1
+            end,
+        }
+        current = screen
+        local target = interaction_target.new_borrowed_native(screen, {
+            get_current_viewscreen=function() return current end,
+            invalidate_screen=function()
+                invalidations = invalidations + 1
+                return 'invalidated'
+            end,
+        })
+
+        assert.equals(screen, target:assert_current('input'))
+        assert.equals(screen, target:native_screen('input'))
+        assert.equals('invalidated', target:invalidate())
+        assert.equals(1, invalidations)
+        assert.is_true(target:cleanup())
+        assert.is_false(target:cleanup())
+        assert.equals(0, screen.dismissals)
+        assert.has_error(function() target:native_screen('input') end,
+            'input native screen is no longer available')
+    end)
+
+    it('rejects a screen transition before input or invalidation', function()
+        local first = {}
+        local current = first
+        local invalidated = false
+        local target = interaction_target.new_borrowed_native(first, {
+            get_current_viewscreen=function() return current end,
+            invalidate_screen=function()
+                invalidated = true
+            end,
+        })
+        current = {}
+
+        assert.has_error(function() target:native_screen('input') end,
+            'DwarfSpec input rejected stale native-screen mount; pinned ' ..
+                'viewscreen is no longer current')
+        assert.has_error(function() target:invalidate() end,
+            'DwarfSpec redraw rejected stale native-screen mount; pinned ' ..
+                'viewscreen is no longer current')
+        assert.is_false(invalidated)
+    end)
+end)

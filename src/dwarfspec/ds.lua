@@ -91,6 +91,12 @@ local interaction_target_module = load_automation_module(package_root,
 local lua_view_adapter_module = load_automation_module(package_root,
     'dwarfspec.lua_view_adapter',
     '/src/dwarfspec/lua_view_adapter.lua')
+local native_attachment_module = load_automation_module(package_root,
+    'dwarfspec.native_attachment',
+    '/src/dwarfspec/native_attachment.lua')
+local native_root_adapter_module = load_automation_module(package_root,
+    'dwarfspec.native_root_adapter',
+    '/src/dwarfspec/native_root_adapter.lua')
 local EMouseButton = load_automation_module(package_root,
     'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
 local EInputState = load_automation_module(package_root,
@@ -241,6 +247,34 @@ local TestStatus = load_automation_module(package_root,
             subject_source_factory=lua_view_adapter_module.new_source,
         })
     end
+    local native_attachment = mount_dependencies.native_attachment
+    if not native_attachment then
+        local get_native_viewscreen = mount_dependencies.native_viewscreen or
+            function() return dfhack.gui.getDFViewscreen(true) end
+        local invalidate_native_screen =
+            mount_dependencies.invalidate_native_screen or
+            function() return dfhack.screen.invalidate() end
+        local is_native_widget_root =
+            mount_dependencies.is_native_widget_root or
+            function(root) return type(root) == 'userdata' end
+        native_attachment = native_attachment_module.new({
+            get_current_viewscreen=context.current_viewscreen,
+            get_native_viewscreen=get_native_viewscreen,
+            is_widget_root=is_native_widget_root,
+            interaction_target_factory=function(screen)
+                return interaction_target_module.new_borrowed_native(screen, {
+                    get_current_viewscreen=context.current_viewscreen,
+                    invalidate_screen=invalidate_native_screen,
+                })
+            end,
+            subject_source_factory=
+                mount_dependencies.native_subject_source_factory or
+                native_root_adapter_module.new_source,
+        })
+    end
+    assert(type(native_attachment) == 'table' and
+        type(native_attachment.attach) == 'function',
+        'DwarfSpec requires a native attachment service')
     context.mount_context = mount_context_module.new({
         run=context.run,
         boundary=boundary,
@@ -368,21 +402,26 @@ local TestStatus = load_automation_module(package_root,
             scheduler, description, query, wait_options(options, true))
     end
 
-    ---Mounts one supported component as the run's implicit current mount.
-    ---@param component any
-    ---@param options table|nil
+    ---Mounts a component or non-owningly attaches when no argument is present.
+    ---@param ... any
     ---@return table
-    function ds.mount(component, options)
+    function ds.mount(...)
+        if select('#', ...) == 0 then
+            return context.mount_context:mount_native(function()
+                return native_attachment:attach()
+            end)
+        end
+        local component, options = ...
         return context.mount_context:mount(component, options)
     end
 
-    ---Returns a subject for the current component root.
+    ---Returns a subject for the current mount's default root.
     ---@return table
     function ds.root()
         return context.mount_context:root()
     end
 
-    ---Unmounts and settles the current component.
+    ---Releases the current native attachment or mounted component.
     function ds.unmount()
         return context.mount_context:unmount()
     end

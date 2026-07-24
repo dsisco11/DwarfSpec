@@ -41,6 +41,11 @@ describe('DwarfSpec public mount commands', function()
     local registry
     local reset
     local screen
+    local native_screen
+    local native_root
+    local current_native_screen
+    local native_df_screen
+    local run
     local TestWidget
     local published
     local current_tracker
@@ -49,11 +54,14 @@ describe('DwarfSpec public mount commands', function()
     local original_gui
     local simulated_inputs
     local wait_until_calls
+    local component_mount_calls
 
     before_each(function()
         original_dfhack = rawget(_G, 'dfhack')
         original_df = rawget(_G, 'df')
         original_gui = package.loaded.gui
+        screen = nil
+        component_mount_calls = 0
         simulated_inputs = {}
         wait_until_calls = 0
         rawset(_G, 'dfhack', {
@@ -104,7 +112,7 @@ describe('DwarfSpec public mount commands', function()
         })
         published = {}
         local now = 10
-        local run = {
+        run = {
             run_id='ds-mount-test',
             scheduler_state={},
             event_publisher={
@@ -134,7 +142,18 @@ describe('DwarfSpec public mount commands', function()
                 return assert(result)
             end,
         }
-        local native_screen = {name='native-screen'}
+        native_root = {kind='native-widget-root'}
+        native_screen = {
+            name='native-screen',
+            widgets=native_root,
+            show_calls=0,
+            dismiss_calls=0,
+            resize_calls=0,
+            replace_calls=0,
+            navigation_calls=0,
+        }
+        current_native_screen = native_screen
+        native_df_screen = native_screen
         ds, reset = ds_factory.new('.',
             {project_root='.', package_root='.'},
             scheduler_module, scheduler, cleanup, registry,
@@ -147,7 +166,16 @@ describe('DwarfSpec public mount commands', function()
                 },
             }}, {
                 boundary=boundary,
-                current_viewscreen=function() return native_screen end,
+                current_viewscreen=function()
+                    return current_native_screen
+                end,
+                native_viewscreen=function() return native_df_screen end,
+                is_native_widget_root=function(root)
+                    return root == native_root
+                end,
+                invalidate_native_screen=function()
+                    current_tracker:completed()
+                end,
                 render_tracker_factory=function()
                     current_tracker = render_tracker.new(
                         scheduler_module, scheduler)
@@ -156,6 +184,8 @@ describe('DwarfSpec public mount commands', function()
                 adapter_factory=function()
                     return {
                         mount=function(_, mount, prepared)
+                            component_mount_calls =
+                                component_mount_calls + 1
                             screen = {
                                 active=true,
                                 invalidation_count=0,
@@ -271,11 +301,69 @@ describe('DwarfSpec public mount commands', function()
         assert.equals('second', second:raw().name)
     end)
 
-    it('does not expose no-component native attachment yet', function()
-        assert.has_error(function() ds.mount() end,
+    it('attaches non-owningly only when the component argument is missing',
+            function()
+        local mounted = ds.mount()
+
+        assert.equals(native_root, mounted:raw())
+        assert.equals(native_root, ds.root():raw())
+        ds.input('SELECT')
+        assert.equals(native_screen, simulated_inputs[1].screen)
+        assert.equals('SELECT', simulated_inputs[1].key)
+        assert.equals(0, component_mount_calls)
+        assert.is_nil(screen)
+        assert.same({
+            current_mount_id=1,
+            active_screen_count=0,
+            tracked_screen_count=0,
+            subject_count=2,
+            pointer_active=false,
+        }, run.mount_cleanup_probe())
+        assert.has_error(function()
+            ds.viewport(80, 25)
+        end, 'DwarfSpec viewport is unavailable for a non-owning ' ..
+            'native-screen mount')
+        assert.same({
+            show_calls=0,
+            dismiss_calls=0,
+            resize_calls=0,
+            replace_calls=0,
+            navigation_calls=0,
+        }, {
+            show_calls=native_screen.show_calls,
+            dismiss_calls=native_screen.dismiss_calls,
+            resize_calls=native_screen.resize_calls,
+            replace_calls=native_screen.replace_calls,
+            navigation_calls=native_screen.navigation_calls,
+        })
+
+        ds.unmount()
+
+        assert.is_nil(run.mount_cleanup_probe().current_mount_id)
+        assert.equals(0, run.mount_cleanup_probe().tracked_screen_count)
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.has_error(function() mounted:raw() end,
+            'DwarfSpec subject raw access rejected stale subject ' ..
+            'control_path="<root>" from mount 1; no component is currently ' ..
+                'mounted')
+        assert.has_error(function() ds.mount(nil) end,
             'unsupported component input (nil); expected a DFHack defclass ' ..
-            'derived from widgets.Widget, overlay.OverlayWidget, or ' ..
-            'gui.ZScreen, or an instance of one of those classes')
+                'derived from widgets.Widget, overlay.OverlayWidget, or ' ..
+                'gui.ZScreen, or an instance of one of those classes')
+    end)
+
+    it('rejects native subject access immediately after a screen transition',
+            function()
+        local mounted = ds.mount()
+        current_native_screen = {
+            name='next-native-screen',
+            widgets={kind='next-widget-root'},
+        }
+
+        assert.has_error(function() mounted:raw() end,
+            'DwarfSpec native subject resolution rejected stale ' ..
+            'native-screen mount; pinned viewscreen is no longer current')
+        assert.equals(0, native_screen.dismiss_calls)
     end)
 
     it('reports missing control paths with current mount identity',

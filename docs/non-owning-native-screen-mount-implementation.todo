@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phases 0-2 complete
+Status: in progress; Phases 0-3 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -254,35 +254,35 @@ target without creating, showing, or owning a screen.
 
 ### Tasks
 
-☐ Route only a truly missing component argument to native attachment; preserve
+✔ Route only a truly missing component argument to native attachment; preserve
   existing validation for invalid explicit component values.
-☐ Acquire both the current viewscreen and native DF viewscreen through
+✔ Acquire both the current viewscreen and native DF viewscreen through
   injectable DFHack calls.
-☐ Require both calls to identify the exact same viewscreen.
-☐ Reject a DFHack Lua screen that currently owns focus above the native
+✔ Require both calls to identify the exact same viewscreen.
+✔ Reject a DFHack Lua screen that currently owns focus above the native
   viewscreen with an explicit error.
-☐ Require a valid native `widgets` container before creating the mount record.
-☐ Pin the exact native viewscreen identity and widget-root identity.
-☐ Create a native interaction target whose `assert_current()` rejects any
+✔ Require a valid native `widgets` container before creating the mount record.
+✔ Pin the exact native viewscreen identity and widget-root identity.
+✔ Create a native interaction target whose `assert_current()` rejects any
   subsequent screen transition.
-☐ Leave `mount.host_screen` unset for the native attachment.
-☐ Add zero screens to `mount_context.owned_screens`.
-☐ Return a subject whose raw value is the exact pinned `widgets` container.
-☐ Reject `ds.viewport()` for a borrowed native screen with an explicit
+✔ Leave `mount.host_screen` unset for the native attachment.
+✔ Add zero screens to `mount_context.owned_screens`.
+✔ Return a subject whose raw value is the exact pinned `widgets` container.
+✔ Reject `ds.viewport()` for a borrowed native screen with an explicit
   non-owning-mount error.
-☐ Ensure failed attachment releases any partially installed run-scoped state.
-☐ Add injected unit tests proving no screen construction, show, resize,
+✔ Ensure failed attachment releases any partially installed run-scoped state.
+✔ Add injected unit tests proving no screen construction, show, resize,
   dismiss, replace, or navigation function is called.
-☐ Add tests for missing current screen, mismatched current/native screens,
+✔ Add tests for missing current screen, mismatched current/native screens,
   missing widget root, successful attachment, and immediate screen staleness.
 
 ### Phase 3 exit gate
 
-☐ `ds.mount()` returns the exact native widget root in injected tests.
-☐ Native mount evidence reports zero DwarfSpec-owned screens.
-☐ All rejection paths leave screen, focus, stack, and ownership state
+✔ `ds.mount()` returns the exact native widget root in injected tests.
+✔ Native mount evidence reports zero DwarfSpec-owned screens.
+✔ All rejection paths leave screen, focus, stack, and ownership state
   unchanged.
-☐ Component-mount regression tests remain green.
+✔ Component-mount regression tests remain green.
 
 ## Phase 4: Native widget traversal, identity, and liveness
 
@@ -885,7 +885,60 @@ as the work proceeds.
 
 ### Phase 3 evidence
 
-- Pending.
+- Added `src/dwarfspec/native_attachment.lua`. It acquires the current and
+  native DF viewscreens through injected getters, requires exact identity,
+  rejects a focused DFHack Lua screen explicitly, reads and validates the
+  exact `viewscreen.widgets` container, and does all of that before returning
+  resources from which a mount record can be created.
+- Added the no-argument `ds.mount()` overload using Lua argument count, so
+  `ds.mount()` attaches natively while an explicit `ds.mount(nil)` still enters
+  and fails the existing component boundary. The overload is declared in
+  `src/ds.d.lua`, and `Subject:raw()` now declares its Lua-table or typed-native
+  result accurately.
+- Added a borrowed interaction target to
+  `src/dwarfspec/interaction_target.lua`. It pins the exact native viewscreen,
+  re-queries current-screen identity before input or invalidation, rejects a
+  transition before dispatch, calls only the injected global invalidator, and
+  releases references without screen mutation.
+- Added `src/dwarfspec/native_root_adapter.lua` as a deliberately root-only
+  adapter. It returns the exact pinned widget container and validates the
+  pinned screen before every root operation. Named and indexed traversal
+  remains Phase 4 work rather than exposing partial lookup behavior.
+- Added `mount_context:mount_native()`. Its mount record keeps
+  `host_screen=nil`, pins the borrowed screen separately, never inserts that
+  screen into `owned_screens`, installs only DwarfSpec reference cleanup, and
+  returns a normal fluent root subject. `ds.viewport()` rejects this record
+  before any resize normalization or adapter call.
+- Attachment validation occurs before `next_mount_id` advances or run-scoped
+  cleanup is registered. Failures after resource creation release the
+  interaction target, subject adapter, subject descriptors, mount record, and
+  cleanup entries. Tests prove both pre-record acquisition failure and
+  post-record validation failure leave no current mount or pending cleanup.
+- Added `tests/unit/native_attachment_spec.lua` and extended the interaction
+  target, mount-context, and public-command suites. Injected tests cover:
+  exact screen/root identity; missing current/native screens; current/native
+  mismatch; missing root; source-construction failure; immediate transition
+  staleness; normal input through the pinned screen; explicit-`nil`
+  preservation; zero host construction/activation; zero owned screens; zero
+  show, resize, dismiss, replace, or navigation calls; viewport rejection; and
+  normal unmount cleanup.
+- Focused commands, run sequentially:
+  - `.\tools\Run-UnitTests.ps1 --filter "borrowed native%-screen interaction target"`:
+    `2 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec native viewscreen attachment"`:
+    `7 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec mount context"`:
+    `27 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"`:
+    `16 successes / 0 failures / 0 errors / 0 pending`.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `304 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 213 files.`
+- `git diff --check` and `git diff --cached --check` passed.
+- No live DFHack result or package build is claimed here. Native widget
+  traversal, inspection, overlay selection, pointer coordinates, and native
+  render observation remain separate later checklist work.
 
 ### Phase 4 evidence
 

@@ -63,6 +63,7 @@ local function cleanup_mount(context, mount)
     mount.alive = false
     mount.root = nil
     mount.host_screen = nil
+    mount.pinned_screen = nil
     mount.interaction_target = nil
     mount.subject_source = nil
     mount.adapter = nil
@@ -193,7 +194,7 @@ function M.new(options)
             type(adapter.tooltip) == 'function' and
             type(adapter.optional_fields) == 'function' and
             type(adapter.inspect) == 'function',
-            'component mount subject adapter is incomplete')
+            'mounted subject adapter is incomplete')
         return adapter
     end
 
@@ -243,7 +244,7 @@ function M.new(options)
 
         local root = adapter:root()
         assert(root == mount.root,
-            'component subject source root changed during mount')
+            'mounted subject source root changed during mount')
         visit(root, '')
         for view in pairs(mount.owned_views) do
             if self.view_mounts[view] == mount.id then
@@ -342,6 +343,18 @@ function M.new(options)
             ('DwarfSpec %s requires a mounted component; call ' ..
                 'ds.mount(component, options) first'):format(operation))
         return self.current
+    end
+
+    ---Validates one complete interaction target without taking ownership.
+    ---@param interaction_target any
+    ---@param label string
+    local function validate_interaction_target(interaction_target, label)
+        assert(type(interaction_target) == 'table' and
+            type(interaction_target.assert_current) == 'function' and
+            type(interaction_target.native_screen) == 'function' and
+            type(interaction_target.invalidate) == 'function' and
+            type(interaction_target.cleanup) == 'function',
+            label .. ' must return a complete interaction target')
     end
 
     ---Registers one cleanup action owned by the current mount.
@@ -459,14 +472,14 @@ function M.new(options)
         return table.unpack(results, 2, results.n)
     end
 
-    ---Returns a subject for the current component root.
+    ---Returns a subject for the current mount's default root.
     ---@return table
     function context:root()
         local mount = self:require_current('root')
         return self:new_subject(mount.root, '<root>')
     end
 
-    ---Unmounts and settles the current component through scoped LIFO cleanup.
+    ---Releases the current mount through scoped LIFO cleanup.
     function context:unmount()
         local mount = self:require_current('unmount')
         local ok, failures = self.cleanup_module.run_from(
@@ -542,6 +555,9 @@ function M.new(options)
     ---@return any
     function context:viewport(width, height)
         local mount = self:require_current('viewport')
+        assert(mount.host_screen ~= nil,
+            'DwarfSpec viewport is unavailable for a non-owning native-screen ' ..
+                'mount')
         local viewport = self.boundary:normalize_viewport({
             width=width,
             height=height,
@@ -554,6 +570,117 @@ function M.new(options)
             mount.options.viewport.height = viewport.height
             return mount.adapter:viewport(mount, mount.options.viewport)
         end)
+    end
+
+    ---Attaches a validated borrowed native screen as the implicit mount.
+    ---@param attach function
+    ---@return table
+    function context:mount_native(attach)
+        assert(not self.current,
+            ('DwarfSpec mount rejected because mount %d is still current; ' ..
+                'call ds.unmount() before mounting another component')
+                :format(self.current and self.current.id or -1))
+        assert(type(attach) == 'function',
+            'native mount requires an attachment factory')
+
+        local attach_ok, attachment = xpcall(attach, debug.traceback)
+        if not attach_ok then error(attachment, 2) end
+        assert(type(attachment) == 'table',
+            'native attachment must return a table')
+
+        self.next_mount_id = self.next_mount_id + 1
+        local mount = {
+            id=self.next_mount_id,
+            run=self.run,
+            category='native',
+            input_form='borrowed',
+            component_class=nil,
+            root=attachment.root,
+            host_screen=nil,
+            pinned_screen=attachment.pinned_screen,
+            interaction_target=attachment.interaction_target,
+            subject_source=attachment.subject_source,
+            render_tracker=nil,
+            adapter=nil,
+            alive=false,
+            cleaned=false,
+            cleanup_marker=nil,
+            cleanup_entry=nil,
+            cleanup_entries={},
+            selected_subjects=setmetatable({}, {__mode='k'}),
+            owned_views=setmetatable({}, {__mode='k'}),
+            command_subject=nil,
+            options={},
+        }
+        mount.refresh_views = function() self:refresh_views(mount) end
+        local setup_ok, setup_failure = xpcall(function()
+            mount.render_tracker = self.render_tracker_factory()
+            mount.cleanup_marker =
+                self.cleanup_module.mark(self.cleanup_registry)
+        end, debug.traceback)
+        if not setup_ok then
+            local cleanup_ok, cleanup_failure =
+                xpcall(function() cleanup_mount(self, mount) end,
+                    debug.traceback)
+            local message = 'DwarfSpec native mount failed to initialize ' ..
+                'run-scoped state: ' .. tostring(setup_failure)
+            if not cleanup_ok then
+                message = message .. '; direct cleanup failed: ' ..
+                    tostring(cleanup_failure)
+            end
+            error(message, 2)
+        end
+        local registration_ok, cleanup_entry = xpcall(function()
+            return self.cleanup_module.push(
+                self.cleanup_registry,
+                ('detach native screen %d'):format(mount.id),
+                function() cleanup_mount(self, mount) end)
+        end, debug.traceback)
+        if not registration_ok then
+            local cleanup_ok, cleanup_failure =
+                xpcall(function() cleanup_mount(self, mount) end,
+                    debug.traceback)
+            local message = 'DwarfSpec native mount failed to register ' ..
+                'cleanup: ' .. tostring(cleanup_entry)
+            if not cleanup_ok then
+                message = message .. '; direct cleanup failed: ' ..
+                    tostring(cleanup_failure)
+            end
+            error(message, 2)
+        end
+        mount.cleanup_entry = cleanup_entry
+        table.insert(mount.cleanup_entries, mount.cleanup_entry)
+        self.current = mount
+
+        local ok, root_subject = xpcall(function()
+            assert(mount.root ~= nil,
+                'native attachment must return its pinned widget root')
+            assert(mount.pinned_screen ~= nil,
+                'native attachment must return its pinned viewscreen')
+            assert(mount.host_screen == nil,
+                'native attachment must not return an owned host screen')
+            validate_interaction_target(
+                mount.interaction_target, 'native attachment')
+            local source_adapter = subject_adapter(mount)
+            assert(source_adapter:root() == mount.root,
+                'native subject source must use the pinned widget root')
+            mount.alive = true
+            self:refresh_views(mount)
+            return self:root()
+        end, debug.traceback)
+        if not ok then
+            local cleanup_ok, failures = self.cleanup_module.run_from(
+                self.cleanup_registry, mount.cleanup_marker,
+                'failed native attachment')
+            local message = 'DwarfSpec native mount failed while attaching: ' ..
+                tostring(root_subject)
+            if not cleanup_ok then
+                message = message .. '; cleanup failed: ' ..
+                    format_cleanup_failures(failures)
+            end
+            error(message, 2)
+        end
+        return root_subject
     end
 
     ---Activates one classified component when no mount is current.
@@ -581,6 +708,7 @@ function M.new(options)
             component_class=classification.class,
             root=classification.input_form == 'instance' and component or nil,
             host_screen=nil,
+            pinned_screen=nil,
             interaction_target=nil,
             subject_source=nil,
             command_subject=nil,
@@ -599,6 +727,7 @@ function M.new(options)
             component_class=prepared.class,
             root=prepared.component,
             host_screen=nil,
+            pinned_screen=nil,
             interaction_target=nil,
             subject_source=nil,
             render_tracker=self.render_tracker_factory(),
@@ -634,16 +763,12 @@ function M.new(options)
             mount.host_screen = adapter_result.host_screen
             mount.interaction_target = adapter_result.interaction_target
             mount.subject_source = adapter_result.subject_source
-            assert(type(mount.root) == 'table',
+            assert(mount.root ~= nil,
                 'component adapter root must be a native component object')
             assert(type(mount.host_screen) == 'table',
                 'component adapter must return its owned host screen')
-            assert(type(mount.interaction_target) == 'table' and
-                type(mount.interaction_target.assert_current) == 'function' and
-                type(mount.interaction_target.native_screen) == 'function' and
-                type(mount.interaction_target.invalidate) == 'function' and
-                type(mount.interaction_target.cleanup) == 'function',
-                'component adapter must return a complete interaction target')
+            validate_interaction_target(
+                mount.interaction_target, 'component adapter')
             local source_adapter = subject_adapter(mount)
             assert(source_adapter:root() == mount.root,
                 'component subject source must use the adapter result root')

@@ -10,6 +10,8 @@ local render_tracker = assert(loadfile(
 local subject = assert(loadfile('src/dwarfspec/subject.lua'))()
 local lua_view_adapter = assert(loadfile(
     'src/dwarfspec/lua_view_adapter.lua'))()
+local interaction_target = require('dwarfspec.interaction_target')
+local native_root_adapter = require('dwarfspec.native_root_adapter')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
 ---@param parent table|nil
@@ -662,6 +664,141 @@ describe('DwarfSpec mount context', function()
         assert.is_false(screens[1].active)
         assert.equals(0, cleanup.pending_count(registry))
         assert.equals('settle:first', events[#events])
+    end)
+
+    it('tracks a borrowed native attachment without owning its screen',
+            function()
+        local root = {kind='native-root'}
+        local pinned = {
+            widgets=root,
+            dismissals=0,
+        }
+        local current = pinned
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return current end,
+            invalidate_screen=function() end,
+        })
+
+        local mounted = context:mount_native(function()
+            return {
+                root=root,
+                pinned_screen=pinned,
+                interaction_target=target,
+                subject_source=
+                    native_root_adapter.new_source(root, target),
+            }
+        end)
+
+        assert.equals(root, mounted:raw())
+        assert.equals(root, context.current.root)
+        assert.equals(pinned, context.current.pinned_screen)
+        assert.is_nil(context.current.host_screen)
+        assert.same({
+            current_mount_id=1,
+            active_screen_count=0,
+            tracked_screen_count=0,
+            subject_count=1,
+        }, context:cleanup_state())
+
+        context:unmount()
+
+        assert.is_true(target._cleaned)
+        assert.equals(0, pinned.dismissals)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('cleans partial native mount state after result validation fails',
+            function()
+        local target_cleanups = 0
+        local source_cleanups = 0
+        local target = {
+            assert_current=function() return {} end,
+            native_screen=function() return {} end,
+            invalidate=function() end,
+            cleanup=function()
+                target_cleanups = target_cleanups + 1
+            end,
+        }
+        local source = {
+            adapter={
+                cleanup=function()
+                    source_cleanups = source_cleanups + 1
+                end,
+            },
+        }
+
+        local ok, failure = pcall(context.mount_native, context, function()
+            return {
+                root={},
+                pinned_screen={},
+                interaction_target=target,
+                subject_source=source,
+            }
+        end)
+
+        assert.is_false(ok)
+        assert.matches('mounted subject adapter is incomplete',
+            failure, 1, true)
+        assert.equals(1, target_cleanups)
+        assert.equals(1, source_cleanups)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
+        assert.same({
+            current_mount_id=nil,
+            active_screen_count=0,
+            tracked_screen_count=0,
+            subject_count=0,
+        }, context:cleanup_state())
+    end)
+
+    it('cleans native resources when run-scoped initialization fails',
+            function()
+        local target_cleanups = 0
+        local source_cleanups = 0
+        context.render_tracker_factory=function()
+            error('tracker construction exploded')
+        end
+
+        local ok, failure = pcall(context.mount_native, context, function()
+            return {
+                root={},
+                pinned_screen={},
+                interaction_target={
+                    cleanup=function()
+                        target_cleanups = target_cleanups + 1
+                    end,
+                },
+                subject_source={
+                    adapter={
+                        cleanup=function()
+                            source_cleanups = source_cleanups + 1
+                        end,
+                    },
+                },
+            }
+        end)
+
+        assert.is_false(ok)
+        assert.matches('DwarfSpec native mount failed to initialize ' ..
+            'run%-scoped state:', failure)
+        assert.matches('tracker construction exploded', failure, 1, true)
+        assert.equals(1, target_cleanups)
+        assert.equals(1, source_cleanups)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('does not create mount state when native acquisition fails',
+            function()
+        local ok, failure = pcall(context.mount_native, context, function()
+            error('native acquisition exploded')
+        end)
+
+        assert.is_false(ok)
+        assert.matches('native acquisition exploded', failure, 1, true)
+        assert.equals(0, context.next_mount_id)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
     end)
 
     it('run cleanup removes the alive mount and all mount entries', function()

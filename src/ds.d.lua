@@ -153,8 +153,8 @@ function Subject:inspect() end
 ---@return string|nil
 function Subject:text() end
 
----Returns the native DFHack object represented by this subject.
----@return table
+---Returns the exact Lua view table or typed native DF object for this subject.
+---@return table|userdata
 function Subject:raw() end
 
 ---@class dwarfspec.DS
@@ -178,7 +178,8 @@ function DS.wait_frames(count, options) end
 ---@return T
 function DS.await(description, query, options) end
 
----Mounts one supported component as the run's implicit current mount.
+---Attaches to the native screen when omitted or mounts one component.
+---@overload fun(): dwarfspec.Subject
 ---@param component any
 ---@param options? dwarfspec.MountOptions
 ---@return dwarfspec.Subject
