@@ -1,0 +1,380 @@
+# CLI diagnostic output implementation
+
+Status: planned
+
+Related design: `docs/test-runner-service-design.md`
+
+## Purpose
+
+Make `dwarfspec run` render live test failures and errors in a standard
+single-line diagnostic format that editor problem matchers can consume.
+Projects select the format with `settings.error_format` in
+`tests/dwarfspec/config.lua`.
+
+This checklist is the implementation completion contract. A phase is complete
+only when every subtask and exit-gate item in that phase is checked and its
+evidence is recorded in the evidence ledger.
+
+## Scope boundary
+
+Included:
+
+- project configuration and validation for `settings.error_format`;
+- immutable identifiers for the supported formats;
+- structured source locations on `problem.recorded` events;
+- MSBuild, GCC/Clang, and ESLint Compact diagnostic rendering;
+- external CLI integration while a run is being polled;
+- DwarfSpec unit tests for configuration, events, formatting, and runner
+  behavior;
+- documentation and example VS Code task configuration.
+
+Excluded:
+
+- changing the `dfhack-run` transport;
+- formatting events inside the DFHack service or command adapters;
+- changing test scheduling, cleanup, persistence, or exit-code behavior;
+- managing, retaining, grouping, collapsing, or deduplicating VS Code Problems;
+- implementing a background or watch-task problem matcher;
+- automated tests of VS Code, the Problems panel, or `.vscode/tasks.json`;
+- changing the separately planned in-game runner UI.
+
+The editor is responsible for clearing problems from the previous task run.
+DwarfSpec will not emit lifecycle markers or run-specific diagnostic owners to
+manage stale Problems.
+
+## Locked implementation contract
+
+☐ Keep structured service events presentation-neutral.
+☐ Perform all format selection and diagnostic rendering in the external
+  command.
+☐ Configure the format with `settings.error_format` in
+  `tests/dwarfspec/config.lua`.
+☐ Support exactly these serialized configuration values:
+  `msbuild`, `gcc`, and `eslint`.
+☐ Treat `gcc` as the shared GCC/Clang-compatible format.
+☐ Default `settings.error_format` to `msbuild` when it is omitted.
+☐ Represent the supported values with an immutable enum created by
+  `dwarfspec.immutable_enum.define`.
+☐ Apply `error_format` only to `problem.recorded` diagnostics.
+☐ Preserve the current human-readable queue, run, test progress, cleanup,
+  scheduler, and final-summary lines.
+☐ Emit one physical output line for each formatted diagnostic.
+☐ Retain the complete original problem message and trace in the structured
+  event journal and persisted result.
+☐ Never invent a file or line number when no source location is known.
+☐ Fall back to a human-readable problem line when no matchable source location
+  is available.
+☐ Preserve current process exit codes, cleanup behavior, result persistence,
+  acknowledgement, and recovery behavior.
+☐ Do not add a CLI option or environment variable for selecting the format as
+  part of this work.
+
+## Canonical output contracts
+
+The examples below define the required shapes. Exact message escaping is
+specified in Phase 3.
+
+MSBuild, selected by `error_format='msbuild'`:
+
+```text
+D:\project\tests\example.ds.lua(12,4): error DS1001: suite example: expected true
+```
+
+GCC/Clang, selected by `error_format='gcc'`:
+
+```text
+D:/project/tests/example.ds.lua:12:4: error: suite example: expected true
+```
+
+ESLint Compact, selected by `error_format='eslint'`:
+
+```text
+tests/example.ds.lua: line 12, col 4, Error - suite example: expected true (dwarfspec)
+```
+
+The VS Code pairing is:
+
+| DwarfSpec format | VS Code problem matcher |
+|---|---|
+| `msbuild` | `$mscompile` |
+| `gcc` | `$gcc` from the Microsoft C/C++ extension |
+| `eslint` | `$eslint-compact` |
+
+MSBuild and GCC/Clang output use absolute paths. ESLint Compact uses canonical
+project-relative paths because its matcher resolves files relative to the
+workspace folder.
+
+## Global engineering rules
+
+☐ Add LuaDoc comments to every new or changed Lua function, method, and
+  class-like module or table, including private helpers.
+☐ Use immutable enums instead of loose string comparisons for the supported
+  error-format identifiers.
+☐ Keep source-location extraction separate from output-format rendering.
+☐ Keep formatter functions deterministic and free of filesystem writes or
+  DFHack dependencies.
+☐ Preserve unrelated worktree changes.
+☐ Record only fresh verification evidence in this checklist.
+
+## Phase 0: Baseline and diagnostic fixtures
+
+Goal: characterize the current event and Busted callback data before changing
+the public output.
+
+☐ Confirm the workspace is the intended DwarfSpec repository before editing
+  implementation files.
+☐ Record the current result of `tools/Check-Lua.ps1`.
+☐ Record the current result of `tools/Run-UnitTests.ps1`.
+☐ Add representative problem fixtures for an assertion failure, a test error,
+  a hook or file error, and a problem without a source location.
+☐ Characterize the Busted trace values received by `baseTestFailure`,
+  `baseTestError`, and `baseError`, including table and string forms.
+☐ Include Windows and Unix-like source paths, a project root containing
+  spaces, a missing column, a multiline message, and ANSI/control characters
+  in the fixture set.
+☐ Record the current human-readable `problem.recorded` output so intentional
+  changes are distinguishable from unrelated regressions.
+
+Phase 0 exit gate:
+
+☐ Baseline syntax and unit results are recorded in the evidence ledger.
+☐ Fixtures describe DwarfSpec and Busted data only; they contain no mocked
+  VS Code APIs or Problems-panel assertions.
+☐ The source-location precedence needed by the fixtures is explicit before
+  implementation begins.
+
+## Phase 1: Configuration and immutable identifiers
+
+Goal: make the selected format a validated project setting available to the
+external command.
+
+☐ Add an immutable error-format enum module with `MSBUILD`, `GCC`, and `ESLINT`
+  members whose values are `msbuild`, `gcc`, and `eslint`.
+☐ Export the default format as the enum's `MSBUILD` value rather than a
+  duplicated string.
+☐ Refactor `dwarfspec.config` to load and validate the external settings needed
+  by `list` and `run` without executing the configuration module more than once
+  per command.
+☐ Preserve discovery configuration and its current default and override
+  behavior.
+☐ Validate `settings.error_format` as one of the immutable enum values.
+☐ Reject an empty, non-string, or unsupported `settings.error_format` with the
+  exact configuration path in the diagnostic.
+☐ Update the in-process extension settings validator to accept the same
+  setting while leaving it unused by the service and host.
+☐ Ensure the external command and in-process loader do not disagree about
+  whether a configuration file is valid.
+☐ Pass the resolved enum value into the external runner options.
+☐ Keep format selection project-local so simultaneous commands from different
+  projects can choose different formats independently.
+
+Phase 1 exit gate:
+
+☐ Unit tests cover the default and all three accepted values.
+☐ Unit tests cover invalid types, empty values, unsupported values, and
+  unknown settings.
+☐ Unit tests prove discovery and error-format settings are loaded together
+  without changing discovery precedence.
+☐ Unit tests prove separate project roots resolve independent formats.
+☐ Lua syntax checks and the full unit suite pass.
+
+## Phase 2: Structured problem source locations
+
+Goal: give the external formatter structured location data instead of making
+it recover locations from already formatted CLI text.
+
+☐ Extend the `problem.recorded` payload contract with optional
+  `source_identity`, `line`, and `column` fields.
+☐ Keep `source_identity` canonical and project-relative when the location is
+  inside the owning project.
+☐ Validate nonempty source identities and positive integer line and column
+  values when those fields are present.
+☐ Require `line` whenever `column` is present.
+☐ Extract structured Busted trace fields before considering rendered trace
+  text.
+☐ Prefer a location in the selected test file over DwarfSpec, Busted, Lua, or
+  cleanup implementation frames.
+☐ Use the test element's source location as the fallback when the trace does
+  not provide a more precise project-owned location.
+☐ Add a bounded fallback parser only for callback forms that Busted exposes as
+  strings.
+☐ Normalize both slash styles without requiring the source file to exist on
+  the external command's filesystem at formatting time.
+☐ Leave all location fields absent when no trustworthy project-owned source
+  location can be determined.
+☐ Preserve the original `message` and `trace` values in the event payload.
+☐ Ensure cursor reads, result persistence, and run-history inspection retain
+  the new location fields unchanged.
+
+Phase 2 exit gate:
+
+☐ Unit tests cover structured traces, string traces, element fallback, missing
+  locations, mixed separators, paths with spaces, and internal-frame
+  rejection.
+☐ Event-schema tests cover valid optional locations and every invalid
+  field combination.
+☐ Unit tests prove the original message and trace remain available after
+  adding structured locations.
+☐ No output format names or VS Code concepts appear in the service-side
+  source-location extractor.
+☐ Lua syntax checks and the full unit suite pass.
+
+## Phase 3: Standard diagnostic formatters
+
+Goal: render a normalized problem into each supported one-line contract.
+
+☐ Introduce a formatter boundary that accepts an immutable error-format value,
+  project root, and structured problem payload.
+☐ Implement the canonical MSBuild output shape.
+☐ Implement the canonical GCC/Clang output shape.
+☐ Implement the canonical ESLint Compact output shape.
+☐ Map assertion failures to stable MSBuild code `DS1001`.
+☐ Map test, hook, and file errors to stable MSBuild code `DS1002`.
+☐ Render both problem kinds with error severity so a failed DwarfSpec test is
+  always reported as a problem.
+☐ Default a missing column to column 1 only when a valid source and line are
+  present.
+☐ Resolve MSBuild and GCC/Clang source identities against the owning project
+  root to produce absolute paths.
+☐ Preserve canonical project-relative paths for ESLint Compact output.
+☐ Convert embedded CR, LF, tab, and other control characters in displayed
+  fields to safe spaces.
+☐ Remove ANSI escape sequences before rendering a diagnostic.
+☐ Collapse whitespace introduced by sanitization without changing the
+  structured event or persisted result.
+☐ Include the full test or hook name in the diagnostic message.
+☐ Preserve colons, parentheses, spaces, and non-ASCII text that do not violate
+  the selected one-line grammar.
+☐ Return the existing human-readable problem shape when the payload has no
+  trustworthy source and line.
+
+Phase 3 exit gate:
+
+☐ Unit tests assert the exact output for all three formats.
+☐ Unit tests cover both problem kinds, both path styles, spaces in paths,
+  missing columns, multiline messages, ANSI escapes, non-ASCII text, and
+  location-less fallback.
+☐ Unit tests prove every matchable problem produces exactly one physical line.
+☐ Unit tests verify only DwarfSpec formatter behavior; they do not instantiate
+  VS Code or assert Problems-panel behavior.
+☐ Lua syntax checks and the full unit suite pass.
+
+## Phase 4: Live-progress runner integration
+
+Goal: apply the project-selected formatter while the external command consumes
+structured events.
+
+☐ Pass the resolved error format and project root through
+  `dwarfspec.runner.run`.
+☐ Update event formatting so `problem.recorded` uses the selected diagnostic
+  formatter.
+☐ Keep all non-problem event formatting byte-for-byte compatible unless a
+  separate defect requires an explicit change.
+☐ Emit a problem diagnostic as soon as its validated event is consumed.
+☐ Ensure cursor retry and repeated polling cannot print the same event twice.
+☐ Ensure formatting does not mutate transport events, the in-memory event
+  journal, or the persisted result.
+☐ Ensure a formatter failure becomes an explicit DwarfSpec CLI error without
+  bypassing active-run abort and cleanup recovery.
+☐ Preserve result persistence and acknowledgement after a normally formatted
+  failed run.
+☐ Preserve established exit codes for passing, failing, host-error, timeout,
+  interruption, persistence-error, and recovery outcomes.
+
+Phase 4 exit gate:
+
+☐ Runner unit tests cover each selected format on streamed problem events.
+☐ Runner unit tests prove regular progress remains present and ordered around
+  the diagnostic line.
+☐ Runner unit tests prove one event is emitted once across cursor polling.
+☐ Runner unit tests prove formatted output does not alter the persisted
+  structured event.
+☐ CLI unit tests prove project configuration reaches the runner and invalid
+  configuration fails before connecting to DFHack.
+☐ Lua syntax checks and the full unit suite pass.
+
+## Phase 5: Documentation and editor examples
+
+Goal: document how projects select a format and pair it with an editor matcher.
+
+☐ Add `settings.error_format` and its default to
+  `docs/configuration.md`.
+☐ Document the three configuration values and their exact output shapes.
+☐ Document that `gcc` is also the Clang-compatible selection.
+☐ Document the required problem matcher for each format.
+☐ Document that `$gcc` is supplied by the Microsoft C/C++ extension rather
+  than core VS Code.
+☐ Document the absolute-path behavior for MSBuild and GCC/Clang and the
+  project-relative behavior for ESLint Compact.
+☐ Document the location-less human fallback and the fact that full traces
+  remain in results and run logs.
+☐ Update the repository's `tests/dwarfspec/config.lua` and Automation Test task
+  so their selected format and problem matcher agree.
+☐ Configure the repository task for one-shot execution only; do not add
+  background matcher state.
+☐ State that the task run clears previous Problems and that DwarfSpec does not
+  manage Problems-panel retention or collapsing.
+☐ Link to the official VS Code task and problem-matcher documentation.
+
+Phase 5 exit gate:
+
+☐ Documentation examples use valid DwarfSpec configuration syntax.
+☐ The repository example pairs `msbuild` with `$mscompile`.
+☐ Manual inspection confirms the task and configuration example agree.
+☐ No automated test asserts VS Code task configuration or Problems-panel
+  behavior.
+
+## Phase 6: Completion verification
+
+Goal: verify the complete DwarfSpec behavior and record reproducible evidence.
+
+☐ Run the focused configuration, event, output-handler, report-formatter,
+  runner, and CLI unit tests.
+☐ Run `tools/Check-Lua.ps1`.
+☐ Run `tools/Run-UnitTests.ps1`.
+☐ Run `git diff --check`.
+☐ Review the diff for accidental scheduler, transport, persistence, cleanup,
+  exit-code, or in-game UI changes.
+☐ Confirm all new or changed Lua functions and class-like modules have LuaDoc
+  comments.
+☐ Record exact commands, results, and any environmental limitations in the
+  evidence ledger.
+
+Phase 6 exit gate:
+
+☐ All focused DwarfSpec unit tests pass.
+☐ The full DwarfSpec unit suite passes.
+☐ Lua syntax checks pass.
+☐ `git diff --check` passes.
+☐ Every earlier phase and exit gate is complete.
+☐ No live DFHack run or VS Code integration test is required to complete this
+  deterministic formatting work.
+
+## Evidence ledger
+
+Record evidence only after running the corresponding command.
+
+| Phase | Evidence | Result |
+|---|---|---|
+| 0 | Baseline repository, syntax, unit, and fixture characterization | Pending |
+| 1 | Configuration and immutable enum unit tests | Pending |
+| 2 | Structured source-location and event-schema unit tests | Pending |
+| 3 | Exact formatter unit tests | Pending |
+| 4 | Runner and CLI integration unit tests | Pending |
+| 5 | Documentation and editor-example review | Pending |
+| 6 | Focused tests, full unit suite, syntax, and diff checks | Pending |
+
+## Final acceptance
+
+☐ A consumer project selects `msbuild`, `gcc`, or `eslint` with
+  `settings.error_format`.
+☐ Live `problem.recorded` events render in the selected standard format.
+☐ Matchable diagnostics contain a trustworthy source, line, column, severity,
+  and message.
+☐ Location-less problems remain visible without fabricated coordinates.
+☐ Full structured messages and traces remain available in results, history,
+  and logs.
+☐ Non-problem progress, transport, scheduling, cleanup, persistence, and exit
+  behavior remain unchanged.
+☐ DwarfSpec tests cover DwarfSpec behavior only; VS Code behavior remains
+  outside the automated test contract.
