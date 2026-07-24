@@ -52,12 +52,16 @@ local function cleanup_mount(context, mount)
             mount.interaction_target:cleanup()
         end)
     end
-    local subject_adapter = mount.subject_source and
-        mount.subject_source.adapter or nil
-    if subject_adapter and type(subject_adapter.cleanup) == 'function' then
-        attempt(function()
-            subject_adapter:cleanup()
-        end)
+    local cleaned_adapters = {}
+    local sources = mount.subject_sources or {}
+    if mount.subject_source then sources[mount.subject_source] = true end
+    for source in pairs(sources) do
+        local adapter = source and source.adapter or nil
+        if adapter and not cleaned_adapters[adapter] and
+                type(adapter.cleanup) == 'function' then
+            cleaned_adapters[adapter] = true
+            attempt(function() adapter:cleanup() end)
+        end
     end
 
     mount.cleaned = true
@@ -67,6 +71,7 @@ local function cleanup_mount(context, mount)
     mount.pinned_screen = nil
     mount.interaction_target = nil
     mount.subject_source = nil
+    mount.subject_sources = {}
     mount.adapter = nil
     mount.cleanup_entry = nil
     mount.cleanup_entries = {}
@@ -173,11 +178,12 @@ function M.new(options)
         return control_path or '<anonymous>'
     end
 
-    ---Returns the validated default subject adapter for one mount.
+    ---Returns the validated selected or default adapter for one mount.
     ---@param mount table
+    ---@param source dwarfspec.SubjectSource|nil
     ---@return dwarfspec.SubjectAdapter
-    local function subject_adapter(mount)
-        local source = mount and mount.subject_source
+    local function subject_adapter(mount, source)
+        source = source or (mount and mount.subject_source)
         local adapter = source and source.adapter
         assert(type(adapter) == 'table' and
             type(adapter.root) == 'function' and
@@ -201,10 +207,18 @@ function M.new(options)
 
     ---Returns whether a mount uses the pinned native widget source.
     ---@param mount table
+    ---@param source dwarfspec.SubjectSource|nil
     ---@return boolean
-    local function uses_native_subjects(mount)
-        return mount and mount.subject_source and
-            mount.subject_source.kind == ESubjectSource.NATIVE
+    local function uses_native_subjects(mount, source)
+        source = source or (mount and mount.subject_source)
+        return mount and source and source.kind == ESubjectSource.NATIVE
+    end
+
+    ---Returns whether a source is an externally owned overlay registry root.
+    ---@param source dwarfspec.SubjectSource|nil
+    ---@return boolean
+    local function uses_overlay_subjects(source)
+        return source and source.kind == ESubjectSource.OVERLAY
     end
 
     ---Refreshes weak ownership and validates direct child control identities.
@@ -275,10 +289,9 @@ function M.new(options)
 
     ---Formats the available direct child control IDs for one resolution error.
     ---@param view table
+    ---@param adapter dwarfspec.SubjectAdapter
     ---@return string
-    local function available_child_ids(view)
-        local mount = context:require_current('get')
-        local adapter = subject_adapter(mount)
+    local function available_child_ids(view, adapter)
         local ids = {}
         for _, child in ipairs(adapter:children(view)) do
             local child_id = adapter:name(child)
@@ -317,17 +330,21 @@ function M.new(options)
     ---Resolves normalized source-specific path segments through one adapter.
     ---@param segments dwarfspec.NativePathSegment[]
     ---@param diagnostic_path string
+    ---@param source dwarfspec.SubjectSource|nil
     ---@return any
-    function context:resolve_path_segments(segments, diagnostic_path)
+    function context:resolve_path_segments(segments, diagnostic_path, source)
         local mount = self:require_current('get')
         assert(type(segments) == 'table',
             'subject path resolution requires normalized segments')
         assert(type(diagnostic_path) == 'string' and diagnostic_path ~= '',
             'subject path resolution requires a diagnostic path')
-        local adapter = subject_adapter(mount)
+        source = source or mount.subject_source
+        assert(mount.subject_sources[source],
+            'subject source is not registered with the current mount')
+        local adapter = subject_adapter(mount, source)
         local view, failure = adapter:resolve(segments)
         if view then return view end
-        if uses_native_subjects(mount) and
+        if uses_native_subjects(mount, source) and
                 type(adapter.format_resolution_failure) == 'function' then
             assert(false, ('DwarfSpec get failed: mount=%s %s')
                 :format(tostring(mount.id),
@@ -343,7 +360,7 @@ function M.new(options)
              'segment=%q after=%q; available children=%s')
                 :format(diagnostic_path, tostring(mount.id), failure.segment,
                     parent_identity(resolved_path),
-                    available_child_ids(failure.parent)))
+                    available_child_ids(failure.parent, adapter)))
     end
 
     ---Returns the current mount that owns a native view, if any.
@@ -407,17 +424,33 @@ function M.new(options)
         return entry
     end
 
+    ---Registers one externally owned subject source with the current mount.
+    ---@param source dwarfspec.SubjectSource
+    ---@return dwarfspec.SubjectSource
+    function context:register_subject_source(source)
+        local mount = self:require_current('subject source selection')
+        assert(type(source) == 'table',
+            'subject source selection requires a source table')
+        subject_adapter(mount, source)
+        mount.subject_sources[source] = true
+        return source
+    end
+
     ---Creates and weakly tracks one subject in the current mount.
     ---@param view table
     ---@param control_path string|nil
     ---@param path_segments dwarfspec.NativePathSegment[]|nil
+    ---@param source dwarfspec.SubjectSource|nil
     ---@return table
-    function context:new_subject(view, control_path, path_segments)
+    function context:new_subject(view, control_path, path_segments, source)
         local mount = self:require_current('subject creation')
-        local source = mount.subject_source
-        local adapter = subject_adapter(mount)
+        source = source or mount.subject_source
+        assert(mount.subject_sources[source],
+            'subject source is not registered with the current mount')
+        local adapter = subject_adapter(mount, source)
         assert(adapter:contains(view) and
-            (uses_native_subjects(mount) or
+            (uses_native_subjects(mount, source) or
+                uses_overlay_subjects(source) or
                 self.view_mounts[view] == mount.id),
             'subject view is outside the current mount')
         local diagnostic_path = control_path or '<root>'
@@ -453,13 +486,14 @@ function M.new(options)
                 'current mount is %s'):format(operation, subject.control_path,
                     tostring(subject.mount_id), tostring(mount.id)))
         local descriptor = subject._descriptor
-        assert(descriptor and descriptor.source == mount.subject_source and
-            descriptor.adapter == subject_adapter(mount),
+        assert(descriptor and mount.subject_sources[descriptor.source] and
+            descriptor.adapter == subject_adapter(
+                mount, descriptor.source),
             ('DwarfSpec %s subject control_path=%q mount=%s descriptor ' ..
             'is no longer available'):format(operation,
                 subject.control_path, tostring(subject.mount_id)))
         local view = descriptor.adapter:resolve(descriptor.path_segments)
-        if uses_native_subjects(mount) then
+        if uses_native_subjects(mount, descriptor.source) then
             assert(view,
                 ('DwarfSpec %s rejected stale native subject path=%s ' ..
                 'mount=%s because the widget no longer resolves; call ' ..
@@ -482,7 +516,8 @@ function M.new(options)
         assert(view and
             current_identity == descriptor.captured_identity and
             descriptor.adapter:contains(view) and
-            self.view_mounts[view] == mount.id,
+            (uses_overlay_subjects(descriptor.source) or
+                self.view_mounts[view] == mount.id),
             ('DwarfSpec %s rejected subject control_path=%q mount=%s because ' ..
                 'its view is outside the current mount'):format(operation,
                     subject.control_path, tostring(subject.mount_id)))
@@ -659,6 +694,7 @@ function M.new(options)
             pinned_screen=attachment.pinned_screen,
             interaction_target=attachment.interaction_target,
             subject_source=attachment.subject_source,
+            subject_sources={},
             render_tracker=nil,
             adapter=nil,
             alive=false,
@@ -671,6 +707,9 @@ function M.new(options)
             command_subject=nil,
             options={},
         }
+        if mount.subject_source then
+            mount.subject_sources[mount.subject_source] = true
+        end
         mount.refresh_views = function() self:refresh_views(mount) end
         local setup_ok, setup_failure = xpcall(function()
             mount.render_tracker = self.render_tracker_factory()
@@ -770,6 +809,7 @@ function M.new(options)
             pinned_screen=nil,
             interaction_target=nil,
             subject_source=nil,
+            subject_sources={},
             command_subject=nil,
         }
         local prepare_ok, prepared = xpcall(function()
@@ -789,6 +829,7 @@ function M.new(options)
             pinned_screen=nil,
             interaction_target=nil,
             subject_source=nil,
+            subject_sources={},
             render_tracker=self.render_tracker_factory(),
             adapter=adapter,
             alive=false,
@@ -829,6 +870,7 @@ function M.new(options)
             validate_interaction_target(
                 mount.interaction_target, 'component adapter')
             local source_adapter = subject_adapter(mount)
+            mount.subject_sources[mount.subject_source] = true
             assert(source_adapter:root() == mount.root,
                 'component subject source must use the adapter result root')
             if mount.host_screen then

@@ -68,6 +68,8 @@ describe('DwarfSpec public mount commands', function()
     local original_dfhack
     local original_df
     local original_gui
+    local original_overlay_plugin
+    local overlay_state
     local simulated_inputs
     local wait_until_calls
     local component_mount_calls
@@ -77,6 +79,11 @@ describe('DwarfSpec public mount commands', function()
         original_dfhack = rawget(_G, 'dfhack')
         original_df = rawget(_G, 'df')
         original_gui = package.loaded.gui
+        original_overlay_plugin = package.loaded['plugins.overlay']
+        overlay_state = {db={}, config={}, index={}}
+        package.loaded['plugins.overlay'] = {
+            get_state=function() return overlay_state end,
+        }
         screen = nil
         component_mount_calls = 0
         native_widget_lookup_calls = 0
@@ -295,6 +302,7 @@ describe('DwarfSpec public mount commands', function()
     after_each(function()
         local cleanup_ok = cleanup.run(registry, 'ds command test teardown')
         package.loaded.gui = original_gui
+        package.loaded['plugins.overlay'] = original_overlay_plugin
         rawset(_G, 'dfhack', original_dfhack)
         rawset(_G, 'df', original_df)
         assert.is_true(cleanup_ok)
@@ -441,6 +449,183 @@ describe('DwarfSpec public mount commands', function()
             '{"Tabs", 0, "Right/panel"}', mixed.control_path)
         assert.equals(hidden, ds.get('Hidden'):raw())
         assert.equals(inactive, ds.get('Inactive'):raw())
+    end)
+
+    it('keeps default native and explicit overlay path collisions separate',
+            function()
+        local native_shared = make_native_widget(
+            'Shared', 'df.widget_text', nil, {
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        native_root.children = {native_shared}
+        local overlay_shared = {
+            view_id='Shared',
+            subviews={},
+            visible=true,
+            active=true,
+            text='overlay',
+        }
+        local overlay_root = {
+            view_id='overlay-root',
+            subviews={overlay_shared},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.ExampleOverlay'] = {
+            widget=overlay_root,
+        }
+        overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
+        ds.mount()
+
+        local native = ds.get('Shared')
+        local options = {
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.ExampleOverlay',
+        }
+        local overlay = ds.get('Shared', options)
+        local selected_root = ds.root(options)
+
+        assert.equals(native_shared, native:raw())
+        assert.equals(overlay_shared, overlay:raw())
+        assert.equals(overlay_root, selected_root:raw())
+        assert.equals(ds.ESubjectSource.NATIVE,
+            native._descriptor.source.kind)
+        assert.equals(ds.ESubjectSource.OVERLAY,
+            overlay._descriptor.source.kind)
+        assert.equals(native_root, ds.root():raw())
+    end)
+
+    it('rejects missing and disabled explicit overlay selections', function()
+        ds.mount()
+        local options = {
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.Missing',
+        }
+        assert.has_error(function() ds.root(options) end,
+            'DwarfSpec overlay subject selection could not find exact ' ..
+                'registry name="gui/example.Missing"')
+
+        overlay_state.db['gui/example.Disabled'] = {
+            widget={view_id='disabled', subviews={}},
+        }
+        overlay_state.config['gui/example.Disabled'] = {enabled=false}
+        options.overlay = 'gui/example.Disabled'
+        assert.has_error(function() ds.root(options) end,
+            'DwarfSpec overlay subject selection requires enabled registry ' ..
+                'name="gui/example.Disabled"')
+    end)
+
+    it('makes retained overlay subjects stale across a rescan replacement',
+            function()
+        local original = {
+            view_id='overlay-root',
+            subviews={},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.ExampleOverlay'] = {widget=original}
+        overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
+        ds.mount()
+        local options = {
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.ExampleOverlay',
+        }
+        local retained = ds.root(options)
+        local replacement = {
+            view_id='overlay-root',
+            subviews={},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.ExampleOverlay'] = {
+            widget=replacement,
+        }
+
+        local ok, failure = pcall(retained.raw, retained)
+        assert.is_false(ok)
+        assert.matches('stale overlay subject registry name=' ..
+            '"gui/example.ExampleOverlay" was replaced', failure, 1, true)
+        assert.equals(replacement, ds.root(options):raw())
+    end)
+
+    it('captures native and overlay trees from separate source roots',
+            function()
+        native_root.children = {
+            make_native_widget(
+                'NativeOnly', 'df.widget_text', nil, {
+                    flag={
+                        VISIBILITY_VISIBLE=true,
+                        VISIBILITY_ACTIVE=true,
+                    },
+                }),
+        }
+        local overlay_root = {
+            view_id='overlay-root',
+            subviews={{
+                view_id='OverlayOnly',
+                subviews={},
+                visible=true,
+                active=true,
+            }},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.ExampleOverlay'] = {
+            widget=overlay_root,
+        }
+        overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
+        ds.mount()
+
+        local native_tree = ds.capture_view_tree('native-tree')
+        local overlay_tree = ds.capture_view_tree('overlay-tree', {
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.ExampleOverlay',
+        })
+
+        assert.equals('NativeOnly', native_tree.children[1].view_id)
+        assert.equals('OverlayOnly', overlay_tree.children[1].view_id)
+        assert.equals('overlay-root', overlay_tree.view_id)
+        assert.equals(native_tree, run.captures['native-tree'])
+        assert.equals(overlay_tree, run.captures['overlay-tree'])
+    end)
+
+    it('leaves overlay registry lifecycle and configuration externally owned',
+            function()
+        local lifecycle_calls = 0
+        local overlay_root = {
+            view_id='overlay-root',
+            subviews={},
+            visible=true,
+            active=true,
+            overlay_onenable=function()
+                lifecycle_calls = lifecycle_calls + 1
+            end,
+            overlay_ondisable=function()
+                lifecycle_calls = lifecycle_calls + 1
+            end,
+        }
+        local entry = {widget=overlay_root}
+        local config = {enabled=true, x=7, y=9}
+        overlay_state.db['gui/example.ExampleOverlay'] = entry
+        overlay_state.config['gui/example.ExampleOverlay'] = config
+        ds.mount()
+        local selected = ds.root({
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.ExampleOverlay',
+        })
+
+        selected:inspect()
+        ds.unmount()
+
+        assert.equals(0, lifecycle_calls)
+        assert.equals(entry,
+            overlay_state.db['gui/example.ExampleOverlay'])
+        assert.equals(config,
+            overlay_state.config['gui/example.ExampleOverlay'])
+        assert.same({enabled=true, x=7, y=9}, config)
     end)
 
     it('uses clipped native bounds and rejects unusable pointer subjects',

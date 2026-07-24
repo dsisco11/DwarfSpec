@@ -192,9 +192,10 @@ function DS.await(description, query, options) end
 ---@return dwarfspec.Subject
 function DS.mount(component, options) end
 
----Returns a subject for the current component root.
+---Returns a subject for the selected current-mount root.
+---@param options? dwarfspec.SubjectSourceOptions
 ---@return dwarfspec.Subject
-function DS.root() end
+function DS.root(options) end
 
 ---Unmounts and settles the current component.
 function DS.unmount() end
@@ -218,8 +219,9 @@ function DS.redraw(view, options) end
 
 ---Captures the current implicit mount tree under one evidence name.
 ---@param name string
+---@param options? dwarfspec.SubjectSourceOptions
 ---@return table
-function DS.capture_view_tree(name) end
+function DS.capture_view_tree(name, options) end
 
 ---Moves the virtual pointer to an anchor inside one live view body.
 ---@param view? table|dwarfspec.Subject

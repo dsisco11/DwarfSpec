@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phases 0-5 complete
+Status: in progress; Phases 0-6 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -379,33 +379,33 @@ leaving their lifecycle and normal dispatch under DFHack control.
 
 ### Tasks
 
-☐ Read overlay state through `require('plugins.overlay').get_state()`.
-☐ Resolve only the exact requested overlay registry entry.
-☐ Require the requested overlay to be enabled and backed by a valid Lua view.
-☐ Pin the exact registry name and Lua widget identity.
-☐ Delegate overlay traversal, inspection, and raw access to the Lua-view
+☑ Read overlay state through `require('plugins.overlay').get_state()`.
+☑ Resolve only the exact requested overlay registry entry.
+☑ Require the requested overlay to be enabled and backed by a valid Lua view.
+☑ Pin the exact registry name and Lua widget identity.
+☑ Delegate overlay traversal, inspection, and raw access to the Lua-view
   adapter.
-☐ Revalidate the registry name-to-widget mapping before every subject
+☑ Revalidate the registry name-to-widget mapping before every subject
   operation.
-☐ Make existing overlay subjects stale after removal, disablement, or rescan
+☑ Make existing overlay subjects stale after removal, disablement, or rescan
   replacement.
-☐ Do not silently bind a stale subject to a new overlay widget with the same
+☑ Do not silently bind a stale subject to a new overlay widget with the same
   registry name.
-☐ Keep overlay subjects as separate roots rather than children of the native
+☑ Keep overlay subjects as separate roots rather than children of the native
   widget tree.
-☐ Ensure selecting an overlay source does not enable, disable, configure,
+☑ Ensure selecting an overlay source does not enable, disable, configure,
   position, or take ownership of the overlay.
-☐ Add tests for default native selection, explicit overlay selection, missing
+☑ Add tests for default native selection, explicit overlay selection, missing
   names, disabled overlays, native/overlay path-name collisions, exact raw
   identity, rescan replacement, and source-specific tree capture.
 
 ### Phase 6 exit gate
 
-☐ Native and overlay sources are explicit and cannot be confused by path
+☑ Native and overlay sources are explicit and cannot be confused by path
   collisions.
-☐ Overlay subjects preserve Lua-view behavior and exact identity.
-☐ Overlay lifecycle remains externally owned.
-☐ Focused source-selection tests pass.
+☑ Overlay subjects preserve Lua-view behavior and exact identity.
+☑ Overlay lifecycle remains externally owned.
+☑ Focused source-selection tests pass.
 
 ## Phase 7: Native input and pointer routing
 

@@ -97,6 +97,9 @@ local native_attachment_module = load_automation_module(package_root,
 local native_widget_adapter_module = load_automation_module(package_root,
     'dwarfspec.native_widget_adapter',
     '/src/dwarfspec/native_widget_adapter.lua')
+local overlay_registry_adapter_module = load_automation_module(package_root,
+    'dwarfspec.overlay_registry_adapter',
+    '/src/dwarfspec/overlay_registry_adapter.lua')
 local subject_paths_module = load_automation_module(package_root,
     'dwarfspec.subject_paths', '/src/dwarfspec/subject_paths.lua')
 local subject_requests_module = load_automation_module(package_root,
@@ -310,6 +313,45 @@ local TestStatus = load_automation_module(package_root,
     assert(type(native_attachment) == 'table' and
         type(native_attachment.attach) == 'function',
         'DwarfSpec requires a native attachment service')
+    local overlay_subject_source_factory =
+        mount_dependencies.overlay_subject_source_factory
+    if overlay_subject_source_factory == nil then
+        ---Creates a read-only source from DFHack's live overlay registry.
+        ---@param overlay_name string
+        ---@return dwarfspec.SubjectSource
+        overlay_subject_source_factory = function(overlay_name)
+            local overlay = require('plugins.overlay')
+            local gui = require('gui')
+            assert(type(overlay) == 'table' and
+                type(overlay.get_state) == 'function',
+                'DFHack overlay registry does not expose get_state()')
+
+            ---Returns whether a registry widget derives from gui.View.
+            ---@param value any
+            ---@return boolean
+            local function is_lua_view(value)
+                if type(value) ~= 'table' or
+                        type(value.subviews) ~= 'table' then
+                    return false
+                end
+                if type(gui.View) ~= 'table' then return true end
+                local class = getmetatable(value)
+                while type(class) == 'table' do
+                    if class == gui.View then return true end
+                    class = rawget(class, 'super')
+                end
+                return false
+            end
+
+            return overlay_registry_adapter_module.new_source(
+                overlay_name, {
+                    get_state=overlay.get_state,
+                    is_lua_view=is_lua_view,
+                })
+        end
+    end
+    assert(type(overlay_subject_source_factory) == 'function',
+        'DwarfSpec requires an overlay subject source factory')
     context.mount_context = mount_context_module.new({
         run=context.run,
         boundary=boundary,
@@ -375,6 +417,24 @@ local TestStatus = load_automation_module(package_root,
         end
         error(('DwarfSpec %s requires a subject from the current mount; ' ..
             'use ds.get(control_path) or ds.root()'):format(operation), 2)
+    end
+
+    ---Resolves and registers one explicit source for a native-screen mount.
+    ---@param mount table
+    ---@param request dwarfspec.SubjectSourceRequest
+    ---@return dwarfspec.SubjectSource
+    local function select_subject_source(mount, request)
+        assert(mount.subject_source.kind == ESubjectSource.NATIVE,
+            'component mounts do not accept subject source options')
+        if request.source == ESubjectSource.NATIVE then
+            return mount.subject_source
+        end
+        local source = overlay_subject_source_factory(request.overlay)
+        assert(type(source) == 'table' and
+            source.kind == ESubjectSource.OVERLAY and
+            source.overlay == request.overlay,
+            'overlay subject source factory returned an invalid source')
+        return context.mount_context:register_subject_source(source)
     end
 
     ---Copies caller wait options and applies project-wide defaults.
@@ -450,10 +510,24 @@ local TestStatus = load_automation_module(package_root,
         return context.mount_context:mount(component, options)
     end
 
-    ---Returns a subject for the current mount's default root.
+    ---Returns a subject for the selected current-mount root.
+    ---@param options dwarfspec.SubjectSourceOptions|nil
     ---@return table
-    function ds.root()
-        return context.mount_context:root()
+    function ds.root(options)
+        local mount = context.mount_context:require_current('root')
+        if mount.subject_source.kind ~= ESubjectSource.NATIVE then
+            assert(options == nil,
+                'component mounts do not accept subject source options')
+            return context.mount_context:root()
+        end
+        local request = subject_requests_module.root(options)
+        local source = select_subject_source(mount, request)
+        if source == mount.subject_source then
+            return context.mount_context:root()
+        end
+        local root = source.adapter:root()
+        return context.mount_context:new_subject(
+            root, '<root>', {}, source)
     end
 
     ---Releases the current native attachment or mounted component.
@@ -469,14 +543,16 @@ local TestStatus = load_automation_module(package_root,
         local mount = context.mount_context:require_current('get')
         local path_segments
         local diagnostic_path = control_path
+        local source = mount.subject_source
         if mount.subject_source.kind == ESubjectSource.NATIVE then
             local request = subject_requests_module.get(
                 control_path, options)
-            assert(request.source == ESubjectSource.NATIVE,
-                'overlay subject lookup is not available yet')
+            source = select_subject_source(mount, request)
             path_segments = request.path_segments
-            diagnostic_path =
-                subject_paths_module.format_native(path_segments)
+            if request.source == ESubjectSource.NATIVE then
+                diagnostic_path =
+                    subject_paths_module.format_native(path_segments)
+            end
         else
             assert(options == nil,
                 'component mounts do not accept subject source options')
@@ -489,7 +565,7 @@ local TestStatus = load_automation_module(package_root,
         local ok, view
         if path_segments then
             ok, view = pcall(context.mount_context.resolve_path_segments,
-                context.mount_context, path_segments, diagnostic_path)
+                context.mount_context, path_segments, diagnostic_path, source)
         else
             ok, view = pcall(context.mount_context.resolve_control_path,
                 context.mount_context, control_path)
@@ -502,7 +578,7 @@ local TestStatus = load_automation_module(package_root,
         end
         mount.command_subject = previous
         return context.mount_context:new_subject(
-            view, diagnostic_path, path_segments)
+            view, diagnostic_path, path_segments, source)
     end
 
     ---Returns a stable read-only diagnostic table for one live view.
@@ -539,11 +615,20 @@ local TestStatus = load_automation_module(package_root,
 
     ---Captures the current implicit mount tree under one evidence name.
     ---@param name string
+    ---@param options dwarfspec.SubjectSourceOptions|nil
     ---@return table
-    function ds.capture_view_tree(name)
+    function ds.capture_view_tree(name, options)
         local mount = context.mount_context:require_current(
             'capture_view_tree')
-        local adapter = mount.subject_source.adapter
+        local source = mount.subject_source
+        if mount.subject_source.kind == ESubjectSource.NATIVE then
+            local request = subject_requests_module.tree(options)
+            source = select_subject_source(mount, request)
+        else
+            assert(options == nil,
+                'component mounts do not accept subject source options')
+        end
+        local adapter = source.adapter
         local root = adapter:root()
         assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
             'capture name must be a relative identifier')

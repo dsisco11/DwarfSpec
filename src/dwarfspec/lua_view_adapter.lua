@@ -25,6 +25,7 @@ local M = {}
 
 ---@class dwarfspec.SubjectSource
 ---@field kind? DwarfSpecESubjectSource
+---@field overlay? string
 ---@field adapter dwarfspec.SubjectAdapter
 
 ---@class dwarfspec.LuaViewAdapter: dwarfspec.SubjectAdapter
