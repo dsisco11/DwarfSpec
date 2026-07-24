@@ -91,4 +91,18 @@ function M.native(control_path)
     return segments
 end
 
+---Formats a complete normalized native path for diagnostics.
+---@param path_segments dwarfspec.NativePathSegmentArray
+---@return string
+function M.format_native(path_segments)
+    assert(type(path_segments) == 'table',
+        'native path formatting requires path segments')
+    local formatted = {}
+    for _, segment in ipairs(path_segments) do
+        table.insert(formatted, type(segment) == 'string' and
+            ('%q'):format(segment) or tostring(segment))
+    end
+    return '{' .. table.concat(formatted, ', ') .. '}'
+end
+
 return M

@@ -1,6 +1,7 @@
 -- Run-owned component mount lifecycle and weak subject ownership.
 
 local subject_paths = require('dwarfspec.subject_paths')
+local ESubjectSource = require('dwarfspec.subject_sources')
 
 local M = {}
 
@@ -198,12 +199,21 @@ function M.new(options)
         return adapter
     end
 
+    ---Returns whether a mount uses the pinned native widget source.
+    ---@param mount table
+    ---@return boolean
+    local function uses_native_subjects(mount)
+        return mount and mount.subject_source and
+            mount.subject_source.kind == ESubjectSource.NATIVE
+    end
+
     ---Refreshes weak ownership and validates direct child control identities.
     ---@param mount table
     function context:refresh_views(mount)
         assert(type(mount) == 'table' and not mount.cleaned,
             'cannot refresh a cleaned component mount')
         local adapter = subject_adapter(mount)
+        local native_subjects = uses_native_subjects(mount)
         local owned_views = setmetatable({}, {__mode='k'})
         local visited = setmetatable({}, {__mode='k'})
 
@@ -214,31 +224,39 @@ function M.new(options)
             if visited[view] then return end
             visited[view] = true
             owned_views[view] = true
-            local child_ids = {}
-            for _, child in ipairs(adapter:children(view)) do
-                local child_id = adapter:name(child)
-                local child_path = nil
-                if type(child_id) == 'string' and child_id ~= '' then
-                    assert(not child_id:find('/', 1, true),
-                        ('DwarfSpec invalid component tree: parent ' ..
-                        'control_path=%q has child view_id=%q containing "/"')
-                            :format(parent_identity(control_path), child_id))
-                    assert(child_id ~= '.' and child_id ~= '..',
-                        ('DwarfSpec invalid component tree: parent ' ..
-                        'control_path=%q has reserved child view_id=%q')
-                            :format(parent_identity(control_path), child_id))
-                    assert(not child_ids[child_id],
-                        ('DwarfSpec invalid component tree: parent ' ..
-                        'control_path=%q has multiple direct children with ' ..
-                        'view_id=%q'):format(parent_identity(control_path),
-                            child_id))
-                    child_ids[child_id] = true
-                    if control_path ~= nil then
-                        child_path = control_path == '' and child_id or
-                            control_path .. '/' .. child_id
-                    end
+            if native_subjects then
+                for _, child in ipairs(adapter:children(view)) do
+                    visit(child, nil)
                 end
-                visit(child, child_path)
+            else
+                local child_ids = {}
+                for _, child in ipairs(adapter:children(view)) do
+                    local child_id = adapter:name(child)
+                    local child_path = nil
+                    if type(child_id) == 'string' and child_id ~= '' then
+                        assert(not child_id:find('/', 1, true),
+                            ('DwarfSpec invalid component tree: parent ' ..
+                            'control_path=%q has child view_id=%q ' ..
+                            'containing "/"'):format(
+                                parent_identity(control_path), child_id))
+                        assert(child_id ~= '.' and child_id ~= '..',
+                            ('DwarfSpec invalid component tree: parent ' ..
+                            'control_path=%q has reserved child view_id=%q')
+                                :format(parent_identity(control_path),
+                                    child_id))
+                        assert(not child_ids[child_id],
+                            ('DwarfSpec invalid component tree: parent ' ..
+                            'control_path=%q has multiple direct children ' ..
+                            'with view_id=%q'):format(
+                                parent_identity(control_path), child_id))
+                        child_ids[child_id] = true
+                        if control_path ~= nil then
+                            child_path = control_path == '' and child_id or
+                                control_path .. '/' .. child_id
+                        end
+                    end
+                    visit(child, child_path)
+                end
             end
         end
 
@@ -292,20 +310,38 @@ function M.new(options)
     ---@param control_path string
     ---@return table
     function context:resolve_control_path(control_path)
-        local mount = self:require_current('get')
         local segments = parse_control_path(control_path)
+        return self:resolve_path_segments(segments, control_path)
+    end
+
+    ---Resolves normalized source-specific path segments through one adapter.
+    ---@param segments dwarfspec.NativePathSegment[]
+    ---@param diagnostic_path string
+    ---@return any
+    function context:resolve_path_segments(segments, diagnostic_path)
+        local mount = self:require_current('get')
+        assert(type(segments) == 'table',
+            'subject path resolution requires normalized segments')
+        assert(type(diagnostic_path) == 'string' and diagnostic_path ~= '',
+            'subject path resolution requires a diagnostic path')
         local adapter = subject_adapter(mount)
         local view, failure = adapter:resolve(segments)
         if view then return view end
+        if uses_native_subjects(mount) and
+                type(adapter.format_resolution_failure) == 'function' then
+            assert(false, ('DwarfSpec get failed: mount=%s %s')
+                :format(tostring(mount.id),
+                    adapter:format_resolution_failure(failure, segments)))
+        end
         local resolved = {}
         for index = 1, failure.index - 1 do
             table.insert(resolved, segments[index])
         end
         local resolved_path = table.concat(resolved, '/')
         assert(false,
-            ('DwarfSpec get failed: control_path=%q mount=%s missing ' ..
-            'segment=%q after=%q; available children=%s')
-                :format(control_path, tostring(mount.id), failure.segment,
+             ('DwarfSpec get failed: control_path=%q mount=%s missing ' ..
+             'segment=%q after=%q; available children=%s')
+                :format(diagnostic_path, tostring(mount.id), failure.segment,
                     parent_identity(resolved_path),
                     available_child_ids(failure.parent)))
     end
@@ -374,16 +410,20 @@ function M.new(options)
     ---Creates and weakly tracks one subject in the current mount.
     ---@param view table
     ---@param control_path string|nil
+    ---@param path_segments dwarfspec.NativePathSegment[]|nil
     ---@return table
-    function context:new_subject(view, control_path)
+    function context:new_subject(view, control_path, path_segments)
         local mount = self:require_current('subject creation')
         local source = mount.subject_source
         local adapter = subject_adapter(mount)
-        assert(adapter:contains(view) and self.view_mounts[view] == mount.id,
+        assert(adapter:contains(view) and
+            (uses_native_subjects(mount) or
+                self.view_mounts[view] == mount.id),
             'subject view is outside the current mount')
         local diagnostic_path = control_path or '<root>'
-        local path_segments = diagnostic_path == '<root>' and {} or
-            parse_control_path(diagnostic_path)
+        path_segments = path_segments or
+            (diagnostic_path == '<root>' and {} or
+                parse_control_path(diagnostic_path))
         local subject = self.subject_module.new(self, mount, {
             mount_id=mount.id,
             source=source,
@@ -419,6 +459,25 @@ function M.new(options)
             'is no longer available'):format(operation,
                 subject.control_path, tostring(subject.mount_id)))
         local view = descriptor.adapter:resolve(descriptor.path_segments)
+        if uses_native_subjects(mount) then
+            assert(view,
+                ('DwarfSpec %s rejected stale native subject path=%s ' ..
+                'mount=%s because the widget no longer resolves; call ' ..
+                'ds.get(path) to select it again'):format(operation,
+                    subject.control_path, tostring(subject.mount_id)))
+            local current_identity = descriptor.adapter:identity(view)
+            assert(current_identity == descriptor.captured_identity,
+                ('DwarfSpec %s rejected stale native subject path=%s ' ..
+                'mount=%s because the widget was replaced; call ' ..
+                'ds.get(path) to select the replacement'):format(operation,
+                    subject.control_path, tostring(subject.mount_id)))
+            assert(descriptor.adapter:contains(view),
+                ('DwarfSpec %s rejected native subject path=%s mount=%s ' ..
+                'because the widget is outside the pinned hierarchy')
+                    :format(operation, subject.control_path,
+                        tostring(subject.mount_id)))
+            return view
+        end
         local current_identity = view and descriptor.adapter:identity(view)
         assert(view and
             current_identity == descriptor.captured_identity and

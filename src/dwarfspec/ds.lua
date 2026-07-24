@@ -94,9 +94,13 @@ local lua_view_adapter_module = load_automation_module(package_root,
 local native_attachment_module = load_automation_module(package_root,
     'dwarfspec.native_attachment',
     '/src/dwarfspec/native_attachment.lua')
-local native_root_adapter_module = load_automation_module(package_root,
-    'dwarfspec.native_root_adapter',
-    '/src/dwarfspec/native_root_adapter.lua')
+local native_widget_adapter_module = load_automation_module(package_root,
+    'dwarfspec.native_widget_adapter',
+    '/src/dwarfspec/native_widget_adapter.lua')
+local subject_paths_module = load_automation_module(package_root,
+    'dwarfspec.subject_paths', '/src/dwarfspec/subject_paths.lua')
+local subject_requests_module = load_automation_module(package_root,
+    'dwarfspec.subject_requests', '/src/dwarfspec/subject_requests.lua')
 local EMouseButton = load_automation_module(package_root,
     'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
 local EInputState = load_automation_module(package_root,
@@ -257,6 +261,38 @@ local TestStatus = load_automation_module(package_root,
         local is_native_widget_root =
             mount_dependencies.is_native_widget_root or
             function(root) return type(root) == 'userdata' end
+        local native_subject_source_factory =
+            mount_dependencies.native_subject_source_factory
+        if not native_subject_source_factory then
+            ---Resolves one direct native child through DFHack.
+            ---@param parent any
+            ---@param segment dwarfspec.NativePathSegment
+            ---@return any|nil
+            local function get_native_widget(parent, segment)
+                return dfhack.gui.getWidget(parent, segment)
+            end
+
+            ---Enumerates one native container through DFHack.
+            ---@param parent any
+            ---@return table
+            local function get_native_widget_children(parent)
+                return dfhack.gui.getWidgetChildren(parent)
+            end
+
+            ---Creates the default native source with live DFHack services.
+            ---@param root any
+            ---@param interaction_target dwarfspec.BorrowedNativeInteractionTarget
+            ---@return dwarfspec.SubjectSource
+            local function create_native_subject_source(
+                    root, interaction_target)
+                return native_widget_adapter_module.new_source(
+                    root, interaction_target, {
+                        get_widget=get_native_widget,
+                        get_children=get_native_widget_children,
+                    })
+            end
+            native_subject_source_factory=create_native_subject_source
+        end
         native_attachment = native_attachment_module.new({
             get_current_viewscreen=context.current_viewscreen,
             get_native_viewscreen=get_native_viewscreen,
@@ -267,9 +303,7 @@ local TestStatus = load_automation_module(package_root,
                     invalidate_screen=invalidate_native_screen,
                 })
             end,
-            subject_source_factory=
-                mount_dependencies.native_subject_source_factory or
-                native_root_adapter_module.new_source,
+            subject_source_factory=native_subject_source_factory,
         })
     end
     assert(type(native_attachment) == 'table' and
@@ -426,18 +460,39 @@ local TestStatus = load_automation_module(package_root,
         return context.mount_context:unmount()
     end
 
-    ---Selects one strict control path from the implicit current mount.
-    ---@param control_path string
+    ---Selects one strict source-specific path from the implicit mount.
+    ---@param control_path string|dwarfspec.NativePathSegment[]
+    ---@param options dwarfspec.SubjectSourceOptions|nil
     ---@return table
-    function ds.get(control_path)
+    function ds.get(control_path, options)
         local mount = context.mount_context:require_current('get')
+        local path_segments
+        local diagnostic_path = control_path
+        if mount.subject_source.kind == ESubjectSource.NATIVE then
+            local request = subject_requests_module.get(
+                control_path, options)
+            assert(request.source == ESubjectSource.NATIVE,
+                'overlay subject lookup is not available yet')
+            path_segments = request.path_segments
+            diagnostic_path =
+                subject_paths_module.format_native(path_segments)
+        else
+            assert(options == nil,
+                'component mounts do not accept subject source options')
+        end
         local previous = mount.command_subject
         mount.command_subject = {
             mount_id=mount.id,
-            control_path=control_path,
+            control_path=diagnostic_path,
         }
-        local ok, view = pcall(context.mount_context.resolve_control_path,
-            context.mount_context, control_path)
+        local ok, view
+        if path_segments then
+            ok, view = pcall(context.mount_context.resolve_path_segments,
+                context.mount_context, path_segments, diagnostic_path)
+        else
+            ok, view = pcall(context.mount_context.resolve_control_path,
+                context.mount_context, control_path)
+        end
         if not ok then
             local reported = context.mount_context:report_failure(
                 mount, 'get', view)
@@ -445,7 +500,8 @@ local TestStatus = load_automation_module(package_root,
             error(reported, 2)
         end
         mount.command_subject = previous
-        return context.mount_context:new_subject(view, control_path)
+        return context.mount_context:new_subject(
+            view, diagnostic_path, path_segments)
     end
 
     ---Returns a stable read-only diagnostic table for one live view.

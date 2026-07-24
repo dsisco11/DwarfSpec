@@ -11,7 +11,7 @@ local subject = assert(loadfile('src/dwarfspec/subject.lua'))()
 local lua_view_adapter = assert(loadfile(
     'src/dwarfspec/lua_view_adapter.lua'))()
 local interaction_target = require('dwarfspec.interaction_target')
-local native_root_adapter = require('dwarfspec.native_root_adapter')
+local native_widget_adapter = require('dwarfspec.native_widget_adapter')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
 ---@param parent table|nil
@@ -685,7 +685,10 @@ describe('DwarfSpec mount context', function()
                 pinned_screen=pinned,
                 interaction_target=target,
                 subject_source=
-                    native_root_adapter.new_source(root, target),
+                    native_widget_adapter.new_source(root, target, {
+                        get_widget=function() return nil end,
+                        get_children=function() return {} end,
+                    }),
             }
         end)
 

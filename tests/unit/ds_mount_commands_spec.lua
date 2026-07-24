@@ -36,6 +36,22 @@ local function make_class(parent)
     return class
 end
 
+---Creates one injected native widget fixture with exact ordered children.
+---@param name string|nil
+---@param type_name string
+---@param children table[]|nil
+---@param fields table|nil
+---@return table
+local function make_native_widget(name, type_name, children, fields)
+    local widget = {
+        name=name,
+        _type={_name=type_name},
+        children=children or {},
+    }
+    for key, value in pairs(fields or {}) do widget[key] = value end
+    return widget
+end
+
 describe('DwarfSpec public mount commands', function()
     local ds
     local registry
@@ -55,6 +71,7 @@ describe('DwarfSpec public mount commands', function()
     local simulated_inputs
     local wait_until_calls
     local component_mount_calls
+    local native_widget_lookup_calls
 
     before_each(function()
         original_dfhack = rawget(_G, 'dfhack')
@@ -62,10 +79,32 @@ describe('DwarfSpec public mount commands', function()
         original_gui = package.loaded.gui
         screen = nil
         component_mount_calls = 0
+        native_widget_lookup_calls = 0
         simulated_inputs = {}
         wait_until_calls = 0
         rawset(_G, 'dfhack', {
             screen={getMousePos=function() return 90, 91 end},
+            gui={
+                getWidget=function(parent, segment)
+                    native_widget_lookup_calls =
+                        native_widget_lookup_calls + 1
+                    local children = parent.children or {}
+                    if type(segment) == 'number' then
+                        return children[segment + 1]
+                    end
+                    for _, child in ipairs(children) do
+                        if child.name == segment then return child end
+                    end
+                    return nil
+                end,
+                getWidgetChildren=function(parent)
+                    local result = {}
+                    for index, child in ipairs(parent.children or {}) do
+                        result[index] = child
+                    end
+                    return result
+                end,
+            },
         })
         rawset(_G, 'df', {
             global={
@@ -142,7 +181,11 @@ describe('DwarfSpec public mount commands', function()
                 return assert(result)
             end,
         }
-        native_root = {kind='native-widget-root'}
+        native_root = {
+            kind='native-widget-root',
+            _type={_name='df.widget_container'},
+            children={},
+        }
         native_screen = {
             name='native-screen',
             widgets=native_root,
@@ -364,6 +407,89 @@ describe('DwarfSpec public mount commands', function()
             'DwarfSpec native subject resolution rejected stale ' ..
             'native-screen mount; pinned viewscreen is no longer current')
         assert.equals(0, native_screen.dismiss_calls)
+    end)
+
+    it('resolves native named, indexed, mixed, and slash-bearing paths',
+            function()
+        local slash = make_native_widget(
+            'Right/panel', 'df.widget_textst')
+        local row = make_native_widget(nil, 'df.widget_container', {slash})
+        local tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {row})
+        local hidden = make_native_widget(
+            'Hidden', 'df.widget_textst', nil, {
+                visible=false,
+            })
+        local inactive = make_native_widget(
+            'Inactive', 'df.widget_textst', nil, {
+                active=false,
+            })
+        native_root.children = {tabs, hidden, inactive}
+        ds.mount()
+
+        local named = ds.get('Tabs')
+        local lookup_count = native_widget_lookup_calls
+        assert.equals(tabs, named:raw())
+        assert.equals(lookup_count + 1, native_widget_lookup_calls)
+        assert.equals(tabs, ds.get({0}):raw())
+        local mixed = ds.get({'Tabs', 0, 'Right/panel'})
+        assert.equals(slash, mixed:raw())
+        assert.equals(
+            '{"Tabs", 0, "Right/panel"}', mixed.control_path)
+        assert.equals(hidden, ds.get('Hidden'):raw())
+        assert.equals(inactive, ds.get('Inactive'):raw())
+    end)
+
+    it('makes a retained native subject stale after removal', function()
+        local original = make_native_widget(
+            'Status', 'df.widget_textst')
+        native_root.children = {original}
+        ds.mount()
+        local selected = ds.get('Status')
+        native_root.children = {}
+
+        assert.has_error(function() selected:raw() end,
+            'DwarfSpec subject raw access rejected stale native subject ' ..
+            'path={"Status"} mount=1 because the widget no longer resolves; ' ..
+                'call ds.get(path) to select it again')
+    end)
+
+    it('requires a new native subject after same-path replacement', function()
+        local original = make_native_widget(
+            'Status', 'df.widget_textst')
+        native_root.children = {original}
+        ds.mount()
+        local selected = ds.get('Status')
+        local replacement = make_native_widget(
+            'Status', 'df.widget_textst')
+        native_root.children = {replacement}
+
+        assert.has_error(function() selected:raw() end,
+            'DwarfSpec subject raw access rejected stale native subject ' ..
+            'path={"Status"} mount=1 because the widget was replaced; call ' ..
+                'ds.get(path) to select the replacement')
+        assert.equals(replacement, ds.get('Status'):raw())
+    end)
+
+    it('reports bounded native child diagnostics for missing paths',
+            function()
+        for index = 0, 14 do
+            table.insert(native_root.children, make_native_widget(
+                ('Child%02d'):format(index), 'df.widget_textst'))
+        end
+        ds.mount()
+
+        local ok, failure = pcall(ds.get, 'Missing')
+
+        assert.is_false(ok)
+        assert.matches('native_path={"Missing"}', failure, 1, true)
+        assert.matches('missing segment%[1%]="Missing"', failure)
+        assert.matches('parent_name="<native%-root>"', failure)
+        assert.matches('parent_type="df.widget_container"',
+            failure, 1, true)
+        assert.matches('named children=%[', failure)
+        assert.matches('indexed children=%[', failure)
+        assert.matches('%.%.%. %(%+3 more%)', failure)
     end)
 
     it('reports missing control paths with current mount identity',

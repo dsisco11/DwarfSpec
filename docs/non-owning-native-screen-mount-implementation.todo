@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phases 0-3 complete
+Status: in progress; Phases 0-4 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -293,35 +293,35 @@ staleness rules.
 
 ### Tasks
 
-☐ Implement a native widget adapter rooted at the exact pinned
+✔ Implement a native widget adapter rooted at the exact pinned
   `viewscreen.widgets` container.
-☐ Resolve each path segment through `dfhack.gui.getWidget()` one segment at a
+✔ Resolve each path segment through `dfhack.gui.getWidget()` one segment at a
   time.
-☐ Enumerate ordered children with `dfhack.gui.getWidgetChildren()`.
-☐ Support exact native names and zero-based child indices.
-☐ Preserve and display the complete requested path in diagnostics.
-☐ On lookup failure, report the failing segment, resolved parent name, native
+✔ Enumerate ordered children with `dfhack.gui.getWidgetChildren()`.
+✔ Support exact native names and zero-based child indices.
+✔ Preserve and display the complete requested path in diagnostics.
+✔ On lookup failure, report the failing segment, resolved parent name, native
   parent type, and bounded named/indexed child summaries.
-☐ Capture the native typed-reference identity when a subject is created.
-☐ Retain the subject locator strongly enough to reacquire a Lua userdata
+✔ Capture the native typed-reference identity when a subject is created.
+✔ Retain the subject locator strongly enough to reacquire a Lua userdata
   wrapper for each operation.
-☐ Validate current-screen identity before reacquiring or dereferencing a native
+✔ Validate current-screen identity before reacquiring or dereferencing a native
   widget.
-☐ Require the reacquired widget to equal the captured typed-reference identity.
-☐ Mark a subject stale when its widget is removed or replaced at the same path.
-☐ Require callers to use a new `ds.get()` after a replacement.
-☐ Make `Subject:raw()` return the exact reacquired typed DF userdata.
-☐ Keep invisible and inactive descendants discoverable.
-☐ Add tests for named lookup, indexed lookup, mixed paths, `/` in a name,
+✔ Require the reacquired widget to equal the captured typed-reference identity.
+✔ Mark a subject stale when its widget is removed or replaced at the same path.
+✔ Require callers to use a new `ds.get()` after a replacement.
+✔ Make `Subject:raw()` return the exact reacquired typed DF userdata.
+✔ Keep invisible and inactive descendants discoverable.
+✔ Add tests for named lookup, indexed lookup, mixed paths, `/` in a name,
   missing segments, bounded diagnostics, invisible/inactive targets, removal,
   replacement, screen transition, and exact raw identity.
 
 ### Phase 4 exit gate
 
-☐ Native lookup and child diagnostics are deterministic and bounded.
-☐ No native widget is dereferenced before current-screen validation.
-☐ Retained subjects cannot silently change identity.
-☐ Focused traversal and liveness tests pass.
+✔ Native lookup and child diagnostics are deterministic and bounded.
+✔ No native widget is dereferenced before current-screen validation.
+✔ Retained subjects cannot silently change identity.
+✔ Focused traversal and liveness tests pass.
 
 ## Phase 5: Native inspection, bounds, text, and tree capture
 
@@ -942,7 +942,69 @@ as the work proceeds.
 
 ### Phase 4 evidence
 
-- Pending.
+- Replaced the temporary root-only adapter with
+  `src/dwarfspec/native_widget_adapter.lua`. The adapter pins the exact native
+  widget root, accepts injected `getWidget` and `getWidgetChildren` services,
+  calls `getWidget` once for each normalized path segment, and copies the
+  ordered child sequence returned by DFHack without filtering on widget state.
+- The production native source in `src/dwarfspec/ds.lua` delegates directly to
+  `dfhack.gui.getWidget(parent, segment)` and
+  `dfhack.gui.getWidgetChildren(parent)`. Native strings and authoritative
+  segment arrays flow through the Phase 2 request/path contracts before
+  adapter resolution; component paths retain their existing behavior.
+- `mount_context.refresh_views()` now distinguishes the immutable native source
+  from Lua component sources. Native names may be absent, duplicated, reserved
+  component words, or contain `/`; they are never subjected to component
+  `view_id` validation, and every ordered descendant remains discoverable.
+- Native subjects retain a copied segment locator, the selected source and
+  adapter, and the identity captured at creation. Every `Subject:raw()` or
+  fluent operation resolves the locator again, captures the current identity,
+  and compares it with the retained identity before returning the exact
+  reacquired raw widget.
+- Stable identity is injectable for wrapper-based unit fixtures and defaults
+  to DFHack typed-reference equality in production. The adapter keeps reached
+  identities in a strong linear set so distinct Lua userdata wrappers that
+  compare as the same typed DF reference remain recognized without relying on
+  Lua table-key identity.
+- Native screen currentness is checked before every root, lookup, child,
+  identity, name, type, containment, and inspection access. It is checked both
+  before and after injected widget helper calls, so a helper cannot cause a
+  transition and leave later widget dereferences unguarded.
+- Missing lookup diagnostics include the complete type-preserving normalized
+  path, failing segment and index, resolved parent name and native type, and
+  separate named and zero-based indexed child summaries. Labels are bounded to
+  80 characters and each summary is capped at 12 entries with an explicit
+  remaining count.
+- Removal now reports that the retained widget no longer resolves.
+  Same-path replacement reports an identity change and explicitly requires a
+  new `ds.get(path)` to select the replacement. Neither condition silently
+  rebinds the retained subject.
+- Updated `src/ds.d.lua` so `DS.get()` declares string or native segment-array
+  paths plus source options. Component regression behavior and exact Lua-table
+  subjects remain unchanged.
+- Added `tests/unit/native_widget_adapter_spec.lua` and extended the public
+  mount suite. Coverage includes named, indexed, mixed, and slash-bearing
+  paths; ordered helper calls; stable wrapper identity; exact raw
+  reacquisition; invisible/inactive targets; missing segments; deterministic
+  bounded diagnostics; removal; replacement; explicit reselection; and screen
+  transitions before native service access.
+- Focused commands, run sequentially:
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec native widget adapter"`:
+    `4 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"`:
+    `20 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec subject source and path contracts"`:
+    `9 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec mount context"`:
+    `27 successes / 0 failures / 0 errors / 0 pending`.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `312 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 214 files.`
+- `git diff --check` and `git diff --cached --check` passed.
+- No live DFHack result or package build is claimed in this phase. Native
+  bounds, flags, text extraction, optional inspection fields, and bounded tree
+  capture remain Phase 5 work.
 
 ### Phase 5 evidence
 

@@ -2,7 +2,7 @@
 
 local interaction_target = require('dwarfspec.interaction_target')
 local native_attachment = require('dwarfspec.native_attachment')
-local native_root_adapter = require('dwarfspec.native_root_adapter')
+local native_widget_adapter = require('dwarfspec.native_widget_adapter')
 
 describe('DwarfSpec native viewscreen attachment', function()
     local current
@@ -44,7 +44,11 @@ describe('DwarfSpec native viewscreen attachment', function()
             end,
             subject_source_factory=function(root_value, target)
                 source_factory_calls = source_factory_calls + 1
-                return native_root_adapter.new_source(root_value, target)
+                return native_widget_adapter.new_source(
+                    root_value, target, {
+                        get_widget=function() return nil end,
+                        get_children=function() return {} end,
+                    })
             end,
         })
     end)

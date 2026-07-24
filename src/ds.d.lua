@@ -192,10 +192,11 @@ function DS.root() end
 ---Unmounts and settles the current component.
 function DS.unmount() end
 
----Selects one strict control path from the implicit current mount.
----@param control_path string
+---Selects one strict source-specific path from the implicit current mount.
+---@param control_path string|dwarfspec.NativePath
+---@param options? dwarfspec.SubjectSourceOptions
 ---@return dwarfspec.Subject
-function DS.get(control_path) end
+function DS.get(control_path, options) end
 
 ---Returns a stable read-only diagnostic table for one live view or subject.
 ---@param view? table|dwarfspec.Subject

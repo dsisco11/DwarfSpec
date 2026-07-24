@@ -21,6 +21,7 @@ local M = {}
 ---@field cleanup fun(self: dwarfspec.SubjectAdapter): boolean
 
 ---@class dwarfspec.SubjectSource
+---@field kind? DwarfSpecESubjectSource
 ---@field adapter dwarfspec.SubjectAdapter
 
 ---@class dwarfspec.LuaViewAdapter: dwarfspec.SubjectAdapter
