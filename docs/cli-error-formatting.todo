@@ -1,6 +1,6 @@
 # CLI diagnostic output implementation
 
-Status: planned
+Status: in progress; Phase 0 complete
 
 Related design: `docs/test-runner-service-design.md`
 
@@ -121,27 +121,54 @@ workspace folder.
 Goal: characterize the current event and Busted callback data before changing
 the public output.
 
-☐ Confirm the workspace is the intended DwarfSpec repository before editing
+✔ Confirm the workspace is the intended DwarfSpec repository before editing
   implementation files.
-☐ Record the current result of `tools/Check-Lua.ps1`.
-☐ Record the current result of `tools/Run-UnitTests.ps1`.
-☐ Add representative problem fixtures for an assertion failure, a test error,
+✔ Record the current result of `tools/Check-Lua.ps1`.
+✔ Record the current result of `tools/Run-UnitTests.ps1`.
+✔ Add representative problem fixtures for an assertion failure, a test error,
   a hook or file error, and a problem without a source location.
-☐ Characterize the Busted trace values received by `baseTestFailure`,
+✔ Characterize the Busted trace values received by `baseTestFailure`,
   `baseTestError`, and `baseError`, including table and string forms.
-☐ Include Windows and Unix-like source paths, a project root containing
+✔ Include Windows and Unix-like source paths, a project root containing
   spaces, a missing column, a multiline message, and ANSI/control characters
   in the fixture set.
-☐ Record the current human-readable `problem.recorded` output so intentional
+✔ Record the current human-readable `problem.recorded` output so intentional
   changes are distinguishable from unrelated regressions.
 
 Phase 0 exit gate:
 
-☐ Baseline syntax and unit results are recorded in the evidence ledger.
-☐ Fixtures describe DwarfSpec and Busted data only; they contain no mocked
+✔ Baseline syntax and unit results are recorded in the evidence ledger.
+✔ Fixtures describe DwarfSpec and Busted data only; they contain no mocked
   VS Code APIs or Problems-panel assertions.
-☐ The source-location precedence needed by the fixtures is explicit before
+✔ The source-location precedence needed by the fixtures is explicit before
   implementation begins.
+
+Phase 0 characterization:
+
+- Repository identity: `D:/CODE/DFHack/DwarfSpec`, with `origin` set to
+  `https://github.com/dsisco11/DwarfSpec.git`.
+- Baseline `.\tools\Check-Lua.ps1`: passed for 195 Lua files on 2026-07-24.
+- Baseline `.\tools\Run-UnitTests.ps1`: 250 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-24.
+- Stock Busted 2.3.0 calls all three problem callbacks with trace tables from
+  `busted.getTrace`; those tables expose `source`, `short_src`, `currentline`,
+  and `traceback`. File-loader `baseError` calls can carry an empty trace
+  table. DwarfSpec's existing callback boundary also accepts already-rendered
+  string traces unchanged. `tests/support/problem_fixtures.lua` records table
+  and string forms for every callback.
+- Current external `problem.recorded` output is
+  `<KIND> <full test or hook name>: <message>`, specifically `FAILURE ...` for
+  assertion failures and `ERROR ...` for errors. It preserves embedded CR,
+  LF, tab, vertical-tab, and ANSI bytes, so a multiline message currently
+  produces more than one physical terminal line.
+- Source-location precedence is locked in
+  `tests/support/problem_fixtures.lua`: eligible structured project trace,
+  internal-frame rejection, eligible selected-file string trace, element
+  source fallback, then no location. Structured fixtures deliberately leave
+  column absent because Busted 2.3.0 trace tables do not provide one.
+- Fixture verification after addition:
+  `.\tools\Run-UnitTests.ps1` reported 255 successes, 0 failures, 0 errors,
+  and 0 pending; `.\tools\Check-Lua.ps1` passed for 197 Lua files.
 
 ## Phase 1: Configuration and immutable identifiers
 
@@ -356,7 +383,7 @@ Record evidence only after running the corresponding command.
 
 | Phase | Evidence | Result |
 |---|---|---|
-| 0 | Baseline repository, syntax, unit, and fixture characterization | Pending |
+| 0 | Baseline repository, syntax, unit, and fixture characterization | Complete: intended root and remote confirmed; baseline 195-file syntax and 250-test unit suites passed; 4 reusable problem fixtures and 5 fixture-contract tests added; post-fixture 197-file syntax and 255-test unit suites passed on 2026-07-24 |
 | 1 | Configuration and immutable enum unit tests | Pending |
 | 2 | Structured source-location and event-schema unit tests | Pending |
 | 3 | Exact formatter unit tests | Pending |
