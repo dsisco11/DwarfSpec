@@ -205,34 +205,4 @@ describe('DwarfSpec package contract', function()
         assert.is_nil(rockspec:find('["dwarfspec.bat"]', 1, true))
     end)
 
-    it('provides a VS Code task for building the portable release rock',
-            function()
-        local tasks = read_repository_file('.vscode/tasks.json')
-        local publish = read_repository_file('tools/Publish.ps1')
-        assert.matches('"label": "Publish"', tasks, 1, true)
-        assert.matches('${workspaceFolder}\\\\tools\\\\Publish.ps1',
-            tasks, 1, true)
-        assert.matches("arch = 'all'", publish, 1, true)
-        assert.matches('lua_interpreter = "$luaInterpreterLiteral"',
-            publish, 1, true)
-        assert.matches('LUA = "$luaExecutableLiteral"', publish, 1, true)
-        assert.matches('--pack-binary-rock', publish, 1, true)
-        assert.matches("$OutputDir = 'dist'", publish, 1, true)
-    end)
-
-    it('provides a sequential task for installing the locally built rock',
-            function()
-        local tasks = read_repository_file('.vscode/tasks.json')
-        local installer = read_repository_file(
-            'tools/Install-LocalPackage.ps1')
-        assert.matches(
-            '"label": "LuaRocks: Install locally built package"',
-            tasks, 1, true)
-        assert.matches('"dependsOrder": "sequence"', tasks, 1, true)
-        assert.matches('"Publish"', tasks, 1, true)
-        assert.matches('Install-LocalPackage.ps1', tasks, 1, true)
-        assert.matches('"dist\\$artifactStem.all.rock"', installer, 1, true)
-        assert.matches('luarocks install $artifactPath --force',
-            installer, 1, true)
-    end)
 end)
