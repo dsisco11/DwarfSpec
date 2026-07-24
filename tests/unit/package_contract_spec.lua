@@ -43,6 +43,12 @@ describe('DwarfSpec package contract', function()
         assert.is_nil(rockspec:find('< 5.4', 1, true))
     end)
 
+    it('declares argparse as a direct CLI dependency', function()
+        local rockspec = read_repository_file(ROCKSPEC_PATH)
+        assert.matches('"argparse == 0.7.2-1"', rockspec, 1, true)
+        assert.is_table(require('argparse'))
+    end)
+
     it('publishes the component boundary module', function()
         local rockspec = read_repository_file(ROCKSPEC_PATH)
         assert.matches('["dwarfspec.component"] = ' ..

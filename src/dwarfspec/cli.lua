@@ -1,5 +1,6 @@
 -- Command-line parsing and dispatch for the DwarfSpec executable.
 
+local argparse = require('argparse')
 local glob = require('dwarfspec.glob')
 local config = require('dwarfspec.config')
 local dotenv = require('dwarfspec.dotenv')
@@ -252,110 +253,127 @@ local function defaults(package_root)
     }
 end
 
----Consumes one option value from --name=value or the following argument.
----@param argv string[]
----@param index integer
----@param inline_value string|nil
+---Adds one value-taking option when it is accepted by a command.
+---@param parser table
+---@param allowed table
 ---@param name string
----@return string, integer
-local function option_value(argv, index, inline_value, name)
-    if inline_value ~= nil then
-        assert(inline_value ~= '', '--' .. name .. ' must not be empty')
-        return inline_value, index
-    end
-    local value = argv[index + 1]
-    assert(value and value:sub(1, 2) ~= '--',
-        '--' .. name .. ' requires a value')
-    return value, index + 1
+---@param target string
+---@param multiple boolean|nil
+local function add_option(parser, allowed, name, target, multiple)
+    if not allowed[name] then return end
+    local option = parser:option('--' .. name):target(target)
+    if multiple then option:count('*') end
 end
 
----Parses common list, run, and abort command options.
+---Builds an argparse parser for one DwarfSpec command.
+---@param command string
+---@param allowed table
+---@return table
+local function command_parser(command, allowed)
+    local parser = argparse('dwarfspec ' .. command)
+        :add_help(false)
+    parser:argument('positionals'):args('*')
+    add_option(parser, allowed, 'project-root', 'project_root')
+    add_option(parser, allowed, 'test-glob', 'test_glob')
+    add_option(parser, allowed, 'runner', 'runner')
+    add_option(parser, allowed, 'filter', 'filters', true)
+    add_option(parser, allowed, 'filter-out', 'filter_out', true)
+    add_option(parser, allowed, 'name', 'names', true)
+    add_option(parser, allowed, 'tag', 'tags', true)
+    add_option(parser, allowed, 'exclude-tag', 'exclude_tags', true)
+    add_option(parser, allowed, 'repeat', 'repeat_count')
+    add_option(parser, allowed, 'timeout', 'timeout_seconds')
+    add_option(parser, allowed, 'queue-timeout', 'queue_timeout_seconds')
+    add_option(parser, allowed, 'poll-interval-ms', 'poll_interval_ms')
+    add_option(parser, allowed, 'startup-delay-frames', 'startup_delay_frames')
+    add_option(parser, allowed, 'lease-timeout-ms', 'lease_timeout_ms')
+    add_option(parser, allowed, 'lease-check-frames', 'lease_check_frames')
+    add_option(parser, allowed, 'results', 'result_path')
+    add_option(parser, allowed, 'run-id', 'run_id')
+    add_option(parser, allowed, 'generation', 'generation')
+    add_option(parser, allowed, 'reason', 'reason')
+    if allowed['no-results'] then
+        parser:flag('--no-results'):target('no_results')
+    end
+    if allowed.verbose then parser:flag('--verbose'):target('verbose') end
+    return parser
+end
+
+---Normalizes argparse diagnostics to DwarfSpec's established CLI wording.
+---@param message any
+---@return string
+local function parser_message(message)
+    return tostring(message):gsub("^unknown option '([^']+)'",
+        'unknown option: %1')
+end
+
+---Validates parsed command values that have DwarfSpec-specific semantics.
+---@param options table
+local function validate_options(options)
+    if options.test_glob then glob.compile(options.test_glob) end
+    if options.repeat_count then
+        options.repeat_count = positive_integer('repeat', options.repeat_count)
+    end
+    if options.timeout_seconds then
+        options.timeout_seconds = positive_number('timeout',
+            options.timeout_seconds)
+    end
+    if options.queue_timeout_seconds then
+        if options.queue_timeout_seconds == 'unlimited' then
+            options.queue_timeout_seconds = nil
+        else
+            options.queue_timeout_seconds = positive_number('queue-timeout',
+                options.queue_timeout_seconds)
+        end
+    end
+    if options.poll_interval_ms then
+        options.poll_interval_ms = positive_integer('poll-interval-ms',
+            options.poll_interval_ms)
+    end
+    if options.startup_delay_frames then
+        options.startup_delay_frames = positive_integer('startup-delay-frames',
+            options.startup_delay_frames)
+    end
+    if options.lease_timeout_ms then
+        options.lease_timeout_ms = positive_integer('lease-timeout-ms',
+            options.lease_timeout_ms)
+    end
+    if options.lease_check_frames then
+        options.lease_check_frames = positive_integer('lease-check-frames',
+            options.lease_check_frames)
+    end
+    if options.run_id then
+        assert(options.run_id:match('^[%w_.-]+$'),
+            '--run-id contains unsupported characters')
+    end
+    if options.generation then
+        options.generation = positive_integer('generation', options.generation)
+    end
+    if options.reason then
+        assert(#options.reason <= 1024,
+            '--reason must not exceed 1024 bytes')
+    end
+end
+
+---Parses options through argparse and applies DwarfSpec defaults and validation.
 ---@param argv string[]
 ---@param start_index integer
 ---@param package_root string
 ---@param allowed table
 ---@return table, string[]
 local function parse_options(argv, start_index, package_root, allowed)
+    local arguments = {}
+    for index = start_index, #argv do table.insert(arguments, argv[index]) end
+    local parsed_ok, parsed = command_parser(argv[1], allowed):pparse(arguments)
+    assert(parsed_ok, 'command syntax: ' .. parser_message(parsed))
     local options = defaults(package_root)
-    local positionals = {}
-    local index = start_index
-    while index <= #argv do
-        local argument = argv[index]
-        local name, inline_value = argument:match('^%-%-([%w-]+)=(.*)$')
-        if not name then name = argument:match('^%-%-([%w-]+)$') end
-        if not name then
-            table.insert(positionals, argument)
-        else
-            assert(allowed[name], 'unknown option: --' .. name)
-        end
-        if name then
-            if name == 'verbose' then
-                assert(inline_value == nil, '--verbose does not take a value')
-                options.verbose = true
-            elseif name == 'no-results' then
-                assert(inline_value == nil,
-                    '--no-results does not take a value')
-                options.result_path = false
-            else
-                local value
-                value, index = option_value(argv, index, inline_value, name)
-                if name == 'project-root' then
-                    options.project_root = value
-                elseif name == 'test-glob' then
-                    glob.compile(value)
-                    options.test_glob = value
-                elseif name == 'runner' then
-                    options.runner = value
-                elseif name == 'filter' then
-                    table.insert(options.filters, value)
-                elseif name == 'filter-out' then
-                    table.insert(options.filter_out, value)
-                elseif name == 'name' then
-                    table.insert(options.names, value)
-                elseif name == 'tag' then
-                    table.insert(options.tags, value)
-                elseif name == 'exclude-tag' then
-                    table.insert(options.exclude_tags, value)
-                elseif name == 'repeat' then
-                    options.repeat_count = positive_integer(name, value)
-                elseif name == 'timeout' then
-                    options.timeout_seconds = positive_number(name, value)
-                elseif name == 'queue-timeout' then
-                    if value == 'unlimited' then
-                        options.queue_timeout_seconds = nil
-                    else
-                        options.queue_timeout_seconds = positive_number(
-                            name, value)
-                    end
-                elseif name == 'poll-interval-ms' then
-                    options.poll_interval_ms = positive_integer(name, value)
-                elseif name == 'startup-delay-frames' then
-                    options.startup_delay_frames = positive_integer(name,
-                        value)
-                elseif name == 'lease-timeout-ms' then
-                    options.lease_timeout_ms = positive_integer(name, value)
-                elseif name == 'lease-check-frames' then
-                    options.lease_check_frames = positive_integer(name, value)
-                elseif name == 'results' then
-                    options.result_path = value
-                elseif name == 'run-id' then
-                    assert(value:match('^[%w_.-]+$'),
-                        '--run-id contains unsupported characters')
-                    options.run_id = value
-                elseif name == 'generation' then
-                    options.generation = positive_integer(name, value)
-                elseif name == 'reason' then
-                    assert(#value <= 1024,
-                        '--reason must not exceed 1024 bytes')
-                    options.reason = value
-                else
-                    error('unknown option: --' .. name, 2)
-                end
-            end
-        end
-        index = index + 1
+    for name, value in pairs(parsed) do
+        if name ~= 'positionals' and value ~= nil then options[name] = value end
     end
-    return options, positionals
+    if options.no_results then options.result_path = false end
+    options.no_results = nil
+    validate_options(options)
+    return options, parsed.positionals or {}
 end
 
 ---Prints command-specific help without performing discovery or connection.
@@ -600,7 +618,8 @@ function M.main(argv, context)
     local message = clean_message(type(result) == 'table' and
         result.message or result)
     write(errors, message)
-    if message:match('malformed glob:') or message:match('unknown option:') or
+    if message:match('command syntax:') or message:match('malformed glob:') or
+            message:match('unknown option:') or
             message:match('accepts at most') or message:match('requires') or
             message:match('does not accept') or message:match('must be') or
             message:match('unknown command:') or

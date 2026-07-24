@@ -455,6 +455,14 @@ describe('DwarfSpec CLI selection', function()
         assert.matches('unknown option: %-%-timeout', errors.text)
     end)
 
+    it('reports argparse syntax errors before project discovery', function()
+        context.filesystem = nil
+        assert.equals(2, cli.main({'list', '--project-root'}, context))
+        assert.matches('command syntax:', errors.text, 1, true)
+        assert.matches('requires an argument', errors.text, 1, true)
+        assert.is_nil(invoked)
+    end)
+
     it('forwards quoted values and every run control without tokenizing them',
             function()
         assert.equals(0, cli.main({

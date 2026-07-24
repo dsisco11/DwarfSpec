@@ -20,6 +20,7 @@ external command safely starts, observes, aborts, and reports those runs.
 
 dependencies = {
     "lua >= 5.3",
+    "argparse == 0.7.2-1",
     "luasystem == 0.3.0-2",
     "busted == 2.3.0-1",
 }
