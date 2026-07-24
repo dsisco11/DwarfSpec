@@ -136,6 +136,44 @@ describe('DwarfSpec overlay mount lifecycle', function()
         assert.equals(original_frame, widget.frame)
     end)
 
+    it('renders overlays from visible independently of active', function()
+        local active = true
+        local visible = true
+        local render_count = 0
+        local widget = {
+            active=function() return active end,
+            visible=function() return visible end,
+            frame={},
+            updateLayout=function() end,
+            ---Records one controller-driven overlay render.
+            render=function()
+                render_count = render_count + 1
+            end,
+        }
+        local controller = factory:create({id=3, run={run_id='matrix'}},
+            widget, {})
+        local cases = {
+            {visible=true, active=true, should_render=true},
+            {visible=true, active=false, should_render=true},
+            {visible=false, active=true, should_render=false},
+            {visible=false, active=false, should_render=false},
+        }
+        controller:enable()
+
+        for _, case in ipairs(cases) do
+            visible = case.visible
+            active = case.active
+            local before = render_count
+
+            controller:render()
+
+            assert.equals(case.should_render and before + 1 or before,
+                render_count,
+                ('visible=%s active=%s'):format(
+                    tostring(case.visible), tostring(case.active)))
+        end
+    end)
+
     it('uses the current shared viewport for layout and rendering', function()
         local observed = {}
         local viewport = {width=40, height=20}

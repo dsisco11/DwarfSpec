@@ -60,6 +60,11 @@ subjects retain mount and complete control-path identity, become stale as soon
 as their mount is no longer current, and prevent normal commands from
 accepting unrelated raw views or screens.
 
+`subject:redraw()` invalidates the DwarfSpec-owned host screen and waits
+for render instrumentation to confirm a later completed render. Callers can
+use `subject:redraw({wait=false})` when they intentionally need to enqueue
+the repaint without synchronizing on its completion.
+
 Ordinary widgets and overlay widgets render inside a DwarfSpec-owned
 instrumented `gui.ZScreen`. Each mount owns a mutable DF-cell viewport, which
 defaults to 128 by 64 and can be changed with `ds.viewport(width, height)`.
@@ -87,7 +92,7 @@ assertion failure, command timeout, external timeout, lease expiry, explicit
 abort, and explicit unmount all drain run-owned cleanup in strict LIFO order.
 Cleanup is idempotent, continues after individual teardown failures, restores
 pause and pointer state, settles screens, invalidates subjects, and reports
-confirmation only after lifecycle probes verify that no active mount resource
+confirmation only after lifecycle probes verify that no alive mount resource
 remains.
 
 ## Overlay registration boundary

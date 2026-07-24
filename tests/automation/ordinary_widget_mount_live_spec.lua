@@ -11,6 +11,7 @@ OrdinaryWidgetHarness.ATTRS{
 ---Creates nested interactive content using only normal DFHack widgets.
 function OrdinaryWidgetHarness:init()
     self.saw_real_painter = false
+    self.render_count = 0
     self:addviews{
         widgets.Panel{
             view_id='nested_panel',
@@ -40,6 +41,7 @@ end
 ---Records that normal rendering supplied a live painter to the component.
 ---@param dc gui.Painter
 function OrdinaryWidgetHarness:onRenderBody(dc)
+    self.render_count = self.render_count + 1
     self.saw_real_painter = type(dc) == 'table' and
         type(dc.seek) == 'function'
     OrdinaryWidgetHarness.super.onRenderBody(self, dc)
@@ -101,6 +103,39 @@ describe('ordinary widget component host', function()
         assert.equals(original_pause, df.global.pause_state)
         assert.equals(original_on_render,
             rawget(OrdinaryWidgetHarness, 'onRender'))
+    end)
+
+    it('renders from visible independently of active', function()
+        local root = ds.mount(OrdinaryWidgetHarness)
+        local widget = root:raw()
+        local cases = {
+            {visible=true, active=true, should_render=true},
+            {visible=true, active=false, should_render=true},
+            {visible=false, active=true, should_render=false},
+            {visible=false, active=false, should_render=false},
+        }
+
+        for _, case in ipairs(cases) do
+            widget.visible = case.visible
+            widget.active = case.active
+            local before = widget.render_count
+
+            root:redraw()
+
+            if case.should_render then
+                assert.is_true(widget.render_count > before,
+                    ('visible=%s active=%s should render'):format(
+                        tostring(case.visible), tostring(case.active)))
+            else
+                assert.equals(before, widget.render_count,
+                    ('visible=%s active=%s should not render'):format(
+                        tostring(case.visible), tostring(case.active)))
+            end
+        end
+
+        widget.visible = true
+        widget.active = true
+        ds.unmount()
     end)
 
     it('uses implicit mount context for nested interaction and inspection',

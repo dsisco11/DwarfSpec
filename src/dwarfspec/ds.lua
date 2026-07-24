@@ -396,6 +396,31 @@ local TestStatus = load_automation_module(package_root,
         return diagnostics.inspect_view(view)
     end
 
+    ---Redraws a subject's mounted screen and optionally skips render wait.
+    ---@param view table
+    ---@param options table|nil
+    ---@return any
+    function ds.redraw(view, options)
+        local screen
+        _, screen = resolve_interaction_target(view, 'redraw')
+        assert(type(options) == 'table' or options == nil,
+            'redraw options must be a table')
+        options = options or {}
+        for name in pairs(options) do
+            assert(name == 'wait',
+                'unsupported redraw option: ' .. tostring(name))
+        end
+        assert(options.wait == nil or type(options.wait) == 'boolean',
+            'redraw wait option must be a boolean')
+        assert(type(screen.invalidate) == 'function',
+            'mounted screen does not support redraw')
+        return context.mount_context:mutate('redraw', function()
+            return screen:invalidate()
+        end, {
+            wait_for_render=options.wait ~= false,
+        })
+    end
+
     ---Captures the current implicit mount tree under one evidence name.
     ---@param name string
     ---@return table
@@ -630,6 +655,9 @@ local TestStatus = load_automation_module(package_root,
         end,
         input=function(subject, keys) return ds.input(keys, subject) end,
         type=function(subject, text) return ds.type(text, subject) end,
+        redraw=function(subject, options)
+            return ds.redraw(subject, options)
+        end,
         inspect=function(subject) return ds.inspect(subject) end,
     }
 

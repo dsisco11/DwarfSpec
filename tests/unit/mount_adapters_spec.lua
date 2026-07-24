@@ -5,6 +5,14 @@ local mount_adapters = assert(loadfile(
 local instrumentation = assert(loadfile(
     'src/dwarfspec/render_instrumentation.lua'))()
 
+---Resolves a literal or zero-argument lazy widget property.
+---@param value any
+---@return any
+local function get_value(value)
+    if type(value) == 'function' then return value() end
+    return value
+end
+
 ---Creates a minimal class compatible with the adapter's host requirements.
 ---@param parent table
 ---@return table
@@ -43,6 +51,14 @@ local function screen_base()
         onRender=function(self)
             self.render_calls = (self.render_calls or 0) + 1
             return 'rendered'
+        end,
+        ---Renders child views according to DFHack's visible-only contract.
+        ---@param self table
+        ---@param dc table
+        renderSubviews=function(self, dc)
+            for _, view in ipairs(self.subviews) do
+                if get_value(view.visible) then view:render(dc) end
+            end
         end,
         show=function(self, parent)
             self.shown_parent = parent
@@ -191,6 +207,56 @@ describe('DwarfSpec mount adapters', function()
             assert.is_nil(rawget(result.host_screen, 'onRender'))
             assert.is_nil(rawget(component_class, 'onRender'))
         end
+    end)
+
+    it('renders hosted widgets from visible independently of active',
+            function()
+        local tracker = tracker_double()
+        local mount = {
+            id=4,
+            render_tracker=tracker,
+            refresh_views=function() end,
+        }
+        local component = {
+            focus_group={},
+            render_count=0,
+            ---Records one host-driven component render.
+            ---@param self table
+            render=function(self)
+                self.render_count = self.render_count + 1
+            end,
+        }
+        local cleanups = {}
+        local result = factory('widget'):mount(mount, {
+            component=component,
+            options={
+                viewport={width=40, height=20},
+                backing_viewscreen={},
+            },
+        }, function(_, action)
+            table.insert(cleanups, action)
+        end)
+        local cases = {
+            {visible=true, active=true, should_render=true},
+            {visible=true, active=false, should_render=true},
+            {visible=false, active=true, should_render=false},
+            {visible=false, active=false, should_render=false},
+        }
+
+        for _, case in ipairs(cases) do
+            component.visible = case.visible
+            component.active = case.active
+            local before = component.render_count
+
+            result.host_screen:renderSubviews({})
+
+            assert.equals(case.should_render and before + 1 or before,
+                component.render_count,
+                ('visible=%s active=%s'):format(
+                    tostring(case.visible), tostring(case.active)))
+        end
+
+        for index=#cleanups,1,-1 do cleanups[index]() end
     end)
 
     it('routes overlay lifecycle through the generic owned host', function()

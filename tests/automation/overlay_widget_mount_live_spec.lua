@@ -234,17 +234,34 @@ describe('overlay widget component host', function()
         assert.is_true(instance.input_count > 0)
 
         local updates = instance.update_count
-        local renders = instance.render_count
         instance.active = false
         ds.wait_frames(2)
         assert.equals(updates, instance.update_count)
-        assert.is_true(instance.render_count > renders)
+        local cases = {
+            {visible=true, active=true, should_render=true},
+            {visible=true, active=false, should_render=true},
+            {visible=false, active=true, should_render=false},
+            {visible=false, active=false, should_render=false},
+        }
+        for _, case in ipairs(cases) do
+            instance.visible = case.visible
+            instance.active = case.active
+            local renders = instance.render_count
+
+            root:redraw()
+
+            if case.should_render then
+                assert.is_true(instance.render_count > renders,
+                    ('visible=%s active=%s should render'):format(
+                        tostring(case.visible), tostring(case.active)))
+            else
+                assert.equals(renders, instance.render_count,
+                    ('visible=%s active=%s should not render'):format(
+                        tostring(case.visible), tostring(case.active)))
+            end
+        end
 
         instance.active = true
-        instance.visible = false
-        renders = instance.render_count
-        ds.wait_frames(2)
-        assert.equals(renders, instance.render_count)
         instance.visible = true
         ds.wait_frames(1)
         ds.unmount()

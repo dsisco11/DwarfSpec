@@ -23,6 +23,9 @@ describe('DwarfSpec subject commands', function()
                 type=function(_, text)
                     table.insert(calls, {'type', text})
                 end,
+                redraw=function(_, options)
+                    table.insert(calls, {'redraw', options})
+                end,
                 inspect=function()
                     table.insert(calls, {'inspect'})
                     return {text='saved'}
@@ -46,6 +49,8 @@ describe('DwarfSpec subject commands', function()
         assert.equals(subject, subject:move_pointer('center'))
         assert.equals(subject, subject:input('SELECT'))
         assert.equals(subject, subject:type('abc'))
+        assert.equals(subject, subject:redraw())
+        assert.equals(subject, subject:redraw({wait=false}))
         assert.same({text='saved'}, subject:inspect())
         assert.equals('saved', subject:text())
         assert.same({
@@ -54,6 +59,8 @@ describe('DwarfSpec subject commands', function()
             {'move_pointer', 'center'},
             {'input', 'SELECT'},
             {'type', 'abc'},
+            {'redraw', nil},
+            {'redraw', {wait=false}},
             {'inspect'},
             {'inspect'},
         }, calls)
@@ -66,6 +73,8 @@ describe('DwarfSpec subject commands', function()
         subject._references.context = nil
 
         assert.has_error(function() subject:click() end,
+            'DwarfSpec subject is unavailable because its run has ended')
+        assert.has_error(function() subject:redraw() end,
             'DwarfSpec subject is unavailable because its run has ended')
     end)
 end)

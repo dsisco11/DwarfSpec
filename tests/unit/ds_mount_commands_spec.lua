@@ -44,12 +44,14 @@ describe('DwarfSpec public mount commands', function()
     local original_df
     local original_gui
     local simulated_inputs
+    local wait_until_calls
 
     before_each(function()
         original_dfhack = rawget(_G, 'dfhack')
         original_df = rawget(_G, 'df')
         original_gui = package.loaded.gui
         simulated_inputs = {}
+        wait_until_calls = 0
         rawset(_G, 'dfhack', {
             screen={getMousePos=function() return 90, 91 end},
         })
@@ -119,6 +121,7 @@ describe('DwarfSpec public mount commands', function()
         local scheduler_module = {
             wait_frames=function() return 1 end,
             wait_until=function(_, _, query)
+                wait_until_calls = wait_until_calls + 1
                 local result = query()
                 if not result and current_tracker then
                     current_tracker:completed()
@@ -151,8 +154,16 @@ describe('DwarfSpec public mount commands', function()
                         mount=function(_, mount, prepared)
                             screen = {
                                 active=true,
+                                invalidation_count=0,
                                 _native=native_screen,
                                 isActive=function(self) return self.active end,
+                                ---Records an invalidation and its render.
+                                ---@param self table
+                                invalidate=function(self)
+                                    self.invalidation_count =
+                                        self.invalidation_count + 1
+                                    current_tracker:completed()
+                                end,
                             }
                             mount.render_tracker:completed()
                             return {
@@ -277,6 +288,8 @@ describe('DwarfSpec public mount commands', function()
             'DwarfSpec unmount' .. suffix)
         assert.has_error(function() ds.inspect() end,
             'DwarfSpec inspect' .. suffix)
+        assert.has_error(function() ds.redraw() end,
+            'DwarfSpec redraw' .. suffix)
         assert.has_error(function() ds.move_pointer() end,
             'DwarfSpec move_pointer' .. suffix)
         assert.has_error(function() ds.input('SELECT') end,
@@ -288,6 +301,65 @@ describe('DwarfSpec public mount commands', function()
             'DwarfSpec click' .. suffix)
         assert.has_error(function() ds.type('text') end,
             'DwarfSpec type' .. suffix)
+    end)
+
+    it('redraws the subject screen and waits by default', function()
+        local mounted = ds.mount(TestWidget)
+        local baseline_waits = wait_until_calls
+
+        assert.equals(mounted, mounted:redraw())
+
+        assert.equals(1, screen.invalidation_count)
+        assert.equals(baseline_waits + 1, wait_until_calls)
+    end)
+
+    it('can redraw without waiting for the resulting render', function()
+        local mounted = ds.mount(TestWidget)
+        local baseline_waits = wait_until_calls
+
+        assert.equals(mounted, mounted:redraw({wait=false}))
+
+        assert.equals(1, screen.invalidation_count)
+        assert.equals(baseline_waits, wait_until_calls)
+    end)
+
+    it('validates redraw options', function()
+        local mounted = ds.mount(TestWidget)
+
+        local cases = {
+            {
+                options=false,
+                expected='redraw options must be a table',
+            },
+            {
+                options={wait='yes'},
+                expected='redraw wait option must be a boolean',
+            },
+            {
+                options={unknown=true},
+                expected='unsupported redraw option: unknown',
+            },
+        }
+        for _, case in ipairs(cases) do
+            local ok, failure = pcall(
+                mounted.redraw, mounted, case.options)
+
+            assert.is_false(ok)
+            assert.matches(case.expected, failure, 1, true)
+        end
+    end)
+
+    it('rejects redraw through a stale subject', function()
+        local mounted = ds.mount(TestWidget)
+        ds.unmount()
+
+        local ok, failure = pcall(mounted.redraw, mounted)
+
+        assert.is_false(ok)
+        assert.matches('DwarfSpec redraw rejected stale subject',
+            failure, 1, true)
+        assert.matches('no component is currently mounted',
+            failure, 1, true)
     end)
 
     it('sends button and wheel input at the current pointer position',

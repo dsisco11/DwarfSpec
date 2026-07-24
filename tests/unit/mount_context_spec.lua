@@ -151,6 +151,8 @@ describe('DwarfSpec mount context', function()
         assert.equals('first', root_subject:raw().name)
         assert.equals('first', mounted.root.name)
         assert.equals(screens[1], mounted.host_screen)
+        assert.is_true(mounted.alive)
+        assert.is_nil(mounted.active)
         assert.is_true(screens[1].active)
         assert.equals(1, mounted.render_tracker:generation())
         assert.is_nil(mounted.root.render_generation)
@@ -322,6 +324,19 @@ describe('DwarfSpec mount context', function()
         assert.equals(2, context.current.render_tracker:generation())
     end)
 
+    it('can run a mutating operation without waiting for a render', function()
+        context:mount(TestWidget, {name='mutated-without-wait'})
+        local generation = context.current.render_tracker:generation()
+
+        local result = context:mutate('redraw', function()
+            return 'redrawn'
+        end, {wait_for_render=false})
+
+        assert.equals('redrawn', result)
+        assert.equals(generation,
+            context.current.render_tracker:generation())
+    end)
+
     it('owns default and runtime viewport state for the current mount',
             function()
         local requested = {width=40, height=20}
@@ -470,10 +485,13 @@ describe('DwarfSpec mount context', function()
 
     it('explicitly unmounts once and remains cleanup-idempotent', function()
         local root_subject = context:mount(TestWidget, {name='explicit'})
+        local mounted = context.current
 
         context:unmount()
 
         assert.is_nil(context.current)
+        assert.is_false(mounted.alive)
+        assert.is_nil(mounted.active)
         assert.is_false(screens[1].active)
         assert.equals(0, cleanup.pending_count(registry))
         assert.same({
@@ -578,7 +596,7 @@ describe('DwarfSpec mount context', function()
         assert.equals('settle:first', events[#events])
     end)
 
-    it('run cleanup removes the active mount and all mount entries', function()
+    it('run cleanup removes the alive mount and all mount entries', function()
         context:mount(TestWidget, {name='lifecycle'})
 
         assert.is_true(cleanup.run(registry, 'example completion'))

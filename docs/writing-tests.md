@@ -142,11 +142,28 @@ assert.equals('saved', ds.get('status'):text())
 ```
 
 Commands execute immediately in the live test coroutine. `click`, `hover`,
-`move_pointer`, `input`, and `type` preserve and return their subject for
-chaining. `inspect` returns a stable diagnostic table, while `text` returns the
-inspected text scalar. No current subject command changes the selection; call
-`ds.get` to obtain a different subject. A subject is valid only while its
-original mount remains current; unmounting that mount makes the subject stale.
+`move_pointer`, `input`, `type`, and `redraw` preserve and return their
+subject for chaining. `inspect` returns a stable diagnostic table, while
+`text` returns the inspected text scalar. No current subject command changes
+the selection; call `ds.get` to obtain a different subject. A subject is valid
+only while its original mount remains current; unmounting that mount makes the
+subject stale.
+
+`subject:redraw()` requests a repaint of the DwarfSpec-owned host screen.
+It waits for render instrumentation to confirm a later completed render before
+returning, so assertions after it observe the requested repaint:
+
+```lua
+local panel = ds.get('panel')
+panel:redraw()
+assert.is_true(panel:inspect().visible)
+```
+
+DFHack invalidates the containing screen rather than an individual widget
+rectangle. The subject identifies and validates the owning mount; it does not
+limit the repaint to that subject. Use `subject:redraw({wait=false})` only
+when the test intentionally needs to request the repaint without waiting for
+its completion.
 
 For mouse input that must use an already positioned pointer, call
 `ds.mouseInput(input)`. The input must be one of the immutable

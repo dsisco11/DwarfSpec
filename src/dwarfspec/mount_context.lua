@@ -33,7 +33,7 @@ local function cleanup_mount(context, mount)
     end
 
     mount.cleaned = true
-    mount.active = false
+    mount.alive = false
     mount.root = nil
     mount.host_screen = nil
     mount.adapter = nil
@@ -300,7 +300,7 @@ local function parent_identity(control_path)
     function context:require_current(operation)
         assert(type(operation) == 'string' and operation ~= '',
             'mount operation name must be a nonempty string')
-        assert(self.current and self.current.active,
+        assert(self.current and self.current.alive,
             ('DwarfSpec %s requires a mounted component; call ' ..
                 'ds.mount(component, options) first'):format(operation))
         return self.current
@@ -340,7 +340,7 @@ local function parent_identity(control_path)
     ---@return table
     function context:resolve_subject(subject, operation)
         local mount = self.current
-        assert(mount and mount.active,
+        assert(mount and mount.alive,
             ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
                 'no component is currently mounted'):format(operation,
                     subject.control_path, tostring(subject.mount_id)))
@@ -421,15 +421,23 @@ local function parent_identity(control_path)
         end
     end
 
-    ---Runs a mutating command and waits for its resulting completed render.
+    ---Runs a mutating command and optionally waits for its completed render.
     ---@param operation string
     ---@param action function
+    ---@param options table|nil
     ---@return any
-    function context:mutate(operation, action)
+    function context:mutate(operation, action, options)
         assert(type(operation) == 'string' and operation ~= '',
             'mutation operation name must be a nonempty string')
         assert(type(action) == 'function',
             'mutation action must be a function')
+        assert(options == nil or type(options) == 'table',
+            'mutation options must be a table')
+        options = options or {}
+        assert(options.wait_for_render == nil or
+            type(options.wait_for_render) == 'boolean',
+            'mutation wait_for_render option must be a boolean')
+        local wait_for_render = options.wait_for_render ~= false
         local mount = self:require_current(operation)
         local observation
         if self.command_observer then
@@ -439,7 +447,10 @@ local function parent_identity(control_path)
                     mount.command_subject.control_path or '<root>',
             })
         end
-        local captured = mount.render_tracker:capture()
+        local captured
+        if wait_for_render then
+            captured = mount.render_tracker:capture()
+        end
         local results = table.pack(xpcall(action, debug.traceback))
         if not results[1] then
             if self.command_observer then
@@ -447,15 +458,19 @@ local function parent_identity(control_path)
             end
             error(self:report_failure(mount, operation, results[2]), 2)
         end
-        local wait_ok, wait_result = xpcall(function()
-            return mount.render_tracker:wait_after(captured,
-                operation .. ' render')
-        end, debug.traceback)
-        if not wait_ok then
-            if self.command_observer then
-                self.command_observer.finished(observation, false, wait_result)
+        if wait_for_render then
+            local wait_ok, wait_result = xpcall(function()
+                return mount.render_tracker:wait_after(captured,
+                    operation .. ' render')
+            end, debug.traceback)
+            if not wait_ok then
+                if self.command_observer then
+                    self.command_observer.finished(
+                        observation, false, wait_result)
+                end
+                error(self:report_failure(
+                    mount, operation, wait_result), 2)
             end
-            error(self:report_failure(mount, operation, wait_result), 2)
         end
         self:refresh_views(mount)
         if self.command_observer then
@@ -527,7 +542,7 @@ local function parent_identity(control_path)
             host_screen=nil,
             render_tracker=self.render_tracker_factory(),
             adapter=adapter,
-            active=false,
+            alive=false,
             cleaned=false,
             cleanup_marker=self.cleanup_module.mark(self.cleanup_registry),
             cleanup_entry=nil,
@@ -578,7 +593,7 @@ local function parent_identity(control_path)
             end
             error(message, 2)
         end
-        mount.active = true
+        mount.alive = true
         local subject_ok, root_subject = xpcall(function()
             return self:root()
         end, debug.traceback)

@@ -849,7 +849,7 @@ lease expiry, explicit abort, and early unmount continue to drain owned
 resources in strict LIFO order.
 
 Cleanup completion emits `cleanup.finished` only after the lifecycle probe
-confirms that no active mount, screen, subject, scheduler, wait, pointer,
+confirms that no alive mount, active screen, subject, scheduler, wait, pointer,
 timeout, project module path, or evictable consumer module remains.
 `run.finished` follows cleanup and reports the same confirmation.
 

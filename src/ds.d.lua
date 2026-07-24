@@ -41,6 +41,9 @@
 ---@field frame_budget? integer
 ---@field description? string
 
+---@class dwarfspec.RedrawOptions
+---@field wait? boolean Wait for the resulting completed render; defaults to true.
+
 ---@class dwarfspec.Viewport
 ---@field width integer
 ---@field height integer
@@ -122,6 +125,11 @@ function Subject:input(keys) end
 ---@return dwarfspec.Subject
 function Subject:type(text) end
 
+---Redraws this subject's mounted screen and waits by default.
+---@param options? dwarfspec.RedrawOptions
+---@return dwarfspec.Subject
+function Subject:redraw(options) end
+
 ---Returns a stable diagnostic snapshot of this subject.
 ---@return dwarfspec.SubjectInspectState
 function Subject:inspect() end
@@ -176,6 +184,12 @@ function DS.get(control_path) end
 ---@param view? table|dwarfspec.Subject
 ---@return dwarfspec.SubjectInspectState
 function DS.inspect(view) end
+
+---Redraws a subject's mounted screen and waits by default.
+---@param view table|dwarfspec.Subject
+---@param options? dwarfspec.RedrawOptions
+---@return any
+function DS.redraw(view, options) end
 
 ---Captures the current implicit mount tree under one evidence name.
 ---@param name string

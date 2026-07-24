@@ -63,6 +63,14 @@ function Subject:type(text)
     return self
 end
 
+---Redraws this subject's mounted screen and optionally skips render wait.
+---@param options table|nil
+---@return dwarfspec.Subject
+function Subject:redraw(options)
+    invoke(self, 'redraw', options)
+    return self
+end
+
 ---Returns a stable diagnostic snapshot of this subject.
 ---@return table
 function Subject:inspect()
