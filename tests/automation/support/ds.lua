@@ -85,6 +85,8 @@ local render_tracker_module = load_automation_module(package_root,
     'dwarfspec.render_tracker', '/src/dwarfspec/render_tracker.lua')
 local subject_module = load_automation_module(package_root,
     'dwarfspec.subject', '/src/dwarfspec/subject.lua')
+local MouseInput = load_automation_module(package_root,
+    'dwarfspec.mouse_inputs', '/src/dwarfspec/mouse_inputs.lua')
 local EventType = load_automation_module(package_root,
     'dwarfspec.automation.event_types',
     '/src/dwarfspec/automation/event_types.lua')
@@ -249,6 +251,7 @@ local TestStatus = load_automation_module(package_root,
         stage_overlay_registration_integration
     local ds = {
         protocol_version=1,
+        MouseInput=MouseInput,
     }
 
     ---Returns the exact service-owned run that currently owns the executor.
@@ -450,6 +453,78 @@ local TestStatus = load_automation_module(package_root,
             assert(is_active(screen), 'input screen is not currently active')
             require('gui').simulateInput(M.resolve_native_screen(
                 screen, context.current_viewscreen), keys)
+        end)
+    end
+
+    local mouse_inputs = {
+        [MouseInput.LEFT_CLICK]={key='_MOUSE_L'},
+        [MouseInput.LEFT_DOWN]={
+            key='_MOUSE_L_DOWN',
+            down_field='mouse_lbut_down',
+            lift_field='mouse_lbut_lift',
+            is_down=true,
+        },
+        [MouseInput.LEFT_UP]={
+            down_field='mouse_lbut_down',
+            lift_field='mouse_lbut_lift',
+            is_down=false,
+        },
+        [MouseInput.RIGHT_CLICK]={key='_MOUSE_R'},
+        [MouseInput.RIGHT_DOWN]={
+            key='_MOUSE_R_DOWN',
+            down_field='mouse_rbut_down',
+            lift_field='mouse_rbut_lift',
+            is_down=true,
+        },
+        [MouseInput.RIGHT_UP]={
+            down_field='mouse_rbut_down',
+            lift_field='mouse_rbut_lift',
+            is_down=false,
+        },
+        [MouseInput.MIDDLE_CLICK]={key='_MOUSE_M'},
+        [MouseInput.MIDDLE_DOWN]={
+            key='_MOUSE_M_DOWN',
+            down_field='mouse_mbut_down',
+            lift_field='mouse_mbut_lift',
+            is_down=true,
+        },
+        [MouseInput.MIDDLE_UP]={
+            down_field='mouse_mbut_down',
+            lift_field='mouse_mbut_lift',
+            is_down=false,
+        },
+        [MouseInput.SCROLL_UP]={key='CONTEXT_SCROLL_UP'},
+        [MouseInput.SCROLL_DOWN]={key='CONTEXT_SCROLL_DOWN'},
+    }
+
+    ---Sends one mouse action at the current virtual pointer position.
+    ---@param input DwarfSpecMouseInput
+    ---@return integer
+    function ds.mouseInput(input)
+        local screen
+        _, screen = resolve_interaction_target(nil, 'mouseInput')
+        local descriptor = mouse_inputs[input]
+        assert(descriptor, 'unsupported mouse input: ' .. tostring(input))
+        local x, y = pointer_adapter_module.position(context.pointer)
+        return context.mount_context:mutate('mouseInput', function()
+            assert(is_active(screen),
+                'mouse input screen is not currently active')
+            local dispatch = function()
+                pointer_adapter_module.with_interface_mouse(x, y, function()
+                    require('gui').simulateInput(M.resolve_native_screen(
+                        screen, context.current_viewscreen), descriptor.key)
+                end)
+            end
+            if descriptor.is_down == nil then
+                dispatch()
+            else
+                pointer_adapter_module.with_button_state(
+                    context.pointer,
+                    descriptor.down_field,
+                    descriptor.lift_field,
+                    descriptor.is_down,
+                    dispatch)
+            end
         end)
     end
 

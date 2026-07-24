@@ -217,6 +217,7 @@ frames is itself part of the behavior being tested.
 | `subject:click(button)` | Click the selected view and preserve the subject. |
 | `subject:input(keys)` | Send native DFHack input through the mounted screen. |
 | `subject:type(text)` | Type ASCII text through the mounted screen. |
+| `ds.mouseInput(input)` | Send a `ds.MouseInput` click, down, up, or wheel action at the current pointer position. |
 | `ds.capture_view_tree(name)` | Retain the implicit mount's structured view tree. |
 | `ds.capture_screen(name, options)` | Retain a bounded screen-cell capture. |
 | `ds.stage_overlay_registration(source, name)` | Stage a run-owned script only for separately selected real-registration integration coverage. |

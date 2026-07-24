@@ -23,7 +23,21 @@ describe('automation interaction support', function()
                 end,
             },
         })
-        rawset(_G, 'df', {global={gps={mouse_x=4, mouse_y=5}}})
+        rawset(_G, 'df', {
+            global={
+                gps={mouse_x=4, mouse_y=5},
+                enabler={
+                    mouse_focus=false,
+                    tracking_on=0,
+                    mouse_lbut_down=0,
+                    mouse_lbut_lift=0,
+                    mouse_rbut_down=0,
+                    mouse_rbut_lift=0,
+                    mouse_mbut_down=0,
+                    mouse_mbut_lift=0,
+                },
+            },
+        })
     end)
 
     after_each(function()
@@ -86,19 +100,84 @@ describe('automation interaction support', function()
         local adapter = pointer_adapter.new(cleanup, registry)
         local original_pointer = dfhack.screen.getMousePos
 
+        assert.has_error(function() pointer_adapter.position(adapter) end,
+            'mouse input requires a pointer position; call ' ..
+            'ds.move_pointer() or subject:hover() first')
         pointer_adapter.set(adapter, 10, 11)
         assert.same({10, 11}, {dfhack.screen.getMousePos()})
+        assert.same({10, 11}, {pointer_adapter.position(adapter)})
         local observed_x
         local observed_y
         pointer_adapter.with_interface_mouse(12, 13, function()
             observed_x = df.global.gps.mouse_x
             observed_y = df.global.gps.mouse_y
+            assert.is_true(df.global.enabler.mouse_focus)
+            assert.equals(1, df.global.enabler.tracking_on)
         end)
         assert.same({12, 13}, {observed_x, observed_y})
         assert.same({4, 5}, {df.global.gps.mouse_x, df.global.gps.mouse_y})
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+
+        local input_ok, input_error = pcall(function()
+            pointer_adapter.with_interface_mouse(14, 15, function()
+                error('simulated input failed', 0)
+            end)
+        end)
+        assert.is_false(input_ok)
+        assert.matches('simulated input failed', input_error, 1, true)
+        assert.same({4, 5}, {df.global.gps.mouse_x, df.global.gps.mouse_y})
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
 
         pointer_adapter.clear(adapter)
         assert.equals(original_pointer, dfhack.screen.getMousePos)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('holds and releases native button state with cleanup restoration',
+            function()
+        local registry = cleanup.new({})
+        local adapter = pointer_adapter.new(cleanup, registry)
+
+        pointer_adapter.with_button_state(adapter,
+            'mouse_lbut_down', 'mouse_lbut_lift', true, function()
+                assert.equals(1, df.global.enabler.mouse_lbut_down)
+                assert.equals(0, df.global.enabler.mouse_lbut_lift)
+            end)
+        assert.equals(1, df.global.enabler.mouse_lbut_down)
+        assert.equals(0, df.global.enabler.mouse_lbut_lift)
+        assert.is_true(df.global.enabler.mouse_focus)
+        assert.equals(1, df.global.enabler.tracking_on)
+
+        pointer_adapter.with_button_state(adapter,
+            'mouse_lbut_down', 'mouse_lbut_lift', false, function()
+                assert.equals(0, df.global.enabler.mouse_lbut_down)
+                assert.equals(1, df.global.enabler.mouse_lbut_lift)
+            end)
+        assert.equals(0, df.global.enabler.mouse_lbut_down)
+        assert.equals(0, df.global.enabler.mouse_lbut_lift)
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+
+        local transition_ok, transition_error = pcall(function()
+            pointer_adapter.with_button_state(adapter,
+                'mouse_rbut_down', 'mouse_rbut_lift', true, function()
+                    error('button transition failed', 0)
+                end)
+        end)
+        assert.is_false(transition_ok)
+        assert.matches('button transition failed', transition_error, 1, true)
+        assert.equals(0, df.global.enabler.mouse_rbut_down)
+        assert.equals(0, df.global.enabler.mouse_rbut_lift)
+
+        pointer_adapter.with_button_state(adapter,
+            'mouse_lbut_down', 'mouse_lbut_lift', true, function() end)
+        local cleanup_ok = cleanup.run(registry, 'button state test')
+        assert.is_true(cleanup_ok)
+        assert.equals(0, df.global.enabler.mouse_lbut_down)
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
         assert.equals(0, cleanup.pending_count(registry))
     end)
 

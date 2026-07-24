@@ -45,6 +45,7 @@ build = {
         ["dwarfspec.layout"] = "src/dwarfspec/layout.lua",
         ["dwarfspec.immutable_enum"] = "src/dwarfspec/immutable_enum.lua",
         ["dwarfspec.mount_context"] = "src/dwarfspec/mount_context.lua",
+        ["dwarfspec.mouse_inputs"] = "src/dwarfspec/mouse_inputs.lua",
         ["dwarfspec.mount_adapters"] = "src/dwarfspec/mount_adapters.lua",
         ["dwarfspec.overlay_mount"] = "src/dwarfspec/overlay_mount.lua",
         ["dwarfspec.render_instrumentation"] =

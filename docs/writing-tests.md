@@ -148,6 +148,31 @@ inspected text scalar. No current subject command changes the selection; call
 `ds.get` to obtain a different subject. A subject is valid only while its
 original mount remains current; unmounting that mount makes the subject stale.
 
+For mouse input that must use an already positioned pointer, call
+`ds.mouseInput(input)`. The input must be one of the immutable
+`ds.MouseInput` identifiers:
+
+```lua
+ds.get('route_list'):hover()
+ds.mouseInput(ds.MouseInput.SCROLL_DOWN)
+ds.mouseInput(ds.MouseInput.RIGHT_CLICK)
+```
+
+Each left, right, and middle button exposes explicit `CLICK`, `DOWN`, and `UP`
+inputs. A `DOWN` state remains held across pointer movement and later commands
+until the matching `UP` input or run cleanup:
+
+```lua
+ds.get('slider'):move_pointer('left')
+ds.mouseInput(ds.MouseInput.LEFT_DOWN)
+ds.get('slider'):move_pointer('right')
+ds.mouseInput(ds.MouseInput.LEFT_UP)
+```
+
+Unlike `subject:click()`, `ds.mouseInput()` does not move the pointer. It sends
+the selected button or wheel input at the position established by
+`subject:hover()` or `subject:move_pointer()`.
+
 `subject:raw()` exposes the underlying DFHack object for an exceptional native
 API that DwarfSpec does not model. Normal selection, interaction, inspection,
 capture, synchronization, and assertions do not require this escape hatch.
@@ -285,6 +310,7 @@ The first-release surface is intentionally small:
 - components: `mount`, `root`, `get`, `unmount`, `viewport`;
 - subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
   `text`, and the exceptional `raw` escape hatch;
+- positioned mouse input: `mouseInput` with `MouseInput`;
 - evidence: `capture_view_tree`, `capture_screen`; and
 - real registration integration: `stage_overlay_registration`.
 

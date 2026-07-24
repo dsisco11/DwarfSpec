@@ -8,6 +8,7 @@ local render_tracker = assert(loadfile(
 local ds_factory = assert(loadfile(
     'tests/automation/support/ds.lua'))()
 local EventType = require('dwarfspec.automation.event_types')
+local MouseInput = require('dwarfspec.mouse_inputs')
 local TestStatus = require('dwarfspec.automation.test_statuses')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
@@ -37,8 +38,54 @@ describe('DwarfSpec public mount commands', function()
     local screen
     local TestWidget
     local published
+    local current_tracker
+    local original_dfhack
+    local original_df
+    local original_gui
+    local simulated_inputs
 
     before_each(function()
+        original_dfhack = rawget(_G, 'dfhack')
+        original_df = rawget(_G, 'df')
+        original_gui = package.loaded.gui
+        simulated_inputs = {}
+        rawset(_G, 'dfhack', {
+            screen={getMousePos=function() return 90, 91 end},
+        })
+        rawset(_G, 'df', {
+            global={
+                gps={mouse_x=4, mouse_y=5},
+                enabler={
+                    mouse_focus=false,
+                    tracking_on=0,
+                    mouse_lbut_down=0,
+                    mouse_lbut_lift=0,
+                    mouse_rbut_down=0,
+                    mouse_rbut_lift=0,
+                    mouse_mbut_down=0,
+                    mouse_mbut_lift=0,
+                },
+            },
+        })
+        package.loaded.gui = {
+            simulateInput=function(native_screen, key)
+                table.insert(simulated_inputs, {
+                    screen=native_screen,
+                    key=key,
+                    x=df.global.gps.mouse_x,
+                    y=df.global.gps.mouse_y,
+                    mouse_focus=df.global.enabler.mouse_focus,
+                    tracking_on=df.global.enabler.tracking_on,
+                    left_down=df.global.enabler.mouse_lbut_down,
+                    left_lift=df.global.enabler.mouse_lbut_lift,
+                    right_down=df.global.enabler.mouse_rbut_down,
+                    right_lift=df.global.enabler.mouse_rbut_lift,
+                    middle_down=df.global.enabler.mouse_mbut_down,
+                    middle_lift=df.global.enabler.mouse_mbut_lift,
+                })
+                current_tracker:completed()
+            end,
+        }
         local Widget = make_class()
         local OverlayWidget = make_class(Widget)
         local ZScreen = make_class()
@@ -70,8 +117,16 @@ describe('DwarfSpec public mount commands', function()
         local scheduler = {run=run}
         local scheduler_module = {
             wait_frames=function() return 1 end,
-            wait_until=function(_, _, query) return assert(query()) end,
+            wait_until=function(_, _, query)
+                local result = query()
+                if not result and current_tracker then
+                    current_tracker:completed()
+                    result = query()
+                end
+                return assert(result)
+            end,
         }
+        local native_screen = {name='native-screen'}
         ds, reset = ds_factory.new('.',
             {project_root='.', package_root='.'},
             scheduler_module, scheduler, cleanup, registry,
@@ -84,13 +139,20 @@ describe('DwarfSpec public mount commands', function()
                 },
             }}, {
                 boundary=boundary,
+                current_viewscreen=function() return native_screen end,
                 render_tracker_factory=function()
-                    return render_tracker.new(scheduler_module, scheduler)
+                    current_tracker = render_tracker.new(
+                        scheduler_module, scheduler)
+                    return current_tracker
                 end,
                 adapter_factory=function()
                     return {
                         mount=function(_, mount, prepared)
-                            screen = {active=true}
+                            screen = {
+                                active=true,
+                                _native=native_screen,
+                                isActive=function(self) return self.active end,
+                            }
                             mount.render_tracker:completed()
                             return {
                                 root=prepared.component,
@@ -122,7 +184,11 @@ describe('DwarfSpec public mount commands', function()
     end)
 
     after_each(function()
-        assert.is_true(cleanup.run(registry, 'ds command test teardown'))
+        local cleanup_ok = cleanup.run(registry, 'ds command test teardown')
+        package.loaded.gui = original_gui
+        rawset(_G, 'dfhack', original_dfhack)
+        rawset(_G, 'df', original_df)
+        assert.is_true(cleanup_ok)
         assert.equals(0, cleanup.pending_count(registry))
         if screen then assert.is_false(screen.active) end
     end)
@@ -214,10 +280,127 @@ describe('DwarfSpec public mount commands', function()
             'DwarfSpec move_pointer' .. suffix)
         assert.has_error(function() ds.input('SELECT') end,
             'DwarfSpec input' .. suffix)
+        assert.has_error(function()
+            ds.mouseInput(MouseInput.LEFT_CLICK)
+        end, 'DwarfSpec mouseInput' .. suffix)
         assert.has_error(function() ds.click() end,
             'DwarfSpec click' .. suffix)
         assert.has_error(function() ds.type('text') end,
             'DwarfSpec type' .. suffix)
+    end)
+
+    it('sends button and wheel input at the current pointer position',
+            function()
+        local mounted = ds.mount(TestWidget, {
+            frame_body={x1=10, y1=20, x2=14, y2=24},
+        })
+        assert.equals(MouseInput.LEFT_CLICK, ds.MouseInput.LEFT_CLICK)
+        assert.equals(MouseInput.SCROLL_DOWN, ds.MouseInput.SCROLL_DOWN)
+        assert.has_error(function()
+            ds.mouseInput(MouseInput.LEFT_CLICK)
+        end, 'mouse input requires a pointer position; call ' ..
+            'ds.move_pointer() or subject:hover() first')
+
+        mounted:hover('top_left')
+        for _, input in ipairs({
+                MouseInput.LEFT_CLICK,
+                MouseInput.RIGHT_CLICK,
+                MouseInput.MIDDLE_CLICK,
+                MouseInput.SCROLL_UP,
+                MouseInput.SCROLL_DOWN}) do
+            ds.mouseInput(input)
+        end
+
+        assert.same({
+            '_MOUSE_L',
+            '_MOUSE_R',
+            '_MOUSE_M',
+            'CONTEXT_SCROLL_UP',
+            'CONTEXT_SCROLL_DOWN',
+        }, {
+            simulated_inputs[1].key,
+            simulated_inputs[2].key,
+            simulated_inputs[3].key,
+            simulated_inputs[4].key,
+            simulated_inputs[5].key,
+        })
+        for _, input in ipairs(simulated_inputs) do
+            assert.equals('native-screen', input.screen.name)
+            assert.same({10, 20}, {input.x, input.y})
+            assert.is_true(input.mouse_focus)
+            assert.equals(1, input.tracking_on)
+        end
+        assert.same({10, 20}, {dfhack.screen.getMousePos()})
+        assert.same({4, 5}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+        })
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+        assert.has_error(function() ds.mouseInput('unknown') end,
+            'unsupported mouse input: unknown')
+    end)
+
+    it('persists explicit button-down state until matching button-up input',
+            function()
+        local mounted = ds.mount(TestWidget, {
+            frame_body={x1=10, y1=20, x2=14, y2=24},
+        })
+        mounted:move_pointer('top_left')
+
+        local transitions = {
+            {
+                down=MouseInput.LEFT_DOWN,
+                up=MouseInput.LEFT_UP,
+                key='_MOUSE_L_DOWN',
+                down_field='mouse_lbut_down',
+                lift_field='mouse_lbut_lift',
+                record_down='left_down',
+                record_lift='left_lift',
+            },
+            {
+                down=MouseInput.RIGHT_DOWN,
+                up=MouseInput.RIGHT_UP,
+                key='_MOUSE_R_DOWN',
+                down_field='mouse_rbut_down',
+                lift_field='mouse_rbut_lift',
+                record_down='right_down',
+                record_lift='right_lift',
+            },
+            {
+                down=MouseInput.MIDDLE_DOWN,
+                up=MouseInput.MIDDLE_UP,
+                key='_MOUSE_M_DOWN',
+                down_field='mouse_mbut_down',
+                lift_field='mouse_mbut_lift',
+                record_down='middle_down',
+                record_lift='middle_lift',
+            },
+        }
+
+        for _, transition in ipairs(transitions) do
+            ds.mouseInput(transition.down)
+            local down_input = simulated_inputs[#simulated_inputs]
+            assert.equals(transition.key, down_input.key)
+            assert.equals(1, down_input[transition.record_down])
+            assert.equals(0, down_input[transition.record_lift])
+            assert.equals(1, df.global.enabler[transition.down_field])
+            assert.is_true(df.global.enabler.mouse_focus)
+            assert.equals(1, df.global.enabler.tracking_on)
+
+            mounted:move_pointer('bottom_right')
+            assert.equals(1, df.global.enabler[transition.down_field])
+
+            ds.mouseInput(transition.up)
+            local up_input = simulated_inputs[#simulated_inputs]
+            assert.is_nil(up_input.key)
+            assert.equals(0, up_input[transition.record_down])
+            assert.equals(1, up_input[transition.record_lift])
+            assert.equals(0, df.global.enabler[transition.down_field])
+            assert.equals(0, df.global.enabler[transition.lift_field])
+            assert.is_false(df.global.enabler.mouse_focus)
+            assert.equals(0, df.global.enabler.tracking_on)
+        end
     end)
 
     it('routes input to a native child while retaining the mounted root',

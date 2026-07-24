@@ -164,6 +164,7 @@ describe('DwarfSpec package contract', function()
         local rockspec = read_repository_file(ROCKSPEC_PATH)
         for name, path in pairs({
                 immutable_enum='src/dwarfspec/immutable_enum.lua',
+                mouse_inputs='src/dwarfspec/mouse_inputs.lua',
                 runner_failure_kinds=
                     'src/dwarfspec/runner_failure_kinds.lua'}) do
             assert.matches(('["dwarfspec.%s"]'):format(name),
