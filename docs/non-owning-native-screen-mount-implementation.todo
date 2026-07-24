@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: not started
+Status: in progress; Phase 0 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -134,36 +134,36 @@ infrastructure.
 
 ### Tasks
 
-☐ Confirm the repository root and Git identity before editing.
-☐ Record the initial `git status --short` output and preserve unrelated
+✔ Confirm the repository root and Git identity before editing.
+✔ Record the initial `git status --short` output and preserve unrelated
   changes.
-☐ Run the repository Lua syntax check and record its exact command and result.
-☐ Run the full standalone unit suite and record its exact command and result.
-☐ Identify every current use of `mount.host_screen` and classify it as screen
+✔ Run the repository Lua syntax check and record its exact command and result.
+✔ Run the full standalone unit suite and record its exact command and result.
+✔ Identify every current use of `mount.host_screen` and classify it as screen
   ownership, interaction routing, subject rooting, rendering, or cleanup.
-☐ Identify every current table-only assumption in `subject.lua`,
+✔ Identify every current table-only assumption in `subject.lua`,
   `mount_context.lua`, diagnostics, and tree capture.
-☐ Record the existing public and internal behavior of:
+✔ Record the existing public and internal behavior of:
   `ds.mount(component)`, `ds.root()`, `ds.get()`, `Subject:raw()`,
   `ds.input()`, `ds.mouseInput()`, `ds.move_pointer()`, and `ds.redraw()`.
-☐ Verify the target DFHack API names and shapes used by the proposal:
+✔ Verify the target DFHack API names and shapes used by the proposal:
   `getCurViewscreen`, `getDFViewscreen`, `getWidget`,
   `getWidgetChildren`, `viewscreen.widgets`, widget flags, widget rectangles,
   and overlay render dispatch.
-☐ Define injectable fixture boundaries for native userdata identity, widget
+✔ Define injectable fixture boundaries for native userdata identity, widget
   hierarchy, overlay registry state, native screen identity, pointer state, and
   render generations.
-☐ List the existing focused test files that must remain green while the shared
+✔ List the existing focused test files that must remain green while the shared
   subject and mount internals are refactored.
 
 ### Phase 0 exit gate
 
-☐ Baseline syntax and unit results are recorded.
-☐ Current ownership and table-only assumptions are documented in the evidence
+✔ Baseline syntax and unit results are recorded.
+✔ Current ownership and table-only assumptions are documented in the evidence
   ledger.
-☐ Native DFHack API assumptions have either been verified or converted into
+✔ Native DFHack API assumptions have either been verified or converted into
   explicit capability checks.
-☐ No production behavior has changed.
+✔ No production behavior has changed.
 
 ## Phase 1: Separate ownership, interaction, and subject adaptation
 
@@ -638,7 +638,137 @@ as the work proceeds.
 
 ### Phase 0 evidence
 
-- Pending.
+- Completed on 2026-07-24 against repository root
+  `D:\CODE\DFHack\DwarfSpec`, branch `main`, origin
+  `https://github.com/dsisco11/DwarfSpec.git`.
+- The initial `git status --short` output was empty. There were no unrelated
+  worktree changes to preserve.
+- Baseline syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 202 files.`
+- Baseline full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `274 successes / 0 failures / 0 errors / 0 pending`.
+- `mount.host_screen` currently combines these responsibilities:
+  - ownership registration: `mount_context.lua` accepts
+    `adapter_result.host_screen`, stores it on the mount, and inserts it into
+    `owned_screens`;
+  - ownership release: `cleanup_mount()` clears the reference, while each
+    current adapter dismisses its active host during scoped cleanup;
+  - interaction routing: `ds.lua` returns `host_screen` for both omitted and
+    subject interaction targets, then uses it for input and redraw;
+  - viewport mutation: `mount_adapters.lua` calls `host_screen:onResize()`;
+  - failure-tree rooting: diagnostics prefer `mount.host_screen` over
+    `mount.root`;
+  - rendering: all existing adapters install instance-level `onRender`
+    instrumentation on the same screen before returning it as `host_screen`.
+    There is no separate interaction or render-observer field.
+  - construction placeholders and cleanup resets in `mount_context.lua` do not
+    add another responsibility; they initialize or release the same combined
+    field.
+- Current table-only assumptions are:
+  - `subject.lua` requires `type(view) == 'table'`, weakly retains that view,
+    annotates `Subject:raw()` as returning a table, and has no adapter or
+    locator;
+  - `mount_context.lua` requires an adapter root table, indexes ownership by
+    raw Lua object, recursively walks `view.subviews`, identifies children by
+    `view_id`, and resolves retained subjects from the weak raw-view reference;
+  - diagnostics directly read Lua-view `_type`, `view_id`, `visible`, `active`,
+    `focus`, `frame_rect`, `frame_body`, `text`, `tooltip`, and `subviews`;
+  - tree capture recursively walks only `subviews`, so it cannot enumerate a
+    native `widget_container`;
+  - `ds.inspect()` sends the raw view directly to Lua-view diagnostics,
+    `ds.move_pointer()` requires `frame_body`, and
+    `ds.capture_view_tree()` sends `mount.root` directly to diagnostics;
+  - current render instrumentation separately requires a Lua table with an
+    `onRender` method and uses `rawget`/`rawset`, so it cannot instrument native
+    viewscreen userdata.
+- Existing public and internal behavior recorded from the current source:
+  - `ds.mount(component, options)` always classifies and prepares an explicit
+    component, selects its category adapter, enforces one current mount, waits
+    for the first tracked render, refreshes the Lua view tree, and returns a
+    root subject;
+  - `ds.root()` creates a new weakly retained subject for the current
+    `mount.root`;
+  - `ds.get(path)` accepts only a nonempty slash-delimited string, walks direct
+    `subviews` by exact `view_id`, rejects malformed/reserved/duplicate IDs,
+    and reports at most 12 sorted available child IDs;
+  - `Subject:raw()` succeeds only while the original mount remains current and
+    the weak raw table remains in the mount's `view_mounts` ownership map;
+  - `ds.input(keys, subject)` requires an active `host_screen`, resolves its
+    shown native screen, and calls `gui.simulateInput()`;
+  - `ds.mouseInput(button, action)` uses the current mount's host screen and
+    current virtual pointer, defaults button actions to `EInputState.CLICK`,
+    supports explicit down/up and wheel input, temporarily installs GPS mouse
+    coordinates, and retains explicit button state for cleanup;
+  - `ds.move_pointer(subject, anchor)` requires a Lua `frame_body`, supports
+    center and four corners, installs the virtual pointer, and waits for the
+    resulting render through the common mutation path;
+  - `ds.redraw(subject, options)` calls `host_screen:invalidate()` and waits for
+    a later tracked render unless `options.wait == false`.
+- Native API verification used the exact local DFHack
+  `D:\CODE\DFHack\dfhack-53.15-r1` source plus the
+  [DFHack Lua API reference](https://docs.dfhack.org/en/53.11-r1/docs/dev/Lua%20API.html#screens):
+  - `Gui::getCurViewscreen(bool)` returns the topmost viewscreen and optionally
+    skips dismissed screens;
+  - `Gui::getDFViewscreen(bool, viewscreen)` walks past DFHack-owned screens,
+    so equality between the two calls is the correct attachment precondition;
+  - `df::viewscreen` contains an embedded `df::widget_container widgets`;
+  - typed DF references are Lua userdata, and equality compares type and
+    pointer value even when separate wrapper userdata instances are produced;
+  - `dfhack.gui.getWidget()` accepts a widget container followed by string
+    names or zero-based integral indices, supports chained traversal, and
+    returns no value when a segment is missing or an intermediate child is not
+    a container;
+  - `dfhack.gui.getWidgetChildren()` returns the container's `children` in
+    vector order;
+  - `df::widget` exposes `parent`, `rect`, `name`, and `flag`, and inherits the
+    virtual `get_rect()` method;
+  - the native flags are `VISIBILITY_ACTIVE` and `VISIBILITY_VISIBLE`;
+  - verified type-specific fields include text `str`, scroll `scroll` and
+    `num_visible`, tab `cur_idx`, radio-row `selected_idx`, dropdown
+    `cur_selected`, tooltip data, and better-button `display_string`;
+  - DFHack's native render interpose calls the original native render first,
+    then calls `plugins.overlay.render_viewscreen_widgets(vs_name, vs)`;
+  - the Lua overlay dispatcher renders the matched viewscreen overlays and then
+    the `all` overlays, making successful return from that function the proposed
+    native-plus-overlay completion boundary;
+  - `gui.simulateInput(screen, keys)` is DFHack's supported input path, and
+    `dfhack.screen.invalidate()` requests a repaint.
+- Attachment must still perform explicit runtime capability checks for:
+  callable current/DF viewscreen getters; exact screen equality; a valid
+  `widgets` container; callable widget helpers; callable global invalidation;
+  a callable overlay render dispatcher; and successful invalidate-and-observe
+  completion. Widget inspection must treat `get_rect()` and type-specific
+  extractors as per-widget capabilities with documented fallbacks.
+- Injectable fixture boundaries for later implementation are:
+  - a native GUI service for current/DF screen acquisition, widget lookup,
+    child enumeration, and normal input dispatch;
+  - a native screen service for invalidation and current window dimensions;
+  - a native widget adapter with explicit identity comparison, type, hierarchy,
+    bounds, flags, and safe optional field access, allowing unit fixtures to use
+    opaque identity tokens while production uses userdata;
+  - an overlay service that exposes registry state and a replaceable render
+    dispatcher without changing overlay lifecycle;
+  - the existing pointer adapter behind injected virtual-pointer, GPS, enabler,
+    and button-state access;
+  - a native render observer supplied with the overlay dispatcher, pinned
+    screen identity predicate, and the already injected render tracker;
+  - mount selection kept injectable through the existing boundary,
+    adapter-factory, subject-module, render-tracker, and failure-reporter seams.
+- Existing focused regression files that must remain green during the shared
+  refactor:
+  `tests/unit/component_boundary_spec.lua`,
+  `tests/unit/mount_context_spec.lua`,
+  `tests/unit/mount_adapters_spec.lua`,
+  `tests/unit/ds_mount_commands_spec.lua`,
+  `tests/unit/subject_spec.lua`,
+  `tests/unit/render_instrumentation_spec.lua`,
+  `tests/unit/render_tracker_spec.lua`,
+  `tests/unit/automation_diagnostics_spec.lua`,
+  `tests/unit/automation_interaction_support_spec.lua`,
+  `tests/unit/overlay_mount_spec.lua`, and
+  `tests/unit/automation_cleanup_spec.lua`.
+- Only this planning document changed while completing Phase 0; no production
+  source, declaration, test, package, or runtime file was modified.
 
 ### Phase 1 evidence
 
