@@ -72,6 +72,7 @@ local function cleanup_mount(context, mount)
     mount.interaction_target = nil
     mount.subject_source = nil
     mount.subject_sources = {}
+    mount.render_observer = nil
     mount.adapter = nil
     mount.cleanup_entry = nil
     mount.cleanup_entries = {}
@@ -113,6 +114,8 @@ function M.new(options)
         'mount context requires an adapter factory')
     assert(type(options.render_tracker_factory) == 'function',
         'mount context requires a render tracker factory')
+    assert(type(options.native_render_observer_factory) == 'function',
+        'mount context requires a native render observer factory')
     assert(type(options.subject_module) == 'table' and
         type(options.subject_module.new) == 'function' and
         type(options.subject_module.release) == 'function',
@@ -131,6 +134,8 @@ function M.new(options)
         cleanup_registry=options.cleanup_registry,
         adapter_factory=options.adapter_factory,
         render_tracker_factory=options.render_tracker_factory,
+        native_render_observer_factory=
+            options.native_render_observer_factory,
         failure_reporter=options.failure_reporter,
         command_observer=options.command_observer,
         subject_module=options.subject_module,
@@ -696,6 +701,7 @@ function M.new(options)
             subject_source=attachment.subject_source,
             subject_sources={},
             render_tracker=nil,
+            render_observer=nil,
             adapter=nil,
             alive=false,
             cleaned=false,
@@ -762,8 +768,41 @@ function M.new(options)
             local source_adapter = subject_adapter(mount)
             assert(source_adapter:root() == mount.root,
                 'native subject source must use the pinned widget root')
+            local restore = self.native_render_observer_factory(mount)
+            assert(type(restore) == 'function',
+                'native render observer factory must return a restore function')
+            local registered, entry = xpcall(function()
+                return self:push_cleanup(
+                    mount,
+                    ('restore native render observation %d')
+                        :format(mount.id),
+                    restore)
+            end, debug.traceback)
+            if not registered then
+                local restored, restore_failure =
+                    xpcall(restore, debug.traceback)
+                local message =
+                    'native render observer cleanup registration failed: ' ..
+                    tostring(entry)
+                if not restored then
+                    message = message .. '; direct restoration failed: ' ..
+                        tostring(restore_failure)
+                end
+                error(message, 0)
+            end
+            mount.render_observer = restore
             mount.alive = true
             self:refresh_views(mount)
+            local captured = mount.render_tracker:capture()
+            local capability_ok, capability_failure = xpcall(function()
+                mount.interaction_target:invalidate()
+                return mount.render_tracker:wait_after(
+                    captured, 'native mount render capability check')
+            end, debug.traceback)
+            if not capability_ok then
+                error('DwarfSpec native render capability check failed: ' ..
+                    tostring(capability_failure), 0)
+            end
             return self:root()
         end, debug.traceback)
         if not ok then
@@ -831,6 +870,7 @@ function M.new(options)
             subject_source=nil,
             subject_sources={},
             render_tracker=self.render_tracker_factory(),
+            render_observer=nil,
             adapter=adapter,
             alive=false,
             cleaned=false,

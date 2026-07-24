@@ -460,40 +460,40 @@ redraw remains waitable without wrapping or owning the native screen.
 
 ### Tasks
 
-☐ Implement a run-scoped observer around
+☒ Implement a run-scoped observer around
   `plugins.overlay.render_viewscreen_widgets`.
-☐ Capture the exact original dispatcher before replacement.
-☐ Forward original arguments unchanged.
-☐ Preserve all return values and error behavior from the original dispatcher.
-☐ Advance the render tracker only after successful dispatch for the pinned
+☒ Capture the exact original dispatcher before replacement.
+☒ Forward original arguments unchanged.
+☒ Preserve all return values and error behavior from the original dispatcher.
+☒ Advance the render tracker only after successful dispatch for the pinned
   native viewscreen.
-☐ Report intercepted render failures through the existing render-tracker
+☒ Report intercepted render failures through the existing render-tracker
   failure path.
-☐ Ignore render dispatch for unrelated viewscreens.
-☐ Restore the exact original dispatcher during cleanup.
-☐ Detect a conflicting dispatcher replacement before restoration and report an
+☒ Ignore render dispatch for unrelated viewscreens.
+☒ Restore the exact original dispatcher during cleanup.
+☒ Detect a conflicting dispatcher replacement before restoration and report an
   explicit cleanup failure without overwriting unknown third-party state.
-☐ Ensure the observer is compatible with the service's one-active-run
+☒ Ensure the observer is compatible with the service's one-active-run
   execution rule and does not change cross-project queue semantics.
-☐ On attachment, invalidate once and wait for a completed observed render as a
+☒ On attachment, invalidate once and wait for a completed observed render as a
   capability check.
-☐ Fail attachment explicitly if overlay dispatch is unavailable or completion
+☒ Fail attachment explicitly if overlay dispatch is unavailable or completion
   cannot be observed.
-☐ Implement native invalidation with `dfhack.screen.invalidate()`.
-☐ Preserve the render-generation sequence: capture, invalidate, yield, observe
+☒ Implement native invalidation with `dfhack.screen.invalidate()`.
+☒ Preserve the render-generation sequence: capture, invalidate, yield, observe
   completion, then resume.
-☐ Preserve `{wait=false}` as an explicit invalidation-only path.
-☐ Add tests for successful completion, unrelated-screen dispatch, multiple
+☒ Preserve `{wait=false}` as an explicit invalidation-only path.
+☒ Add tests for successful completion, unrelated-screen dispatch, multiple
   returns, original errors, observation errors, timeout, wait opt-out,
   conflicting replacement, exact restoration, and failed attachment cleanup.
 
 ### Phase 8 exit gate
 
-☐ `ds.redraw()` waits for the pinned native screen's completed
+☒ `ds.redraw()` waits for the pinned native screen's completed
   native-plus-overlay render boundary.
-☐ `{wait=false}` does not enter the render wait path.
-☐ Observer installation and restoration are exact and failure-safe.
-☐ Focused render-observer and redraw tests pass.
+☒ `{wait=false}` does not enter the render wait path.
+☒ Observer installation and restoration are exact and failure-safe.
+☒ Focused render-observer and redraw tests pass.
 
 ## Phase 9: Cleanup, failure recovery, and ownership evidence
 
@@ -1059,11 +1059,55 @@ as the work proceeds.
 - `git diff --check` passed.
 - No package build or live DFHack run is claimed for this phase. The routing
   boundary is covered by unit tests and confirmed against the checked-out
-  DFHack source; native render observation remains Phase 8 work.
+  DFHack source.
 
 ### Phase 8 evidence
 
-- Pending.
+- Added `src/dwarfspec/native_render_observer.lua`. It captures and replaces
+  the exact `plugins.overlay.render_viewscreen_widgets` dispatcher, forwards
+  packed arguments, preserves nil and multiple returns, advances only for the
+  exact pinned viewscreen after successful dispatch, and reports pinned render
+  or observation failures through the mount's render tracker.
+- Restoration is idempotent and exact. A conflicting replacement produces an
+  explicit cleanup failure and remains untouched; the cleanup registry
+  continues detaching the borrowed mount after that failure.
+- `src/dwarfspec/mount_context.lua` now owns observer installation and cleanup.
+  Native attachment performs the required capture, global screen invalidation,
+  scheduler wait, and observed-completion capability check before returning a
+  root subject. Installation, capability, and timeout failures use the existing
+  failed-attachment cleanup path.
+- `src/dwarfspec/ds.lua` lazily binds native observation to the real overlay
+  module and retains `dfhack.screen.invalidate()` as the production native
+  invalidator. Component-only mounts do not require overlay dispatch through
+  this new path.
+- The existing `mutate()` sequence remains authoritative for redraw:
+  wait-enabled calls capture, invalidate, and wait; `{wait=false}` invalidates
+  without entering `wait_after()`.
+- No scheduler or queue code changed. Observation is stored in the active
+  run's mount cleanup registry, preserving the service's existing single-active
+  run and cross-project FIFO semantics.
+- Added `tests/unit/native_render_observer_spec.lua` for exact arguments,
+  nil/multiple returns, pinned success, unrelated success and failure,
+  dispatcher and observation failures, missing dispatch, exact restoration,
+  and conflicting replacement.
+- Extended `tests/unit/mount_context_spec.lua` for capability success, timeout
+  cleanup, observer-install failure cleanup, and conflict-safe continued
+  detachment. Extended `tests/unit/ds_mount_commands_spec.lua` so native
+  invalidation advances the tracker only through the observed overlay
+  dispatcher and verifies native redraw waiting, wait opt-out, and exact
+  restoration.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `351 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 218 files.`
+- `git diff --check` passed.
+- The checked-out DFHack 53.15-r1 source confirms the completion boundary:
+  `plugins/overlay.cpp` calls the native render first and then invokes
+  `render_viewscreen_widgets(vs_name, this)`; `plugins/lua/overlay.lua`
+  renders screen-specific and global registered overlays in that dispatcher.
+- No live DFHack run is claimed or required for this phase; behavior is covered
+  by unit contracts and the dispatcher boundary is confirmed from DFHack
+  source.
 
 ### Phase 9 evidence
 

@@ -49,6 +49,10 @@ describe('DwarfSpec mount context', function()
     local invalid_result
     local fail_subject
     local fail_render
+    local native_observer_installs
+    local native_observer_restores
+    local native_observer_install_failure
+    local native_observer_restore_failure
 
     before_each(function()
         Widget = make_class()
@@ -63,6 +67,10 @@ describe('DwarfSpec mount context', function()
         invalid_result = false
         fail_subject = false
         fail_render = false
+        native_observer_installs = 0
+        native_observer_restores = 0
+        native_observer_install_failure = nil
+        native_observer_restore_failure = nil
         local boundary = component.new({
             Widget=Widget,
             OverlayWidget=OverlayWidget,
@@ -79,6 +87,21 @@ describe('DwarfSpec mount context', function()
                         return assert(query(), 'render did not complete')
                     end,
                 }, {})
+            end,
+            native_render_observer_factory=function()
+                native_observer_installs =
+                    native_observer_installs + 1
+                if native_observer_install_failure then
+                    error(native_observer_install_failure, 0)
+                end
+                return function()
+                    native_observer_restores =
+                        native_observer_restores + 1
+                    if native_observer_restore_failure then
+                        error(native_observer_restore_failure, 0)
+                    end
+                    return true
+                end
             end,
             subject_module={
                 new=function(...)
@@ -676,7 +699,9 @@ describe('DwarfSpec mount context', function()
         local current = pinned
         local target = interaction_target.new_borrowed_native(pinned, {
             get_current_viewscreen=function() return current end,
-            invalidate_screen=function() end,
+            invalidate_screen=function()
+                context.current.render_tracker:completed()
+            end,
         })
 
         local mounted = context:mount_native(function()
@@ -696,6 +721,9 @@ describe('DwarfSpec mount context', function()
         assert.equals(root, context.current.root)
         assert.equals(pinned, context.current.pinned_screen)
         assert.is_nil(context.current.host_screen)
+        assert.equals(1, native_observer_installs)
+        assert.equals(0, native_observer_restores)
+        assert.equals(1, context.current.render_tracker:generation())
         assert.same({
             current_mount_id=1,
             active_screen_count=0,
@@ -706,7 +734,133 @@ describe('DwarfSpec mount context', function()
         context:unmount()
 
         assert.is_true(target._cleaned)
+        assert.equals(1, native_observer_restores)
         assert.equals(0, pinned.dismissals)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('restores observation and attachment state after capability timeout',
+            function()
+        local root = {kind='native-root'}
+        local pinned = {widgets=root}
+        local target_cleanups = 0
+        local source_cleanups = 0
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return pinned end,
+            invalidate_screen=function() end,
+        })
+        local original_target_cleanup = target.cleanup
+        target.cleanup = function(self)
+            target_cleanups = target_cleanups + 1
+            return original_target_cleanup(self)
+        end
+        local source = native_widget_adapter.new_source(root, target, {
+            get_widget=function() return nil end,
+            get_children=function() return {} end,
+        })
+        local original_source_cleanup = source.adapter.cleanup
+        source.adapter.cleanup = function(self)
+            source_cleanups = source_cleanups + 1
+            if original_source_cleanup then
+                return original_source_cleanup(self)
+            end
+        end
+
+        local ok, failure = pcall(context.mount_native, context, function()
+            return {
+                root=root,
+                pinned_screen=pinned,
+                interaction_target=target,
+                subject_source=source,
+            }
+        end)
+
+        assert.is_false(ok)
+        assert.matches('DwarfSpec native render capability check failed:',
+            failure, 1, true)
+        assert.matches('render did not complete', failure, 1, true)
+        assert.equals(1, native_observer_installs)
+        assert.equals(1, native_observer_restores)
+        assert.equals(1, target_cleanups)
+        assert.equals(1, source_cleanups)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('cleans attachment resources when native observation cannot install',
+            function()
+        local root = {kind='native-root'}
+        local pinned = {widgets=root}
+        local target_cleanups = 0
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return pinned end,
+            invalidate_screen=function() end,
+        })
+        local original_cleanup = target.cleanup
+        target.cleanup = function(self)
+            target_cleanups = target_cleanups + 1
+            return original_cleanup(self)
+        end
+        native_observer_install_failure =
+            'overlay render dispatch unavailable'
+
+        local ok, failure = pcall(context.mount_native, context, function()
+            return {
+                root=root,
+                pinned_screen=pinned,
+                interaction_target=target,
+                subject_source=native_widget_adapter.new_source(
+                    root, target, {
+                        get_widget=function() return nil end,
+                        get_children=function() return {} end,
+                    }),
+            }
+        end)
+
+        assert.is_false(ok)
+        assert.matches('overlay render dispatch unavailable',
+            failure, 1, true)
+        assert.equals(1, native_observer_installs)
+        assert.equals(0, native_observer_restores)
+        assert.equals(1, target_cleanups)
+        assert.is_nil(context.current)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('continues detaching after observer restoration reports a conflict',
+            function()
+        local root = {kind='native-root'}
+        local pinned = {widgets=root}
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return pinned end,
+            invalidate_screen=function()
+                context.current.render_tracker:completed()
+            end,
+        })
+        native_observer_restore_failure =
+            'native render dispatcher changed before restoration'
+        context:mount_native(function()
+            return {
+                root=root,
+                pinned_screen=pinned,
+                interaction_target=target,
+                subject_source=native_widget_adapter.new_source(
+                    root, target, {
+                        get_widget=function() return nil end,
+                        get_children=function() return {} end,
+                    }),
+            }
+        end)
+
+        local ok, failure = pcall(context.unmount, context)
+
+        assert.is_false(ok)
+        assert.matches(
+            'native render dispatcher changed before restoration',
+            failure, 1, true)
+        assert.equals(1, native_observer_restores)
+        assert.is_true(target._cleaned)
+        assert.is_nil(context.current)
         assert.equals(0, cleanup.pending_count(registry))
     end)
 

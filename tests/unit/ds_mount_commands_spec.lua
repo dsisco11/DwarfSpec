@@ -76,6 +76,8 @@ describe('DwarfSpec public mount commands', function()
     local wait_until_calls
     local component_mount_calls
     local native_widget_lookup_calls
+    local native_invalidation_count
+    local original_native_render_dispatcher
 
     before_each(function()
         original_dfhack = rawget(_G, 'dfhack')
@@ -83,12 +85,19 @@ describe('DwarfSpec public mount commands', function()
         original_gui = package.loaded.gui
         original_overlay_plugin = package.loaded['plugins.overlay']
         overlay_state = {db={}, config={}, index={}}
-        package.loaded['plugins.overlay'] = {
+        local overlay_plugin = {
             get_state=function() return overlay_state end,
         }
+        overlay_plugin.render_viewscreen_widgets=function(...)
+            return ...
+        end
+        original_native_render_dispatcher =
+            overlay_plugin.render_viewscreen_widgets
+        package.loaded['plugins.overlay'] = overlay_plugin
         screen = nil
         component_mount_calls = 0
         native_widget_lookup_calls = 0
+        native_invalidation_count = 0
         simulated_inputs = {}
         simulate_input_failure = nil
         simulate_input_dispatch = nil
@@ -237,7 +246,11 @@ describe('DwarfSpec public mount commands', function()
                     return root == native_root
                 end,
                 invalidate_native_screen=function()
-                    current_tracker:completed()
+                    native_invalidation_count =
+                        native_invalidation_count + 1
+                    return package.loaded['plugins.overlay']
+                        .render_viewscreen_widgets(
+                            'native-screen', current_native_screen)
                 end,
                 render_tracker_factory=function()
                     current_tracker = render_tracker.new(
@@ -311,6 +324,9 @@ describe('DwarfSpec public mount commands', function()
 
     after_each(function()
         local cleanup_ok = cleanup.run(registry, 'ds command test teardown')
+        assert.equals(original_native_render_dispatcher,
+            package.loaded['plugins.overlay']
+                .render_viewscreen_widgets)
         package.loaded.gui = original_gui
         package.loaded['plugins.overlay'] = original_overlay_plugin
         rawset(_G, 'dfhack', original_dfhack)
@@ -375,6 +391,9 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(native_screen, simulated_inputs[1].screen)
         assert.equals('SELECT', simulated_inputs[1].key)
         assert.equals(0, component_mount_calls)
+        assert.equals(1, native_invalidation_count)
+        assert.not_equals(original_native_render_dispatcher,
+            package.loaded['plugins.overlay'].render_viewscreen_widgets)
         assert.is_nil(screen)
         assert.same({
             current_mount_id=1,
@@ -414,6 +433,29 @@ describe('DwarfSpec public mount commands', function()
             'unsupported component input (nil); expected a DFHack defclass ' ..
                 'derived from widgets.Widget, overlay.OverlayWidget, or ' ..
                 'gui.ZScreen, or an instance of one of those classes')
+    end)
+
+    it('waits for observed native redraw and supports explicit wait opt-out',
+            function()
+        local mounted = ds.mount()
+        local baseline_waits = wait_until_calls
+        local baseline_invalidations = native_invalidation_count
+
+        ds.redraw()
+        assert.equals(baseline_invalidations + 1,
+            native_invalidation_count)
+        assert.equals(baseline_waits + 1, wait_until_calls)
+
+        baseline_waits = wait_until_calls
+        baseline_invalidations = native_invalidation_count
+        assert.equals(mounted, mounted:redraw({wait=false}))
+        assert.equals(baseline_invalidations + 1,
+            native_invalidation_count)
+        assert.equals(baseline_waits, wait_until_calls)
+
+        ds.unmount()
+        assert.equals(original_native_render_dispatcher,
+            package.loaded['plugins.overlay'].render_viewscreen_widgets)
     end)
 
     it('rejects native subject access immediately after a screen transition',

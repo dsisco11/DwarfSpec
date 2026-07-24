@@ -81,6 +81,9 @@ local overlay_mount_module = load_automation_module(package_root,
 local render_instrumentation = load_automation_module(package_root,
     'dwarfspec.render_instrumentation',
     '/src/dwarfspec/render_instrumentation.lua')
+local native_render_observer_module = load_automation_module(package_root,
+    'dwarfspec.native_render_observer',
+    '/src/dwarfspec/native_render_observer.lua')
 local render_tracker_module = load_automation_module(package_root,
     'dwarfspec.render_tracker', '/src/dwarfspec/render_tracker.lua')
 local subject_module = load_automation_module(package_root,
@@ -354,6 +357,26 @@ local TestStatus = load_automation_module(package_root,
     end
     assert(type(overlay_subject_source_factory) == 'function',
         'DwarfSpec requires an overlay subject source factory')
+    local native_render_observer_factory =
+        mount_dependencies.native_render_observer_factory
+    if native_render_observer_factory == nil then
+        ---Observes the real post-native overlay render boundary for one mount.
+        ---@param mount table
+        ---@return function
+        native_render_observer_factory = function(mount)
+            local overlay = require('plugins.overlay')
+            return native_render_observer_module.install(
+                overlay, mount.pinned_screen, mount.render_tracker,
+                function(failure)
+                    return report_mount_failure(mount, 'render', failure)
+                end,
+                function()
+                    if mount.refresh_views then mount.refresh_views() end
+                end)
+        end
+    end
+    assert(type(native_render_observer_factory) == 'function',
+        'DwarfSpec requires a native render observer factory')
     context.mount_context = mount_context_module.new({
         run=context.run,
         boundary=boundary,
@@ -363,6 +386,7 @@ local TestStatus = load_automation_module(package_root,
         failure_reporter=mount_dependencies.failure_reporter or
             report_mount_failure,
         render_tracker_factory=new_render_tracker,
+        native_render_observer_factory=native_render_observer_factory,
         subject_module=mount_dependencies.subject_module or subject_module,
         command_observer=command_observer,
     })
