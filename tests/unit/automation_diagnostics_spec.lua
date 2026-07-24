@@ -32,6 +32,9 @@ describe('automation mount diagnostics', function()
         assert.same({
             max_depth=3,
             max_nodes=20,
+            max_children=32,
+            max_value_length=512,
+            max_field_count=32,
             node_count=4,
             truncated=true,
         }, tree.capture_bounds)
@@ -60,5 +63,37 @@ describe('automation mount diagnostics', function()
         assert.is_true(tree.capture_bounds.truncated)
         assert.is_true(tree.truncated)
         assert.equals(4, #tree.children)
+    end)
+
+    it('bounds children and diagnostic string values independently',
+            function()
+        local root = {
+            view_id=string.rep('x', 40),
+            visible=true,
+            active=true,
+            subviews={},
+        }
+        for index = 1, 10 do
+            table.insert(root.subviews, {
+                view_id='child-' .. index,
+                visible=true,
+                active=true,
+                subviews={},
+            })
+        end
+
+        local tree = diagnostics.capture_view_tree(root, {
+            max_depth=8,
+            max_nodes=20,
+            max_children=3,
+            max_value_length=12,
+        })
+
+        assert.equals('xxxxxxxxx...', tree.view_id)
+        assert.equals(3, #tree.children)
+        assert.is_true(tree.truncated)
+        assert.is_true(tree.capture_bounds.truncated)
+        assert.equals(3, tree.capture_bounds.max_children)
+        assert.equals(12, tree.capture_bounds.max_value_length)
     end)
 end)

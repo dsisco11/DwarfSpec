@@ -289,6 +289,7 @@ local TestStatus = load_automation_module(package_root,
                     root, interaction_target, {
                         get_widget=get_native_widget,
                         get_children=get_native_widget_children,
+                        get_window_size=dfhack.screen.getWindowSize,
                     })
             end
             native_subject_source_factory=create_native_subject_source
@@ -560,8 +561,14 @@ local TestStatus = load_automation_module(package_root,
         local adapter
         view, _, _, adapter = resolve_interaction_target(
             view, 'move_pointer')
-        local body = assert(adapter:bounds(view),
-            'view has no live frame body')
+        local body
+        if type(adapter.interaction_bounds) == 'function' then
+            body = adapter:interaction_bounds(view)
+        else
+            body = adapter:bounds(view)
+        end
+        body = assert(body,
+            'view has no usable live bounds for pointer placement')
         anchor = anchor or 'center'
         local x = math.floor((body.x1 + body.x2) / 2)
         local y = math.floor((body.y1 + body.y2) / 2)

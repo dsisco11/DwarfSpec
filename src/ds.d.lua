@@ -99,6 +99,13 @@
 ---@field body dwarfspec.SubjectInspectRect|nil
 ---@field text string|nil
 ---@field tooltip string|nil
+---@field native_type? string Native DF widget type for native subjects.
+---@field name? string Native widget name for native subjects.
+---@field effective_visible? boolean Visibility including native ancestors.
+---@field effective_active? boolean Activity including native ancestors.
+---@field scroll_position? integer Native scroll-row position.
+---@field visible_row_count? integer Native scroll-row visible count.
+---@field selected_index? integer Native tabs, dropdown, or radio selection.
 
 ---@class dwarfspec.ScreenCell
 ---@field ch? integer

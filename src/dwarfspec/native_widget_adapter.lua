@@ -6,6 +6,41 @@ local M = {}
 
 local DEFAULT_CHILD_SUMMARY_LIMIT = 12
 local DEFAULT_LABEL_LIMIT = 80
+local DEFAULT_TEXT_LIMIT = 512
+local DEFAULT_TEXT_DEPTH_LIMIT = 4
+local DEFAULT_TEXT_NODE_LIMIT = 64
+local DEFAULT_PARENT_LIMIT = 64
+
+---Maps exact supported native widget types to their read-only text field.
+---@type table<string, string>
+local TEXT_TYPES = {
+    ['df.widget_text']='str',
+    ['df.widget_textst']='str',
+    ['df.widget_text_truncated']='str',
+    ['df.widget_text_truncatedst']='str',
+    ['df.widget_text_multiline']='str',
+    ['df.widget_text_multilinest']='str',
+    ['df.widget_textbox']='str',
+    ['df.widget_textboxst']='str',
+}
+
+---Identifies native button types with a documented display-string accessor.
+---@type table<string, boolean>
+local BETTER_BUTTON_TYPES = {
+    ['df.widget_better_button']=true,
+    ['df.widget_better_buttonst']=true,
+}
+
+---Maps exact selectable native widget types to their selected-index field.
+---@type table<string, string>
+local SELECTION_FIELDS = {
+    ['df.widget_tabs']='cur_idx',
+    ['df.widget_tabsst']='cur_idx',
+    ['df.widget_dropdown']='cur_selected',
+    ['df.widget_dropdownst']='cur_selected',
+    ['df.widget_radio_rows']='selected_idx',
+    ['df.widget_radio_rowsst']='selected_idx',
+}
 
 ---@class dwarfspec.NativeWidgetAdapter: dwarfspec.SubjectAdapter
 ---@field _root any|nil
@@ -15,11 +50,73 @@ local DEFAULT_LABEL_LIMIT = 80
 ---@field _identity_of function|nil
 ---@field _name_of function|nil
 ---@field _type_of function|nil
+---@field _get_window_size function|nil
 ---@field _known_identities any[]
 ---@field _child_summary_limit integer
+---@field _text_limit integer
+---@field _text_depth_limit integer
+---@field _text_node_limit integer
 ---@field _cleaned boolean
 local NativeWidgetAdapter = {}
 NativeWidgetAdapter.__index = NativeWidgetAdapter
+
+---Reads one native field without propagating userdata access failures.
+---@param raw any
+---@param field string
+---@return any
+local function safe_field(raw, field)
+    local ok, value = pcall(function() return raw[field] end)
+    if ok then return value end
+    return nil
+end
+
+---Copies a valid integral inclusive rectangle into a plain table.
+---@param rect any
+---@return table|nil
+local function normalize_rect(rect)
+    if rect == nil then return nil end
+    local values = {}
+    for _, field in ipairs({'x1', 'y1', 'x2', 'y2'}) do
+        local value = safe_field(rect, field)
+        if type(value) ~= 'number' or value % 1 ~= 0 then return nil end
+        values[field] = value
+    end
+    if values.x1 > values.x2 or values.y1 > values.y2 then return nil end
+    return values
+end
+
+---Returns a bounded string without inspecting arbitrary compound values.
+---@param value any
+---@param limit integer
+---@return string|nil
+local function bounded_text(value, limit)
+    if value == nil then return nil end
+    local value_type = type(value)
+    if value_type ~= 'string' and value_type ~= 'number' and
+            value_type ~= 'boolean' then
+        return nil
+    end
+    local result = tostring(value)
+    if #result <= limit then return result end
+    if limit <= 3 then return result:sub(1, limit) end
+    return result:sub(1, limit - 3) .. '...'
+end
+
+---Returns a native flag value without evaluating any callbacks.
+---@param raw any
+---@param flag_name string
+---@return boolean
+local function read_flag(raw, flag_name)
+    local flags = safe_field(raw, 'flag')
+    if flags == nil then return false end
+    return not not safe_field(flags, flag_name)
+end
+
+---Returns an unusable window when geometry services were not injected.
+---@return integer, integer
+local function unavailable_window_size()
+    return 0, 0
+end
 
 ---Returns a bounded scalar label for native lookup diagnostics.
 ---@param value any
@@ -180,31 +277,102 @@ function NativeWidgetAdapter:native_type(raw)
     return bounded_label(self._type_of(raw) or '<unknown-native-widget>')
 end
 
----Returns no bounds until native geometry normalization is installed.
+---Returns current normalized zero-based inclusive native widget bounds.
 ---@param raw any
----@return nil
+---@return table|nil
 function NativeWidgetAdapter:bounds(raw)
     assert(self:contains(raw),
         'native widget adapter cannot read bounds from an unrelated object')
-    return nil
+    local rect
+    local get_rect = safe_field(raw, 'get_rect')
+    if type(get_rect) == 'function' then
+        self._interaction_target:assert_current('native widget geometry')
+        local ok, value = pcall(get_rect, raw)
+        self._interaction_target:assert_current('native widget geometry')
+        if ok then rect = value end
+    end
+    if rect == nil then rect = safe_field(raw, 'rect') end
+    return normalize_rect(rect)
 end
 
----Returns a temporary direct visibility value without filtering lookup.
+---Returns bounds clipped to the current window for pointer interaction.
+---@param raw any
+---@return table|nil
+function NativeWidgetAdapter:interaction_bounds(raw)
+    local rect = self:bounds(raw)
+    if rect == nil then return nil end
+    self._interaction_target:assert_current('native window geometry')
+    local ok, width, height = pcall(self._get_window_size)
+    self._interaction_target:assert_current('native window geometry')
+    assert(ok, 'DwarfSpec native window geometry failed: ' ..
+        tostring(width))
+    if type(width) ~= 'number' or type(height) ~= 'number' or
+            width % 1 ~= 0 or height % 1 ~= 0 or
+            width < 1 or height < 1 then
+        return nil
+    end
+    local clipped = {
+        x1=math.max(0, rect.x1),
+        y1=math.max(0, rect.y1),
+        x2=math.min(width - 1, rect.x2),
+        y2=math.min(height - 1, rect.y2),
+    }
+    if clipped.x1 > clipped.x2 or clipped.y1 > clipped.y2 then return nil end
+    return clipped
+end
+
+---Returns direct native visibility without filtering lookup.
 ---@param raw any
 ---@return boolean
 function NativeWidgetAdapter:visible(raw)
     assert(self:contains(raw),
         'native widget adapter cannot inspect an unrelated object')
-    return true
+    return read_flag(raw, 'VISIBILITY_VISIBLE')
 end
 
----Returns a temporary direct activity value without filtering lookup.
+---Returns direct native activity without filtering lookup.
 ---@param raw any
 ---@return boolean
 function NativeWidgetAdapter:active(raw)
     assert(self:contains(raw),
         'native widget adapter cannot inspect an unrelated object')
-    return true
+    return read_flag(raw, 'VISIBILITY_ACTIVE')
+end
+
+---Calculates effective native visibility or activity through the parent chain.
+---@param self dwarfspec.NativeWidgetAdapter
+---@param raw any
+---@param flag_name string
+---@return boolean
+local function effective_flag(self, raw, flag_name)
+    assert(self:contains(raw),
+        'native widget adapter cannot inspect an unrelated object')
+    local current = raw
+    local visited = {}
+    for _ = 1, DEFAULT_PARENT_LIMIT do
+        local identity = self._identity_of(current)
+        if visited[identity] then return false end
+        visited[identity] = true
+        if not read_flag(current, flag_name) then return false end
+        if identity == self._identity_of(self._root) then return true end
+        current = safe_field(current, 'parent')
+        if current == nil then return true end
+    end
+    return false
+end
+
+---Returns inherited native visibility separately from the direct flag.
+---@param raw any
+---@return boolean
+function NativeWidgetAdapter:effective_visible(raw)
+    return effective_flag(self, raw, 'VISIBILITY_VISIBLE')
+end
+
+---Returns inherited native activity separately from the direct flag.
+---@param raw any
+---@return boolean
+function NativeWidgetAdapter:effective_active(raw)
+    return effective_flag(self, raw, 'VISIBILITY_ACTIVE')
 end
 
 ---Returns whether the native widget itself owns focus.
@@ -216,48 +384,145 @@ function NativeWidgetAdapter:focused(raw)
     return false
 end
 
----Returns no text until type-aware native extraction is installed.
+---Returns direct text for an explicitly supported native widget type.
+---@param self dwarfspec.NativeWidgetAdapter
 ---@param raw any
----@return nil
+---@return string|nil
+local function direct_text(self, raw)
+    local type_name = self:native_type(raw)
+    local field = TEXT_TYPES[type_name]
+    if field then
+        return bounded_text(safe_field(raw, field), self._text_limit)
+    end
+    if BETTER_BUTTON_TYPES[type_name] then
+        local display_string = safe_field(raw, 'display_string')
+        if type(display_string) ~= 'function' then
+            return bounded_text(display_string, self._text_limit)
+        end
+        self._interaction_target:assert_current(
+            'native better-button text inspection')
+        local ok, value = pcall(display_string, raw)
+        self._interaction_target:assert_current(
+            'native better-button text inspection')
+        if ok then return bounded_text(value, self._text_limit) end
+    end
+    return nil
+end
+
+---Aggregates visible descendant text within fixed traversal limits.
+---@param self dwarfspec.NativeWidgetAdapter
+---@param raw any
+---@return string|nil
+local function descendant_text(self, raw)
+    local parts = {}
+    local state = {nodes=0, length=0}
+
+    ---Visits one descendant without traversing arbitrary native fields.
+    ---@param node any
+    ---@param depth integer
+    local function visit(node, depth)
+        if depth > self._text_depth_limit or
+                state.nodes >= self._text_node_limit or
+                state.length >= self._text_limit then
+            return
+        end
+        for _, child in ipairs(self:children(node)) do
+            if state.nodes >= self._text_node_limit or
+                    state.length >= self._text_limit then
+                return
+            end
+            state.nodes = state.nodes + 1
+            if self:visible(child) then
+                local value = direct_text(self, child)
+                if value ~= nil and value ~= '' then
+                    local separator = #parts == 0 and '' or '\n'
+                    local remaining = self._text_limit -
+                        state.length - #separator
+                    if remaining <= 0 then return end
+                    local piece = value:sub(1, remaining)
+                    table.insert(parts, separator .. piece)
+                    state.length = state.length + #separator + #piece
+                elseif depth < self._text_depth_limit then
+                    visit(child, depth + 1)
+                end
+            end
+        end
+    end
+
+    visit(raw, 1)
+    if #parts == 0 then return nil end
+    return table.concat(parts)
+end
+
+---Returns bounded type-aware text or visible descendant text.
+---@param raw any
+---@return string|nil
 function NativeWidgetAdapter:text(raw)
     assert(self:contains(raw),
         'native widget adapter cannot inspect an unrelated object')
-    return nil
+    return direct_text(self, raw) or descendant_text(self, raw)
 end
 
----Returns no tooltip until native tooltip extraction is installed.
+---Returns scalar native tooltip text without invoking variant callbacks.
 ---@param raw any
----@return nil
+---@return string|nil
 function NativeWidgetAdapter:tooltip(raw)
     assert(self:contains(raw),
         'native widget adapter cannot inspect an unrelated object')
-    return nil
+    return bounded_text(safe_field(raw, 'tooltip'), self._text_limit)
 end
 
----Returns no optional fields until native inspection is installed.
+---Returns the documented bounded optional native inspection fields.
 ---@param raw any
 ---@return table
 function NativeWidgetAdapter:optional_fields(raw)
     assert(self:contains(raw),
         'native widget adapter cannot inspect an unrelated object')
-    return {}
+    local type_name = self:native_type(raw)
+    local result = {
+        native_type=type_name,
+        name=self:name(raw),
+        effective_visible=self:effective_visible(raw),
+        effective_active=self:effective_active(raw),
+    }
+    if type_name == 'df.widget_scroll_rows' or
+            type_name == 'df.widget_scroll_rowsst' then
+        local scroll = safe_field(raw, 'scroll')
+        local visible_rows = safe_field(raw, 'num_visible')
+        if type(scroll) == 'number' and scroll % 1 == 0 then
+            result.scroll_position = scroll
+        end
+        if type(visible_rows) == 'number' and visible_rows % 1 == 0 then
+            result.visible_row_count = visible_rows
+        end
+    end
+    local selection_field = SELECTION_FIELDS[type_name]
+    local selected = selection_field and safe_field(raw, selection_field)
+    if type(selected) == 'number' and selected % 1 == 0 then
+        result.selected_index = selected
+    end
+    return result
 end
 
----Returns one bounded minimal native widget inspection record.
+---Returns one bounded read-only native widget inspection record.
 ---@param raw any
 ---@return table
 function NativeWidgetAdapter:inspect(raw)
-    return {
+    local result = {
         class=self:native_type(raw),
         view_id=self:name(raw),
         visible=self:visible(raw),
         active=self:active(raw),
         focused=self:focused(raw),
         frame=nil,
-        body=nil,
-        text=nil,
-        tooltip=nil,
+        body=self:bounds(raw),
+        text=self:text(raw),
+        tooltip=self:tooltip(raw),
     }
+    for name, value in pairs(self:optional_fields(raw)) do
+        result[name] = value
+    end
+    return result
 end
 
 ---Formats a bounded deterministic child summary for one failed lookup.
@@ -319,6 +584,7 @@ function NativeWidgetAdapter:cleanup()
     self._identity_of = nil
     self._name_of = nil
     self._type_of = nil
+    self._get_window_size = nil
     self._known_identities = {}
     return true
 end
@@ -368,15 +634,29 @@ function M.new(root, interaction_target, options)
         _identity_of=identity_of,
         _name_of=name_of,
         _type_of=type_of,
+        _get_window_size=options.get_window_size or unavailable_window_size,
         _known_identities={},
         _child_summary_limit=options.child_summary_limit or
             DEFAULT_CHILD_SUMMARY_LIMIT,
+        _text_limit=options.text_limit or DEFAULT_TEXT_LIMIT,
+        _text_depth_limit=options.text_depth_limit or
+            DEFAULT_TEXT_DEPTH_LIMIT,
+        _text_node_limit=options.text_node_limit or
+            DEFAULT_TEXT_NODE_LIMIT,
         _cleaned=false,
     }, NativeWidgetAdapter)
     assert(type(adapter._child_summary_limit) == 'number' and
         adapter._child_summary_limit >= 1 and
         adapter._child_summary_limit % 1 == 0,
         'native child summary limit must be a positive integer')
+    for name, value in pairs({
+        text_limit=adapter._text_limit,
+        text_depth_limit=adapter._text_depth_limit,
+        text_node_limit=adapter._text_node_limit,
+    }) do
+        assert(type(value) == 'number' and value >= 1 and value % 1 == 0,
+            ('native %s must be a positive integer'):format(name))
+    end
     interaction_target:assert_current('native widget adapter creation')
     remember(adapter, root)
     return adapter

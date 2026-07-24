@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phases 0-4 complete
+Status: in progress; Phases 0-5 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -332,43 +332,43 @@ diagnostics APIs without guessing or dumping arbitrary userdata.
 
 ### Tasks
 
-☐ Normalize native bounds to integral zero-based inclusive
+☑ Normalize native bounds to integral zero-based inclusive
   `x1, y1, x2, y2` coordinates.
-☐ Prefer the bound `widget:get_rect()` method when available and otherwise use
+☑ Prefer the bound `widget:get_rect()` method when available and otherwise use
   `widget.rect`.
-☐ Reject subject-relative pointer interaction for empty, invalid, or wholly
+☑ Reject subject-relative pointer interaction for empty, invalid, or wholly
   off-window rectangles while keeping the subject inspectable.
-☐ Map direct visibility and activity from
+☑ Map direct visibility and activity from
   `widget.flag.VISIBILITY_VISIBLE` and
   `widget.flag.VISIBILITY_ACTIVE`.
-☐ If effective state is exposed, calculate it through the native parent chain
+☑ If effective state is exposed, calculate it through the native parent chain
   and keep it distinct from direct flags.
-☐ Implement a documented, type-aware native text-extractor registry.
-☐ Add extractors for widget text, truncated text, multiline text, textbox text,
+☑ Implement a documented, type-aware native text-extractor registry.
+☑ Add extractors for widget text, truncated text, multiline text, textbox text,
   and safe better-button display text.
-☐ Aggregate visible textual descendants only when a direct text value is
+☑ Aggregate visible textual descendants only when a direct text value is
   unavailable and the result remains bounded.
-☐ Return `nil` for unsupported text types instead of reading rendered screen
+☑ Return `nil` for unsupported text types instead of reading rendered screen
   pixels or invoking callbacks.
-☐ Expose documented optional native fields for type, name, tooltip, scroll
+☑ Expose documented optional native fields for type, name, tooltip, scroll
   position, visible-row count, and applicable selection state.
-☐ Ensure read-only inspection never invokes activation, mutation, selection,
+☑ Ensure read-only inspection never invokes activation, mutation, selection,
   or input callbacks.
-☐ Generalize diagnostics and `capture_view_tree()` through the selected subject
+☑ Generalize diagnostics and `capture_view_tree()` through the selected subject
   adapter.
-☐ Bound tree depth, child count, text length, and diagnostic value size.
-☐ Add tests for rectangle fallback and validation, direct/effective state,
+☑ Bound tree depth, child count, text length, and diagnostic value size.
+☑ Add tests for rectangle fallback and validation, direct/effective state,
   every supported text extractor, unsupported text, tooltip, scroll and
   selection fields, aggregate text, callback non-invocation, and bounded tree
   capture.
 
 ### Phase 5 exit gate
 
-☐ Native inspection returns documented normalized values without arbitrary
+☑ Native inspection returns documented normalized values without arbitrary
   userdata traversal.
-☐ Unsupported widget types remain safely inspectable.
-☐ Native tree capture is deterministic and bounded.
-☐ Focused inspection and diagnostics tests pass.
+☑ Unsupported widget types remain safely inspectable.
+☑ Native tree capture is deterministic and bounded.
+☑ Focused inspection and diagnostics tests pass.
 
 ## Phase 6: Overlay-registry subject source
 

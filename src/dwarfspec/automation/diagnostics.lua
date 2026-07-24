@@ -4,6 +4,9 @@ local M = {}
 
 local DEFAULT_TREE_MAX_DEPTH = 8
 local DEFAULT_TREE_MAX_NODES = 128
+local DEFAULT_TREE_MAX_CHILDREN = 32
+local DEFAULT_DIAGNOSTIC_VALUE_LENGTH = 512
+local DEFAULT_DIAGNOSTIC_FIELD_COUNT = 32
 
 ---Returns a scalar value or the result of a lazy widget property.
 ---@param value any
@@ -56,6 +59,54 @@ local function text_value(text)
     return '<' .. type(text) .. '>'
 end
 
+---Copies one diagnostic value without retaining arbitrary live objects.
+---@param value any
+---@param options table
+---@param depth integer
+---@return any
+local function bounded_value(value, options, depth)
+    local value_type = type(value)
+    if value == nil or value_type == 'boolean' or value_type == 'number' then
+        return value
+    end
+    if value_type == 'string' then
+        if #value <= options.max_value_length then return value end
+        if options.max_value_length <= 3 then
+            return value:sub(1, options.max_value_length)
+        end
+        return value:sub(1, options.max_value_length - 3) .. '...'
+    end
+    if value_type ~= 'table' or depth >= 2 then
+        return '<' .. value_type .. '>'
+    end
+    local result = {}
+    local names = {}
+    for name in pairs(value) do
+        if type(name) == 'string' or type(name) == 'number' then
+            table.insert(names, name)
+        end
+    end
+    table.sort(names, function(left, right)
+        return tostring(left) < tostring(right)
+    end)
+    for index, name in ipairs(names) do
+        if index > options.max_field_count then
+            result.truncated = true
+            break
+        end
+        result[name] = bounded_value(value[name], options, depth + 1)
+    end
+    return result
+end
+
+---Returns one bounded detached inspection record.
+---@param inspection table
+---@param options table
+---@return table
+local function bounded_inspection(inspection, options)
+    return bounded_value(inspection, options, 0)
+end
+
 ---Inspects one live view through an adapter or the legacy Lua-view fields.
 ---@param view any
 ---@param adapter dwarfspec.SubjectAdapter|nil
@@ -93,7 +144,7 @@ end
 ---@param adapter dwarfspec.SubjectAdapter|nil
 ---@return table
 local function capture_view_subtree(view, options, state, depth, adapter)
-    local node = M.inspect_view(view, adapter)
+    local node = bounded_inspection(M.inspect_view(view, adapter), options)
     node.children = {}
     state.node_count = state.node_count + 1
     local children = adapter and adapter:children(view) or
@@ -105,7 +156,12 @@ local function capture_view_subtree(view, options, state, depth, adapter)
         end
         return node
     end
-    for _, child in ipairs(children) do
+    for index, child in ipairs(children) do
+        if index > options.max_children then
+            node.truncated = true
+            state.truncated = true
+            break
+        end
         if state.node_count >= options.max_nodes then
             node.truncated = true
             state.truncated = true
@@ -127,6 +183,11 @@ function M.capture_view_tree(view, options, adapter)
     local bounds = {
         max_depth=options.max_depth or DEFAULT_TREE_MAX_DEPTH,
         max_nodes=options.max_nodes or DEFAULT_TREE_MAX_NODES,
+        max_children=options.max_children or DEFAULT_TREE_MAX_CHILDREN,
+        max_value_length=options.max_value_length or
+            DEFAULT_DIAGNOSTIC_VALUE_LENGTH,
+        max_field_count=options.max_field_count or
+            DEFAULT_DIAGNOSTIC_FIELD_COUNT,
     }
     assert(type(bounds.max_depth) == 'number' and bounds.max_depth >= 0 and
         bounds.max_depth % 1 == 0,
@@ -134,11 +195,22 @@ function M.capture_view_tree(view, options, adapter)
     assert(type(bounds.max_nodes) == 'number' and bounds.max_nodes >= 1 and
         bounds.max_nodes % 1 == 0,
         'view-tree max nodes must be a positive integer')
+    for name, value in pairs({
+        children=bounds.max_children,
+        value_length=bounds.max_value_length,
+        field_count=bounds.max_field_count,
+    }) do
+        assert(type(value) == 'number' and value >= 1 and value % 1 == 0,
+            ('view-tree max %s must be a positive integer'):format(name))
+    end
     local state = {node_count=0, truncated=false}
     local root = capture_view_subtree(view, bounds, state, 0, adapter)
     root.capture_bounds = {
         max_depth=bounds.max_depth,
         max_nodes=bounds.max_nodes,
+        max_children=bounds.max_children,
+        max_value_length=bounds.max_value_length,
+        max_field_count=bounds.max_field_count,
         node_count=state.node_count,
         truncated=state.truncated,
     }

@@ -11,8 +11,11 @@ local M = {}
 ---@field name fun(self: dwarfspec.SubjectAdapter, raw: any): string|nil
 ---@field native_type fun(self: dwarfspec.SubjectAdapter, raw: any): string
 ---@field bounds fun(self: dwarfspec.SubjectAdapter, raw: any): table|nil
+---@field interaction_bounds? fun(self: dwarfspec.SubjectAdapter, raw: any): table|nil
 ---@field visible fun(self: dwarfspec.SubjectAdapter, raw: any): boolean
 ---@field active fun(self: dwarfspec.SubjectAdapter, raw: any): boolean
+---@field effective_visible? fun(self: dwarfspec.SubjectAdapter, raw: any): boolean
+---@field effective_active? fun(self: dwarfspec.SubjectAdapter, raw: any): boolean
 ---@field focused fun(self: dwarfspec.SubjectAdapter, raw: any): boolean
 ---@field text fun(self: dwarfspec.SubjectAdapter, raw: any): string|nil
 ---@field tooltip fun(self: dwarfspec.SubjectAdapter, raw: any): string|nil

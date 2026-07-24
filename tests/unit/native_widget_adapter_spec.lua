@@ -2,6 +2,7 @@
 
 local interaction_target = require('dwarfspec.interaction_target')
 local native_widget_adapter = require('dwarfspec.native_widget_adapter')
+local diagnostics = require('dwarfspec.automation.diagnostics')
 
 ---Creates one native widget fixture with stable pointer-like identity.
 ---@param id string
@@ -11,13 +12,19 @@ local native_widget_adapter = require('dwarfspec.native_widget_adapter')
 ---@param fields table|nil
 ---@return table
 local function widget(id, name, type_name, children, fields)
+    fields = fields or {}
     local value = {
         id=id,
         name=name,
         type_name=type_name,
         children=children or {},
+        flag={
+            VISIBILITY_VISIBLE=fields.visible ~= false,
+            VISIBILITY_ACTIVE=fields.active ~= false,
+        },
     }
-    for key, field in pairs(fields or {}) do value[key] = field end
+    for key, field in pairs(fields) do value[key] = field end
+    for _, child in ipairs(value.children) do child.parent = value end
     return value
 end
 
@@ -63,6 +70,7 @@ describe('DwarfSpec native widget adapter', function()
                 end
                 return children
             end,
+            get_window_size=function() return 80, 25 end,
             identity_of=function(raw) return raw.id end,
             name_of=function(raw) return raw.name end,
             type_of=function(raw) return raw.type_name end,
@@ -174,5 +182,251 @@ describe('DwarfSpec native widget adapter', function()
         assert.is_not.equal(initial, reacquired)
         assert.equals(captured_identity, adapter:identity(reacquired))
         assert.is_true(adapter:contains(reacquired))
+    end)
+
+    it('normalizes get_rect geometry and falls back to rect', function()
+        local preferred = widget(
+            'preferred', 'Preferred', 'df.widget', nil, {
+                rect={x1=30, y1=30, x2=31, y2=31},
+                get_rect=function()
+                    return {x1=1, y1=2, x2=5, y2=7}
+                end,
+            })
+        local fallback = widget(
+            'fallback', 'Fallback', 'df.widget', nil, {
+                rect={x1=-2, y1=3, x2=4, y2=9},
+            })
+        root.children = {preferred, fallback}
+
+        adapter:resolve({'Preferred'})
+        adapter:resolve({'Fallback'})
+        assert.same({x1=1, y1=2, x2=5, y2=7},
+            adapter:bounds(preferred))
+        assert.same({x1=-2, y1=3, x2=4, y2=9},
+            adapter:bounds(fallback))
+        assert.same({x1=0, y1=3, x2=4, y2=9},
+            adapter:interaction_bounds(fallback))
+    end)
+
+    it('keeps invalid and off-window widgets inspectable but not interactive',
+            function()
+        local invalid = widget(
+            'invalid', 'Invalid', 'df.widget', nil, {
+                rect={x1=4, y1=3, x2=2, y2=5},
+            })
+        local fractional = widget(
+            'fractional', 'Fractional', 'df.widget', nil, {
+                rect={x1=1.5, y1=1, x2=4, y2=5},
+            })
+        local offscreen = widget(
+            'offscreen', 'Offscreen', 'df.widget', nil, {
+                rect={x1=90, y1=30, x2=100, y2=40},
+            })
+        root.children = {invalid, fractional, offscreen}
+        for _, child in ipairs(root.children) do
+            adapter:resolve({child.name})
+            assert.is_table(adapter:inspect(child))
+            assert.is_nil(adapter:interaction_bounds(child))
+        end
+        assert.is_nil(adapter:bounds(invalid))
+        assert.is_nil(adapter:bounds(fractional))
+        assert.same({x1=90, y1=30, x2=100, y2=40},
+            adapter:bounds(offscreen))
+    end)
+
+    it('reports all direct visibility and activity combinations', function()
+        local combinations = {
+            {true, true},
+            {true, false},
+            {false, true},
+            {false, false},
+        }
+        for index, values in ipairs(combinations) do
+            local child = widget(
+                'flags-' .. index, 'Flags' .. index, 'df.widget', nil, {
+                    visible=values[1],
+                    active=values[2],
+                })
+            child.parent = root
+            table.insert(root.children, child)
+            adapter:resolve({child.name})
+            assert.equals(values[1], adapter:visible(child))
+            assert.equals(values[2], adapter:active(child))
+        end
+    end)
+
+    it('keeps direct and effective inherited state separate', function()
+        local parent = widget(
+            'parent', 'Parent', 'df.widget_container', nil, {
+                visible=false,
+                active=true,
+            })
+        local child = widget(
+            'child', 'Child', 'df.widget_text', nil, {
+                visible=true,
+                active=false,
+            })
+        root.children = {parent}
+        parent.parent = root
+        parent.children = {child}
+        child.parent = parent
+
+        adapter:resolve({'Parent', 'Child'})
+        local inspection = adapter:inspect(child)
+        assert.is_true(inspection.visible)
+        assert.is_false(inspection.active)
+        assert.is_false(inspection.effective_visible)
+        assert.is_false(inspection.effective_active)
+    end)
+
+    it('extracts only registered native text forms', function()
+        local types = {
+            'df.widget_text',
+            'df.widget_text_truncated',
+            'df.widget_text_multiline',
+            'df.widget_textbox',
+        }
+        for index, type_name in ipairs(types) do
+            local child = widget(
+                'text-' .. index, 'Text' .. index, type_name, nil, {
+                    str='value-' .. index,
+                })
+            table.insert(root.children, child)
+            adapter:resolve({child.name})
+            assert.equals('value-' .. index, adapter:text(child))
+        end
+        local unsupported = widget(
+            'unsupported', 'Unsupported', 'df.widget_character', nil, {
+                str='must not leak',
+            })
+        table.insert(root.children, unsupported)
+        adapter:resolve({'Unsupported'})
+        assert.is_nil(adapter:text(unsupported))
+
+        local long = widget(
+            'long', 'Long', 'df.widget_text', nil, {
+                str=string.rep('x', 600),
+            })
+        table.insert(root.children, long)
+        adapter:resolve({'Long'})
+        assert.equals(512, #adapter:text(long))
+        assert.equals('...', adapter:text(long):sub(-3))
+    end)
+
+    it('uses the better-button display accessor without invoking callbacks',
+            function()
+        local display_calls = 0
+        local mutation_calls = 0
+        local button = widget(
+            'button', 'Button', 'df.widget_better_button', nil, {
+                display_string=function()
+                    display_calls = display_calls + 1
+                    return 'Safe display'
+                end,
+                on_activate=function() mutation_calls = mutation_calls + 1 end,
+                on_input=function() mutation_calls = mutation_calls + 1 end,
+                tooltip=function() mutation_calls = mutation_calls + 1 end,
+            })
+        root.children = {button}
+        adapter:resolve({'Button'})
+
+        local inspection = adapter:inspect(button)
+        assert.equals('Safe display', inspection.text)
+        assert.equals(1, display_calls)
+        assert.equals(0, mutation_calls)
+        assert.is_nil(inspection.tooltip)
+    end)
+
+    it('aggregates visible descendant text within deterministic bounds',
+            function()
+        local visible = widget(
+            'visible', 'Visible', 'df.widget_text', nil, {str='visible'})
+        local hidden = widget(
+            'hidden', 'Hidden', 'df.widget_text', nil, {
+                str='hidden',
+                visible=false,
+            })
+        local nested_text = widget(
+            'nested-text', 'NestedText', 'df.widget_text', nil, {
+                str='nested',
+            })
+        local nested = widget(
+            'nested', 'Nested', 'df.widget_container', {nested_text})
+        local container = widget(
+            'container', 'Container', 'df.widget_container',
+            {visible, hidden, nested})
+        root.children = {container}
+        container.parent = root
+
+        adapter:resolve({'Container'})
+        assert.equals('visible\nnested', adapter:text(container))
+    end)
+
+    it('exposes only documented bounded optional fields', function()
+        local rows = widget(
+            'rows', 'Rows', 'df.widget_scroll_rows', nil, {
+                scroll=12,
+                num_visible=8,
+                secret={unbounded=true},
+                tooltip='Rows tooltip',
+            })
+        local tabs = widget(
+            'tabs', 'Tabs', 'df.widget_tabs', nil, {cur_idx=3})
+        local dropdown = widget(
+            'dropdown', 'Dropdown', 'df.widget_dropdown', nil, {
+                cur_selected=4,
+            })
+        local radio = widget(
+            'radio', 'Radio', 'df.widget_radio_rows', nil, {
+                selected_idx=5,
+            })
+        root.children = {rows, tabs, dropdown, radio}
+        rows.parent = root
+        tabs.parent = root
+        dropdown.parent = root
+        radio.parent = root
+        adapter:resolve({'Rows'})
+        adapter:resolve({'Tabs'})
+        adapter:resolve({'Dropdown'})
+        adapter:resolve({'Radio'})
+
+        local rows_inspection = adapter:inspect(rows)
+        assert.equals('df.widget_scroll_rows',
+            rows_inspection.native_type)
+        assert.equals('Rows', rows_inspection.name)
+        assert.equals('Rows tooltip', rows_inspection.tooltip)
+        assert.equals(12, rows_inspection.scroll_position)
+        assert.equals(8, rows_inspection.visible_row_count)
+        assert.is_nil(rows_inspection.secret)
+        assert.equals(3, adapter:inspect(tabs).selected_index)
+        assert.equals(4, adapter:inspect(dropdown).selected_index)
+        assert.equals(5, adapter:inspect(radio).selected_index)
+    end)
+
+    it('captures native trees deterministically within every bound', function()
+        for index = 1, 10 do
+            table.insert(root.children, widget(
+                'tree-' .. index,
+                'Tree' .. index,
+                'df.widget_text',
+                nil,
+                {str=string.rep(tostring(index % 10), 30)}))
+        end
+
+        local options = {
+            max_depth=2,
+            max_nodes=20,
+            max_children=3,
+            max_value_length=16,
+        }
+        local first = diagnostics.capture_view_tree(root, options, adapter)
+        local second = diagnostics.capture_view_tree(root, options, adapter)
+
+        assert.same(first, second)
+        assert.equals(3, #first.children)
+        assert.is_true(first.truncated)
+        assert.is_true(first.capture_bounds.truncated)
+        assert.equals(16, #first.text)
+        assert.equals(4, first.capture_bounds.node_count)
     end)
 end)

@@ -83,7 +83,10 @@ describe('DwarfSpec public mount commands', function()
         simulated_inputs = {}
         wait_until_calls = 0
         rawset(_G, 'dfhack', {
-            screen={getMousePos=function() return 90, 91 end},
+            screen={
+                getMousePos=function() return 90, 91 end,
+                getWindowSize=function() return 80, 25 end,
+            },
             gui={
                 getWidget=function(parent, segment)
                     native_widget_lookup_calls =
@@ -438,6 +441,48 @@ describe('DwarfSpec public mount commands', function()
             '{"Tabs", 0, "Right/panel"}', mixed.control_path)
         assert.equals(hidden, ds.get('Hidden'):raw())
         assert.equals(inactive, ds.get('Inactive'):raw())
+    end)
+
+    it('uses clipped native bounds and rejects unusable pointer subjects',
+            function()
+        local partial = make_native_widget(
+            'Partial', 'df.widget', nil, {
+                rect={x1=-3, y1=4, x2=6, y2=10},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        local invalid = make_native_widget(
+            'Invalid', 'df.widget', nil, {
+                rect={x1=7, y1=9, x2=3, y2=11},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        local offscreen = make_native_widget(
+            'Offscreen', 'df.widget', nil, {
+                rect={x1=90, y1=30, x2=100, y2=40},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        native_root.children = {partial, invalid, offscreen}
+        ds.mount()
+
+        assert.same({0, 4}, {
+            ds.move_pointer(ds.get('Partial'), 'top_left'),
+        })
+        assert.has_error(function()
+            ds.move_pointer(ds.get('Invalid'))
+        end, 'view has no usable live bounds for pointer placement')
+        assert.has_error(function()
+            ds.move_pointer(ds.get('Offscreen'))
+        end, 'view has no usable live bounds for pointer placement')
+        assert.same({x1=90, y1=30, x2=100, y2=40},
+            ds.get('Offscreen'):inspect().body)
     end)
 
     it('makes a retained native subject stale after removal', function()
