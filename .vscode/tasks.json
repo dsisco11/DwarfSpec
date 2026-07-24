@@ -61,6 +61,31 @@
                 "isDefault": false
             },
             "problemMatcher": []
+        },
+        {
+            "label": "LuaRocks: Install locally built package",
+            "type": "process",
+            "command": "pwsh.exe",
+            "args": [
+                "-NoLogo",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\tools\\Install-LocalPackage.ps1"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Publish"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": []
         }
     ]
 }
