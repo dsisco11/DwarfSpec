@@ -212,6 +212,9 @@ describe('DwarfSpec package contract', function()
         assert.matches('${workspaceFolder}\\\\tools\\\\Publish.ps1',
             tasks, 1, true)
         assert.matches("arch = 'all'", publish, 1, true)
+        assert.matches('lua_interpreter = "$luaInterpreterLiteral"',
+            publish, 1, true)
+        assert.matches('LUA = "$luaExecutableLiteral"', publish, 1, true)
         assert.matches('--pack-binary-rock', publish, 1, true)
         assert.matches("$OutputDir = 'dist'", publish, 1, true)
     end)

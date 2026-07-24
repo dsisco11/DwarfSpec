@@ -16,6 +16,14 @@ $rockspecPath = $rockspecFiles[0].FullName
 if (-not (Get-Command luarocks -ErrorAction SilentlyContinue)) {
     throw 'LuaRocks was not found on PATH.'
 }
+$luaCommand = Get-Command lua -ErrorAction SilentlyContinue
+if (-not $luaCommand -or [string]::IsNullOrWhiteSpace($luaCommand.Source)) {
+    throw 'Lua was not found on PATH.'
+}
+$luaExecutable = $luaCommand.Source
+$luaExecutableLiteral = $luaExecutable.Replace('\', '\\').Replace('"', '\"')
+$luaInterpreter = Split-Path -Leaf $luaExecutable
+$luaInterpreterLiteral = $luaInterpreter.Replace('\', '\\').Replace('"', '\"')
 
 $rockspec = Get-Content -LiteralPath $rockspecPath -Raw
 $packageMatch = [regex]::Match(
@@ -53,7 +61,14 @@ $oldTemp = [Environment]::GetEnvironmentVariable('TEMP', 'Process')
 $oldTmp = [Environment]::GetEnvironmentVariable('TMP', 'Process')
 New-Item -ItemType Directory -Force -Path $scratchRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
-[IO.File]::WriteAllText($configPath, "arch = 'all'`n")
+$configContents = @"
+arch = 'all'
+lua_interpreter = "$luaInterpreterLiteral"
+variables = {
+    LUA = "$luaExecutableLiteral",
+}
+"@
+[IO.File]::WriteAllText($configPath, $configContents)
 
 try {
     Set-Item -LiteralPath Env:LUAROCKS_CONFIG -Value $configPath
