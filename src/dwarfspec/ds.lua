@@ -540,18 +540,26 @@ local TestStatus = load_automation_module(package_root,
             scheduler, description, query, wait_options(options, true))
     end
 
-    ---Mounts a component or non-owningly attaches when no argument is present.
-    ---The native form borrows the current screen without showing a ZScreen.
+    ---Mounts one owned component or complete screen.
+    ---@param component any
+    ---@param options table|nil
+    ---@return table
+    function ds.mount(component, options)
+        assert(component ~= nil,
+            'DwarfSpec ds.mount() requires a component; use ' ..
+                'ds.mountNativeScreen() to mount the current native DF screen')
+        return context.mount_context:mount(component, options)
+    end
+
+    ---Mounts the current native DF screen without taking ownership of it.
     ---@param ... any
     ---@return table
-    function ds.mount(...)
-        if select('#', ...) == 0 then
-            return context.mount_context:mount_native(function()
-                return native_attachment:attach()
-            end)
-        end
-        local component, options = ...
-        return context.mount_context:mount(component, options)
+    function ds.mountNativeScreen(...)
+        assert(select('#', ...) == 0,
+            'DwarfSpec ds.mountNativeScreen() does not accept arguments')
+        return context.mount_context:mount_native_screen(function()
+            return native_attachment:attach()
+        end)
     end
 
     ---Returns a subject for the selected current-mount root.

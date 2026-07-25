@@ -71,7 +71,7 @@ describe('ordinary widget component host', function()
         assert.has_error(function()
             ds.mount(OrdinaryWidgetHarness)
         end, ('DwarfSpec mount rejected because mount %d is still current; ' ..
-            'call ds.unmount() before mounting another component')
+        'call ds.unmount() before creating another mount')
                 :format(first.mount_id))
         assert.equals(first_instance, first:raw())
         assert.equals(first_instance, ds.root():raw())

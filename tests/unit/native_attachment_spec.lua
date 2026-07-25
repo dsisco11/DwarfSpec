@@ -85,7 +85,7 @@ describe('DwarfSpec native viewscreen attachment', function()
         current = nil
 
         assert.has_error(function() attachment:attach() end,
-            'DwarfSpec native mount requires a current viewscreen')
+            'DwarfSpec native-screen mount requires a current viewscreen')
         assert.equals(0, target_factory_calls)
         assert.equals(0, source_factory_calls)
     end)
@@ -95,7 +95,7 @@ describe('DwarfSpec native viewscreen attachment', function()
         native = nil
 
         assert.has_error(function() attachment:attach() end,
-            'DwarfSpec native mount requires a native DF viewscreen')
+            'DwarfSpec native-screen mount requires a native DF viewscreen')
         assert.equals(0, target_factory_calls)
         assert.equals(0, source_factory_calls)
     end)
@@ -109,9 +109,9 @@ describe('DwarfSpec native viewscreen attachment', function()
         local before_current = current
 
         assert.has_error(function() attachment:attach() end,
-            'DwarfSpec native mount requires the current viewscreen to be ' ..
-            'the native DF viewscreen; a DFHack Lua screen currently owns ' ..
-            'focus')
+            'DwarfSpec native-screen mount requires the current viewscreen ' ..
+                'to be the native DF viewscreen; a DFHack Lua screen ' ..
+                    'currently owns focus')
         assert.equals(before_current, current)
         assert.equals(native_screen, native)
         assert.equals(0, target_factory_calls)
@@ -123,8 +123,8 @@ describe('DwarfSpec native viewscreen attachment', function()
         current.widgets = nil
 
         assert.has_error(function() attachment:attach() end,
-            'DwarfSpec native mount requires the current viewscreen to expose ' ..
-                'a valid widgets container')
+            'DwarfSpec native-screen mount requires the current viewscreen ' ..
+                'to expose a valid widgets container')
         assert.equals(0, target_factory_calls)
         assert.equals(0, source_factory_calls)
     end)

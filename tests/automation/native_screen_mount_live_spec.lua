@@ -195,7 +195,7 @@ describe('non-owning native-screen attachment', function()
         local hauling = df.global.plotinfo.hauling
         local original_scroll = hauling.scroll_position
 
-        local root = ds.mount()
+        local root = ds.mountNativeScreen()
         assert.equals(native_root, root:raw())
         assert.equals(native_root, ds.root():raw())
         assert.equals(native_screen, dfhack.gui.getDFViewscreen(true))

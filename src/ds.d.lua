@@ -200,13 +200,16 @@ function DS.wait_frames(count, options) end
 ---@return T
 function DS.await(description, query, options) end
 
----Attaches non-owningly to the current native screen when called with no arguments.
----The no-argument form neither creates nor shows a ZScreen.
----@overload fun(): dwarfspec.Subject
+---Mounts one owned component or complete screen.
 ---@param component any
 ---@param options? dwarfspec.MountOptions
 ---@return dwarfspec.Subject
 function DS.mount(component, options) end
+
+---Mounts the current native DF screen without taking ownership of it.
+---The mount creates, shows, resizes, and dismisses no screen.
+---@return dwarfspec.Subject
+function DS.mountNativeScreen() end
 
 ---Returns a subject for the selected current-mount root.
 ---Source options are accepted only by a borrowed native-screen mount.
@@ -219,7 +222,8 @@ function DS.unmount() end
 
 ---Selects one strict direct-child path from the implicit current mount.
 ---Native strings select one named child; arrays support nested names, zero-based
----indices, and names containing "/". Source options require a native mount.
+---indices, and names containing "/". Source options require a native-screen
+---mount.
 ---@param control_path string|dwarfspec.NativePath
 ---@param options? dwarfspec.GetSourceOptions
 ---@return dwarfspec.Subject

@@ -18,7 +18,8 @@ NativeAttachment.__index = NativeAttachment
 local function acquire_screen(getter, label)
     local ok, screen = pcall(getter)
     assert(ok,
-        ('DwarfSpec native mount could not query the %s viewscreen: %s')
+        ('DwarfSpec native-screen mount could not query the %s ' ..
+            'viewscreen: %s')
             :format(label, tostring(screen)))
     return screen
 end
@@ -29,22 +30,23 @@ function NativeAttachment:attach()
     local current = acquire_screen(
         self._get_current_viewscreen, 'current')
     assert(current ~= nil,
-        'DwarfSpec native mount requires a current viewscreen')
+        'DwarfSpec native-screen mount requires a current viewscreen')
     local native = acquire_screen(
         self._get_native_viewscreen, 'native DF')
     assert(native ~= nil,
-        'DwarfSpec native mount requires a native DF viewscreen')
+        'DwarfSpec native-screen mount requires a native DF viewscreen')
     assert(current == native,
-        'DwarfSpec native mount requires the current viewscreen to be the ' ..
-        'native DF viewscreen; a DFHack Lua screen currently owns focus')
+        'DwarfSpec native-screen mount requires the current viewscreen to ' ..
+            'be the native DF viewscreen; a DFHack Lua screen currently ' ..
+                'owns focus')
 
     local root_ok, root = pcall(function() return current.widgets end)
     assert(root_ok,
-        'DwarfSpec native mount could not read the current viewscreen ' ..
-            'widgets container: ' .. tostring(root))
+        'DwarfSpec native-screen mount could not read the current ' ..
+            'viewscreen widgets container: ' .. tostring(root))
     assert(self._is_widget_root(root),
-        'DwarfSpec native mount requires the current viewscreen to expose a ' ..
-            'valid widgets container')
+        'DwarfSpec native-screen mount requires the current viewscreen to ' ..
+            'expose a valid widgets container')
 
     local interaction_target =
         self._interaction_target_factory(current)

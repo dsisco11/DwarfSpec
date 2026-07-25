@@ -1,6 +1,6 @@
 # Explicit native-screen mount API
 
-Status: in progress; Phase 0 complete
+Status: in progress; Phases 0-1 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -65,6 +65,7 @@ Production and declarations:
 
 - `src/dwarfspec/ds.lua`
 - `src/dwarfspec/mount_context.lua`
+- `src/dwarfspec/native_attachment.lua`
 - `src/ds.d.lua`
 
 Primary deterministic coverage:
@@ -128,31 +129,31 @@ Goal: establish the exact pre-change surface and verification baseline.
 Goal: separate component mounting from native-screen mounting without changing
 the underlying mount lifecycle.
 
-☐ Add `ds.mountNativeScreen(...)` to the run-scoped `ds` object.
-☐ Validate that the command receives no arguments.
-☐ Route the command through the existing native attachment factory and mount
+✔ Add `ds.mountNativeScreen(...)` to the run-scoped `ds` object.
+✔ Validate that the command receives no arguments.
+✔ Route the command through the existing native attachment factory and mount
   context.
-☐ Refactor `ds.mount` to require a non-nil component and preserve its existing
+✔ Refactor `ds.mount` to require a non-nil component and preserve its existing
   component options behavior.
-☐ Give `ds.mount()` and `ds.mount(nil)` the same actionable
+✔ Give `ds.mount()` and `ds.mount(nil)` the same actionable
   `mountNativeScreen()` guidance.
-☐ Rename `mount_context:mount_native(...)` to
+✔ Rename `mount_context:mount_native(...)` to
   `mount_context:mount_native_screen(...)`.
-☐ Update internal diagnostics to use “native-screen mount” when the mount kind
+✔ Update internal diagnostics to use “native-screen mount” when the mount kind
   matters and “native attachment” when describing the borrowed implementation
   resource.
-☐ Keep the same mount ID, subject source, interaction target, cleanup entries,
+✔ Keep the same mount ID, subject source, interaction target, cleanup entries,
   observer, and returned root subject.
-☐ Keep cross-kind second-mount rejection at the shared mount-context boundary.
-☐ Do not export a compatibility alias or alternate spelling.
+✔ Keep cross-kind second-mount rejection at the shared mount-context boundary.
+✔ Do not export a compatibility alias or alternate spelling.
 
 ### Phase 1 exit gate
 
-☐ `ds.mountNativeScreen()` reaches the existing native attachment path.
-☐ `ds.mount()` cannot enter native attachment through missing or nil input.
-☐ Native-screen ownership, input, rendering, staleness, and cleanup code is
+✔ `ds.mountNativeScreen()` reaches the existing native attachment path.
+✔ `ds.mount()` cannot enter native attachment through missing or nil input.
+✔ Native-screen ownership, input, rendering, staleness, and cleanup code is
   otherwise unchanged.
-☐ Every changed Lua declaration has LuaDoc.
+✔ Every changed Lua declaration has LuaDoc.
 
 ## Phase 2: Public declarations and repository call sites
 
@@ -350,7 +351,46 @@ cleanup observations, and environmental limitations here as work proceeds.
 
 ### Phase 1 evidence
 
-- Pending.
+- `src/dwarfspec/ds.lua` now exposes strict
+  `ds.mountNativeScreen(...)`, which rejects every argument before calling the
+  existing native attachment service through
+  `mount_context:mount_native_screen(...)`.
+- `ds.mount(component, options)` now rejects both a missing component and
+  explicit `nil` with:
+  `DwarfSpec ds.mount() requires a component; use ds.mountNativeScreen() to
+  mount the current native DF screen`. Neither form reaches component
+  classification or native attachment.
+- `src/dwarfspec/mount_context.lua` uses the explicit
+  `mount_native_screen` name. Shared second-mount diagnostics now direct the
+  caller to unmount before creating another mount, and mount-kind diagnostics
+  use “native-screen mount”. Borrowed implementation resources retain “native
+  attachment” terminology.
+- `src/dwarfspec/native_attachment.lua` preserves its acquisition and
+  ownership behavior while using explicit native-screen mount diagnostics.
+- `src/ds.d.lua` declares separate component and native-screen entry points,
+  with LuaDoc on both. Runtime and declaration searches find no compatibility
+  alias or alternate exported spelling.
+- `tests/unit/ds_mount_commands_spec.lua` proves missing/nil component
+  rejection, argument rejection without mount allocation, the exact borrowed
+  root, unchanged ownership counters, and component-to-component,
+  component-to-native, native-to-component, and native-to-native second-mount
+  rejection. It also proves the first mount remains usable after rejection.
+- Directly affected native unit and live callers use
+  `ds.mountNativeScreen()`, and mount-context unit callers use
+  `mount_native_screen`. Broader documentation migration remains assigned to
+  Phase 4.
+- Focused verification on 2026-07-25:
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec public mount commands'`: 39 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter 'DwarfSpec mount context'`:
+    34 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec native viewscreen attachment'`: 8 successes.
+  All focused commands reported 0 failures, 0 errors, and 0 pending.
+- `.\tools\Run-UnitTests.ps1` reported 378 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-25.
+- `.\tools\Check-Lua.ps1` passed Lua 5.4.6 syntax and formatting checks for
+  224 files on 2026-07-25.
 
 ### Phase 2 evidence
 

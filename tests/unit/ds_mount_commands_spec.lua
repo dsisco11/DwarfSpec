@@ -385,7 +385,7 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function()
             ds.mount(TestWidget, {name='second'})
         end, 'DwarfSpec mount rejected because mount 1 is still current; ' ..
-            'call ds.unmount() before mounting another component')
+            'call ds.unmount() before creating another mount')
         assert.is_true(first_screen.active)
         assert.equals('first', first:raw().name)
 
@@ -397,9 +397,55 @@ describe('DwarfSpec public mount commands', function()
         assert.equals('second', second:raw().name)
     end)
 
-    it('attaches non-owningly only when the component argument is missing',
+    it('rejects every second mount combination at the shared boundary',
             function()
-        local mounted = ds.mount()
+        local cases = {
+            {
+                first=function() return ds.mount(TestWidget) end,
+                second=function() return ds.mount(TestWidget) end,
+            },
+            {
+                first=function() return ds.mount(TestWidget) end,
+                second=function() return ds.mountNativeScreen() end,
+            },
+            {
+                first=function() return ds.mountNativeScreen() end,
+                second=function() return ds.mount(TestWidget) end,
+            },
+            {
+                first=function() return ds.mountNativeScreen() end,
+                second=function() return ds.mountNativeScreen() end,
+            },
+        }
+
+        for _, case in ipairs(cases) do
+            local first = case.first()
+            local mount_id = run.mount_cleanup_probe().current_mount_id
+            assert.has_error(case.second,
+                ('DwarfSpec mount rejected because mount %d is still ' ..
+                    'current; call ds.unmount() before creating another mount')
+                        :format(mount_id))
+            assert.is_not_nil(first:raw())
+            ds.unmount()
+            assert.is_nil(run.mount_cleanup_probe().current_mount_id)
+        end
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.navigation_calls)
+    end)
+
+    it('attaches non-owningly only through the explicit native command',
+            function()
+        local mount_error =
+            'DwarfSpec ds.mount() requires a component; use ' ..
+                'ds.mountNativeScreen() to mount the current native DF screen'
+        assert.has_error(function() ds.mount() end, mount_error)
+        assert.has_error(function() ds.mount(nil) end, mount_error)
+        assert.has_error(function()
+            ds.mountNativeScreen({})
+        end, 'DwarfSpec ds.mountNativeScreen() does not accept arguments')
+        assert.is_nil(run.mount_cleanup_probe().current_mount_id)
+
+        local mounted = ds.mountNativeScreen()
 
         assert.equals(native_root, mounted:raw())
         assert.equals(native_root, ds.root():raw())
@@ -451,15 +497,11 @@ describe('DwarfSpec public mount commands', function()
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; no component is currently ' ..
                 'mounted')
-        assert.has_error(function() ds.mount(nil) end,
-            'unsupported component input (nil); expected a DFHack defclass ' ..
-                'derived from widgets.Widget, overlay.OverlayWidget, or ' ..
-                'gui.ZScreen, or an instance of one of those classes')
     end)
 
     it('waits for observed native redraw and supports explicit wait opt-out',
             function()
-        local mounted = ds.mount()
+        local mounted = ds.mountNativeScreen()
         local baseline_waits = wait_until_calls
         local baseline_invalidations = native_invalidation_count
 
@@ -493,7 +535,7 @@ describe('DwarfSpec public mount commands', function()
         overlay_state.config['gui/example.CleanupOverlay'] = {
             enabled=true,
         }
-        local native_subject = ds.mount()
+        local native_subject = ds.mountNativeScreen()
         local overlay_subject = ds.root({
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.CleanupOverlay',
@@ -583,7 +625,7 @@ describe('DwarfSpec public mount commands', function()
             },
         }
         for _, scenario in ipairs(scenarios) do
-            local retained = ds.mount()
+            local retained = ds.mountNativeScreen()
             ds.move_pointer(2, 3)
             ds.mouseInput(EMouseButton.LEFT, EInputState.DOWN)
             if scenario.prepare then scenario.prepare() end
@@ -626,7 +668,7 @@ describe('DwarfSpec public mount commands', function()
                 'scheduler abort',
                 'external runner recovery',
             }) do
-            local retained = ds.mount()
+            local retained = ds.mountNativeScreen()
             ds.move_pointer(4, 6)
             ds.mouseInput(EMouseButton.RIGHT, EInputState.DOWN)
 
@@ -656,7 +698,7 @@ describe('DwarfSpec public mount commands', function()
     it('does not accumulate state across repeated native attachments',
             function()
         for iteration = 1, 5 do
-            local retained = ds.mount()
+            local retained = ds.mountNativeScreen()
             ds.move_pointer(iteration, iteration)
             ds.mouseInput(EMouseButton.MIDDLE, EInputState.DOWN)
 
@@ -687,7 +729,7 @@ describe('DwarfSpec public mount commands', function()
 
     it('rejects native subject access immediately after a screen transition',
             function()
-        local mounted = ds.mount()
+        local mounted = ds.mountNativeScreen()
         current_native_screen = {
             name='next-native-screen',
             widgets={kind='next-widget-root'},
@@ -720,7 +762,7 @@ describe('DwarfSpec public mount commands', function()
                 active=false,
             })
         native_root.children = {tabs, hidden, inactive}
-        ds.mount()
+        ds.mountNativeScreen()
 
         local named = ds.get('Tabs')
         local lookup_count = native_widget_lookup_calls
@@ -762,7 +804,7 @@ describe('DwarfSpec public mount commands', function()
             widget=overlay_root,
         }
         overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
-        ds.mount()
+        ds.mountNativeScreen()
 
         local native = ds.get('Shared')
         local options = {
@@ -783,7 +825,7 @@ describe('DwarfSpec public mount commands', function()
     end)
 
     it('rejects missing and disabled explicit overlay selections', function()
-        ds.mount()
+        ds.mountNativeScreen()
         local options = {
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.Missing',
@@ -812,7 +854,7 @@ describe('DwarfSpec public mount commands', function()
         }
         overlay_state.db['gui/example.ExampleOverlay'] = {widget=original}
         overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
-        ds.mount()
+        ds.mountNativeScreen()
         local options = {
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.ExampleOverlay',
@@ -861,7 +903,7 @@ describe('DwarfSpec public mount commands', function()
             widget=overlay_root,
         }
         overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
-        ds.mount()
+        ds.mountNativeScreen()
 
         local native_tree = ds.capture_view_tree('native-tree')
         local overlay_tree = ds.capture_view_tree('overlay-tree', {
@@ -895,7 +937,7 @@ describe('DwarfSpec public mount commands', function()
         local config = {enabled=true, x=7, y=9}
         overlay_state.db['gui/example.ExampleOverlay'] = entry
         overlay_state.config['gui/example.ExampleOverlay'] = config
-        ds.mount()
+        ds.mountNativeScreen()
         local selected = ds.root({
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.ExampleOverlay',
@@ -939,7 +981,7 @@ describe('DwarfSpec public mount commands', function()
                 },
             })
         native_root.children = {partial, invalid, offscreen}
-        ds.mount()
+        ds.mountNativeScreen()
 
         assert.same({0, 4}, {
             ds.move_pointer(ds.get('Partial'), 'top_left'),
@@ -961,7 +1003,7 @@ describe('DwarfSpec public mount commands', function()
     end)
 
     it('supports arbitrary in-window pointer coordinates', function()
-        ds.mount()
+        ds.mountNativeScreen()
 
         assert.same({0, 0}, {ds.move_pointer(0, 0)})
         assert.same({79, 24}, {ds.move_pointer(79, 24)})
@@ -969,7 +1011,7 @@ describe('DwarfSpec public mount commands', function()
     end)
 
     it('rejects invalid arbitrary pointer coordinates explicitly', function()
-        ds.mount()
+        ds.mountNativeScreen()
         local cases = {
             {
                 invoke=function() ds.move_pointer(-1, 0) end,
@@ -1017,7 +1059,7 @@ describe('DwarfSpec public mount commands', function()
                 },
             })
         native_root.children = {target}
-        ds.mount()
+        ds.mountNativeScreen()
         local subject = ds.get('Target')
         local expected = {
             center={12, 15},
@@ -1036,7 +1078,7 @@ describe('DwarfSpec public mount commands', function()
         local original = make_native_widget(
             'Status', 'df.widget_textst')
         native_root.children = {original}
-        ds.mount()
+        ds.mountNativeScreen()
         local selected = ds.get('Status')
         native_root.children = {}
 
@@ -1054,7 +1096,7 @@ describe('DwarfSpec public mount commands', function()
         local original = make_native_widget(
             'Status', 'df.widget_textst')
         native_root.children = {original}
-        ds.mount()
+        ds.mountNativeScreen()
         local selected = ds.get('Status')
         local replacement = make_native_widget(
             'Status', 'df.widget_textst')
@@ -1079,7 +1121,7 @@ describe('DwarfSpec public mount commands', function()
             table.insert(native_root.children, make_native_widget(
                 ('Child%02d'):format(index), 'df.widget_textst'))
         end
-        ds.mount()
+        ds.mountNativeScreen()
 
         local ok, failure = pcall(ds.get, 'Missing')
 
@@ -1303,7 +1345,7 @@ describe('DwarfSpec public mount commands', function()
             widget=overlay_root,
         }
         overlay_state.config['gui/example.InputOverlay'] = {enabled=true}
-        ds.mount()
+        ds.mountNativeScreen()
         local native_subject = ds.get('NativeControl')
         local overlay_subject = ds.get('OverlayControl', {
             source=ds.ESubjectSource.OVERLAY,
@@ -1373,7 +1415,7 @@ describe('DwarfSpec public mount commands', function()
                 backing_calls = backing_calls + 1
             end
         end
-        ds.mount()
+        ds.mountNativeScreen()
         local subject = ds.root({
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.FallthroughOverlay',
@@ -1487,7 +1529,7 @@ describe('DwarfSpec public mount commands', function()
 
     it('rejects input and pointer operations after a native screen change',
             function()
-        local mounted = ds.mount()
+        local mounted = ds.mountNativeScreen()
         ds.move_pointer(4, 5)
         local lookup_count = native_widget_lookup_calls
         current_native_screen = {

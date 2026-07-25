@@ -564,7 +564,7 @@ describe('DwarfSpec mount context', function()
         assert.has_error(function()
             context:mount(NextWidget, {name='second'})
         end, 'DwarfSpec mount rejected because mount 1 is still current; ' ..
-            'call ds.unmount() before mounting another component')
+            'call ds.unmount() before creating another mount')
 
         assert.same({
             'mount:first',
@@ -757,7 +757,7 @@ describe('DwarfSpec mount context', function()
             return original_source_cleanup(self)
         end
 
-        local mounted = context:mount_native(function()
+        local mounted = context:mount_native_screen(function()
             return {
                 root=root,
                 pinned_screen=pinned,
@@ -826,7 +826,8 @@ describe('DwarfSpec mount context', function()
             end
         end
 
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             return {
                 root=root,
                 pinned_screen=pinned,
@@ -836,7 +837,8 @@ describe('DwarfSpec mount context', function()
         end)
 
         assert.is_false(ok)
-        assert.matches('DwarfSpec native render capability check failed:',
+        assert.matches(
+            'DwarfSpec native-screen mount render capability check failed:',
             failure, 1, true)
         assert.matches('render did not complete', failure, 1, true)
         assert.equals(1, native_observer_installs)
@@ -864,7 +866,8 @@ describe('DwarfSpec mount context', function()
         native_observer_install_failure =
             'overlay render dispatch unavailable'
 
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             return {
                 root=root,
                 pinned_screen=pinned,
@@ -900,7 +903,7 @@ describe('DwarfSpec mount context', function()
         })
         native_observer_restore_failure =
             'native render dispatcher changed before restoration'
-        context:mount_native(function()
+        context:mount_native_screen(function()
             return {
                 root=root,
                 pinned_screen=pinned,
@@ -946,7 +949,8 @@ describe('DwarfSpec mount context', function()
             },
         }
 
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             return {
                 root={},
                 pinned_screen={},
@@ -982,7 +986,8 @@ describe('DwarfSpec mount context', function()
             error('tracker construction exploded')
         end
 
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             return {
                 root={},
                 pinned_screen={},
@@ -1002,7 +1007,7 @@ describe('DwarfSpec mount context', function()
         end)
 
         assert.is_false(ok)
-        assert.matches('DwarfSpec native mount failed to initialize ' ..
+        assert.matches('DwarfSpec native%-screen mount failed to initialize ' ..
             'run%-scoped state:', failure)
         assert.matches('tracker construction exploded', failure, 1, true)
         assert.equals(1, target_cleanups)
@@ -1034,7 +1039,7 @@ describe('DwarfSpec mount context', function()
                 cleanup_push_count + case.failing_push
 
             local ok, failure = pcall(
-                context.mount_native, context, function()
+                context.mount_native_screen, context, function()
                     return {
                         root=root,
                         pinned_screen=pinned,
@@ -1077,7 +1082,7 @@ describe('DwarfSpec mount context', function()
         fail_subject = true
 
         local ok, failure = pcall(
-            context.mount_native, context, function()
+            context.mount_native_screen, context, function()
                 return {
                     root=root,
                     pinned_screen=pinned,
@@ -1112,7 +1117,7 @@ describe('DwarfSpec mount context', function()
         })
 
         local ok, failure = pcall(
-            context.mount_native, context, function()
+            context.mount_native_screen, context, function()
                 return {
                     root=root,
                     pinned_screen=pinned,
@@ -1150,7 +1155,7 @@ describe('DwarfSpec mount context', function()
         })
 
         local ok, failure = pcall(
-            context.mount_native, context, function()
+            context.mount_native_screen, context, function()
                 return {
                     root=root,
                     pinned_screen=pinned,
@@ -1160,7 +1165,7 @@ describe('DwarfSpec mount context', function()
             end)
 
         assert.is_false(ok)
-        assert.matches('native render capability check failed',
+        assert.matches('native-screen mount render capability check failed',
             failure, 1, true)
         assert.matches('cleanup failed:', failure, 1, true)
         assert.matches('borrowed target cleanup exploded',
@@ -1175,7 +1180,8 @@ describe('DwarfSpec mount context', function()
 
     it('does not create mount state when native acquisition fails',
             function()
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             error('native acquisition exploded')
         end)
 

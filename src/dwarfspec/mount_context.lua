@@ -753,13 +753,13 @@ function M.new(options)
     ---Attaches a validated borrowed native screen as the implicit mount.
     ---@param attach function
     ---@return table
-    function context:mount_native(attach)
+    function context:mount_native_screen(attach)
         assert(not self.current,
             ('DwarfSpec mount rejected because mount %d is still current; ' ..
-                'call ds.unmount() before mounting another component')
+                'call ds.unmount() before creating another mount')
                 :format(self.current and self.current.id or -1))
         assert(type(attach) == 'function',
-            'native mount requires an attachment factory')
+            'native-screen mount requires an attachment factory')
 
         local attach_ok, attachment = xpcall(attach, debug.traceback)
         if not attach_ok then error(attachment, 2) end
@@ -809,8 +809,9 @@ function M.new(options)
             local cleanup_ok, cleanup_failure =
                 xpcall(function() cleanup_mount(self, mount) end,
                     debug.traceback)
-            local message = 'DwarfSpec native mount failed to initialize ' ..
-                'run-scoped state: ' .. tostring(setup_failure)
+            local message =
+                'DwarfSpec native-screen mount failed to initialize ' ..
+                    'run-scoped state: ' .. tostring(setup_failure)
             if not cleanup_ok then
                 message = message .. '; direct cleanup failed: ' ..
                     tostring(cleanup_failure)
@@ -827,8 +828,9 @@ function M.new(options)
             local cleanup_ok, cleanup_failure =
                 xpcall(function() cleanup_mount(self, mount) end,
                     debug.traceback)
-            local message = 'DwarfSpec native mount failed to register ' ..
-                'cleanup: ' .. tostring(cleanup_entry)
+            local message =
+                'DwarfSpec native-screen mount failed to register ' ..
+                    'cleanup: ' .. tostring(cleanup_entry)
             if not cleanup_ok then
                 message = message .. '; direct cleanup failed: ' ..
                     tostring(cleanup_failure)
@@ -851,8 +853,9 @@ function M.new(options)
             local cleanup_ok, failures = self.cleanup_module.run_from(
                 self.cleanup_registry, mount.cleanup_marker,
                 'failed native subject cleanup registration')
-            local message = 'DwarfSpec native mount failed to register ' ..
-                'subject cleanup: ' .. tostring(descriptor_entry)
+            local message =
+                'DwarfSpec native-screen mount failed to register ' ..
+                    'subject cleanup: ' .. tostring(descriptor_entry)
             if not cleanup_ok then
                 message = message .. '; cleanup failed: ' ..
                     format_cleanup_failures(failures)
@@ -903,11 +906,12 @@ function M.new(options)
             local capability_ok, capability_failure = xpcall(function()
                 mount.interaction_target:invalidate()
                 return mount.render_tracker:wait_after(
-                    captured, 'native mount render capability check')
+                    captured, 'native-screen mount render capability check')
             end, debug.traceback)
             if not capability_ok then
-                error('DwarfSpec native render capability check failed: ' ..
-                    tostring(capability_failure), 0)
+                error(
+                    'DwarfSpec native-screen mount render capability check ' ..
+                        'failed: ' .. tostring(capability_failure), 0)
             end
             return self:root()
         end, debug.traceback)
@@ -915,8 +919,9 @@ function M.new(options)
             local cleanup_ok, failures = self.cleanup_module.run_from(
                 self.cleanup_registry, mount.cleanup_marker,
                 'failed native attachment')
-            local message = 'DwarfSpec native mount failed while attaching: ' ..
-                tostring(root_subject)
+            local message =
+                'DwarfSpec native-screen mount failed while attaching: ' ..
+                    tostring(root_subject)
             if not cleanup_ok then
                 message = message .. '; cleanup failed: ' ..
                     format_cleanup_failures(failures)
@@ -933,7 +938,7 @@ function M.new(options)
     function context:mount(component, mount_options)
         assert(not self.current,
             ('DwarfSpec mount rejected because mount %d is still current; ' ..
-                'call ds.unmount() before mounting another component')
+                'call ds.unmount() before creating another mount')
                 :format(self.current and self.current.id or -1))
 
         local classification = self.boundary:classify(component)
