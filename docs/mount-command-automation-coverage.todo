@@ -1,6 +1,6 @@
 # Mount command automation coverage
 
-Status: planned
+Status: in progress; Phase 0 complete
 
 Related live specifications:
 
@@ -126,37 +126,84 @@ adding tests.
 
 ### Tasks
 
-☐ Verify repository path, branch, remote, and initial `git status --short`.
-☐ Enumerate the current public top-level commands from `src/ds.d.lua` and
+✔ Verify repository path, branch, remote, and initial `git status --short`.
+✔ Enumerate the current public top-level commands from `src/ds.d.lua` and
   `src/dwarfspec/ds.lua`.
-☐ Enumerate the current fluent `Subject` methods from `src/ds.d.lua` and
+✔ Enumerate the current fluent `Subject` methods from `src/ds.d.lua` and
   `src/dwarfspec/subject.lua`.
-☐ Record the four mount hosts and the two native subject sources.
-☐ Create an applicability matrix containing every command surface and classify
+✔ Record the four mount hosts and the two native subject sources.
+✔ Create an applicability matrix containing every command surface and classify
   each cell as:
   - already proven live;
   - missing live coverage;
   - shared behavior proven by another cell;
   - explicitly unsupported;
   - blocked by unavailable stable live state.
-☐ Link every already-proven cell to its exact automation specification and
+✔ Link every already-proven cell to its exact automation specification and
   assertion.
-☐ Link unit-only behavior to its existing unit specification without treating
+✔ Link unit-only behavior to its existing unit specification without treating
   it as live proof.
-☐ Record baseline `.\tools\Run-UnitTests.ps1` output.
-☐ Record baseline `.\tools\Check-Lua.ps1` output.
-☐ Verify a responsive DFHack process and record its PID, executable, current
+✔ Record baseline `.\tools\Run-UnitTests.ps1` output.
+✔ Record baseline `.\tools\Check-Lua.ps1` output.
+✔ Verify a responsive DFHack process and record its PID, executable, current
   viewscreen type, focus, and loaded-world preconditions.
-☐ Run `.\tools\Run-AutomationTests.ps1` and record the baseline full-live result
+✔ Run `.\tools\Run-AutomationTests.ps1` and record the baseline full-live result
   and cleanup confirmation.
 
 ### Phase 0 exit gate
 
-☐ Every public command and fluent method appears exactly once in the
+✔ Every public command and fluent method appears exactly once in the
   applicability matrix.
-☐ Every missing case maps to a later task in this checklist.
-☐ Shared and unsupported classifications include a concrete reason.
-☐ Baseline unit, syntax, full-live, process, and cleanup evidence is recorded.
+✔ Every missing case maps to a later task in this checklist.
+✔ Shared and unsupported classifications include a concrete reason.
+✔ Baseline unit, syntax, full-live, process, and cleanup evidence is recorded.
+
+### Applicability matrix
+
+Legend: **live** identifies an existing direct assertion, **missing** identifies
+the later checklist work that owns the gap, **shared** identifies behavior whose
+mount boundary does not change the contract, and **unsupported** identifies a
+documented rejection. `O`, `W`, `S`, `N`, and `NO` mean ordinary widget,
+owned overlay widget, complete screen, native source, and native overlay source.
+
+| Surface | Baseline classification and exact evidence or gap owner |
+| --- | --- |
+| `ds.await` | **shared/live** — `tests/automation/scheduler_cleanup_live_spec.lua:18-25` proves scheduler behavior; it is run-level, not mount-dependent. |
+| `ds.capture_screen` | **live** for O: `tests/automation/interaction_live_spec.lua:103-109`; **missing** W, S, N/NO → Phases 3, 4, and 5. |
+| `ds.capture_view_tree` | **live** for O: `tests/automation/interaction_live_spec.lua:86-92`; **missing** W, S, N/NO → Phases 3, 4, and 5. |
+| `ds.click` | **missing** applicable host routes → Phases 2-5; existing fluent-click coverage is not proof of the top-level resolution path. |
+| `ds.current_run` | **shared/live** — `tests/automation/native_screen_mount_live_spec.lua:187` reads run-scoped state. Runtime-only inventory finding: it is not yet declared in `src/ds.d.lua`; this is a declaration gap, not live proof. |
+| `ds.get` | **live** O: `ordinary_widget_mount_live_spec.lua:147`; W: `overlay_widget_mount_live_spec.lua:232`; S: `complete_screen_mount_live_spec.lua:151`; N/NO: `native_screen_mount_live_spec.lua:228-251`. |
+| `ds.getTick` | **shared/live** — `native_screen_mount_live_spec.lua:184`; it has no mount dependency. |
+| `ds.getTime` | **shared/live** — `native_screen_mount_live_spec.lua:185`; it has no mount dependency. |
+| `ds.hover` | **missing** top-level host routes → Phases 2-5; only fluent overlay hover is currently live-proven. |
+| `ds.input` | **live** N: `native_screen_mount_live_spec.lua:287,311`; **missing** O, W, S top-level routes → Phases 2-4. |
+| `ds.inspect` | **missing** root-default routes → Phases 2-5; descendant fluent inspection does not cover default-root resolution. |
+| `ds.mount` | **live** O: `ordinary_widget_mount_live_spec.lua:69`; W: `overlay_widget_mount_live_spec.lua:153`; S: `complete_screen_mount_live_spec.lua:134`; class and instance ownership is already exercised where applicable. |
+| `ds.mountNativeScreen` | **live** N/NO: `native_screen_mount_live_spec.lua:214`; borrowed-root identity and ownership are asserted there. |
+| `ds.mouseInput` | **live** W: `overlay_widget_mount_live_spec.lua:182-188`; N/NO: `native_screen_mount_live_spec.lua:280-306`; **missing** O and S → Phases 2 and 4. |
+| `ds.move_pointer` | **live** N: `native_screen_mount_live_spec.lua:301-305`; **missing** O, W, S top-level geometry routes → Phases 2-4. |
+| `ds.redraw` | **live** N/NO: `native_screen_mount_live_spec.lua:258-271`; **missing** O, W, S top-level default/no-wait routes → Phases 2-4. |
+| `ds.root` | **live** O: `ordinary_widget_mount_live_spec.lua:77`; W: `overlay_widget_mount_live_spec.lua:160`; S: `complete_screen_mount_live_spec.lua:142`; N/NO: `native_screen_mount_live_spec.lua:215,250`. |
+| `ds.stage_overlay_registration` | **shared/live** — `native_screen_mount_live_spec.lua:195-200`; registration is an explicit integration boundary, not a mount command. |
+| `ds.type` | **missing** top-level route → Phases 2-5; existing `Subject:type()` evidence is not equivalent. |
+| `ds.unmount` | **live** for all hosts: O `ordinary_widget_mount_live_spec.lua:170`; W `overlay_widget_mount_live_spec.lua:267`; S `complete_screen_mount_live_spec.lua:175`; N/NO `native_screen_mount_live_spec.lua:317`, with independent cleanup assertions in each specification. |
+| `ds.viewport` | **live** O `ordinary_widget_mount_live_spec.lua:99`; W `overlay_widget_mount_live_spec.lua:225`; S `complete_screen_mount_live_spec.lua:154`; **missing/unsupported** N/NO rejection → Phase 5. |
+| `ds.wait_frames` | **shared/live** — `tests/automation/scheduler_cleanup_live_spec.lua:4-13`; it is run-level, not mount-dependent. |
+| `Subject:click` | **live** O `interaction_live_spec.lua:95`; W `overlay_widget_mount_live_spec.lua:232`; S `complete_screen_mount_live_spec.lua:151`; NO `native_screen_mount_live_spec.lua:280`; **missing** N → Phase 5. |
+| `Subject:getFocusList` | **live** N `native_screen_mount_live_spec.lua:224,235`; **missing** O, W, S, NO → Phases 2-5. |
+| `Subject:hover` | **live** W `overlay_widget_mount_live_spec.lua:166`; **missing** O, S, N, NO → Phases 2, 4, and 5. |
+| `Subject:input` | **live** S `complete_screen_mount_live_spec.lua:158,170`; **missing** O, W, N, NO → Phases 2, 3, and 5. |
+| `Subject:inspect` | **live** O `ordinary_widget_mount_live_spec.lua:153-160`; N `native_screen_mount_live_spec.lua:237`; **missing** W, S, NO → Phases 3-5. |
+| `Subject:move_pointer` | **live** O `interaction_live_spec.lua:93`; NO `native_screen_mount_live_spec.lua:273`; **missing** W, S, N → Phases 3-5. |
+| `Subject:raw` | **live** all hosts through exact mount-root identity: O `ordinary_widget_mount_live_spec.lua:76`; W `overlay_widget_mount_live_spec.lua:158`; S `complete_screen_mount_live_spec.lua:142`; N/NO `native_screen_mount_live_spec.lua:215,252`. |
+| `Subject:redraw` | **live** O `ordinary_widget_mount_live_spec.lua:123`; W `overlay_widget_mount_live_spec.lua:251`; N `native_screen_mount_live_spec.lua:262`; **missing** S and NO no-wait routes → Phases 4 and 5. |
+| `Subject:text` | **live** O `ordinary_widget_mount_live_spec.lua:160`; S `complete_screen_mount_live_spec.lua:153`; NO `native_screen_mount_live_spec.lua:282`; **missing** W and N → Phases 3 and 5. |
+| `Subject:type` | **live** O `ordinary_widget_mount_live_spec.lua:158`; S `complete_screen_mount_live_spec.lua:151`; **missing** W, N, NO → Phases 3 and 5. |
+
+Unit-only validation remains in `tests/unit/ds_mount_commands_spec.lua` and
+adapter-specific unit specifications. It is linked here only as support for
+argument and failure contracts; it is not classified as live evidence.
 
 ## Phase 1: Shared live conformance support
 
@@ -218,6 +265,11 @@ Goal: close the remaining live command gaps for the ordinary-widget host.
   explicitly.
 ☐ Exercise root-default `ds.inspect()` and validate the ordinary component
   root identity, visibility, activity, and bounds.
+☐ Exercise the applicable top-level `ds.click`, `ds.hover`, `ds.input`,
+  `ds.type`, and `ds.move_pointer` routes and compare each observable result
+  with its fluent-subject counterpart.
+☐ Exercise `Subject:getFocusList()` for the ordinary-widget host and validate
+  the returned bounded focus strings.
 ☐ Exercise top-level `ds.redraw()` with default waiting.
 ☐ Exercise `ds.redraw(nil, {wait=false})`, prove it returns before the next
   render generation, then separately await completion.
@@ -251,6 +303,11 @@ Goal: close the remaining live command gaps for an owned overlay-widget mount.
 ☐ Capture bounded screen cells with `ds.capture_screen()` while the overlay is
   rendered.
 ☐ Exercise root-default `ds.inspect()`.
+☐ Exercise the applicable top-level `ds.click`, `ds.hover`, `ds.input`,
+  `ds.type`, and `ds.move_pointer` routes and compare each observable result
+  with its fluent-subject counterpart.
+☐ Exercise `Subject:getFocusList()` for the owned overlay host and validate
+  the returned bounded focus strings.
 ☐ Exercise `{wait=false}` redraw, prove the immediate generation is unchanged,
   and separately await the later overlay render.
 ☐ Verify backing screen, overlay lifecycle, pointer/button state, viewport, and
@@ -271,6 +328,11 @@ Goal: close the remaining live command gaps for an owned complete-screen mount.
 ### Tasks
 
 ☐ Exercise root-default `ds.inspect()` and fluent `Subject:inspect()`.
+☐ Exercise the applicable top-level `ds.click`, `ds.hover`, `ds.input`,
+  `ds.type`, and `ds.move_pointer` routes and compare each observable result
+  with its fluent-subject counterpart.
+☐ Exercise `Subject:getFocusList()` for both complete-screen mount forms and
+  validate the returned bounded focus strings.
 ☐ Capture the complete-screen component tree and validate that modal or backing
   screens outside the component root are excluded.
 ☐ Capture bounded screen cells while the complete screen is active.
@@ -319,6 +381,10 @@ attachment without mutating persistent game state.
   base-game text field is modified.
 ☐ Exercise native `Subject:redraw({wait=false})` and separately await the later
   render.
+☐ Exercise the remaining applicable top-level interaction routes on the native
+  source through test-owned observation, without mutating base-game controls.
+☐ Exercise native `Subject:getFocusList()` after a fresh attachment and validate
+  the pinned screen's focus strings.
 ☐ Call `ds.viewport()` and assert the explicit non-owning-mount rejection
   without screen, layout, focus, stack, or pointer mutation.
 
@@ -334,6 +400,8 @@ attachment without mutating persistent game state.
   `Subject:type()`.
 ☐ Exercise overlay-source `Subject:text()` directly.
 ☐ Exercise overlay-source `Subject:redraw({wait=false})`.
+☐ Exercise overlay-source `Subject:getFocusList()` and validate the pinned
+  native screen's focus strings.
 
 ### Shared cleanup tasks
 
@@ -441,7 +509,37 @@ observations, and relevant file paths here as work proceeds.
 
 ### Phase 0 evidence
 
-- Pending.
+- Repository identity on 2026-07-25: `D:\CODE\DFHack\DwarfSpec`, branch
+  `cli-error-formatting`, with `origin` fetch and push set to
+  `https://github.com/dsisco11/DwarfSpec.git`. Initial `git status --short`
+  was empty; this phase changes only this checklist.
+- Public-surface inventory compared `src/ds.d.lua` with
+  `src/dwarfspec/ds.lua`, and `Subject` declarations with
+  `src/dwarfspec/subject.lua`. The applicability matrix above lists every
+  top-level command and fluent method exactly once. All declared methods have
+  a runtime counterpart. Runtime `ds.current_run()` has no `ds.d.lua`
+  declaration; it is recorded as an existing declaration gap rather than being
+  silently omitted from the coverage inventory.
+- Mount inventory: ordinary `gui.View`, owned `OverlayWidget`, complete
+  `gui.ZScreen`, and non-owning native-screen mounts. Native attachments have
+  `ESubjectSource.NATIVE` and `ESubjectSource.OVERLAY` subject sources. The
+  matrix links each baseline live assertion and assigns every missing route to
+  Phases 2-5; unit-only validation remains explicitly non-live evidence.
+- `.\tools\Run-UnitTests.ps1` passed with 382 successes, 0 failures,
+  0 errors, and 0 pending. `.\tools\Check-Lua.ps1` passed Lua 5.4.6 syntax
+  and formatting checks for 224 files.
+- `.\tools\Run-AutomationTests.ps1` passed with 25 successes, 0 failures,
+  0 errors, and 0 pending. The terminal report was `FINISHED passed` with
+  `cleanup_confirmed=true`; all five baseline mount-oriented specifications
+  completed in the same fresh run.
+- Process-state inspection before and after the full live baseline found the
+  responsive Dwarf Fortress process PID 29712 at
+  `G:\Steam\steamapps\common\Dwarf Fortress\Dwarf Fortress.exe`.
+  A read-only `dfhack-run lua` query reported
+  `<viewscreen_dwarfmodest: 0x202f2cf49d0>`, focus `dwarfmode/Default`,
+  `fortress=true`, `world=true`, and `df.global.cur_year_tick=168555`.
+- `git diff --check` and `git diff --cached --check` passed. Final worktree
+  accounting shows only `docs/mount-command-automation-coverage.todo` changed.
 
 ### Phase 1 evidence
 
