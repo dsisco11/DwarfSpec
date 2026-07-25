@@ -3,6 +3,7 @@
 local M = {}
 local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
+local diagnostic_formatter = require('dwarfspec.diagnostic_formatter')
 local schemas = require('dwarfspec.automation.schemas')
 local SchedulerFailureKind =
     require('dwarfspec.automation.scheduler_failure_kinds')
@@ -312,8 +313,9 @@ end
 
 ---Formats one structured event for terminal progress output.
 ---@param event table
+---@param options table|nil
 ---@return string|nil
-local function format_event(event)
+local function format_event(event, options)
     local payload = event.payload
     if event.type == EventType.RUN_QUEUED then
         return 'QUEUED'
@@ -336,6 +338,12 @@ local function format_event(event)
         return ('%s %s (%d ms)'):format(payload.status:upper(),
             payload.name, payload.duration_ms)
     elseif event.type == EventType.PROBLEM_RECORDED then
+        if options and options.error_format then
+            local formatter = options.diagnostic_formatter or
+                diagnostic_formatter
+            return formatter.format(options.error_format,
+                options.project_root, payload)
+        end
         return ('%s %s: %s'):format(payload.kind:upper(),
             payload.name, payload.message)
     elseif event.type == EventType.CLEANUP_STARTED then
@@ -368,13 +376,14 @@ local function format_event(event)
     return nil
 end
 
----Formats structured transport events without depending on diagnostic lines.
+---Formats structured transport events for external terminal presentation.
 ---@param transport_events table[]
+---@param options table|nil
 ---@return string[]
-function M.format_events(transport_events)
+function M.format_events(transport_events, options)
     local lines = {}
     for _, event in ipairs(transport_events) do
-        local line = format_event(event)
+        local line = format_event(event, options)
         if line ~= nil then table.insert(lines, line) end
     end
     return lines

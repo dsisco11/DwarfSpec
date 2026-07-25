@@ -1,6 +1,6 @@
 # CLI diagnostic output implementation
 
-Status: in progress; Phases 0-3 complete
+Status: in progress; Phases 0-4 complete
 
 Related design: `docs/test-runner-service-design.md`
 
@@ -350,34 +350,62 @@ Phase 3 evidence:
 Goal: apply the project-selected formatter while the external command consumes
 structured events.
 
-☐ Pass the resolved error format and project root through
+✔ Pass the resolved error format and project root through
   `dwarfspec.runner.run`.
-☐ Update event formatting so `problem.recorded` uses the selected diagnostic
+✔ Update event formatting so `problem.recorded` uses the selected diagnostic
   formatter.
-☐ Keep all non-problem event formatting byte-for-byte compatible unless a
+✔ Keep all non-problem event formatting byte-for-byte compatible unless a
   separate defect requires an explicit change.
-☐ Emit a problem diagnostic as soon as its validated event is consumed.
-☐ Ensure cursor retry and repeated polling cannot print the same event twice.
-☐ Ensure formatting does not mutate transport events, the in-memory event
+✔ Emit a problem diagnostic as soon as its validated event is consumed.
+✔ Ensure cursor retry and repeated polling cannot print the same event twice.
+✔ Ensure formatting does not mutate transport events, the in-memory event
   journal, or the persisted result.
-☐ Ensure a formatter failure becomes an explicit DwarfSpec CLI error without
+✔ Ensure a formatter failure becomes an explicit DwarfSpec CLI error without
   bypassing active-run abort and cleanup recovery.
-☐ Preserve result persistence and acknowledgement after a normally formatted
+✔ Preserve result persistence and acknowledgement after a normally formatted
   failed run.
-☐ Preserve established exit codes for passing, failing, host-error, timeout,
+✔ Preserve established exit codes for passing, failing, host-error, timeout,
   interruption, persistence-error, and recovery outcomes.
 
 Phase 4 exit gate:
 
-☐ Runner unit tests cover each selected format on streamed problem events.
-☐ Runner unit tests prove regular progress remains present and ordered around
+✔ Runner unit tests cover each selected format on streamed problem events.
+✔ Runner unit tests prove regular progress remains present and ordered around
   the diagnostic line.
-☐ Runner unit tests prove one event is emitted once across cursor polling.
-☐ Runner unit tests prove formatted output does not alter the persisted
+✔ Runner unit tests prove one event is emitted once across cursor polling.
+✔ Runner unit tests prove formatted output does not alter the persisted
   structured event.
-☐ CLI unit tests prove project configuration reaches the runner and invalid
+✔ CLI unit tests prove project configuration reaches the runner and invalid
   configuration fails before connecting to DFHack.
-☐ Lua syntax checks and the full unit suite pass.
+✔ Lua syntax checks and the full unit suite pass.
+
+Phase 4 evidence:
+
+- `dwarfspec.report.format_events` accepts external presentation options and
+  delegates only `problem.recorded` events to the selected diagnostic
+  formatter. Calls without those options and every non-problem event retain
+  the existing human-readable output.
+- `dwarfspec.runner.run` supplies the owning project root and resolved format
+  while consuming each validated cursor response. Events enter the detached
+  result journal before rendering, and the cursor advances before the next
+  poll, so presentation neither mutates nor repeats structured events.
+- An injected formatter failure is classified as an explicit host error. The
+  runner uses the advanced cursor to recover the active run, records confirmed
+  cleanup without invoking the failed formatter again, and persists the
+  complete structured journal.
+- Normal failed runs stream ordered test progress and diagnostics, persist the
+  unmodified problem message, trace, and location, and acknowledge the
+  terminal generation after the final result write.
+- `.\tools\Run-UnitTests.ps1 --filter 'DwarfSpec external runner'` reported
+  30 successes, 0 failures, 0 errors, and 0 pending on 2026-07-25.
+- `.\tools\Run-UnitTests.ps1 --filter 'DwarfSpec CLI selection'` reported
+  29 successes, 0 failures, 0 errors, and 0 pending on 2026-07-25.
+- `.\tools\Run-UnitTests.ps1 --filter 'standard diagnostic formatter'`
+  reported 9 successes, 0 failures, 0 errors, and 0 pending on 2026-07-25.
+- `.\tools\Run-UnitTests.ps1` reported 377 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-25.
+- `.\tools\Check-Lua.ps1` passed for 224 Lua files on 2026-07-25.
+- `git diff --check` passed on 2026-07-25.
 
 ## Phase 5: Documentation and editor examples
 
@@ -446,7 +474,7 @@ Record evidence only after running the corresponding command.
 | 1 | Configuration and immutable enum unit tests | Complete: shared validated settings and config schema, immutable identifiers, one-load CLI propagation, discovery precedence, independent roots, 266-test unit suite, and 200-file Lua checks passed on 2026-07-24 |
 | 2 | Structured source-location and event-schema unit tests | Complete: bounded presentation-neutral extraction, callback integration, optional-field validation, cursor/result/history retention, 274-test unit suite, and 202-file Lua checks passed on 2026-07-24 |
 | 3 | Exact formatter unit tests | Complete: all three canonical formats, both problem kinds, path and column rules, display sanitization, immutable structured input, one-line output, and location-less fallback covered by 9 focused tests; 374-test unit suite and 224-file Lua checks passed on 2026-07-25 |
-| 4 | Runner and CLI integration unit tests | Pending |
+| 4 | Runner and CLI integration unit tests | Complete: project-selected formats stream in cursor order, structured events remain unchanged, failed runs persist and acknowledge, formatter failures recover cleanup, 30 focused runner tests and 29 focused CLI tests passed; 377-test unit suite and 224-file Lua checks passed on 2026-07-25 |
 | 5 | Documentation and editor-example review | Pending |
 | 6 | Focused tests, full unit suite, syntax, and diff checks | Pending |
 
