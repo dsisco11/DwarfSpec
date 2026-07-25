@@ -1,6 +1,6 @@
 # Explicit native-screen mount API
 
-Status: planned
+Status: in progress; Phase 0 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -104,24 +104,24 @@ implementation to this list and update it in the same change.
 
 Goal: establish the exact pre-change surface and verification baseline.
 
-☐ Confirm the workspace and Git remote identify the intended DwarfSpec
+✔ Confirm the workspace and Git remote identify the intended DwarfSpec
   repository.
-☐ Record `git status --short` and preserve unrelated changes.
-☐ Run `.\tools\Run-UnitTests.ps1`.
-☐ Run `.\tools\Check-Lua.ps1`.
-☐ Inventory every positive `ds.mount()` no-argument call in source, tests, and
+✔ Record `git status --short` and preserve unrelated changes.
+✔ Run `.\tools\Run-UnitTests.ps1`.
+✔ Run `.\tools\Check-Lua.ps1`.
+✔ Inventory every positive `ds.mount()` no-argument call in source, tests, and
   documentation.
-☐ Inventory every `mount_native` declaration and call.
-☐ Inventory diagnostics that currently mention only
+✔ Inventory every `mount_native` declaration and call.
+✔ Inventory diagnostics that currently mention only
   `ds.mount(component, options)`.
-☐ Characterize the current behavior of `ds.mount()`, `ds.mount(nil)`, and
+✔ Characterize the current behavior of `ds.mount()`, `ds.mount(nil)`, and
   repeated component/native mounts before editing.
 
 ### Phase 0 exit gate
 
-☐ Baseline unit and Lua checks pass or every pre-existing failure is recorded.
-☐ Every affected public, internal, test, and documentation call site is listed.
-☐ No production behavior has changed.
+✔ Baseline unit and Lua checks pass or every pre-existing failure is recorded.
+✔ Every affected public, internal, test, and documentation call site is listed.
+✔ No production behavior has changed.
 
 ## Phase 1: Explicit public and internal entry points
 
@@ -291,7 +291,62 @@ cleanup observations, and environmental limitations here as work proceeds.
 
 ### Phase 0 evidence
 
-- Pending.
+- Repository identity on 2026-07-25:
+  `D:\CODE\DFHack\DwarfSpec`, branch `cli-error-formatting`, with `origin`
+  fetch and push set to `https://github.com/dsisco11/DwarfSpec.git`.
+  Baseline `git status --short` was empty at `9e55ad4`.
+- `.\tools\Run-UnitTests.ps1` reported 377 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-25.
+- `.\tools\Check-Lua.ps1` passed Lua 5.4.6 syntax and formatting checks for
+  224 files on 2026-07-25.
+- `.\tools\Run-UnitTests.ps1 --filter 'DwarfSpec public mount commands'`
+  reported 38 successes, 0 failures, 0 errors, and 0 pending.
+- The current public declaration is the single overloaded `DS.mount` at
+  `src/ds.d.lua:203-209`; its comments and overload describe the no-argument
+  native attachment.
+- The production dispatch is `src/dwarfspec/ds.lua:547-555`.
+  `ds.mount()` sees zero arguments and calls `mount_native`; `ds.mount(nil)`
+  sees one argument and enters component classification. The latter currently
+  fails with `unsupported component input (nil)` and the supported DFHack
+  component categories. `tests/unit/ds_mount_commands_spec.lua:400-457`
+  directly locks both behaviors.
+- Both `mount_context:mount` and `mount_context:mount_native` reject any
+  already-current mount before allocation. Component-to-component is directly
+  covered at `tests/unit/ds_mount_commands_spec.lua:380-398`; native-to-native
+  and both cross-kind combinations currently reach the same assertion:
+  `DwarfSpec mount rejected because mount <id> is still current; call
+  ds.unmount() before mounting another component`. Repeated native attachment
+  after explicit unmount is covered for five iterations at
+  `tests/unit/ds_mount_commands_spec.lua:656-687`. Direct cross-kind coverage
+  is intentionally added by Phase 3.
+- Positive executable no-argument native calls are:
+  `tests/unit/ds_mount_commands_spec.lua` at lines 402, 462, 496, 586, 629,
+  659, 690, 723, 765, 786, 815, 864, 898, 942, 964, 972, 1020, 1039, 1057,
+  1082, 1306, 1376, and 1490; and
+  `tests/automation/native_screen_mount_live_spec.lua:198`.
+- User-facing no-argument native references are
+  `docs/architecture.md:90`,
+  `docs/non-owning-native-screen-mount-proposal.md:5,9,98,102,249,575,630,665,696,720,761`,
+  and `docs/writing-tests.md:209,233,300`.
+  `docs/writing-tests.md:417` is also affected because it ambiguously says
+  component specs use `ds.mount()` without showing a component argument.
+  References in this checklist and `docs/project.todo` describe the planned
+  removal and are not positive usage examples.
+- The internal `mount_native` inventory is
+  `src/dwarfspec/ds.lua:549`,
+  `src/dwarfspec/mount_context.lua:756`, and
+  `tests/unit/mount_context_spec.lua:760,829,867,903,949,985,1037,1080,1115,1153,1178`.
+- The component-only no-current-mount diagnostic is produced at
+  `src/dwarfspec/mount_context.lua:450`. Exact expectations occur at
+  `tests/unit/ds_mount_commands_spec.lua:1128`,
+  `tests/unit/mount_context_spec.lua:1202`,
+  `tests/automation/component_render_tracking_live_spec.lua:93`, and the
+  framework recovery specifications
+  `mount_error_recovery_spec.ds.lua:37`,
+  `mount_failure_recovery_spec.ds.lua:46`, and
+  `overlay_failure_recovery_spec.ds.lua:66`.
+- Phase 0 changed only this planning document; production behavior remains at
+  the characterized baseline.
 
 ### Phase 1 evidence
 
