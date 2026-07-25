@@ -1,0 +1,484 @@
+# Mount command automation coverage
+
+Status: planned
+
+Related live specifications:
+
+- `tests/automation/ordinary_widget_mount_live_spec.lua`
+- `tests/automation/overlay_widget_mount_live_spec.lua`
+- `tests/automation/complete_screen_mount_live_spec.lua`
+- `tests/automation/native_screen_mount_live_spec.lua`
+- `tests/automation/interaction_live_spec.lua`
+
+## Purpose
+
+Provide direct live-DFHack evidence that every applicable public DwarfSpec
+command works through each distinct mount host and native subject source.
+Existing unit coverage remains responsible for exhaustive argument validation
+and injected failure combinations; this checklist covers behavior that depends
+on real DFHack mounting, screen routing, input dispatch, rendering, geometry,
+or cleanup.
+
+This checklist is the implementation completion contract. A phase is complete
+only when every task and exit-gate item in that phase is checked and its fresh
+evidence is recorded in the evidence ledger.
+
+## Scope
+
+Included mount hosts:
+
+- ordinary `gui.View` widget components;
+- `plugins.overlay.OverlayWidget` components;
+- complete `gui.ZScreen` components;
+- non-owning native-screen attachments.
+
+Included native-mount subject sources:
+
+- `ESubjectSource.NATIVE`;
+- `ESubjectSource.OVERLAY`.
+
+Included command surfaces:
+
+- top-level `ds` commands;
+- equivalent fluent `Subject` methods;
+- supported overloads and mount-specific rejection behavior;
+- exact unmount and test-fixture cleanup.
+
+Excluded:
+
+- duplicating every unit-test argument permutation in live automation;
+- tests of VS Code tasks, package manifests, or static configuration contents;
+- adding production commands solely to simplify test coverage;
+- relying on unstable world data when a reversible test-owned fixture can prove
+  the same routing contract;
+- treating a command returning without error as proof when an observable result
+  is available;
+- changing runner transport, scheduling, result persistence, or the separate
+  in-game runner UI.
+
+## Coverage model
+
+Each command is tested once for behavior shared entirely above the mount
+boundary. It is repeated for a mount host or subject source when that boundary
+changes any of:
+
+- interaction target;
+- subject adapter;
+- geometry;
+- render observation;
+- screen ownership;
+- input fall-through;
+- cleanup responsibility;
+- supported versus rejected behavior.
+
+Run-level commands `ds.current_run()`, `ds.wait_frames()`, `ds.await()`, and
+`ds.stage_overlay_registration()` already have live coverage and are not
+repeated for every mount host.
+
+## Locked acceptance contract
+
+☐ Every supported mount host has direct live coverage for its applicable
+  command routes.
+☐ Every supported native subject source has direct live coverage for lookup,
+  inspection, interaction, rendering, capture, staleness, and cleanup.
+☐ Top-level and fluent command forms are both exercised where they enter
+  meaningfully different resolution paths.
+☐ Expected unsupported behavior is asserted as an explicit error with no state
+  mutation.
+☐ Pointer and mouse tests place the pointer over a rendered target before
+  dispatch.
+☐ Keyboard, text, click, and wheel tests prove an observable result through
+  normal DFHack dispatch.
+☐ Redraw tests distinguish default waiting from `{wait=false}`.
+☐ Screen captures and view-tree captures validate bounded returned content, not
+  merely that a table was returned.
+☐ Live tests never depend on execution order or state retained by another test.
+☐ Every test-owned screen, overlay registration, configuration change, pointer
+  claim, and instrumentation hook is restored independently.
+☐ Native-screen tests never dismiss or take ownership of the borrowed game
+  screen.
+☐ A passing functional assertion never substitutes for independent cleanup
+  evidence.
+
+## Global engineering rules
+
+☐ Add LuaDoc comments to every new or changed Lua function, method, class, and
+  class-like test fixture.
+☐ Reuse public DwarfSpec commands in acceptance tests; do not invoke native
+  widget callbacks or overlay `onInput()` methods directly.
+☐ Prefer test-owned reversible screens and overlays over mutating persistent
+  fortress state.
+☐ Preserve the actual native screen, focus, stack, pause state, viewport,
+  pointer, button state, overlay configuration, and render dispatcher.
+☐ Use bounded waits with explicit descriptions for asynchronous observations.
+☐ Avoid arbitrary frame delays when an observable completion condition exists.
+☐ Keep shared test helpers under `tests/support` or
+  `tests/automation/support`; do not add test-only helpers to the release rock.
+☐ Do not add packaging-contract or VS Code task-configuration tests.
+☐ Preserve unrelated worktree changes.
+☐ Record focused live, full live, unit, syntax, diff, process-state, and cleanup
+  evidence separately.
+
+## Phase 0: Baseline and authoritative coverage matrix
+
+Goal: establish the exact public command and mount capability inventory before
+adding tests.
+
+### Tasks
+
+☐ Verify repository path, branch, remote, and initial `git status --short`.
+☐ Enumerate the current public top-level commands from `src/ds.d.lua` and
+  `src/dwarfspec/ds.lua`.
+☐ Enumerate the current fluent `Subject` methods from `src/ds.d.lua` and
+  `src/dwarfspec/subject.lua`.
+☐ Record the four mount hosts and the two native subject sources.
+☐ Create an applicability matrix containing every command surface and classify
+  each cell as:
+  - already proven live;
+  - missing live coverage;
+  - shared behavior proven by another cell;
+  - explicitly unsupported;
+  - blocked by unavailable stable live state.
+☐ Link every already-proven cell to its exact automation specification and
+  assertion.
+☐ Link unit-only behavior to its existing unit specification without treating
+  it as live proof.
+☐ Record baseline `.\tools\Run-UnitTests.ps1` output.
+☐ Record baseline `.\tools\Check-Lua.ps1` output.
+☐ Verify a responsive DFHack process and record its PID, executable, current
+  viewscreen type, focus, and loaded-world preconditions.
+☐ Run `.\tools\Run-AutomationTests.ps1` and record the baseline full-live result
+  and cleanup confirmation.
+
+### Phase 0 exit gate
+
+☐ Every public command and fluent method appears exactly once in the
+  applicability matrix.
+☐ Every missing case maps to a later task in this checklist.
+☐ Shared and unsupported classifications include a concrete reason.
+☐ Baseline unit, syntax, full-live, process, and cleanup evidence is recorded.
+
+## Phase 1: Shared live conformance support
+
+Goal: make the missing cases concise, deterministic, and consistent without
+hiding mount-specific behavior.
+
+### Tasks
+
+☐ Add a shared command-conformance helper only where it removes duplicated
+  setup or assertions across at least two mount hosts.
+☐ Keep mount construction in each mount-specific specification so the actual
+  host category remains visible.
+☐ Define explicit capability fields for:
+  - root inspection;
+  - tree capture;
+  - screen capture;
+  - subject pointer placement and hover;
+  - keyboard input;
+  - text input;
+  - physical mouse states;
+  - default-wait redraw;
+  - no-wait redraw;
+  - viewport support or expected rejection.
+☐ Reject unknown or contradictory capability fields in the helper.
+☐ Provide reusable assertions for exact mounted-root identity.
+☐ Provide reusable assertions for default-wait and no-wait redraw generation
+  behavior.
+☐ Provide reusable pointer/button snapshot and exact-restoration assertions.
+☐ Provide reusable bounded capture assertions.
+☐ Provide reusable command-observation counters that are owned by the test
+  fixture and reached only through normal input/render dispatch.
+☐ Ensure helper cleanup runs after both successful assertions and injected
+  failures.
+☐ Add focused unit coverage for nontrivial helper validation or cleanup logic;
+  do not add unit tests that merely restate static fixture tables.
+
+### Phase 1 exit gate
+
+☐ The helper contains no mount implementation or production behavior.
+☐ Mount-specific tests still show which real host and interaction target are
+  exercised.
+☐ Shared cleanup assertions fail when any owned state remains.
+☐ Focused helper tests and Lua syntax checks pass.
+
+## Phase 2: Ordinary-widget command gaps
+
+Goal: close the remaining live command gaps for the ordinary-widget host.
+
+### Tasks
+
+☐ Add a rendered ordinary-widget pointer target that records ordinary host
+  input dispatch.
+☐ Place the pointer inside that target before every physical mouse action.
+☐ Exercise `ds.mouseInput(EMouseButton.LEFT)` and prove the default click is
+  observed.
+☐ Exercise explicit `EInputState.DOWN` and `EInputState.UP` and prove temporary
+  button fields and final restoration.
+☐ Exercise wheel input and prove handled or normal fall-through behavior
+  explicitly.
+☐ Exercise root-default `ds.inspect()` and validate the ordinary component
+  root identity, visibility, activity, and bounds.
+☐ Exercise top-level `ds.redraw()` with default waiting.
+☐ Exercise `ds.redraw(nil, {wait=false})`, prove it returns before the next
+  render generation, then separately await completion.
+☐ Verify pointer, button, viewport, pause, host-screen, and instrumentation
+  restoration after unmount.
+
+### Phase 2 exit gate
+
+☐ Every previously missing ordinary-widget command case has an observable live
+  assertion.
+☐ Physical mouse states and no-wait redraw do not leak state.
+☐ Existing ordinary-widget automation remains green.
+
+## Phase 3: Overlay-widget command gaps
+
+Goal: close the remaining live command gaps for an owned overlay-widget mount.
+
+### Tasks
+
+☐ Assert `ds.root():raw()` is the exact mounted overlay instance.
+☐ Add a test-owned overlay keyboard target and prove both `ds.input()` and
+  `Subject:input()` use normal overlay dispatch.
+☐ Add a test-owned editable overlay control and prove `ds.type()` and
+  `Subject:type()` update observable overlay state.
+☐ Place the pointer over a rendered overlay target and exercise physical left
+  `CLICK`, `DOWN`, and `UP` through `ds.mouseInput()`.
+☐ Preserve the existing wheel-handled and wheel-fall-through assertions.
+☐ Exercise `Subject:text()` directly on an overlay descendant.
+☐ Capture the mounted overlay tree with `ds.capture_view_tree()` and validate
+  bounded root and descendant content.
+☐ Capture bounded screen cells with `ds.capture_screen()` while the overlay is
+  rendered.
+☐ Exercise root-default `ds.inspect()`.
+☐ Exercise `{wait=false}` redraw, prove the immediate generation is unchanged,
+  and separately await the later overlay render.
+☐ Verify backing screen, overlay lifecycle, pointer/button state, viewport, and
+  instrumentation restoration after unmount.
+
+### Phase 3 exit gate
+
+☐ Keyboard, text, physical mouse, capture, inspection, and redraw gaps are
+  proven through the real overlay host.
+☐ Handled overlay input and unhandled backing-screen fall-through remain
+  distinct assertions.
+☐ Existing overlay-widget automation remains green.
+
+## Phase 4: Complete-screen command gaps
+
+Goal: close the remaining live command gaps for an owned complete-screen mount.
+
+### Tasks
+
+☐ Exercise root-default `ds.inspect()` and fluent `Subject:inspect()`.
+☐ Capture the complete-screen component tree and validate that modal or backing
+  screens outside the component root are excluded.
+☐ Capture bounded screen cells while the complete screen is active.
+☐ Exercise top-level and fluent subject pointer placement.
+☐ Exercise top-level and fluent hover over a rendered complete-screen control.
+☐ Exercise physical click, down, up, and wheel input at the current pointer
+  position.
+☐ Prove handled complete-screen input and configured backing-screen
+  fall-through separately.
+☐ Exercise top-level and fluent default-wait redraw.
+☐ Exercise `{wait=false}` redraw and separately observe the later completed
+  render.
+☐ Run the new cases for both a mounted class and an existing instance where
+  class/instance ownership can change cleanup behavior.
+☐ Verify child modal, mounted screen, backing screen, pause state, viewport,
+  pointer/button state, and instrumentation cleanup.
+
+### Phase 4 exit gate
+
+☐ Inspection, capture, pointer, mouse, and redraw gaps are proven on a real
+  complete-screen host.
+☐ Component-root captures never absorb backing or modal screen ownership.
+☐ Class and instance mounts preserve their existing method and cleanup
+  contracts.
+
+## Phase 5: Native source and overlay-source command gaps
+
+Goal: complete command coverage for both sources of a non-owning native-screen
+attachment without mutating persistent game state.
+
+### Native source tasks
+
+☐ Capture the default native tree with `ds.capture_view_tree()` and validate
+  bounded native root, type, names, state, bounds, and available text.
+☐ Repeat native root, lookup, and tree capture with explicit
+  `ESubjectSource.NATIVE`.
+☐ Capture bounded screen cells while the native screen remains current.
+☐ Exercise `Subject:text()` directly on the stable live native text widget.
+☐ Exercise native `Subject:move_pointer()` and `Subject:hover()` and prove the
+  pointer lies within the widget's rendered bounds.
+☐ Exercise native `Subject:input()` and observe normal dispatch through a
+  test-owned overlay observer without calling it directly.
+☐ Exercise native `Subject:click()` and observe normal mouse dispatch through a
+  test-owned overlay observer.
+☐ Exercise native `Subject:type()` through the same observer so no persistent
+  base-game text field is modified.
+☐ Exercise native `Subject:redraw({wait=false})` and separately await the later
+  render.
+☐ Call `ds.viewport()` and assert the explicit non-owning-mount rejection
+  without screen, layout, focus, stack, or pointer mutation.
+
+### Overlay source tasks
+
+☐ Capture a test-owned registered overlay tree through
+  `ESubjectSource.OVERLAY`.
+☐ Exercise overlay-source `Subject:hover()` and verify live bounds.
+☐ Exercise overlay-source `Subject:click()` and prove its ordinary activation
+  callback result.
+☐ Exercise overlay-source `Subject:input()` through normal overlay dispatch.
+☐ Add a test-owned editable control and exercise overlay-source
+  `Subject:type()`.
+☐ Exercise overlay-source `Subject:text()` directly.
+☐ Exercise overlay-source `Subject:redraw({wait=false})`.
+
+### Shared cleanup tasks
+
+☐ Capture exact native viewscreen, focus, screen stack, pointer/button state,
+  render dispatcher, overlay registry/configuration, and relevant game state
+  before attachment.
+☐ Unmount and independently prove exact restoration of every captured value.
+☐ Prove zero owned-screen and native-dismissal evidence.
+☐ Prove native unmount leaves the external overlay registered and enabled.
+☐ Restore the test-owned overlay registration and configuration through its
+  independent cleanup and prove no staged files or registry entries remain.
+
+### Phase 5 exit gate
+
+☐ Every applicable native-source and overlay-source command has direct live
+  evidence.
+☐ Text, click, and keyboard observations use test-owned overlay instrumentation
+  without bypassing normal dispatch.
+☐ The borrowed native screen remains exact, current, unowned, and undismissed.
+☐ Native and independently owned overlay cleanup both pass.
+
+## Phase 6: Live rejection, staleness, and recovery contracts
+
+Goal: prove the unit-covered failure boundaries that depend on real DFHack
+screen or overlay lifecycle.
+
+### Tasks
+
+☐ For each component mount host, reject native/overlay source options and prove
+  the current mount remains usable.
+☐ Show a test-owned DFHack Lua screen above the native game screen and prove a
+  new native attachment rejects the current/DF viewscreen mismatch.
+☐ Dismiss only that test-owned screen and prove the original native screen,
+  focus, and stack are restored.
+☐ While a native attachment is active, show a test-owned screen transition and
+  prove retained native subjects become stale before widget dereference or
+  input dispatch.
+☐ Restore the original screen and prove the stale subject does not silently
+  rebind.
+☐ Unmount and perform a fresh native attachment to prove remount recovery.
+☐ With a test-owned registered overlay subject, prove staleness after:
+  - disablement;
+  - removal;
+  - replacement under the same exact registry name.
+☐ Prove a new `ds.get()` is required after overlay replacement.
+☐ Prove missing and disabled overlay selections return explicit source-aware
+  diagnostics without registry mutation.
+☐ Induce one reversible native render-observation failure through test-owned
+  instrumentation.
+☐ Prove the original failure remains primary and partial render observation,
+  subjects, attachment state, pointer/button state, and cleanup entries are
+  removed.
+☐ Verify the process remains responsive and the original native screen remains
+  current after every rejection case.
+
+### Phase 6 exit gate
+
+☐ All live rejection cases leave independently verified clean state.
+☐ Native and overlay subjects fail explicitly after real lifecycle changes.
+☐ Recovery requires and successfully creates fresh subjects and attachments.
+☐ No test dismisses or navigates the borrowed native game screen.
+
+## Phase 7: Full verification and coverage closure
+
+Goal: prove the final live matrix and retain precise evidence.
+
+### Tasks
+
+☐ Re-audit every public top-level command and fluent `Subject` method against
+  the applicability matrix.
+☐ Link every supported cell to a direct live assertion.
+☐ Link every shared cell to the exact tested implementation boundary.
+☐ Link every unsupported cell to its explicit live rejection assertion.
+☐ Record any genuinely unavailable stable native control as an incomplete
+  item; do not substitute an unrelated assertion.
+☐ Run focused automation specifications sequentially for ordinary widget,
+  overlay widget, complete screen, native screen, and lifecycle failures.
+☐ Record each focused command, process state, test counts, and cleanup result.
+☐ Run `.\tools\Run-AutomationTests.ps1` and require zero failures, errors, or
+  pending tests plus confirmed cleanup.
+☐ Run `.\tools\Run-UnitTests.ps1`.
+☐ Run `.\tools\Check-Lua.ps1`.
+☐ Build the local rock only if production or packaged source changed; record why
+  packaging was required or why it was not applicable.
+☐ Run `git diff --check` and `git diff --cached --check`.
+☐ Review `git status --short` and account for every changed or added file.
+☐ Query final DFHack process state and prove the original screen/focus plus zero
+  test-owned screens, overlays, files, pointer/button claims, and render hooks.
+☐ Update the matrix so no cell remains classified as missing without an
+  explicit incomplete reason.
+
+### Phase 7 exit gate
+
+☐ The final applicability matrix contains no unexplained missing cells.
+☐ Focused and full live automation pass with independently confirmed cleanup.
+☐ Full unit and Lua syntax checks pass.
+☐ Conditional package verification, diff hygiene, worktree accounting, and
+  final process-state checks pass.
+☐ Every earlier phase and exit gate is complete.
+
+## Evidence ledger
+
+Record commands, results, process state, functional observations, cleanup
+observations, and relevant file paths here as work proceeds.
+
+### Phase 0 evidence
+
+- Pending.
+
+### Phase 1 evidence
+
+- Pending.
+
+### Phase 2 evidence
+
+- Pending.
+
+### Phase 3 evidence
+
+- Pending.
+
+### Phase 4 evidence
+
+- Pending.
+
+### Phase 5 evidence
+
+- Pending.
+
+### Phase 6 evidence
+
+- Pending.
+
+### Phase 7 evidence
+
+- Pending.
+
+## Final acceptance
+
+☐ Every mount host and native subject source has complete applicable live
+  command coverage.
+☐ Shared behavior is repeated only when the mount boundary changes its runtime
+  contract.
+☐ Unsupported operations fail explicitly without mutation.
+☐ Native-screen and registered-overlay ownership boundaries remain intact.
+☐ All test-owned state restores after success and failure.
+☐ The final coverage matrix, test results, and evidence ledger agree.
+☐ All checklist items and evidence-ledger entries are complete.
