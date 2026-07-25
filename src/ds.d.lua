@@ -208,6 +208,10 @@ function DS.await(description, query, options) end
 ---@return integer
 function DS.getTick() end
 
+---Returns DFHack's current millisecond clock value.
+---@return integer
+function DS.getTime() end
+
 ---Mounts one owned component or complete screen.
 ---@param component any
 ---@param options? dwarfspec.MountOptions

@@ -551,6 +551,18 @@ local TestStatus = load_automation_module(package_root,
         return tick
     end
 
+    ---Returns DFHack's current millisecond clock value.
+    ---@return integer
+    function ds.getTime()
+        local get_tick_count = dfhack and dfhack.getTickCount
+        assert(type(get_tick_count) == 'function',
+            'DwarfSpec getTime requires dfhack.getTickCount')
+        local time = get_tick_count()
+        assert(type(time) == 'number' and time % 1 == 0 and time >= 0,
+            'DFHack getTickCount did not return a valid millisecond clock')
+        return time
+    end
+
     ---Mounts one owned component or complete screen.
     ---@param component any
     ---@param options table|nil

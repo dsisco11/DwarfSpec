@@ -342,6 +342,14 @@ assert.is_true(tick >= 0)
 
 It fails explicitly when no loaded world exposes a valid tick counter.
 
+`ds.getTime()` returns DFHack's current millisecond clock value from
+`dfhack.getTickCount()`. It is also read-only and independent of mounting:
+
+```lua
+local milliseconds = ds.getTime()
+assert.is_true(milliseconds >= 0)
+```
+
 ## Condition waits
 
 `ds.await(description, query, options)` polls a read-only query between live

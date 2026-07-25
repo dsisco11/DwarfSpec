@@ -78,6 +78,7 @@ describe('DwarfSpec public mount commands', function()
     local native_widget_lookup_calls
     local native_invalidation_count
     local focus_queries
+    local dfhack_time
     local original_native_render_dispatcher
     local native_render_failure
     local suppress_native_render
@@ -106,6 +107,7 @@ describe('DwarfSpec public mount commands', function()
         native_widget_lookup_calls = 0
         native_invalidation_count = 0
         focus_queries = {}
+        dfhack_time = 67890
         native_render_failure = nil
         suppress_native_render = false
         wait_until_failure = nil
@@ -114,6 +116,7 @@ describe('DwarfSpec public mount commands', function()
         simulate_input_dispatch = nil
         wait_until_calls = 0
         rawset(_G, 'dfhack', {
+            getTickCount=function() return dfhack_time end,
             screen={
                 getMousePos=function() return 90, 91 end,
                 getWindowSize=function() return 80, 25 end,
@@ -393,6 +396,16 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function() ds.getTick() end,
             'DwarfSpec getTick requires a loaded world with a valid ' ..
                 'df.global.cur_year_tick')
+    end)
+
+    it('returns the current DFHack time without requiring a mount', function()
+        assert.equals(67890, ds.getTime())
+        dfhack_time = 67891
+        assert.equals(67891, ds.getTime())
+
+        dfhack.getTickCount = nil
+        assert.has_error(function() ds.getTime() end,
+            'DwarfSpec getTime requires dfhack.getTickCount')
     end)
 
     it('requires explicit unmount before mounting another component',
