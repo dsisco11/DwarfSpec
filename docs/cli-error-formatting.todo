@@ -1,6 +1,6 @@
 # CLI diagnostic output implementation
 
-Status: in progress; Phases 0-2 complete
+Status: in progress; Phases 0-3 complete
 
 Related design: `docs/test-runner-service-design.md`
 
@@ -292,41 +292,58 @@ Phase 2 evidence:
 
 Goal: render a normalized problem into each supported one-line contract.
 
-☐ Introduce a formatter boundary that accepts an immutable error-format value,
+✔ Introduce a formatter boundary that accepts an immutable error-format value,
   project root, and structured problem payload.
-☐ Implement the canonical MSBuild output shape.
-☐ Implement the canonical GCC/Clang output shape.
-☐ Implement the canonical ESLint Compact output shape.
-☐ Map assertion failures to stable MSBuild code `DS1001`.
-☐ Map test, hook, and file errors to stable MSBuild code `DS1002`.
-☐ Render both problem kinds with error severity so a failed DwarfSpec test is
+✔ Implement the canonical MSBuild output shape.
+✔ Implement the canonical GCC/Clang output shape.
+✔ Implement the canonical ESLint Compact output shape.
+✔ Map assertion failures to stable MSBuild code `DS1001`.
+✔ Map test, hook, and file errors to stable MSBuild code `DS1002`.
+✔ Render both problem kinds with error severity so a failed DwarfSpec test is
   always reported as a problem.
-☐ Default a missing column to column 1 only when a valid source and line are
+✔ Default a missing column to column 1 only when a valid source and line are
   present.
-☐ Resolve MSBuild and GCC/Clang source identities against the owning project
+✔ Resolve MSBuild and GCC/Clang source identities against the owning project
   root to produce absolute paths.
-☐ Preserve canonical project-relative paths for ESLint Compact output.
-☐ Convert embedded CR, LF, tab, and other control characters in displayed
+✔ Preserve canonical project-relative paths for ESLint Compact output.
+✔ Convert embedded CR, LF, tab, and other control characters in displayed
   fields to safe spaces.
-☐ Remove ANSI escape sequences before rendering a diagnostic.
-☐ Collapse whitespace introduced by sanitization without changing the
+✔ Remove ANSI escape sequences before rendering a diagnostic.
+✔ Collapse whitespace introduced by sanitization without changing the
   structured event or persisted result.
-☐ Include the full test or hook name in the diagnostic message.
-☐ Preserve colons, parentheses, spaces, and non-ASCII text that do not violate
+✔ Include the full test or hook name in the diagnostic message.
+✔ Preserve colons, parentheses, spaces, and non-ASCII text that do not violate
   the selected one-line grammar.
-☐ Return the existing human-readable problem shape when the payload has no
+✔ Return the existing human-readable problem shape when the payload has no
   trustworthy source and line.
 
 Phase 3 exit gate:
 
-☐ Unit tests assert the exact output for all three formats.
-☐ Unit tests cover both problem kinds, both path styles, spaces in paths,
+✔ Unit tests assert the exact output for all three formats.
+✔ Unit tests cover both problem kinds, both path styles, spaces in paths,
   missing columns, multiline messages, ANSI escapes, non-ASCII text, and
   location-less fallback.
-☐ Unit tests prove every matchable problem produces exactly one physical line.
-☐ Unit tests verify only DwarfSpec formatter behavior; they do not instantiate
+✔ Unit tests prove every matchable problem produces exactly one physical line.
+✔ Unit tests verify only DwarfSpec formatter behavior; they do not instantiate
   VS Code or assert Problems-panel behavior.
-☐ Lua syntax checks and the full unit suite pass.
+✔ Lua syntax checks and the full unit suite pass.
+
+Phase 3 evidence:
+
+- `dwarfspec.diagnostic_formatter` renders immutable `msbuild`, `gcc`, and
+  `eslint` selections without filesystem or DFHack dependencies. It emits
+  stable `DS1001` and `DS1002` codes, resolves the required path shape, supplies
+  column 1 only for matchable locations, and retains the human-readable
+  fallback when source or line is unavailable.
+- Display-only sanitization removes ANSI escapes, replaces control characters,
+  collapses resulting whitespace, and produces one physical line without
+  mutating the structured problem.
+- `.\tools\Run-UnitTests.ps1 --filter 'standard diagnostic formatter'` reported
+  9 successes, 0 failures, 0 errors, and 0 pending on 2026-07-25.
+- `.\tools\Run-UnitTests.ps1` reported 374 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-25.
+- `.\tools\Check-Lua.ps1` passed for 224 Lua files on 2026-07-25.
+- `git diff --check` passed on 2026-07-25.
 
 ## Phase 4: Live-progress runner integration
 
@@ -428,7 +445,7 @@ Record evidence only after running the corresponding command.
 | 0 | Baseline repository, syntax, unit, and fixture characterization | Complete: intended root and remote confirmed; baseline 195-file syntax and 250-test unit suites passed; 4 reusable problem fixtures and 5 fixture-contract tests added; post-fixture 197-file syntax and 255-test unit suites passed on 2026-07-24 |
 | 1 | Configuration and immutable enum unit tests | Complete: shared validated settings and config schema, immutable identifiers, one-load CLI propagation, discovery precedence, independent roots, 266-test unit suite, and 200-file Lua checks passed on 2026-07-24 |
 | 2 | Structured source-location and event-schema unit tests | Complete: bounded presentation-neutral extraction, callback integration, optional-field validation, cursor/result/history retention, 274-test unit suite, and 202-file Lua checks passed on 2026-07-24 |
-| 3 | Exact formatter unit tests | Pending |
+| 3 | Exact formatter unit tests | Complete: all three canonical formats, both problem kinds, path and column rules, display sanitization, immutable structured input, one-line output, and location-less fallback covered by 9 focused tests; 374-test unit suite and 224-file Lua checks passed on 2026-07-25 |
 | 4 | Runner and CLI integration unit tests | Pending |
 | 5 | Documentation and editor-example review | Pending |
 | 6 | Focused tests, full unit suite, syntax, and diff checks | Pending |
