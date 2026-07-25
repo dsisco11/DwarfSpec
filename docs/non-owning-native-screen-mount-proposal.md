@@ -2,11 +2,11 @@
 
 ## Summary
 
-DwarfSpec should extend the existing `ds.mount()` command so calling it without
-a component attaches the current run to the current native DF viewscreen:
+DwarfSpec exposes `ds.mountNativeScreen()` to attach the current run to the
+current native DF viewscreen:
 
 ```lua
-local root = ds.mount()
+local root = ds.mountNativeScreen()
 
 local list = ds.get({'Tabs', 0, 'Right panel', 'List'})
 list:move_pointer()
@@ -51,7 +51,7 @@ dismiss a screen, instantiate a native widget, or take ownership of an overlay.
 - Navigating back if test input changes the current native viewscreen.
 - Supporting a DFHack Lua screen that currently owns focus above the native
   screen.
-- Introducing a second public mount command.
+- Retaining a no-argument `ds.mount()` overload or compatibility alias.
 
 ## DFHack capabilities
 
@@ -91,23 +91,26 @@ None of those assumptions should be applied directly to native DF widgets.
 The public subject API can remain common, but traversal, identity, inspection,
 and liveness need adapter-specific implementations.
 
-## Proposed public API
+## Accepted public API
 
 ### Native attachment
 
-`ds.mount()` with no component attaches the current native DF viewscreen and
-returns a subject for its `widgets` container:
+`ds.mountNativeScreen()` attaches the current native DF viewscreen and returns
+a subject for its `widgets` container:
 
 ```lua
-local native_root = ds.mount()
+local native_root = ds.mountNativeScreen()
 
 assert.equals(
     dfhack.gui.getDFViewscreen(true).widgets,
     native_root:raw())
 ```
 
-`ds.mount(component, options)` remains unchanged for ordinary widgets,
-overlay widgets, and `ZScreen` components.
+`ds.mount(component, options)` is exclusively for ordinary widgets, overlay
+widgets, and `ZScreen` components. The two commands converge on one mount
+context, enforce one current mount, and share `ds.unmount()` cleanup. “Mount”
+describes that DwarfSpec lifecycle, while “native attachment” describes the
+borrowed implementation resource.
 
 ### Native control paths
 
@@ -246,7 +249,7 @@ must contribute zero DwarfSpec-owned screens.
 
 ```mermaid
 flowchart LR
-    Mount["ds.mount()"] --> Context["mount context"]
+    Mount["ds.mountNativeScreen()"] --> Context["mount context"]
     Context --> Adapter["non-owning native adapter"]
 
     Adapter --> Screen["pinned native DF viewscreen"]
@@ -572,7 +575,8 @@ No native screen or widget dismissal action is registered.
 
 ### `src/dwarfspec/ds.lua`
 
-- Overload `ds.mount()` for a missing component.
+- Add zero-argument `ds.mountNativeScreen()` for native-screen mounts and keep
+  `ds.mount(component, options)` component-only.
 - Export immutable `ESubjectSource`.
 - Add optional subject-source arguments to `ds.root()`, `ds.get()`, and
   `ds.capture_view_tree()`.
@@ -627,7 +631,8 @@ controller.
 
 ### `src/ds.d.lua`
 
-- Document the no-component `DS.mount()` overload.
+- Document `DS.mountNativeScreen()` as a non-owning current-native-screen
+  mount that returns a borrowed root subject.
 - Define native path segment and path types.
 - Define immutable `ESubjectSource`.
 - Document source options for root, get, and tree capture.
@@ -662,7 +667,8 @@ screen.
 
 Unit coverage should prove:
 
-- `ds.mount()` selects native attachment without component classification;
+- `ds.mountNativeScreen()` selects native attachment without component
+  classification;
 - no `ZScreen` is constructed, shown, resized, or dismissed;
 - the current native viewscreen and focus remain unchanged;
 - a DFHack Lua screen above the native screen causes explicit rejection;
@@ -693,7 +699,7 @@ A live DFHack test should:
 
 1. capture the current viewscreen, widget root, focus strings, screen stack, and
    pointer state;
-2. attach with `ds.mount()`;
+2. attach with `ds.mountNativeScreen()`;
 3. prove `ds.root():raw()` is the exact native widget root;
 4. resolve named and indexed base-game controls through `ds.get()`;
 5. inspect native bounds, visibility/activity, and text;
@@ -714,11 +720,13 @@ overlay registry.
 
 ## Alternatives rejected
 
-### Add `ds.mountNativeScreen()`
+### Keep the no-argument `ds.mount()` overload
 
-DwarfSpec already has one-current-mount semantics. The no-component
-`ds.mount()` overload preserves one lifecycle without adding a parallel public
-command.
+One-current-mount semantics belongs to the shared mount context, not to the
+number of public entry points. Keeping the overload would make a missing
+component silently select a materially different ownership model. Explicit
+`ds.mountNativeScreen()` makes the borrowed native-screen behavior clear and
+keeps `ds.mount(component, options)` component-only.
 
 ### Create a transparent `ZScreen`
 
@@ -758,10 +766,11 @@ stale-subject errors preserve deterministic tests.
 
 ## Recommendation
 
-Implement `ds.mount()` as a non-owning attachment whose default subject root is
-the native viewscreen's `widgets` container. Generalize `Subject` around
-explicit native-widget and Lua-view adapters, add segment-array native paths,
-and expose overlays through an immutable subject-source selector.
+Implement `ds.mountNativeScreen()` as a non-owning native-screen mount whose
+default subject root is the native viewscreen's `widgets` container. Generalize
+`Subject` around explicit native-widget and Lua-view adapters, add
+segment-array native paths, and expose overlays through an immutable
+subject-source selector.
 
 Keep interaction routing and render completion attached to the real native
 viewscreen. This provides semantic `ds.get()` access to base-game and overlay

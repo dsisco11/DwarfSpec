@@ -47,8 +47,8 @@ library.
 `ds.mount(component, options)` is the only component entry point. The
 component boundary classifies a `widgets.Widget`, `overlay.OverlayWidget`, or
 `gui.ZScreen` class or existing instance and normalizes mount-only options. A
-run owns at most one implicit current mount. Calling either `ds.mount` form
-while that mount remains current is an error; the test must call
+A run owns at most one implicit current mount. Calling either public mount entry
+  point while that mount remains current is an error; the test must call
 `ds.unmount()` before selecting another mount.
 
 The mount context assigns identity, owns the component root and host screen,
@@ -87,13 +87,21 @@ frames for a later completed render before returning. Construction, first
 render, and command failures receive bounded mount, selection, component-tree,
 and screen diagnostics while preserving the original cause.
 
-The no-argument `ds.mount()` form instead creates a borrowed native attachment.
-It pins the current DF viewscreen and its native widget container without
-showing, dismissing, or owning a screen. Native subjects traverse only widget
-objects exposed by DFHack; pixels and procedurally rendered controls do not
-become subjects. A separately selected overlay source borrows an enabled
-registry widget while dispatch remains owned by DFHack's normal overlay path.
-Neither borrowed source is enabled, disabled, or dismissed by DwarfSpec.
+`ds.mountNativeScreen()` creates a non-owning native-screen mount. It pins the
+current DF viewscreen and its native widget container without showing,
+dismissing, or owning a screen. Here, “mount” names the DwarfSpec test
+lifecycle; “native attachment” names its borrowed implementation resource.
+Native subjects traverse only widget objects exposed by DFHack; pixels and
+procedurally rendered controls do not become subjects. A separately selected
+overlay source borrows an enabled registry widget while dispatch remains owned
+by DFHack's normal overlay path. Neither borrowed source is enabled, disabled,
+or dismissed by DwarfSpec.
+
+Component and native-screen mounts are distinct public entry points, but both
+converge on the same mount context, one-current-mount rule, subject lifecycle,
+and `ds.unmount()` cleanup operation. `ESubjectSource.NATIVE` and
+`ESubjectSource.OVERLAY` select the native or registered-overlay subject
+hierarchy only within a native-screen mount; they do not select a mount kind.
 
 The native render observer records the post-native-overlay completion boundary
 for wait-by-default redraw. A changed viewscreen makes the attachment and all

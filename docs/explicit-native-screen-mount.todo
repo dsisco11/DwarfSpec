@@ -1,6 +1,6 @@
 # Explicit native-screen mount API
 
-Status: in progress; Phases 0-3 complete
+Status: in progress; Phases 0-4 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -219,35 +219,35 @@ Goal: prove the new boundary and preserve all existing native-screen behavior.
 
 Goal: make the explicit API and non-owning semantics unambiguous everywhere.
 
-☐ Update `docs/architecture.md` to contrast owned
+✔ Update `docs/architecture.md` to contrast owned
   `ds.mount(component, options)` with non-owning
   `ds.mountNativeScreen()`.
-☐ Update every native-screen example in `docs/writing-tests.md`.
-☐ Revise `docs/non-owning-native-screen-mount-proposal.md` so the accepted
+✔ Update every native-screen example in `docs/writing-tests.md`.
+✔ Revise `docs/non-owning-native-screen-mount-proposal.md` so the accepted
   design uses `ds.mountNativeScreen()` and the rejected alternative is the
   no-argument overload.
-☐ Update the proposal's Mermaid flowchart and labels if they mention
+✔ Update the proposal's Mermaid flowchart and labels if they mention
   `ds.mount()`.
-☐ Remove rationale claiming that one-current-mount semantics requires one
+✔ Remove rationale claiming that one-current-mount semantics requires one
   public entry point.
-☐ Explain that both entry points still converge on one mount context and share
+✔ Explain that both entry points still converge on one mount context and share
   `ds.unmount()`.
-☐ Explain that “mount” describes the DwarfSpec test lifecycle while
+✔ Explain that “mount” describes the DwarfSpec test lifecycle while
   “attachment” describes the non-owning native implementation.
-☐ Keep `ESubjectSource` documentation scoped to native and overlay subject
+✔ Keep `ESubjectSource` documentation scoped to native and overlay subject
   selection.
-☐ Update `docs/project.todo` to link this checklist and mark its task complete
+✔ Update `docs/project.todo` to link this checklist and mark its task complete
   only after final acceptance.
-☐ Search all documentation for stale positive no-argument examples or
+✔ Search all documentation for stale positive no-argument examples or
   compatibility language.
 
 ### Phase 4 exit gate
 
-☐ Every public example uses the explicit API.
-☐ Documentation consistently distinguishes owned component mounts from the
+✔ Every public example uses the explicit API.
+✔ Documentation consistently distinguishes owned component mounts from the
   borrowed native-screen mount.
-☐ All revised graphs use Mermaid.
-☐ No migration or legacy-support section was added.
+✔ All revised graphs use Mermaid.
+✔ No migration or legacy-support section was added.
 
 ## Phase 5: Full and live acceptance
 
@@ -465,7 +465,25 @@ cleanup observations, and environmental limitations here as work proceeds.
 
 ### Phase 4 evidence
 
-- Pending.
+- `docs/architecture.md` now distinguishes the owned
+  `ds.mount(component, options)` path from the non-owning
+  `ds.mountNativeScreen()` path. It documents their shared mount context,
+  one-current-mount rule, `ds.unmount()` cleanup, the mount-versus-attachment
+  terminology, and `ESubjectSource` as native-screen subject selection only.
+- `docs/writing-tests.md` now uses `ds.mountNativeScreen()` in every native
+  screen example and describes the contrast with owned component mounts.
+  Its component and shared-lifecycle wording no longer suggests a no-argument
+  `ds.mount()` form.
+- `docs/non-owning-native-screen-mount-proposal.md` now records the accepted
+  explicit command, updates its Mermaid flowchart, and lists the no-argument
+  overload as a rejected alternative. It contains no migration, compatibility,
+  or legacy-support plan.
+- `docs/project.todo` links this checklist and remains unchecked pending the
+  checklist's final acceptance, as required.
+- Documentation search on 2026-07-25 found no positive no-argument
+  `ds.mount()` example. The only remaining references are this checklist's
+  historical/rejection evidence, the proposal's rejected alternative, and the
+  still-open project task that describes the removal.
 
 ### Phase 5 evidence
 

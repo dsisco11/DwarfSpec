@@ -122,9 +122,9 @@ mount and returns a subject for its root. `ds.get(control_path)` returns another
 subject by walking direct children from that root. A path such as
 `form/editor` selects `editor` only when it is a direct child of `form`, and
 `form` is a direct child of the mounted component. DwarfSpec never performs a
-global descendant-ID search. Calling either form of `ds.mount` again while the
-mount remains current is an error; call `ds.unmount()` before mounting another
-component or attaching to the current native screen.
+global descendant-ID search. Calling either public mount entry point again
+while the mount remains current is an error; call `ds.unmount()` before
+mounting another component or attaching to the current native screen.
 
 Every path segment is an exact `view_id`. `/` is reserved as the separator;
 paths cannot start or end with `/`, contain empty segments, `.` or `..`, or
@@ -206,11 +206,16 @@ callers do not pass a root or screen.
 
 ## Borrowed native game screens
 
-Call `ds.mount()` with no arguments to attach to the current native DF
-viewscreen. This is a non-owning attachment: DwarfSpec does not create or show
-a `ZScreen`, change DFHack focus, alter the screen stack, or dismiss the
-borrowed screen. The returned root subject wraps the exact native widget
-container exposed by the current viewscreen.
+Call `ds.mountNativeScreen()` to create a native-screen mount for the current
+native DF viewscreen. Its implementation uses a non-owning native attachment:
+DwarfSpec does not create or show a `ZScreen`, change DFHack focus, alter the
+screen stack, or dismiss the borrowed screen. The returned root subject wraps
+the exact native widget container exposed by the current viewscreen.
+
+By contrast, `ds.mount(component, options)` creates an owned component mount.
+Both commands share one current mount and are released with `ds.unmount()`.
+`ESubjectSource` chooses native or registered-overlay subject hierarchies only
+after a native-screen mount exists; it does not choose how to mount.
 
 DFHack exposes many base-game controls as typed native widget objects. For
 those objects, DwarfSpec can traverse direct children, inspect names, types,
@@ -230,7 +235,7 @@ Use a segment array for nested traversal, a zero-based child index, or a widget
 name containing `/`:
 
 ```lua
-local native_root = ds.mount()
+local native_root = ds.mountNativeScreen()
 local named = ds.get('menu')
 local nested = ds.get({'menu', 'confirm'})
 local indexed = ds.get({'menu', 0})
@@ -297,8 +302,8 @@ The attached viewscreen and native widget hierarchy are pinned. If game input,
 a script, or another system changes the current viewscreen, subsequent subject
 inspection, input, pointer movement, capture, or redraw fails with an explicit
 stale-screen error. DwarfSpec never follows the transition or navigates back.
-Call `ds.unmount()`, establish the desired game screen, and call `ds.mount()`
-again to create a new attachment.
+Call `ds.unmount()`, establish the desired game screen, and call
+`ds.mountNativeScreen()` again to create a new native attachment.
 
 Attachment also fails explicitly when there is no current native viewscreen,
 the viewscreen has no usable widget container, or render observation cannot be
@@ -414,8 +419,8 @@ current mount.
 ## Real overlay registration integration
 
 Normal overlay behavior belongs in isolated component specs named distinctly,
-such as `tooltip_overlay_component_spec.ds.lua`. These specs use `ds.mount()`
-and never copy scripts into `hack/scripts/gui`.
+such as `tooltip_overlay_component_spec.ds.lua`. These specs use
+`ds.mount(component, options)` and never copy scripts into `hack/scripts/gui`.
 
 DwarfSpec retains a separately selected registration integration for the real
 DFHack boundary. It proves `OVERLAY_WIDGETS` discovery, registration, rescan,
