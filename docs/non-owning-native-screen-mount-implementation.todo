@@ -1,6 +1,6 @@
 # Non-owning native-screen mount implementation
 
-Status: in progress; Phases 0-10 complete
+Status: complete; Phases 0-11 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -53,76 +53,76 @@ Excluded:
 
 ## Locked implementation contract
 
-☐ `ds.mount()` with no component attaches to the current native DF viewscreen.
-☐ `ds.mount(component, options)` preserves its current component behavior and
+☒ `ds.mount()` with no component attaches to the current native DF viewscreen.
+☒ `ds.mount(component, options)` preserves its current component behavior and
   overload resolution.
-☐ A native attachment owns zero screens and never calls screen show, dismiss,
+☒ A native attachment owns zero screens and never calls screen show, dismiss,
   resize, replace, or navigation operations.
-☐ Attachment succeeds only when `dfhack.gui.getCurViewscreen(true)` and
+☒ Attachment succeeds only when `dfhack.gui.getCurViewscreen(true)` and
   `dfhack.gui.getDFViewscreen(true)` identify the same screen.
-☐ The exact attached screen is pinned for the lifetime of the mount.
-☐ The exact `attached_screen.widgets` container is the default subject root.
-☐ `ds.root():raw()` returns that exact typed DF widget container.
-☐ Existing component subjects continue returning their exact Lua view tables.
-☐ `ds.get()` accepts existing string paths and a path-segment array.
-☐ Native path segments are nonempty strings or nonnegative, integral,
+☒ The exact attached screen is pinned for the lifetime of the mount.
+☒ The exact `attached_screen.widgets` container is the default subject root.
+☒ `ds.root():raw()` returns that exact typed DF widget container.
+☒ Existing component subjects continue returning their exact Lua view tables.
+☒ `ds.get()` accepts existing string paths and a path-segment array.
+☒ Native path segments are nonempty strings or nonnegative, integral,
   zero-based child indices.
-☐ The segment-array form is authoritative for native names containing `/`.
-☐ Native widget traversal delegates to `dfhack.gui.getWidget()` and
+☒ The segment-array form is authoritative for native names containing `/`.
+☒ Native widget traversal delegates to `dfhack.gui.getWidget()` and
   `dfhack.gui.getWidgetChildren()`.
-☐ Native lookup does not filter invisible, inactive, or otherwise
+☒ Native lookup does not filter invisible, inactive, or otherwise
   non-interactable widgets.
-☐ `ESubjectSource` is an immutable enum created with
+☒ `ESubjectSource` is an immutable enum created with
   `dwarfspec.immutable_enum.define`.
-☐ `ESubjectSource.NATIVE` is the default source for a native attachment.
-☐ `ESubjectSource.OVERLAY` requires an exact enabled overlay registry name.
-☐ Overlay registry names remain validated runtime strings, not enum members.
-☐ `ds.root()`, `ds.get()`, and `ds.capture_view_tree()` use the same optional
+☒ `ESubjectSource.NATIVE` is the default source for a native attachment.
+☒ `ESubjectSource.OVERLAY` requires an exact enabled overlay registry name.
+☒ Overlay registry names remain validated runtime strings, not enum members.
+☒ `ds.root()`, `ds.get()`, and `ds.capture_view_tree()` use the same optional
   subject-source contract.
-☐ A `Subject` stores an adapter-backed descriptor and does not require its raw
+☒ A `Subject` stores an adapter-backed descriptor and does not require its raw
   target to be a Lua table.
-☐ Native `Subject:raw()` returns typed DF userdata; Lua-view
+☒ Native `Subject:raw()` returns typed DF userdata; Lua-view
   `Subject:raw()` returns the actual Lua table.
-☐ Retained native subjects reacquire their path and validate captured identity
+☒ Retained native subjects reacquire their path and validate captured identity
   before every inspection or interaction.
-☐ A replacement at the same native or overlay path makes the retained subject
+☒ A replacement at the same native or overlay path makes the retained subject
   stale; it is never silently rebound.
-☐ Every native operation validates that the pinned viewscreen is still current
+☒ Every native operation validates that the pinned viewscreen is still current
   before dereferencing a native widget.
-☐ `ds.input()`, `ds.mouseInput()`, subject input, and subject clicks dispatch
+☒ `ds.input()`, `ds.mouseInput()`, subject input, and subject clicks dispatch
   through the pinned native viewscreen.
-☐ Subjects provide geometry and diagnostic context but never bypass normal
+☒ Subjects provide geometry and diagnostic context but never bypass normal
   native or overlay input routing.
-☐ `ds.move_pointer(x, y)` accepts integral, zero-based, in-window native screen
+☒ `ds.move_pointer(x, y)` accepts integral, zero-based, in-window native screen
   coordinates.
-☐ Subject-relative pointer operations use current normalized widget bounds.
-☐ `ds.redraw()` and `Subject:redraw()` wait for a completed render by default.
-☐ `{wait=false}` invalidates without waiting for render completion.
-☐ Native render completion is observed after the normal overlay render
+☒ Subject-relative pointer operations use current normalized widget bounds.
+☒ `ds.redraw()` and `Subject:redraw()` wait for a completed render by default.
+☒ `{wait=false}` invalidates without waiting for render completion.
+☒ Native render completion is observed after the normal overlay render
   dispatcher has completed successfully for the pinned screen.
-☐ Pointer, button, render-observer, subject, and mount state restore on normal
+☒ Pointer, button, render-observer, subject, and mount state restore on normal
   unmount and every failure path.
-☐ Cleanup never dismisses or otherwise mutates the borrowed native screen.
+☒ Cleanup never dismisses or otherwise mutates the borrowed native screen.
 
 ## Global engineering rules
 
-☐ Add LuaDoc comments to every new or changed method, function, class, adapter,
+☒ Add LuaDoc comments to every new or changed method, function, class, adapter,
   record, option table, and public type.
-☐ Keep public behavior in `ds.lua`; keep native attachment, widget adaptation,
+☒ Keep public behavior in `ds.lua`; keep native attachment, widget adaptation,
   text extraction, and render observation in focused modules.
-☐ Do not add scattered `type(value) == 'userdata'` branches as a substitute for
+☒ Do not add scattered `type(value) == 'userdata'` branches as a substitute for
   the subject-adapter boundary.
-☐ Keep adapters read-only except for operations explicitly delegated to the
+☒ Keep adapters read-only except for operations explicitly delegated to the
   interaction target or pointer adapter.
-☐ Prefer dependency-injected DFHack services in unit-testable modules.
-☐ Keep failure messages explicit, source-aware, path-aware, and bounded.
-☐ Do not recursively dump arbitrary DF userdata in diagnostics.
-☐ Preserve unrelated user changes and existing worktree state.
-☐ Record syntax, focused unit, full unit, packaging, and live DFHack evidence
+☒ Prefer dependency-injected DFHack services in unit-testable modules.
+☒ Keep failure messages explicit, source-aware, path-aware, and bounded.
+☒ Do not recursively dump arbitrary DF userdata in diagnostics.
+☒ Preserve unrelated user changes and existing worktree state.
+☒ Record syntax, focused unit, full unit, packaging, and live DFHack evidence
   separately; one evidence layer does not imply another passed.
-☐ Do not add packaging-contract tests or tests that merely duplicate static
+☒ Do not add packaging-contract tests or tests that merely duplicate static
   package configuration.
-☐ Use Mermaid for any graph added to supporting documentation.
+☒ Use Mermaid for any graph added to supporting documentation.
 
 ## Phase 0: Baseline and native-widget characterization
 
@@ -583,53 +583,53 @@ verified independently from functional assertions.
 
 ### Tasks
 
-☐ Run focused unit tests for mount separation, adapters, native traversal,
+☒ Run focused unit tests for mount separation, adapters, native traversal,
   inspection, sources, pointer/input, render observation, and cleanup.
-☐ Run the complete standalone unit suite.
-☐ Run the repository Lua syntax check.
-☐ Build the local rock through the supported project tool and record the
+☒ Run the complete standalone unit suite.
+☒ Run the repository Lua syntax check.
+☒ Build the local rock through the supported project tool and record the
   result; do not add a static packaging-contract test.
-☐ Install the locally built rock into the intended local test environment when
+☒ Install the locally built rock into the intended local test environment when
   needed for live validation.
-☐ Run `git diff --check`.
-☐ Review `git status --short` and account for every modified or added file.
-☐ Create a live DwarfSpec test that captures the current native viewscreen,
+☒ Run `git diff --check`.
+☒ Review `git status --short` and account for every modified or added file.
+☒ Create a live DwarfSpec test that captures the current native viewscreen,
   widget root, DFHack focus, screen stack, pointer/button state, and render
   dispatcher identity before attachment.
-☐ In the live test, attach with `ds.mount()` and prove the root is the exact
+☒ In the live test, attach with `ds.mount()` and prove the root is the exact
   native `viewscreen.widgets` container.
-☐ Resolve at least one named native path, one numeric native path, and one
+☒ Resolve at least one named native path, one numeric native path, and one
   mixed path through `ds.get()`.
-☐ If a stable live widget name containing `/` is available, prove its
+☒ If a stable live widget name containing `/` is available, prove its
   segment-array lookup; otherwise record unit evidence for that syntax and why
   the live screen lacks a stable candidate.
-☐ Inspect live native bounds, direct visibility/activity, native type, and
+☒ Inspect live native bounds, direct visibility/activity, native type, and
   available text without invoking callbacks.
-☐ Place the pointer on a real rendered native control before mouse input and
+☒ Place the pointer on a real rendered native control before mouse input and
   prove the observed interaction through normal screen dispatch.
-☐ Exercise absolute-coordinate pointer placement and restore the original
+☒ Exercise absolute-coordinate pointer placement and restore the original
   pointer state.
-☐ Register or select a test-owned overlay, resolve it with
+☒ Register or select a test-owned overlay, resolve it with
   `ESubjectSource.OVERLAY`, and prove normal overlay input/render dispatch.
-☐ Exercise top-level and subject redraw with default waiting.
-☐ Exercise `{wait=false}` and prove it does not wait for a render generation.
-☐ Unmount and independently verify the original viewscreen, focus, screen
+☒ Exercise top-level and subject redraw with default waiting.
+☒ Exercise `{wait=false}` and prove it does not wait for a render generation.
+☒ Unmount and independently verify the original viewscreen, focus, screen
   stack, pointer/button state, and render dispatcher identity.
-☐ Prove no native screen or widget was dismissed and no owned-screen evidence
+☒ Prove no native screen or widget was dismissed and no owned-screen evidence
   was recorded.
-☐ Restore test-owned overlay registration and configuration independently.
-☐ Record live process state, exact commands, pass/fail output, and cleanup
+☒ Restore test-owned overlay registration and configuration independently.
+☒ Record live process state, exact commands, pass/fail output, and cleanup
   evidence; do not report a live result from unit or syntax evidence.
 
 ### Phase 11 exit gate
 
-☐ Focused and full unit suites pass.
-☐ Lua syntax, local package build, and `git diff --check` pass.
-☐ Live DFHack evidence proves native lookup, inspection, input, overlay
+☒ Focused and full unit suites pass.
+☒ Lua syntax, local package build, and `git diff --check` pass.
+☒ Live DFHack evidence proves native lookup, inspection, input, overlay
   dispatch, redraw completion, and exact cleanup.
-☐ Any environment limitation is recorded as an explicit incomplete item rather
+☒ Any environment limitation is recorded as an explicit incomplete item rather
   than being treated as passing evidence.
-☐ Every earlier phase and exit gate is complete.
+☒ Every earlier phase and exit gate is complete.
 
 ## Evidence ledger
 
@@ -1008,11 +1008,40 @@ as the work proceeds.
 
 ### Phase 5 evidence
 
-- Pending.
+- `src/dwarfspec/native_widget_adapter.lua` exposes normalized inclusive bounds,
+  direct and inherited native flags, bounded type-specific text, safe optional
+  fields, and deterministic child traversal through the common subject-adapter
+  contract. Unsupported text types return `nil`, and callback-valued tooltip
+  data is not invoked.
+- `tests/unit/native_widget_adapter_spec.lua` covers rectangle preference and
+  fallback, invalid and off-window geometry, all four direct visibility/activity
+  combinations, inherited state, registered and unsupported text types,
+  callback non-invocation, optional scroll/selection fields, aggregate text,
+  deterministic bounded capture, native leaf handling, and live DFHack type
+  descriptor normalization.
+- Focused command:
+  `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec native widget adapter"`.
+  Final result: `15 successes / 0 failures / 0 errors / 0 pending`.
+- The current full unit and syntax results are recorded in Phase 11 evidence.
 
 ### Phase 6 evidence
 
-- Pending.
+- `src/dwarfspec/overlay_registry_adapter.lua` reads the live overlay registry
+  through `plugins.overlay.get_state()`, requires one exact enabled registry
+  entry, delegates its Lua view to the Lua-view adapter, and revalidates exact
+  registry-name and widget identity before each operation.
+- Native and overlay roots remain explicit sources. Selecting an external
+  overlay does not enable, disable, configure, reposition, or own it; removal,
+  disablement, or replacement makes retained overlay subjects stale.
+- Focused commands:
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec overlay registry adapter"`:
+    `5 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec subject source and path contracts"`:
+    `9 successes / 0 failures / 0 errors / 0 pending`;
+  - `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"`:
+    `38 successes / 0 failures / 0 errors / 0 pending`.
+- Live overlay selection, dispatch, and independently owned cleanup are recorded
+  in Phase 11 evidence.
 
 ### Phase 7 evidence
 
@@ -1191,20 +1220,126 @@ as the work proceeds.
 
 ### Phase 11 evidence
 
-- Pending.
+- Verification ran on 2026-07-24 from
+  `D:\CODE\DFHack\DwarfSpec`. The live process was `Dwarf Fortress`, PID
+  `53720`, executable
+  `G:\Steam\steamapps\common\Dwarf Fortress\Dwarf Fortress.exe`, with
+  `DFHACK_ROOT=G:\Steam\steamapps\common\Dwarf Fortress\hack`, a loaded fortress,
+  `viewscreen_dwarfmodest`, initial focus `dwarfmode/Default`, and 21 Hauling
+  routes.
+- The first focused live attempt exposed a real adapter defect:
+  `dfhack.gui.getWidgetChildren()` was called for a non-container native leaf.
+  Production now injects `df.widget_container:is_instance(widget)` as an
+  explicit adapter capability. Native leaves return an empty child list without
+  calling the container-only API, while genuine container enumeration failures
+  still propagate. The same repair normalizes live DFHack
+  `<type: widget_text_multiline>` descriptors to the documented
+  `df.widget_text_multiline` identifier. Focused regression command:
+  `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec native widget adapter"`;
+  result: `15 successes / 0 failures / 0 errors / 0 pending`.
+- Final focused unit filters covered owned and borrowed interaction targets,
+  Lua-view and mount adapters, mount context, native attachment, native widget
+  traversal and inspection, overlay registry selection, source/path contracts,
+  native render observation, public pointer/input/redraw behavior, interaction
+  support, cleanup, and mount diagnostics. The 14 sequential filters produced
+  140 successes total with zero failures, errors, or pending tests.
+- Full unit command: `.\tools\Run-UnitTests.ps1`.
+  Result: `365 successes / 0 failures / 0 errors / 0 pending`.
+- Syntax command: `.\tools\Check-Lua.ps1`.
+  Result: `Lua 5.4.6 syntax and formatting checks passed for 222 files.`
+- Package command: `.\tools\Publish.ps1`.
+  LuaRocks packed and created
+  `dist\dwarfspec-0.2.0-1.all.rock` successfully. The first sandboxed install
+  attempt lacked permission to replace the user-tree package; the approved
+  retry, `.\tools\Install-LocalPackage.ps1`, installed the built
+  `dwarfspec 0.2.0-1` artifact into
+  `C:\Users\Sisco\AppData\Roaming\luarocks`.
+- Added `tests/automation/native_screen_mount_live_spec.lua` and its test-owned
+  registered overlay fixture
+  `tests/automation/support/native_screen_overlay_probe.lua`. The test captures
+  the exact current/native screen, widget root, focus array, full screen child
+  chain, virtual/GPS pointer and button fields, and overlay render dispatcher
+  before attachment.
+- The focused live test proves:
+  - `ds.mount()` creates no screen and returns the exact
+    `native_screen.widgets` userdata through both the mount result and
+    `ds.root()`;
+  - named `{'Tooltip'}`, numeric `{0}`, and mixed `{'Tooltip', 1}` native paths
+    resolve to the exact DFHack widget identities;
+  - live bounds, direct visibility/activity, native type, and multiline text are
+    read without invoking callbacks;
+  - the current `dwarfmode/Default` native widget hierarchy contains no stable
+    slash-bearing name, so live slash lookup has no valid candidate.
+    `tests/unit/ds_mount_commands_spec.lua` supplies the deterministic
+    slash-bearing-name contract using the exact segment array
+    `{'Tabs', 0, 'Right/panel'}`;
+  - a test-owned enabled registry overlay resolves through
+    `ESubjectSource.OVERLAY`; its rendered button receives ordinary overlay
+    mouse dispatch and its render counter observes normal dispatcher completion;
+  - top-level and subject redraw wait for later completed renders, while
+    `{wait=false}` returns with the generation unchanged and the separately
+    awaited render completes afterward;
+  - the pointer is placed inside the rendered overlay button before its click,
+    and inside a graphics-backed native Hauling route row before wheel input.
+    Normal dispatch advances the overlay callback state and the real native
+    `hauling.scroll_position`, respectively;
+  - absolute coordinates are returned exactly, and the original virtual/GPS
+    pointer plus every focus/tracking/button field is restored;
+  - unmount restores exact current/native viewscreen identity, focus, stack,
+    render dispatcher, pointer/button state, and Hauling scroll state;
+  - cleanup reports zero active, tracked, and owned screens; zero borrowed
+    native screens after detach; one cumulative attachment; zero native-screen
+    dismissals and retained subjects; and no pointer, button, or render-observer
+    claim;
+  - native unmount leaves the external overlay enabled and registered, while a
+    separate run-scoped cleanup removes its script and registrations and
+    restores the exact prior overlay configuration file.
+- Source-worktree focused live command:
+  `.\tools\Run-AutomationTests.ps1 --test-glob tests/automation/native_screen_mount_live_spec.lua`.
+  Result: 2 successes, zero failures/errors/pending, followed by
+  `CLEANUP finished confirmed=true` and
+  `FINISHED passed cleanup_confirmed=true`.
+- Full live command: `.\tools\Run-AutomationTests.ps1`.
+  Result: 25 successes, zero failures/errors/pending, followed by
+  `CLEANUP finished confirmed=true` and
+  `FINISHED passed cleanup_confirmed=true`.
+- Installed-package live command:
+  `dwarfspec run --test-glob tests/automation/native_screen_mount_live_spec.lua`.
+  Result: 2 successes, zero failures/errors/pending; result schema
+  `dwarfspec.result.v2`, run ID `dwarfspec-219009765-2cf55f0f`,
+  `mount_cleanup_verified=true`, and `cleanup_confirmed=true`.
+- A final read-only process/DFHack query confirmed PID `53720` remained
+  responsive on `viewscreen_dwarfmodest` at `dwarfmode/Default`, with zero
+  registry entries containing the test overlay's `native_screen` identifier.
+- `git diff --check` and `git diff --cached --check` passed. Final worktree
+  accounting:
+  - `src/dwarfspec/ds.lua` injects the production native-container predicate;
+  - `src/dwarfspec/native_widget_adapter.lua` handles leaves and live type
+    descriptors safely;
+  - `tests/unit/ds_mount_commands_spec.lua`,
+    `tests/unit/mount_context_spec.lua`,
+    `tests/unit/native_attachment_spec.lua`, and
+    `tests/unit/native_widget_adapter_spec.lua` cover the explicit predicate and
+    regressions;
+  - the two new automation files provide the live proof and independently owned
+    overlay fixture;
+  - this planning document closes the missing Phase 5, Phase 6, and Phase 11
+    evidence. The ignored `dist` artifact is the expected package output.
+- No environment limitation remains. No packaging-contract or VS Code task
+  configuration test was added, and no graph was added or changed.
 
 ## Final acceptance
 
-☐ `ds.mount()` attaches non-owningly to the exact current native DF viewscreen.
-☐ Native and overlay controls are accessible through the common fluent subject
+☒ `ds.mount()` attaches non-owningly to the exact current native DF viewscreen.
+☒ Native and overlay controls are accessible through the common fluent subject
   API.
-☐ Native subjects safely expose typed userdata, paths, bounds, state, text,
+☒ Native subjects safely expose typed userdata, paths, bounds, state, text,
   pointer placement, input, and redraw.
-☐ Existing component mounts retain their prior behavior.
-☐ Normal DFHack focus, screen-stack, overlay input, and render behavior are
+☒ Existing component mounts retain their prior behavior.
+☒ Normal DFHack focus, screen-stack, overlay input, and render behavior are
   preserved.
-☐ Every retained subject and attached screen has explicit staleness behavior.
-☐ Cleanup restores all DwarfSpec instrumentation and pointer/button state.
-☐ DwarfSpec never owns or dismisses the native screen or registered overlays.
-☐ Runtime declarations and user documentation match the implemented behavior.
-☐ All checklist items and evidence-ledger entries are complete.
+☒ Every retained subject and attached screen has explicit staleness behavior.
+☒ Cleanup restores all DwarfSpec instrumentation and pointer/button state.
+☒ DwarfSpec never owns or dismisses the native screen or registered overlays.
+☒ Runtime declarations and user documentation match the implemented behavior.
+☒ All checklist items and evidence-ledger entries are complete.

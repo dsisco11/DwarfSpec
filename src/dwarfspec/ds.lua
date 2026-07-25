@@ -287,6 +287,17 @@ local TestStatus = load_automation_module(package_root,
                 return dfhack.gui.getWidgetChildren(parent)
             end
 
+            local is_native_widget_container =
+                mount_dependencies.is_native_widget_container
+            ---Returns whether one native widget is a child container.
+            ---@param widget any
+            ---@return boolean
+            local function default_is_native_widget_container(widget)
+                return df.widget_container:is_instance(widget)
+            end
+            is_native_widget_container = is_native_widget_container or
+                default_is_native_widget_container
+
             ---Creates the default native source with live DFHack services.
             ---@param root any
             ---@param interaction_target dwarfspec.BorrowedNativeInteractionTarget
@@ -297,6 +308,7 @@ local TestStatus = load_automation_module(package_root,
                     root, interaction_target, {
                         get_widget=get_native_widget,
                         get_children=get_native_widget_children,
+                        is_container=is_native_widget_container,
                         get_window_size=dfhack.screen.getWindowSize,
                     })
             end

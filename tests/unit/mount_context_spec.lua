@@ -749,6 +749,7 @@ describe('DwarfSpec mount context', function()
         local source = native_widget_adapter.new_source(root, target, {
             get_widget=function() return nil end,
             get_children=function() return {} end,
+            is_container=function() return true end,
         })
         local original_source_cleanup = source.adapter.cleanup
         source.adapter.cleanup = function(self)
@@ -815,6 +816,7 @@ describe('DwarfSpec mount context', function()
         local source = native_widget_adapter.new_source(root, target, {
             get_widget=function() return nil end,
             get_children=function() return {} end,
+            is_container=function() return true end,
         })
         local original_source_cleanup = source.adapter.cleanup
         source.adapter.cleanup = function(self)
@@ -871,6 +873,7 @@ describe('DwarfSpec mount context', function()
                     root, target, {
                         get_widget=function() return nil end,
                         get_children=function() return {} end,
+                        is_container=function() return true end,
                     }),
             }
         end)
@@ -906,6 +909,7 @@ describe('DwarfSpec mount context', function()
                     root, target, {
                         get_widget=function() return nil end,
                         get_children=function() return {} end,
+                        is_container=function() return true end,
                     }),
             }
         end)
@@ -1024,6 +1028,7 @@ describe('DwarfSpec mount context', function()
             local source = native_widget_adapter.new_source(root, target, {
                 get_widget=function() return nil end,
                 get_children=function() return {} end,
+                is_container=function() return true end,
             })
             cleanup_push_failure_at =
                 cleanup_push_count + case.failing_push
@@ -1067,6 +1072,7 @@ describe('DwarfSpec mount context', function()
         local source = native_widget_adapter.new_source(root, target, {
             get_widget=function() return nil end,
             get_children=function() return {} end,
+            is_container=function() return true end,
         })
         fail_subject = true
 
@@ -1102,6 +1108,7 @@ describe('DwarfSpec mount context', function()
             get_children=function()
                 error('native hierarchy refresh exploded', 0)
             end,
+            is_container=function() return true end,
         })
 
         local ok, failure = pcall(
@@ -1139,6 +1146,7 @@ describe('DwarfSpec mount context', function()
         local source = native_widget_adapter.new_source(root, target, {
             get_widget=function() return nil end,
             get_children=function() return {} end,
+            is_container=function() return true end,
         })
 
         local ok, failure = pcall(

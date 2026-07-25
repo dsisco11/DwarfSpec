@@ -257,6 +257,9 @@ describe('DwarfSpec public mount commands', function()
                 is_native_widget_root=function(root)
                     return root == native_root
                 end,
+                is_native_widget_container=function(widget)
+                    return widget._type._name == 'df.widget_container'
+                end,
                 invalidate_native_screen=function()
                     native_invalidation_count =
                         native_invalidation_count + 1

@@ -47,6 +47,7 @@ local SELECTION_FIELDS = {
 ---@field _interaction_target dwarfspec.BorrowedNativeInteractionTarget|nil
 ---@field _get_widget function|nil
 ---@field _get_children function|nil
+---@field _is_container function|nil
 ---@field _identity_of function|nil
 ---@field _name_of function|nil
 ---@field _type_of function|nil
@@ -116,6 +117,19 @@ end
 ---@return integer, integer
 local function unavailable_window_size()
     return 0, 0
+end
+
+---Normalizes DFHack type descriptors to canonical df-prefixed names.
+---@param value any
+---@return string
+local function normalize_native_type(value)
+    local label = tostring(value)
+    local descriptor = label:match('^<type:%s*([%w_%.]+)>$')
+    if descriptor then
+        if descriptor:match('^df%.') then return descriptor end
+        return 'df.' .. descriptor
+    end
+    return label
 end
 
 ---Returns a bounded scalar label for native lookup diagnostics.
@@ -242,6 +256,13 @@ function NativeWidgetAdapter:children(raw)
     assert(self:contains(raw),
         'native widget adapter cannot enumerate an unrelated object')
     self._interaction_target:assert_current('native child enumeration')
+    local ok, is_container = pcall(self._is_container, raw)
+    assert(ok,
+        'DwarfSpec native container test failed: ' .. tostring(is_container))
+    assert(type(is_container) == 'boolean',
+        'DwarfSpec native container test must return a boolean')
+    self._interaction_target:assert_current('native child enumeration')
+    if not is_container then return {} end
     local ok, children = pcall(self._get_children, raw)
     assert(ok,
         'DwarfSpec native child enumeration failed: ' .. tostring(children))
@@ -581,6 +602,7 @@ function NativeWidgetAdapter:cleanup()
     self._interaction_target = nil
     self._get_widget = nil
     self._get_children = nil
+    self._is_container = nil
     self._identity_of = nil
     self._name_of = nil
     self._type_of = nil
@@ -605,6 +627,8 @@ function M.new(root, interaction_target, options)
         'native widget adapter requires getWidget access')
     assert(type(options.get_children) == 'function',
         'native widget adapter requires getWidgetChildren access')
+    assert(type(options.is_container) == 'function',
+        'native widget adapter requires widget-container type access')
     local identity_of = options.identity_of or
         function(raw) return raw end
     local name_of = options.name_of or function(raw)
@@ -616,9 +640,9 @@ function M.new(root, interaction_target, options)
         local ok, value = pcall(function() return raw._type end)
         if not ok or value == nil then return type(raw) end
         if type(value) == 'table' then
-            return value._name or value.name or tostring(value)
+            value = value._name or value.name or value
         end
-        return tostring(value)
+        return normalize_native_type(value)
     end
     assert(type(identity_of) == 'function',
         'native widget adapter identity access must be callable')
@@ -631,6 +655,7 @@ function M.new(root, interaction_target, options)
         _interaction_target=interaction_target,
         _get_widget=options.get_widget,
         _get_children=options.get_children,
+        _is_container=options.is_container,
         _identity_of=identity_of,
         _name_of=name_of,
         _type_of=type_of,

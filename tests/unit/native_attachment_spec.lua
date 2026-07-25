@@ -48,6 +48,7 @@ describe('DwarfSpec native viewscreen attachment', function()
                     root_value, target, {
                         get_widget=function() return nil end,
                         get_children=function() return {} end,
+                        is_container=function() return true end,
                     })
             end,
         })

@@ -70,11 +70,83 @@ describe('DwarfSpec native widget adapter', function()
                 end
                 return children
             end,
+            is_container=function(raw)
+                return raw.type_name == 'df.widget_container'
+            end,
             get_window_size=function() return 80, 25 end,
             identity_of=function(raw) return raw.id end,
             name_of=function(raw) return raw.name end,
             type_of=function(raw) return raw.type_name end,
         })
+    end)
+
+    it('does not enumerate native leaf widgets as containers', function()
+        local leaf = widget(
+            'leaf', 'Leaf', 'df.widget_character', nil, {str='ignored'})
+        root.children = {leaf}
+        adapter:resolve({'Leaf'})
+
+        assert.same({}, adapter:children(leaf))
+        assert.is_nil(adapter:text(leaf))
+        for _, call in ipairs(calls) do
+            assert.is_false(
+                call.operation == 'children' and call.parent == 'leaf')
+        end
+    end)
+
+    it('normalizes live DFHack type descriptors for text inspection',
+            function()
+        local type_descriptor = setmetatable({}, {
+            __tostring=function()
+                return '<type: widget_text_multiline>'
+            end,
+        })
+        local leaf = {
+            _type=type_descriptor,
+            name='Text',
+            str='Native text',
+            flag={
+                VISIBILITY_VISIBLE=true,
+                VISIBILITY_ACTIVE=true,
+            },
+        }
+        local native_root = {
+            _type=setmetatable({}, {
+                __tostring=function()
+                    return '<type: widget_container>'
+                end,
+            }),
+            children={leaf},
+            flag={
+                VISIBILITY_VISIBLE=true,
+                VISIBILITY_ACTIVE=true,
+            },
+        }
+        leaf.parent = native_root
+        local target = interaction_target.new_borrowed_native(screen, {
+            get_current_viewscreen=function() return current end,
+            invalidate_screen=function() end,
+        })
+        local default_adapter = native_widget_adapter.new(
+            native_root, target, {
+                get_widget=function(parent, segment)
+                    for _, child in ipairs(parent.children or {}) do
+                        if child.name == segment then return child end
+                    end
+                    return nil
+                end,
+                get_children=function(parent)
+                    return parent.children or {}
+                end,
+                is_container=function(raw)
+                    return raw == native_root
+                end,
+            })
+
+        local resolved = default_adapter:resolve({'Text'})
+        assert.equals('df.widget_text_multiline',
+            default_adapter:native_type(resolved))
+        assert.equals('Native text', default_adapter:text(resolved))
     end)
 
     it('resolves named, indexed, mixed, and slash-bearing paths exactly',
