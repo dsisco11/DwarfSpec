@@ -2,6 +2,12 @@
 ✔ Update `ds.get(...)` to accept and parse hierarchy paths for nested components. @done(26-07-21 04:57)
 ✘ Add new `ds.screenshot(...)` method to allow taking screenshots of mounted components under test. @cancelled(26-07-21 05:12)
 
+Documentation:
+    ☐ Create a `wiki/usage.md` document for describing how to setup a project to use the test runner.
+    ☐ Create a `wiki/mounting.md` document from the latest `non-owning-native-screen-mount-proposal.md` document.
+    ☐ Create a `wiki/commands.md` document to describe the available commands for the test runner.
+    ☐ Create a `wiki/writing-tests.md` document to describe how to write DwarfSpec tests.
+
 Backend:
     ✔ Evaluate migrating to an RPC server for the test runner. The accepted design keeps `dfhack-run`, introduces a multi-project in-process automation service and structured events consumable by external tools and a future in-game UI, supports concurrent project submissions through a deterministic queue, serializes live execution per DFHack process, and defers remote execution. Service implementation is separate from the runner UI work listed below. See `docs/test-runner-service-design.md`. @done(26-07-22 02:49)
     ✔ Implement the multi-project test runner service according to `docs/test-runner-service-implementation.todo`. @done(26-07-24 09:06)
