@@ -1,6 +1,6 @@
 # Native game-UI path resolution
 
-Status: not started
+Status: in progress; Phase 0 complete
 
 Related design:
 
@@ -167,6 +167,7 @@ Excluded:
 - CSS-like selectors, predicates, or text queries;
 - adding `Subject:get()` or a general query-object API;
 - automatic active-interface selection;
+- synthetic subjects for procedurally rendered Hauling route rows;
 - overlay registry source changes;
 - component mount path changes;
 - runner transport, scheduling, persistence, or runner UI work;
@@ -174,32 +175,109 @@ Excluded:
 
 ## Phase 0: Baseline and authoritative examples
 
-☐ Record the current branch, commit, and dirty-worktree state before editing.
-☐ Run the complete unit suite and record its success count.
-☐ Run Lua syntax and formatting checks.
-☐ Capture the current behavior of:
+☒ Record the current branch, commit, and dirty-worktree state before editing.
+☒ Run the complete unit suite and record its success count.
+☒ Run Lua syntax and formatting checks.
+☒ Capture the current behavior of:
   - `ds.get()` from `viewscreen.widgets`;
   - `ds.get(..., {native_root=...})`;
   - retained native subjects;
   - native missing-child diagnostics;
   - native-screen transition rejection.
-☐ Record at least two authoritative DFHack examples that traverse
+☒ Record at least two authoritative DFHack examples that traverse
   `df.global.game.main_interface` fields before calling
   `dfhack.gui.getWidget()`.
-☐ Identify and record one real hauling-menu control path suitable for live
-  acceptance coverage.
-☐ Confirm the relevant DFHack type metadata contract from its Lua API and local
+☒ Investigate and record whether the real Hauling route list exposes a native
+  widget path suitable for live acceptance coverage.
+☒ Confirm the relevant DFHack type metadata contract from its Lua API and local
   generated types, including ordered `type._fields` data-field iteration.
-☐ Confirm `df.widget:is_instance()` and
+☒ Confirm `df.widget:is_instance()` and
   `df.widget_container:is_instance()` behavior for the intermediate and final
   objects used by the live examples.
 
 Exit gate:
 
-☐ Baseline evidence is recorded without changing production behavior.
-☐ The real example paths distinguish DF structure fields from widget names.
-☐ The hauling path is proven with direct DFHack calls before DwarfSpec code is
-  changed.
+☒ Baseline evidence is recorded without changing production behavior.
+☒ The real example paths distinguish DF structure fields from widget names.
+☒ Hauling widget-path availability is established with direct DFHack calls
+  before game-UI path implementation begins; the supported host exposes no
+  native widget path for the procedurally rendered route rows.
+
+### Phase 0 findings
+
+Repository baseline:
+
+- branch: `cli-error-formatting`;
+- commit: `1464c39c30eb6ef9cc1a540e22e0e9bac8b0f71a`;
+- worktree: clean before Phase 0 evidence was recorded;
+- `git diff --check`: passed;
+- complete unit suite: 384 successes, 0 failures, 0 errors, 0 pending;
+- Lua 5.4.6 syntax and formatting: passed for 224 files.
+
+Existing DwarfSpec behavior:
+
+- `tests/unit/ds_mount_commands_spec.lua` proves named, indexed, mixed, and
+  slash-bearing lookup from `viewscreen.widgets`;
+- the same specification proves nested lookup, text, and tree capture from an
+  explicit `native_root`, with default-root isolation and invalid-root
+  rejection;
+- `tests/unit/native_widget_adapter_spec.lua` proves stable injected identity
+  across reacquired wrappers and deterministic bounded missing-child evidence;
+- `tests/unit/ds_mount_commands_spec.lua` and
+  `tests/unit/native_widget_adapter_spec.lua` prove immediate rejection after a
+  pinned-screen transition and before invoking native services.
+
+Authoritative DFHack examples:
+
+1. `plugins/lua/sort/deathcause_button.lua` starts at
+   `df.global.game.main_interface.info.creatures`, resolves
+   `{'Tabs', 'Dead/Missing'}` with `dfhack.gui.getWidget()`, and enumerates the
+   list containers and rows with `dfhack.gui.getWidgetChildren()`.
+2. `plugins/lua/sort/info.lua` starts at the same `creatures` field, resolves
+   `{'Tabs', 'Pets/Livestock', 'Hunting assignment', 'Unit List', 1}`, and
+   enumerates its scroll rows through DFHack's widget APIs.
+
+Type metadata:
+
+- DFHack's `docs/dev/Lua API.rst` documents `type._fields` as the mapping of
+  field names to field descriptions and states that `pairs()` returns data
+  fields in definition order;
+- the field records expose `name`, `offset`, `count`, `mode`, `type_name`, and,
+  where available, `type`;
+- generated `main_interface.h` and `info_interfacest.h` confirm that `info` and
+  `creatures` are declared structural fields.
+
+Direct DFHack 53.15-r2 proof:
+
+- normal `D_UNITLIST` input established focus
+  `dwarfmode/Info/CREATURES`;
+- `main_interface._type._fields.info` and
+  `info._type._fields.creatures` both exist;
+- `main_interface.info` and `info.creatures` both satisfy
+  `df.widget:is_instance()` and `df.widget_container:is_instance()`;
+- `dfhack.gui.getWidget(info.creatures, 'Tabs', 'Dead/Missing')` returned a
+  `widget_unit_list` satisfying both widget and container type checks with two
+  direct children;
+- normal `LEAVESCREEN` input restored `dwarfmode/Default`.
+
+Hauling finding:
+
+- normal `D_HAULING` input established `dwarfmode/Hauling`;
+- `main_interface` has no declared `hauling` field;
+- `main_interface.hauling_stop_conditions` is a
+  `hauling_stop_conditions_interfacest`, not a widget or widget container;
+- `plotinfo.hauling` is a `hauling_infost`, not a widget or widget container;
+- the current native viewscreen's `widgets` container exposes only the
+  `Tooltip` child while Hauling is open;
+- bounded traversal of inline compound fields under `game.main_interface`,
+  `plotinfo`, and `gview` found no Hauling widget hierarchy;
+- normal `LEAVESCREEN` input restored `dwarfmode/Default`.
+
+The Hauling route rows on this supported host are procedurally rendered from
+`plotinfo.hauling` data. They cannot be returned as exact native widget userdata
+by this plan. Supporting those rows through `ds.get()` would require a separate
+synthetic/procedural subject design with an explicitly different raw-identity
+contract.
 
 ## Phase 1: Structural path contracts
 
@@ -368,8 +446,8 @@ Exit gate:
 ☐ Establish the required real base-game menu through normal DFHack input.
 ☐ Resolve a stable base-game control through a complete `main_interface` path
   without `native_root`.
-☐ Resolve and inspect a real list row through the hauling-menu path recorded in
-  Phase 0.
+☐ Resolve and inspect a real `info.creatures` list row through the structural
+  and widget path proven in Phase 0.
 ☐ Verify the returned raw value is the same native userdata identity resolved
   by direct DFHack APIs.
 ☐ Verify text and bounds from the DwarfSpec subject against the live control.
@@ -385,8 +463,8 @@ Exit gate:
 
 Exit gate:
 
-☐ At least one full `main_interface` path and the reported hauling-row scenario
-  pass against a real supported DFHack host.
+☐ At least one full `main_interface` path and one real widget-backed list-row
+  scenario pass against a supported DFHack host.
 ☐ Cleanup verification passes even if lookup, input, or assertion is injected
   to fail.
 ☐ No coordinate-only lookup is accepted as evidence for widget resolution.
@@ -403,8 +481,10 @@ Exit gate:
 ☐ Add examples for:
   - a direct viewscreen-widget path;
   - `info.creatures`;
-  - the verified hauling list-row path;
+  - the verified `info.creatures` list-row path;
   - an explicit-root ambiguity resolution.
+☐ Document that the current Hauling route rows are procedurally rendered and
+  are not addressable through native widget paths on the supported host.
 ☐ Update architecture documentation with a Mermaid resolution diagram.
 ☐ Update the native-screen proposal to replace explicit-root common examples.
 ☐ Add the capability and compatibility behavior to `CHANGELOG.md`.
@@ -439,4 +519,10 @@ Exit gate:
 
 | Date | Phase | Command or inspection | Result |
 |---|---:|---|---|
-| | | | |
+| 2026-07-25 | 0 | `git branch --show-current`; `git rev-parse HEAD`; `git status --short`; `git diff --check` | `cli-error-formatting`; `1464c39c30eb6ef9cc1a540e22e0e9bac8b0f71a`; clean; passed |
+| 2026-07-25 | 0 | `tools/Run-UnitTests.ps1` | 384 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 0 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 224 files |
+| 2026-07-25 | 0 | Inspect current native command and adapter unit contracts | Existing viewscreen-root, explicit-root, retained-identity, missing-child, and screen-transition behavior recorded |
+| 2026-07-25 | 0 | Inspect DFHack `sort/deathcause_button.lua`, `sort/info.lua`, generated types, and Lua API docs | Two authoritative mixed structural/widget paths and ordered `_fields` metadata contract recorded |
+| 2026-07-25 | 0 | Direct DFHack 53.15-r2 `D_UNITLIST`, type checks, and `getWidget(info.creatures, 'Tabs', 'Dead/Missing')` | Structural fields and final `widget_unit_list` proven; focus restored |
+| 2026-07-25 | 0 | Direct DFHack 53.15-r2 `D_HAULING`, field/type checks, and bounded exposed-widget inspection | No Hauling native widget path exists; route rows are procedural; focus restored |
