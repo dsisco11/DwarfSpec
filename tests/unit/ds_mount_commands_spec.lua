@@ -432,6 +432,23 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, native_screen.navigation_calls)
     end)
 
+    it('switches mount entry points only after explicit unmount', function()
+        local component = ds.mount(TestWidget, {name='before-native'})
+        assert.equals('before-native', component:raw().name)
+
+        ds.unmount()
+        local native = ds.mountNativeScreen()
+        assert.equals(native_root, native:raw())
+        assert.equals(1, component_mount_calls)
+
+        ds.unmount()
+        local replacement = ds.mount(TestWidget, {name='after-native'})
+        assert.equals('after-native', replacement:raw().name)
+        assert.equals(2, component_mount_calls)
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.navigation_calls)
+    end)
+
     it('attaches non-owningly only through the explicit native command',
             function()
         local mount_error =
