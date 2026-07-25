@@ -1,6 +1,6 @@
 # Native game-UI path resolution
 
-Status: in progress; Phases 0-2 complete
+Status: in progress; Phases 0-3 complete
 
 Related design:
 
@@ -325,9 +325,10 @@ Exit gate:
 - The resolver accepts explicit read-only services for the main interface,
   type descriptors, declared fields, exact field reads, widget and container
   identity checks, child lookup, and stable native identity.
-- `EFieldKind` and `EFailureKind` are immutable enums. Expected failures return
-  bounded resolution records instead of loose identifiers or thrown mutation
-  paths.
+- `EFieldMode`, `EFieldKind`, and `EFailureKind` are immutable enums. The
+  production DFHack adapter uses the numeric `EFieldMode` values for documented
+  field metadata. Expected failures return bounded resolution records instead
+  of loose identifiers or thrown mutation paths.
 - Structural objects in the focused fixture reject arbitrary indexing.
   Successful access is possible only through the exact metadata object passed
   to the injected field reader.
@@ -386,31 +387,52 @@ Exit gate:
 
 ## Phase 3: `ds.get()` dual-root integration
 
-☐ Keep the existing normalization rules for native path strings and segment
+☒ Keep the existing normalization rules for native path strings and segment
   arrays.
-☐ Attempt viewscreen-root resolution through the existing native source.
-☐ Attempt game-UI resolution only when the first segment is an exact declared
+☒ Attempt viewscreen-root resolution through the existing native source.
+☒ Attempt game-UI resolution only when the first segment is an exact declared
   field of `main_interface`.
-☐ Avoid treating an arbitrary missing viewscreen child as permission to scan
+☒ Avoid treating an arbitrary missing viewscreen child as permission to scan
   every game interface.
-☐ Deduplicate two successes that resolve to the same stable widget identity.
-☐ Return the only successful result when exactly one root resolves.
-☐ Reject two different successful widget identities as ambiguous.
-☐ Preserve explicit `native_root` behavior as a single-root request.
-☐ Preserve explicit overlay-source behavior without game-UI resolution.
-☐ Preserve component-mount behavior without native resolution.
-☐ Keep `ds.root()` returning the exact `viewscreen.widgets` subject.
-☐ Ensure `ds.inspect()`, pointer placement, input, mouse input, and redraw work
+☒ Deduplicate two successes that resolve to the same stable widget identity.
+☒ Return the only successful result when exactly one root resolves.
+☒ Reject two different successful widget identities as ambiguous.
+☒ Preserve explicit `native_root` behavior as a single-root request.
+☒ Preserve explicit overlay-source behavior without game-UI resolution.
+☒ Preserve component-mount behavior without native resolution.
+☒ Keep `ds.root()` returning the exact `viewscreen.widgets` subject.
+☒ Ensure `ds.inspect()`, pointer placement, input, mouse input, and redraw work
   unchanged on a game-UI-resolved subject.
-☐ Ensure command failure reporting retains the full original path.
+☒ Ensure command failure reporting retains the full original path.
 
 Exit gate:
 
-☐ The common base-game interface example resolves without source options.
-☐ Existing viewscreen-root, explicit-root, overlay, and component calls retain
+☒ The common base-game interface example resolves without source options.
+☒ Existing viewscreen-root, explicit-root, overlay, and component calls retain
   their prior behavior.
-☐ `ds.get()` never silently chooses between different native widget
+☒ `ds.get()` never silently chooses between different native widget
   identities.
+
+### Phase 3 evidence
+
+- Implicit native `ds.get()` requests first use the existing viewscreen source
+  and independently enter game-UI resolution only when the exact first segment
+  is present in `main_interface._type._fields`.
+- The existing native string and segment-array normalization remains owned by
+  `subject_requests.lua` and `subject_paths.lua`; dual-root selection receives
+  only the resulting normalized segment array.
+- Coverage proves viewscreen-only, game-UI-only, same-identity, different-
+  identity, and neither-root outcomes. Different identities produce an
+  explicit ambiguity failure instead of selecting either result.
+- Game-UI subjects use a registered located native source containing the
+  structural prefix and retain only the widget suffix. Inspection, pointer
+  placement, keyboard and mouse input, and redraw therefore continue through
+  the existing native subject and interaction-target contracts.
+- Explicit native roots, overlay sources, and component mounts bypass
+  automatic game-UI lookup. `ds.root()` remains the exact viewscreen widget
+  root.
+- Failures preserve the normalized complete original path and include bounded
+  evidence from each attempted native root.
 
 ## Phase 4: Diagnostics and failure contracts
 
@@ -574,3 +596,8 @@ Exit gate:
 | 2026-07-25 | 2 | `tools/Run-UnitTests.ps1` | 405 successes; 0 failures, errors, or pending |
 | 2026-07-25 | 2 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 226 files |
 | 2026-07-25 | 2 | `git diff --check` | Passed |
+| 2026-07-25 | 3 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec native game%-UI path resolver"` | 18 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 3 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"` | 53 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 3 | `tools/Run-UnitTests.ps1` | 417 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 3 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 226 files |
+| 2026-07-25 | 3 | `git diff --check` | Passed |

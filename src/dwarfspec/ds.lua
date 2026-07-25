@@ -100,6 +100,9 @@ local native_attachment_module = load_automation_module(package_root,
 local native_widget_adapter_module = load_automation_module(package_root,
     'dwarfspec.native_widget_adapter',
     '/src/dwarfspec/native_widget_adapter.lua')
+local native_game_ui_path_module = load_automation_module(package_root,
+    'dwarfspec.native_game_ui_path',
+    '/src/dwarfspec/native_game_ui_path.lua')
 local overlay_registry_adapter_module = load_automation_module(package_root,
     'dwarfspec.overlay_registry_adapter',
     '/src/dwarfspec/overlay_registry_adapter.lua')
@@ -107,6 +110,8 @@ local subject_paths_module = load_automation_module(package_root,
     'dwarfspec.subject_paths', '/src/dwarfspec/subject_paths.lua')
 local subject_requests_module = load_automation_module(package_root,
     'dwarfspec.subject_requests', '/src/dwarfspec/subject_requests.lua')
+local identity_labels = load_automation_module(package_root,
+    'dwarfspec.identity_labels', '/src/dwarfspec/identity_labels.lua')
 local EMouseButton = load_automation_module(package_root,
     'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
 local EInputState = load_automation_module(package_root,
@@ -272,40 +277,56 @@ local TestStatus = load_automation_module(package_root,
     local is_native_widget_root =
         mount_dependencies.is_native_widget_root or
         is_native_widget_container
+    local native_widget_identity =
+        mount_dependencies.native_widget_identity or
+        function(raw) return raw end
+    local get_native_widget =
+        mount_dependencies.get_native_widget or
+        function(parent, segment)
+            return dfhack.gui.getWidget(parent, segment)
+        end
+    local get_native_widget_children =
+        mount_dependencies.get_native_widget_children or
+        function(parent)
+            return dfhack.gui.getWidgetChildren(parent)
+        end
     local native_subject_source_factory =
         mount_dependencies.native_subject_source_factory
     if not native_subject_source_factory then
-        ---Resolves one direct native child through DFHack.
-        ---@param parent any
-        ---@param segment dwarfspec.NativePathSegment
-        ---@return any|nil
-        local function get_native_widget(parent, segment)
-            return dfhack.gui.getWidget(parent, segment)
-        end
-
-        ---Enumerates one native container through DFHack.
-        ---@param parent any
-        ---@return table
-        local function get_native_widget_children(parent)
-            return dfhack.gui.getWidgetChildren(parent)
-        end
-
         ---Creates a native source rooted at one exposed DF widget container.
         ---@param root any
         ---@param interaction_target dwarfspec.BorrowedNativeInteractionTarget
+        ---@param source_options table|nil
         ---@return dwarfspec.SubjectSource
         local function create_native_subject_source(
-                root, interaction_target)
+                root, interaction_target, source_options)
+            source_options = source_options or {}
             return native_widget_adapter_module.new_source(
                 root, interaction_target, {
                     get_widget=get_native_widget,
                     get_children=get_native_widget_children,
                     is_container=is_native_widget_container,
                     get_window_size=dfhack.screen.getWindowSize,
+                    identity_of=native_widget_identity,
+                    root_locator=source_options.root_locator,
+                    structural_path=source_options.structural_path,
                 })
         end
         native_subject_source_factory=create_native_subject_source
     end
+    local native_game_ui_resolver =
+        mount_dependencies.native_game_ui_resolver or
+        native_game_ui_path_module.new_dfhack({
+            df=df,
+            get_widget=get_native_widget,
+            identity_of=native_widget_identity,
+        })
+    assert(type(native_game_ui_resolver) == 'table' and
+        type(native_game_ui_resolver.has_declared_leading_field) ==
+            'function' and
+        type(native_game_ui_resolver.resolve) == 'function' and
+        type(native_game_ui_resolver.root_locator) == 'function',
+        'DwarfSpec requires a complete native game-UI path resolver')
     local native_attachment = mount_dependencies.native_attachment
     if not native_attachment then
         local get_native_viewscreen = mount_dependencies.native_viewscreen or
@@ -496,6 +517,117 @@ local TestStatus = load_automation_module(package_root,
         return context.mount_context:register_subject_source(source)
     end
 
+    ---Attempts one path against an already registered subject source.
+    ---@param source dwarfspec.SubjectSource
+    ---@param path_segments dwarfspec.NativePath
+    ---@param diagnostic_path string
+    ---@return table
+    local function attempt_source_path(
+            source, path_segments, diagnostic_path)
+        local ok, result = pcall(function()
+            local view = context.mount_context:resolve_path_segments(
+                path_segments, diagnostic_path, source)
+            return {
+                view=view,
+                identity=source.adapter:identity(view),
+            }
+        end)
+        if ok then
+            result.success = true
+            result.source = source
+            result.path_segments = path_segments
+            return result
+        end
+        return {
+            success=false,
+            failure=tostring(result),
+        }
+    end
+
+    ---Creates or reuses a located source for one game-UI resolution.
+    ---@param mount table
+    ---@param resolution dwarfspec.GameUIPathResolution
+    ---@param diagnostic_path string
+    ---@return table
+    local function select_game_ui_result(
+            mount, resolution, diagnostic_path)
+        local source = native_subject_source_factory(
+            resolution.widget_root, mount.interaction_target, {
+                root_locator=native_game_ui_resolver:root_locator(
+                    resolution.structural_segments),
+                structural_path=resolution.structural_segments,
+            })
+        assert(type(source) == 'table' and
+            source.kind == ESubjectSource.NATIVE,
+            'native game-UI source factory returned an invalid source')
+        source = context.mount_context:register_subject_source(source)
+        local selected = attempt_source_path(
+            source, resolution.widget_segments, diagnostic_path)
+        assert(selected.success,
+            'native game-UI widget suffix changed during selection: ' ..
+                tostring(selected.failure))
+        assert(selected.identity == resolution.widget_identity,
+            'native game-UI widget identity changed during selection')
+        return selected
+    end
+
+    ---Resolves one implicit native request across both compatible roots.
+    ---@param mount table
+    ---@param path_segments dwarfspec.NativePath
+    ---@param diagnostic_path string
+    ---@return table
+    local function resolve_implicit_native_path(
+            mount, path_segments, diagnostic_path)
+        local viewscreen = attempt_source_path(
+            mount.subject_source, path_segments, diagnostic_path)
+        local eligibility_ok, eligible = pcall(
+            native_game_ui_resolver.has_declared_leading_field,
+            native_game_ui_resolver, path_segments)
+        if not eligibility_ok or not eligible then
+            if viewscreen.success then return viewscreen end
+            error(viewscreen.failure, 0)
+        end
+
+        local game_ok, game_resolution = pcall(
+            native_game_ui_resolver.resolve,
+            native_game_ui_resolver, path_segments)
+        local game_success = game_ok and
+            type(game_resolution) == 'table' and
+            game_resolution.failure == nil and
+            game_resolution.widget ~= nil and
+            game_resolution.widget_identity ~= nil
+        if viewscreen.success and game_success then
+            if viewscreen.identity == game_resolution.widget_identity then
+                return viewscreen
+            end
+            error(('DwarfSpec get failed: native_path=%s is ambiguous; ' ..
+                'viewscreen_identity=%s game_ui_identity=%s'):format(
+                    diagnostic_path,
+                    identity_labels.of(viewscreen.identity),
+                    identity_labels.of(game_resolution.widget_identity)), 0)
+        end
+        if viewscreen.success then return viewscreen end
+        if game_success then
+            return select_game_ui_result(
+                mount, game_resolution, diagnostic_path)
+        end
+
+        local game_failure
+        if not game_ok then
+            game_failure = bounded_text(game_resolution)
+        elseif type(game_resolution) == 'table' and
+                game_resolution.failure then
+            game_failure =
+                native_game_ui_path_module.format_failure(game_resolution)
+        else
+            game_failure = 'invalid game-UI resolver result'
+        end
+        error(('DwarfSpec get failed: native_path=%s was unavailable from ' ..
+            'both native roots; viewscreen={%s}; game_ui={%s}'):format(
+                diagnostic_path, bounded_text(viewscreen.failure),
+                bounded_text(game_failure)), 0)
+    end
+
     ---Copies caller wait options and applies project-wide defaults.
     ---@param options table|nil
     ---@param include_frame_budget boolean
@@ -635,11 +767,15 @@ local TestStatus = load_automation_module(package_root,
         local path_segments
         local diagnostic_path = control_path
         local source = mount.subject_source
+        local use_implicit_native_roots = false
         if mount.subject_source.kind == ESubjectSource.NATIVE then
             local request = subject_requests_module.get(
                 control_path, options)
             source = select_subject_source(mount, request)
             path_segments = request.path_segments
+            use_implicit_native_roots =
+                request.source == ESubjectSource.NATIVE and
+                request.native_root == nil
             if request.source == ESubjectSource.NATIVE then
                 diagnostic_path =
                     subject_paths_module.format_native(path_segments)
@@ -653,23 +789,37 @@ local TestStatus = load_automation_module(package_root,
             mount_id=mount.id,
             control_path=diagnostic_path,
         }
-        local ok, view
-        if path_segments then
-            ok, view = pcall(context.mount_context.resolve_path_segments,
-                context.mount_context, path_segments, diagnostic_path, source)
-        else
-            ok, view = pcall(context.mount_context.resolve_control_path,
-                context.mount_context, control_path)
-        end
+        local selected_path_segments = path_segments
+        local ok, selected = pcall(function()
+            if use_implicit_native_roots then
+                return resolve_implicit_native_path(
+                    mount, path_segments, diagnostic_path)
+            end
+            if path_segments then
+                return {
+                    view=context.mount_context:resolve_path_segments(
+                        path_segments, diagnostic_path, source),
+                    source=source,
+                    path_segments=path_segments,
+                }
+            end
+            return {
+                view=context.mount_context:resolve_control_path(control_path),
+                source=source,
+                path_segments=nil,
+            }
+        end)
         if not ok then
             local reported = context.mount_context:report_failure(
-                mount, 'get', view)
+                mount, 'get', selected)
             mount.command_subject = previous
             error(reported, 2)
         end
         mount.command_subject = previous
+        source = selected.source
+        selected_path_segments = selected.path_segments
         return context.mount_context:new_subject(
-            view, diagnostic_path, path_segments, source)
+            selected.view, diagnostic_path, selected_path_segments, source)
     end
 
     ---Returns a stable read-only diagnostic table for one live subject.

@@ -2,6 +2,7 @@
 
 local native_game_ui_path = require('dwarfspec.native_game_ui_path')
 
+local EFieldMode = native_game_ui_path.EFieldMode
 local EFieldKind = native_game_ui_path.EFieldKind
 local EFailureKind = native_game_ui_path.EFailureKind
 
@@ -472,5 +473,128 @@ describe('DwarfSpec native game-UI path resolver', function()
         assert.equals(EFailureKind.TYPE_UNAVAILABLE, result.failure.kind)
         assert.is_true(#result.failure.detail <= 80)
         assert.equals('...', result.failure.detail:sub(-3))
+    end)
+
+    it('checks only the exact declared leading field without reading it',
+            function()
+        local f = fixture()
+        local info = f:object('info')
+        f:add_field(f.main, 'info', EFieldKind.COMPOUND, info)
+        local resolver = f:resolver()
+
+        assert.is_true(
+            resolver:has_declared_leading_field({'info', 'Tabs'}))
+        assert.is_false(
+            resolver:has_declared_leading_field({'missing', 'Tabs'}))
+        assert.is_false(resolver:has_declared_leading_field({0}))
+        assert.equals(0, #f.calls.read_field)
+        assert.equals(0, #f.calls.get_widget)
+    end)
+
+    it('creates a structural root locator that replays from main_interface',
+            function()
+        local f = fixture()
+        local first = f:object(
+            'stable-root', {widget=true, container=true})
+        local metadata = f:add_field(
+            f.main, 'info', EFieldKind.WIDGET, first)
+        local resolver = f:resolver()
+        local locate = resolver:root_locator({'info'})
+
+        assert.equals(first, locate())
+
+        local second = f:object(
+            'stable-root', {
+                widget=true,
+                container=true,
+                identity='stable-root',
+            })
+        f.values[f.main][metadata] = second
+        assert.equals(second, locate())
+        assert.is_not.equal(first, second)
+    end)
+
+    it('adapts documented DF field metadata for the common game-UI path',
+            function()
+        local dead = {
+            id='dead',
+            _type={_fields={}},
+            widget=true,
+            container=true,
+            children={},
+        }
+        local tabs = {
+            id='tabs',
+            name='Tabs',
+            _type={_fields={}},
+            widget=true,
+            container=true,
+            children={dead},
+        }
+        dead.name = 'Dead/Missing'
+        local creatures = {
+            id='creatures',
+            _type={_fields={
+                scalar={name='scalar', mode=EFieldMode.PRIMITIVE},
+            }},
+            widget=true,
+            container=true,
+            children={tabs},
+            scalar=42,
+        }
+        local info = {
+            _type={_fields={
+                creatures={name='creatures', mode=EFieldMode.SUBSTRUCT},
+            }},
+            creatures=creatures,
+        }
+        local main_interface = {
+            _type={_fields={
+                info={name='info', mode=EFieldMode.SUBSTRUCT},
+            }},
+            info=info,
+        }
+        local df_namespace = {
+            global={game={main_interface=main_interface}},
+            widget={
+                is_instance=function(_, value)
+                    return value and value.widget == true
+                end,
+            },
+            widget_container={
+                is_instance=function(_, value)
+                    return value and value.container == true
+                end,
+            },
+        }
+        local resolver = native_game_ui_path.new_dfhack({
+            df=df_namespace,
+            get_widget=function(parent, segment)
+                for _, child in ipairs(parent.children or {}) do
+                    if child.name == segment then return child end
+                end
+                return nil
+            end,
+            identity_of=function(value) return value.id or value end,
+        })
+
+        local result = resolver:resolve({
+            'info',
+            'creatures',
+            'Tabs',
+            'Dead/Missing',
+        })
+        local scalar = resolver:resolve({
+            'info',
+            'creatures',
+            'scalar',
+        })
+
+        assert.is_nil(result.failure)
+        assert.same({'info', 'creatures'}, result.structural_segments)
+        assert.same({'Tabs', 'Dead/Missing'}, result.widget_segments)
+        assert.equals(dead, result.widget)
+        assert.equals(EFailureKind.UNSUPPORTED_FIELD, scalar.failure.kind)
+        assert.equals(EFieldKind.SCALAR, scalar.failure.field_kind)
     end)
 end)

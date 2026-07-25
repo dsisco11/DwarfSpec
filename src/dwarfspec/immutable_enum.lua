@@ -31,4 +31,34 @@ function M.define(values)
     })
 end
 
+---Creates an immutable numeric enum and rejects duplicate values.
+---@param values table<string, number>
+---@return table<string, number>
+function M.define_numeric(values)
+    local data = {}
+    local seen = {}
+    for name, value in pairs(values) do
+        assert(type(name) == 'string' and type(value) == 'number' and
+            value == value,
+            'Enum names must be strings and values must be numbers.')
+        assert(not seen[value], ('Duplicate enum value: %s'):format(value))
+        data[name] = value
+        seen[value] = true
+    end
+
+    return setmetatable({}, {
+        __index=data,
+        ---Rejects mutation of the immutable enum.
+        __newindex=function()
+            error('Enums are immutable.', 2)
+        end,
+        ---Iterates the immutable enum names and numeric values.
+        ---@return function, table, nil
+        __pairs=function()
+            return pairs(data)
+        end,
+        __metatable=false,
+    })
+end
+
 return M

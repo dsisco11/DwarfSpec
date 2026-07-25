@@ -14,6 +14,8 @@ local lua_view_adapter = assert(loadfile(
 local EventType = require('dwarfspec.automation.event_types')
 local EMouseButton = require('dwarfspec.mouse_buttons')
 local EInputState = require('dwarfspec.input_states')
+local EFieldMode =
+    require('dwarfspec.native_game_ui_path').EFieldMode
 local TestStatus = require('dwarfspec.automation.test_statuses')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
@@ -45,7 +47,7 @@ end
 local function make_native_widget(name, type_name, children, fields)
     local widget = {
         name=name,
-        _type={_name=type_name},
+        _type={_name=type_name, _fields={}},
         children=children or {},
     }
     for key, value in pairs(fields or {}) do widget[key] = value end
@@ -83,6 +85,60 @@ describe('DwarfSpec public mount commands', function()
     local native_render_failure
     local suppress_native_render
     local wait_until_failure
+
+    ---Installs one declared main-interface path ending in a native widget.
+    ---@param final_widget table|nil
+    ---@return table
+    local function install_game_ui(final_widget)
+        final_widget = final_widget or make_native_widget(
+            'Dead/Missing', 'df.widget_text', nil, {
+                str='Deceased citizens',
+                rect={x1=10, y1=5, x2=24, y2=7},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        local tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {final_widget})
+        local creatures = make_native_widget(
+            'creatures', 'df.widget_container', {tabs})
+        local info = make_native_widget(
+            'info', 'df.widget_container', {creatures})
+        info._type._fields.creatures = {
+            name='creatures',
+            mode=EFieldMode.SUBSTRUCT,
+        }
+        info.creatures = creatures
+        local main_interface = {
+            _type={_name='df.main_interface', _fields={
+                info={name='info', mode=EFieldMode.SUBSTRUCT},
+            }},
+            info=info,
+        }
+        df.global.game = {main_interface=main_interface}
+        df.widget = {
+            is_instance=function(_, value)
+                return type(value) == 'table' and
+                    value._type ~= nil and
+                    value ~= main_interface
+            end,
+        }
+        df.widget_container = {
+            is_instance=function(_, value)
+                return type(value) == 'table' and value._type and
+                    value._type._name == 'df.widget_container'
+            end,
+        }
+        return {
+            main_interface=main_interface,
+            info=info,
+            creatures=creatures,
+            tabs=tabs,
+            final_widget=final_widget,
+            path={'info', 'creatures', 'Tabs', 'Dead/Missing'},
+        }
+    end
 
     before_each(function()
         original_dfhack = rawget(_G, 'dfhack')
@@ -842,6 +898,152 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(inactive, ds.get('Inactive'):raw())
     end)
 
+    it('resolves the common complete game-UI path without source options',
+            function()
+        local game_ui = install_game_ui()
+        ds.mountNativeScreen()
+
+        local selected = ds.get(game_ui.path)
+
+        assert.equals(game_ui.final_widget, selected:raw())
+        assert.same(
+            {'Tabs', 'Dead/Missing'},
+            selected._descriptor.path_segments)
+        assert.equals(
+            '{"info", "creatures", "Tabs", "Dead/Missing"}',
+            selected.control_path)
+        assert.is_not.equal(
+            ds.root()._descriptor.source,
+            selected._descriptor.source)
+        assert.equals(native_root, ds.root():raw())
+    end)
+
+    it('deduplicates matching viewscreen and game-UI identities',
+            function()
+        local game_ui = install_game_ui()
+        native_root.children = {game_ui.info}
+        ds.mountNativeScreen()
+
+        local selected = ds.get(game_ui.path)
+
+        assert.equals(game_ui.final_widget, selected:raw())
+        assert.equals(
+            ds.root()._descriptor.source,
+            selected._descriptor.source)
+        assert.same(game_ui.path, selected._descriptor.path_segments)
+    end)
+
+    it('rejects different viewscreen and game-UI identities as ambiguous',
+            function()
+        local game_ui = install_game_ui()
+        local viewscreen_final = make_native_widget(
+            'Dead/Missing', 'df.widget_text', nil, {
+                str='Different viewscreen result',
+            })
+        local viewscreen_tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {viewscreen_final})
+        local viewscreen_creatures = make_native_widget(
+            'creatures', 'df.widget_container', {viewscreen_tabs})
+        local viewscreen_info = make_native_widget(
+            'info', 'df.widget_container', {viewscreen_creatures})
+        native_root.children = {viewscreen_info}
+        ds.mountNativeScreen()
+
+        local ok, failure = pcall(ds.get, game_ui.path)
+
+        assert.is_false(ok)
+        assert.matches(
+            'native_path={"info", "creatures", "Tabs", "Dead/Missing"}',
+            failure, 1, true)
+        assert.matches('is ambiguous;', failure, 1, true)
+        assert.matches('viewscreen_identity=table#%d+', failure)
+        assert.matches('game_ui_identity=table#%d+', failure)
+    end)
+
+    it('reports both unavailable roots with the complete original path',
+            function()
+        local game_ui = install_game_ui()
+        game_ui.creatures.children = {}
+        ds.mountNativeScreen()
+
+        local ok, failure = pcall(ds.get, game_ui.path)
+
+        assert.is_false(ok)
+        assert.matches(
+            'native_path={"info", "creatures", "Tabs", "Dead/Missing"}',
+            failure, 1, true)
+        assert.matches(
+            'was unavailable from both native roots',
+            failure, 1, true)
+        assert.matches('viewscreen={', failure, 1, true)
+        assert.matches('game_ui={kind=missing_widget', failure, 1, true)
+    end)
+
+    it('does not enter unrelated game interfaces after a native miss',
+            function()
+        local mutation_calls = 0
+        local main_interface = {
+            _type={_name='df.main_interface', _fields={
+                unrelated={
+                    name='unrelated',
+                    mode=EFieldMode.SUBSTRUCT,
+                },
+            }},
+            unrelated=setmetatable({}, {
+                __index=function()
+                    mutation_calls = mutation_calls + 1
+                    error('unrelated interface was inspected')
+                end,
+            }),
+        }
+        df.global.game = {main_interface=main_interface}
+        df.widget = {
+            is_instance=function() return false end,
+        }
+        df.widget_container = {
+            is_instance=function() return false end,
+        }
+        ds.mountNativeScreen()
+
+        local ok, failure = pcall(ds.get, 'Missing')
+
+        assert.is_false(ok)
+        assert.matches(
+            'native_path={"Missing"}', failure, 1, true)
+        assert.is_nil(failure:find(
+            'both native roots', 1, true))
+        assert.equals(0, mutation_calls)
+    end)
+
+    it('routes game-UI subjects through native inspection and interaction',
+            function()
+        local game_ui = install_game_ui()
+        ds.mountNativeScreen()
+        local selected = ds.get(game_ui.path)
+        local baseline_invalidations = native_invalidation_count
+
+        local inspection = ds.inspect(selected)
+        selected:move_pointer('center')
+        local pointer_position = {dfhack.screen.getMousePos()}
+        selected:input('GAME_UI_INPUT')
+        ds.mouseInput(EMouseButton.LEFT, EInputState.CLICK)
+        selected:redraw()
+
+        assert.equals('Deceased citizens', inspection.text)
+        assert.same(
+            {x1=10, y1=5, x2=24, y2=7}, inspection.body)
+        assert.same({17, 6}, pointer_position)
+        assert.equals('GAME_UI_INPUT',
+            simulated_inputs[#simulated_inputs - 1].key)
+        assert.equals('_MOUSE_L',
+            simulated_inputs[#simulated_inputs].key)
+        assert.equals(native_screen,
+            simulated_inputs[#simulated_inputs].screen)
+        assert.equals(
+            baseline_invalidations + 1,
+            native_invalidation_count)
+    end)
+
     it('resolves exposed base-game controls from an explicit native root',
             function()
         local row = make_native_widget(
@@ -870,6 +1072,77 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(selected_row._descriptor.source,
             selected_label._descriptor.source)
         assert.equals(native_root, ds.root():raw())
+    end)
+
+    it('keeps explicit native roots isolated from automatic game-UI lookup',
+            function()
+        local game_ui = install_game_ui()
+        local explicit_final = make_native_widget(
+            'Dead/Missing', 'df.widget_text', nil, {
+                str='Explicit result',
+            })
+        local explicit_tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {explicit_final})
+        local explicit_creatures = make_native_widget(
+            'creatures', 'df.widget_container', {explicit_tabs})
+        local explicit_info = make_native_widget(
+            'info', 'df.widget_container', {explicit_creatures})
+        local explicit_root = make_native_widget(
+            nil, 'df.widget_container', {explicit_info})
+        ds.mountNativeScreen()
+
+        local selected = ds.get(
+            game_ui.path, {native_root=explicit_root})
+
+        assert.equals(explicit_final, selected:raw())
+        assert.is_not.equal(game_ui.final_widget, selected:raw())
+    end)
+
+    it('keeps overlay and component paths outside game-UI resolution',
+            function()
+        install_game_ui()
+        local overlay_final = {
+            view_id='Dead',
+            subviews={},
+            visible=true,
+            active=true,
+        }
+        local overlay_root = {
+            view_id='overlay-root',
+            subviews={{
+                view_id='info',
+                subviews={{view_id='creatures', subviews={{
+                    view_id='Tabs',
+                    subviews={overlay_final},
+                }}}},
+            }},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.GameUIOverlay'] = {
+            widget=overlay_root,
+        }
+        overlay_state.config['gui/example.GameUIOverlay'] = {enabled=true}
+        ds.mountNativeScreen()
+        local overlay = ds.get('info/creatures/Tabs/Dead', {
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.GameUIOverlay',
+        })
+        assert.equals(overlay_final, overlay:raw())
+        ds.unmount()
+
+        local component_child = {
+            view_id='info',
+            subviews={},
+        }
+        ds.mount(TestWidget, {
+            name='component',
+            subviews={component_child},
+        })
+        local component_subject = ds.get('info')
+
+        assert.equals(component_child, component_subject:raw())
+        assert.equals(1, component_mount_calls)
     end)
 
     it('rejects a native root that is not an exposed widget container',

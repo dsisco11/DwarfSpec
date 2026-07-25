@@ -1,6 +1,8 @@
 -- Unit contracts for immutable closed-set DwarfSpec identifiers.
 
 local immutable_enum = require('dwarfspec.immutable_enum')
+local EFieldMode =
+    require('dwarfspec.native_game_ui_path').EFieldMode
 local ErrorFormat = require('dwarfspec.error_formats')
 local EventType = require('dwarfspec.automation.event_types')
 local OwnerKind = require('dwarfspec.automation.owner_kinds')
@@ -61,6 +63,13 @@ describe('immutable DwarfSpec contract enums', function()
         }, observed)
     end)
 
+    it('exposes immutable numeric enum values', function()
+        assert.equals(1, EFieldMode.PRIMITIVE)
+        assert.equals(5, EFieldMode.SUBSTRUCT)
+        assert.equals(9, EFieldMode.CLASS_METHOD)
+        assert_immutable(EFieldMode, 'SUBSTRUCT')
+    end)
+
     it('rejects invalid definitions and duplicate values', function()
         assert.has_error(function()
             immutable_enum.define({FIRST='same', SECOND='same'})
@@ -71,6 +80,15 @@ describe('immutable DwarfSpec contract enums', function()
         assert.has_error(function()
             immutable_enum.define({[1]='value'})
         end, 'Enum names and values must be strings.')
+        assert.has_error(function()
+            immutable_enum.define_numeric({FIRST=1, SECOND=1})
+        end, 'Duplicate enum value: 1')
+        assert.has_error(function()
+            immutable_enum.define_numeric({VALID='1'})
+        end, 'Enum names must be strings and values must be numbers.')
+        assert.has_error(function()
+            immutable_enum.define_numeric({[1]=1})
+        end, 'Enum names must be strings and values must be numbers.')
     end)
 
     it('rejects namespace mutation for every requested type', function()

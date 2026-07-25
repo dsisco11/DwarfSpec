@@ -7,6 +7,19 @@ local M = {}
 local FIELD_SUMMARY_LIMIT = 12
 local LABEL_LIMIT = 80
 
+---@enum DwarfSpecEFieldMode
+M.EFieldMode = immutable_enum.define_numeric({
+    PRIMITIVE=1,
+    STATIC_STRING=2,
+    POINTER=3,
+    STATIC_ARRAY=4,
+    SUBSTRUCT=5,
+    CONTAINER=6,
+    VECTOR_POINTER=7,
+    OBJECT_METHOD=8,
+    CLASS_METHOD=9,
+})
+
 ---@enum DwarfSpecEGameUIFieldKind
 M.EFieldKind = immutable_enum.define({
     COMPOUND='compound',
@@ -387,6 +400,89 @@ function NativeGameUIPathResolver:resolve(path)
     return capture_identities(self, resolution)
 end
 
+---Returns whether the first segment is an exact main-interface field.
+---@param path dwarfspec.NativePath
+---@return boolean
+function NativeGameUIPathResolver:has_declared_leading_field(path)
+    if type(path) ~= 'table' or type(path[1]) ~= 'string' or
+            path[1] == '' then
+        return false
+    end
+    local main_ok, main_interface = pcall(self._get_main_interface)
+    if not main_ok or main_interface == nil then return false end
+    local type_ok, type_descriptor =
+        pcall(self._get_type, main_interface)
+    if not type_ok or type_descriptor == nil then return false end
+    local fields_ok, fields = pcall(self._get_fields, type_descriptor)
+    return fields_ok and type(fields) == 'table' and
+        fields[path[1]] ~= nil
+end
+
+---Formats one bounded structural or widget resolution failure.
+---@param resolution dwarfspec.GameUIPathResolution
+---@return string
+function M.format_failure(resolution)
+    assert(type(resolution) == 'table' and
+        type(resolution.failure) == 'table',
+        'game-UI path failure formatting requires a failed resolution')
+    local failure = resolution.failure
+    local parts = {
+        'kind=' .. bounded_label(failure.kind),
+    }
+    if failure.index ~= nil then
+        table.insert(parts, 'index=' .. bounded_label(failure.index))
+    end
+    if failure.segment ~= nil then
+        table.insert(parts, 'segment=' .. bounded_label(failure.segment))
+    end
+    if failure.current_type ~= nil then
+        table.insert(
+            parts, 'current_type=' .. bounded_label(failure.current_type))
+    end
+    if failure.field_kind ~= nil then
+        table.insert(
+            parts, 'field_kind=' .. bounded_label(failure.field_kind))
+    end
+    if failure.detail ~= nil then
+        table.insert(parts, 'detail=' .. bounded_label(failure.detail))
+    end
+    if failure.available_fields then
+        table.insert(parts, 'available_fields=[' ..
+            table.concat(failure.available_fields, ',') .. ']')
+    end
+    if failure.omitted_field_count and
+            failure.omitted_field_count > 0 then
+        table.insert(parts, 'omitted_fields=' ..
+            tostring(failure.omitted_field_count))
+    end
+    return table.concat(parts, ' ')
+end
+
+---Creates a locator that replays one structural path from main_interface.
+---@param structural_path string[]
+---@return function
+function NativeGameUIPathResolver:root_locator(structural_path)
+    assert(type(structural_path) == 'table' and #structural_path > 0,
+        'game-UI root locator requires a structural path')
+    local path = {}
+    for index, segment in ipairs(structural_path) do
+        assert(type(segment) == 'string' and segment ~= '',
+            ('game-UI structural path segment %d must be a nonempty string')
+                :format(index))
+        path[index] = segment
+    end
+
+    ---Reacquires the exact structural widget root.
+    ---@return any
+    return function()
+        local resolution = self:resolve(path)
+        if resolution.failure then
+            error(M.format_failure(resolution), 0)
+        end
+        return resolution.widget
+    end
+end
+
 ---Creates a structural game-UI path resolver from explicit read-only services.
 ---@param options table
 ---@return dwarfspec.NativeGameUIPathResolver
@@ -425,6 +521,117 @@ function M.new(options)
         _get_widget=options.get_widget,
         _identity_of=identity_of,
     }, NativeGameUIPathResolver)
+end
+
+---@class dwarfspec.NativeGameUIPathDFHackOptions
+---@field df table|nil
+---@field get_widget function|nil
+---@field identity_of function|nil
+
+---Classifies one documented DF structure field without reading its value.
+---@param metadata table
+---@return DwarfSpecEGameUIFieldKind
+local function classify_df_field(metadata)
+    local mode = metadata.mode
+    if mode == M.EFieldMode.SUBSTRUCT then
+        return M.EFieldKind.COMPOUND
+    end
+    if mode == M.EFieldMode.POINTER then return M.EFieldKind.POINTER end
+    if mode == M.EFieldMode.STATIC_ARRAY or
+            mode == M.EFieldMode.CONTAINER or
+            mode == M.EFieldMode.VECTOR_POINTER then
+        return M.EFieldKind.COLLECTION
+    end
+    if mode == M.EFieldMode.OBJECT_METHOD or
+            mode == M.EFieldMode.CLASS_METHOD then
+        return M.EFieldKind.FUNCTION
+    end
+    return M.EFieldKind.SCALAR
+end
+
+---Creates a resolver backed by documented DFHack Lua type metadata.
+---@param options dwarfspec.NativeGameUIPathDFHackOptions|nil
+---@return dwarfspec.NativeGameUIPathResolver
+function M.new_dfhack(options)
+    options = options or {}
+    local df_namespace = options.df or df
+    local get_widget = options.get_widget or
+        function(parent, segment)
+            return dfhack.gui.getWidget(parent, segment)
+        end
+    assert(type(df_namespace) == 'table',
+        'game-UI path resolver requires the DF namespace')
+    assert(type(get_widget) == 'function',
+        'game-UI path resolver requires native widget lookup')
+
+    ---Returns the current main-interface structure.
+    ---@return any
+    local function get_main_interface()
+        local global = df_namespace.global
+        local game = global and global.game
+        return game and game.main_interface
+    end
+
+    ---Returns the exact DF type descriptor attached to one value.
+    ---@param value any
+    ---@return any
+    local function get_type(value)
+        return value._type
+    end
+
+    ---Normalizes documented DF field descriptions by exact field name.
+    ---@param type_descriptor any
+    ---@return table
+    local function get_fields(type_descriptor)
+        local declared = assert(type_descriptor._fields,
+            'DF type descriptor does not expose _fields')
+        local result = {}
+        for name, metadata in pairs(declared) do
+            if type(name) == 'string' and type(metadata) == 'table' then
+                result[name] = {
+                    name=name,
+                    kind=classify_df_field(metadata),
+                    df_metadata=metadata,
+                }
+            end
+        end
+        return result
+    end
+
+    ---Reads one exact field whose normalized metadata was already found.
+    ---@param current any
+    ---@param metadata table
+    ---@return any
+    local function read_field(current, metadata)
+        return current[metadata.name]
+    end
+
+    ---Returns whether one value is a native DF widget.
+    ---@param value any
+    ---@return boolean
+    local function is_widget(value)
+        return df_namespace.widget ~= nil and
+            df_namespace.widget:is_instance(value)
+    end
+
+    ---Returns whether one value is a native DF widget container.
+    ---@param value any
+    ---@return boolean
+    local function is_container(value)
+        return df_namespace.widget_container ~= nil and
+            df_namespace.widget_container:is_instance(value)
+    end
+
+    return M.new({
+        get_main_interface=get_main_interface,
+        get_type=get_type,
+        get_fields=get_fields,
+        read_field=read_field,
+        is_widget=is_widget,
+        is_container=is_container,
+        get_widget=get_widget,
+        identity_of=options.identity_of,
+    })
 end
 
 return M
