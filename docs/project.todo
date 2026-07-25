@@ -1,3 +1,5 @@
+☐ Revise the native-screen mounting approach to be more explicit about the fact that its mounting the native screen
+    e.g. `ds.mountGame()`
 ✔ Complete the deterministic DF-cell viewport work in `docs/viewport.todo`, including the mount option, 128 by 64 default, and `ds.viewport(width, height)` command. @done(26-07-21 04:57)
 ✔ Update `ds.get(...)` to accept and parse hierarchy paths for nested components. @done(26-07-21 04:57)
 ✘ Add new `ds.screenshot(...)` method to allow taking screenshots of mounted components under test. @cancelled(26-07-21 05:12)
@@ -20,6 +22,7 @@ Frontend:
 
 Testing Features:
     ☐ Need a `ds.getFocusList()` method to return the current focus list of the subject.
+    ☐ Add a `ds.getTime()` method to return the current tick count of the world.
     ☐ Refactor `ds.get()` so it is more like a Cypress get assertion, returning a `DSQuery` object that can be chained with `.should(...)` and `.find(...)` methods.
         - get method will become more of an async query with a timeout.
         - get method acts as an implicit assertion.
