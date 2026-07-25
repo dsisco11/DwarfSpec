@@ -32,7 +32,9 @@ dismiss a screen, instantiate a native widget, or take ownership of an overlay.
 - Preserve the current viewscreen stack and DFHack focus.
 - Make the attached screen the target for `ds.input()`, `ds.mouseInput()`, and
   `ds.redraw()`.
-- Make `viewscreen.widgets` the default root for `ds.root()` and `ds.get()`.
+- Make `viewscreen.widgets` the default root for `ds.root()` and `ds.get()`,
+  while allowing an exact DFHack-exposed `df.widget_container` to be selected
+  with the existing subject-source options.
 - Support native widget traversal by name and zero-based child index.
 - Preserve the existing fluent `dwarfspec.Subject` API for native and Lua
   widgets.
@@ -337,7 +339,11 @@ No public proxy object replaces the underlying widget.
 
 ### Native subject adapter
 
-The native adapter is rooted at the exact `attached_screen.widgets` container.
+The default native adapter is rooted at the exact
+`attached_screen.widgets` container. A caller can instead select another exact
+DFHack-exposed `df.widget_container`, including a container owned by
+`df.global.game.main_interface`, without changing the attached interaction
+target.
 
 Traversal uses:
 

@@ -17,10 +17,17 @@ describe('DwarfSpec subject source and path contracts', function()
 
     it('accepts exact enum source members and overlay registry names',
             function()
+        local native_root = {}
         assert.same({
             source=ESubjectSource.NATIVE,
         }, subject_requests.root({
             source=ESubjectSource.NATIVE,
+        }))
+        assert.same({
+            source=ESubjectSource.NATIVE,
+            native_root=native_root,
+        }, subject_requests.root({
+            native_root=native_root,
         }))
         assert.same({
             source=ESubjectSource.OVERLAY,
@@ -49,6 +56,13 @@ describe('DwarfSpec subject source and path contracts', function()
                 overlay='',
             })
         end, 'overlay subject source requires an exact nonempty overlay name')
+        assert.has_error(function()
+            subject_requests.root({
+                source=ESubjectSource.OVERLAY,
+                overlay='gui/example.ExampleOverlay',
+                native_root={},
+            })
+        end, 'native_root option conflicts with overlay subject source')
         assert.has_error(function()
             subject_requests.root({
                 source=ESubjectSource.NATIVE,

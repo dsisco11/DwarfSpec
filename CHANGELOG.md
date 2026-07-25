@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Native-screen subject commands can select any DFHack-exposed
+  `df.widget_container` with the `native_root` source option while retaining
+  the mounted viewscreen as their input and render target.
+
 ## [0.2.0] - 2026-07-24
 
 ### Added

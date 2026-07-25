@@ -266,7 +266,8 @@ describe('DwarfSpec public mount commands', function()
                 end,
                 native_viewscreen=function() return native_df_screen end,
                 is_native_widget_root=function(root)
-                    return root == native_root
+                    return root and root._type and
+                        root._type._name == 'df.widget_container'
                 end,
                 is_native_widget_container=function(widget)
                     return widget._type._name == 'df.widget_container'
@@ -839,6 +840,45 @@ describe('DwarfSpec public mount commands', function()
             '{"Tabs", 0, "Right/panel"}', mixed.control_path)
         assert.equals(hidden, ds.get('Hidden'):raw())
         assert.equals(inactive, ds.get('Inactive'):raw())
+    end)
+
+    it('resolves exposed base-game controls from an explicit native root',
+            function()
+        local row = make_native_widget(
+            nil, 'df.widget_container', {
+                make_native_widget(
+                    'Label', 'df.widget_text', nil, {str='Route 1'}),
+            })
+        local rows = make_native_widget(
+            'Rows', 'df.widget_container', {row})
+        local main_interface_root = make_native_widget(
+            nil, 'df.widget_container', {rows})
+        ds.mountNativeScreen()
+
+        local options = {native_root=main_interface_root}
+        local selected_root = ds.root(options)
+        local selected_row = ds.get({'Rows', 0}, options)
+        local selected_label = ds.get({'Rows', 0, 'Label'}, options)
+        local tree = ds.capture_view_tree('main-interface', options)
+
+        assert.equals(main_interface_root, selected_root:raw())
+        assert.equals(row, selected_row:raw())
+        assert.equals('Route 1', selected_label:text())
+        assert.equals('Rows', tree.children[1].view_id)
+        assert.equals(selected_root._descriptor.source,
+            selected_row._descriptor.source)
+        assert.equals(selected_row._descriptor.source,
+            selected_label._descriptor.source)
+        assert.equals(native_root, ds.root():raw())
+    end)
+
+    it('rejects a native root that is not an exposed widget container',
+            function()
+        ds.mountNativeScreen()
+
+        assert.has_error(function()
+            ds.get('Rows', {native_root={}})
+        end, 'native_root must be a DF widget_container exposed by DFHack')
     end)
 
     it('keeps default native and explicit overlay path collisions separate',

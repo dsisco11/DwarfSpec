@@ -246,6 +246,23 @@ assert.is_userdata(named:raw())
 assert.is_table(named:inspect().body)
 ```
 
+Some base-game interfaces expose their controls from a widget container under
+`df.global.game.main_interface` instead of the viewscreen's default `widgets`
+container. Select that exact DFHack-exposed container without changing the
+mounted interaction target:
+
+```lua
+local creatures = df.global.game.main_interface.info.creatures
+local options = {native_root=creatures}
+local deceased = ds.get({'Tabs', 'Dead/Missing'}, options)
+local tree = ds.capture_view_tree('deceased-controls', options)
+```
+
+The value passed as `native_root` must be a `df.widget_container`. DwarfSpec
+uses it only as a borrowed subject-tree root; `ds.input()`, `ds.mouseInput()`,
+and `ds.redraw()` continue to target the native viewscreen pinned by
+`ds.mountNativeScreen()`.
+
 The path array itself uses ordinary one-based Lua array positions; integer
 segments inside it are zero-based native child indices. Empty names, negative
 or fractional indices, gaps in the array, ambiguous slash-containing string

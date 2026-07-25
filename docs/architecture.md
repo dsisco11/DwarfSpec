@@ -91,6 +91,11 @@ and screen diagnostics while preserving the original cause.
 current DF viewscreen and its native widget container without showing,
 dismissing, or owning a screen. Here, “mount” names the DwarfSpec test
 lifecycle; “native attachment” names its borrowed implementation resource.
+The viewscreen's `widgets` container is the default subject root. Base-game
+interfaces can expose additional widget-container roots through structures such
+as `df.global.game.main_interface`; callers select one of those exact containers
+with the `native_root` source option while input, redraw, focus, and lifetime
+validation remain pinned to the attached viewscreen.
 Native subjects traverse only widget objects exposed by DFHack; pixels and
 procedurally rendered controls do not become subjects. A separately selected
 overlay source borrows an enabled registry widget while dispatch remains owned

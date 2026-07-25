@@ -54,11 +54,13 @@
 ---@class dwarfspec.NativeSubjectSourceOptions
 ---@field source? `native`
 ---@field overlay? nil
+---@field native_root? userdata Exact exposed `df.widget_container` root.
 
 ---Selects one externally owned widget from DFHack's live overlay registry.
 ---@class dwarfspec.OverlaySubjectSourceOptions
 ---@field source `overlay`
 ---@field overlay string Exact enabled overlay registry name.
+---@field native_root? nil
 
 ---@alias dwarfspec.SubjectSourceOptions dwarfspec.NativeSubjectSourceOptions|dwarfspec.OverlaySubjectSourceOptions
 ---@alias dwarfspec.RootSourceOptions dwarfspec.SubjectSourceOptions

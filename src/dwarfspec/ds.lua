@@ -259,6 +259,53 @@ local TestStatus = load_automation_module(package_root,
             subject_source_factory=lua_view_adapter_module.new_source,
         })
     end
+    local is_native_widget_container =
+        mount_dependencies.is_native_widget_container
+    ---Returns whether one native widget is a child container.
+    ---@param widget any
+    ---@return boolean
+    local function default_is_native_widget_container(widget)
+        return df.widget_container:is_instance(widget)
+    end
+    is_native_widget_container = is_native_widget_container or
+        default_is_native_widget_container
+    local is_native_widget_root =
+        mount_dependencies.is_native_widget_root or
+        is_native_widget_container
+    local native_subject_source_factory =
+        mount_dependencies.native_subject_source_factory
+    if not native_subject_source_factory then
+        ---Resolves one direct native child through DFHack.
+        ---@param parent any
+        ---@param segment dwarfspec.NativePathSegment
+        ---@return any|nil
+        local function get_native_widget(parent, segment)
+            return dfhack.gui.getWidget(parent, segment)
+        end
+
+        ---Enumerates one native container through DFHack.
+        ---@param parent any
+        ---@return table
+        local function get_native_widget_children(parent)
+            return dfhack.gui.getWidgetChildren(parent)
+        end
+
+        ---Creates a native source rooted at one exposed DF widget container.
+        ---@param root any
+        ---@param interaction_target dwarfspec.BorrowedNativeInteractionTarget
+        ---@return dwarfspec.SubjectSource
+        local function create_native_subject_source(
+                root, interaction_target)
+            return native_widget_adapter_module.new_source(
+                root, interaction_target, {
+                    get_widget=get_native_widget,
+                    get_children=get_native_widget_children,
+                    is_container=is_native_widget_container,
+                    get_window_size=dfhack.screen.getWindowSize,
+                })
+        end
+        native_subject_source_factory=create_native_subject_source
+    end
     local native_attachment = mount_dependencies.native_attachment
     if not native_attachment then
         local get_native_viewscreen = mount_dependencies.native_viewscreen or
@@ -266,54 +313,6 @@ local TestStatus = load_automation_module(package_root,
         local invalidate_native_screen =
             mount_dependencies.invalidate_native_screen or
             function() return dfhack.screen.invalidate() end
-        local is_native_widget_root =
-            mount_dependencies.is_native_widget_root or
-            function(root) return type(root) == 'userdata' end
-        local native_subject_source_factory =
-            mount_dependencies.native_subject_source_factory
-        if not native_subject_source_factory then
-            ---Resolves one direct native child through DFHack.
-            ---@param parent any
-            ---@param segment dwarfspec.NativePathSegment
-            ---@return any|nil
-            local function get_native_widget(parent, segment)
-                return dfhack.gui.getWidget(parent, segment)
-            end
-
-            ---Enumerates one native container through DFHack.
-            ---@param parent any
-            ---@return table
-            local function get_native_widget_children(parent)
-                return dfhack.gui.getWidgetChildren(parent)
-            end
-
-            local is_native_widget_container =
-                mount_dependencies.is_native_widget_container
-            ---Returns whether one native widget is a child container.
-            ---@param widget any
-            ---@return boolean
-            local function default_is_native_widget_container(widget)
-                return df.widget_container:is_instance(widget)
-            end
-            is_native_widget_container = is_native_widget_container or
-                default_is_native_widget_container
-
-            ---Creates the default native source with live DFHack services.
-            ---@param root any
-            ---@param interaction_target dwarfspec.BorrowedNativeInteractionTarget
-            ---@return dwarfspec.SubjectSource
-            local function create_native_subject_source(
-                    root, interaction_target)
-                return native_widget_adapter_module.new_source(
-                    root, interaction_target, {
-                        get_widget=get_native_widget,
-                        get_children=get_native_widget_children,
-                        is_container=is_native_widget_container,
-                        get_window_size=dfhack.screen.getWindowSize,
-                    })
-            end
-            native_subject_source_factory=create_native_subject_source
-        end
         native_attachment = native_attachment_module.new({
             get_current_viewscreen=context.current_viewscreen,
             get_native_viewscreen=get_native_viewscreen,
@@ -470,7 +469,24 @@ local TestStatus = load_automation_module(package_root,
         assert(mount.subject_source.kind == ESubjectSource.NATIVE,
             'component mounts do not accept subject source options')
         if request.source == ESubjectSource.NATIVE then
-            return mount.subject_source
+            if request.native_root == nil then return mount.subject_source end
+            local root_ok, is_root = pcall(
+                is_native_widget_root, request.native_root)
+            assert(root_ok and is_root,
+                'native_root must be a DF widget_container exposed by DFHack')
+            for source in pairs(mount.subject_sources) do
+                if source.kind == ESubjectSource.NATIVE and
+                        source.adapter:root() == request.native_root then
+                    return source
+                end
+            end
+            local source = native_subject_source_factory(
+                request.native_root, mount.interaction_target)
+            assert(type(source) == 'table' and
+                source.kind == ESubjectSource.NATIVE and
+                source.adapter:root() == request.native_root,
+                'native subject source factory returned an invalid source')
+            return context.mount_context:register_subject_source(source)
         end
         local source = overlay_subject_source_factory(request.overlay)
         assert(type(source) == 'table' and
