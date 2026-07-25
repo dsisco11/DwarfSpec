@@ -1,6 +1,6 @@
 # Native game-UI path resolution
 
-Status: in progress; Phase 0 complete
+Status: in progress; Phases 0-1 complete
 
 Related design:
 
@@ -281,9 +281,9 @@ contract.
 
 ## Phase 1: Structural path contracts
 
-☐ Add a focused native game-UI path module rather than embedding DF reflection
+☒ Add a focused native game-UI path module rather than embedding DF reflection
   logic in `ds.lua`.
-☐ Define injected capabilities for:
+☒ Define injected capabilities for:
   - acquiring `df.global.game.main_interface`;
   - reading an object's DF type descriptor;
   - reading declared data-field metadata;
@@ -291,32 +291,51 @@ contract.
   - testing `df.widget` identity;
   - testing `df.widget_container` identity;
   - resolving a native widget child.
-☐ Define an internal resolution record containing:
+☒ Define an internal resolution record containing:
   - normalized complete path;
   - structural field prefix;
   - widget suffix;
   - resolved widget-root identity;
   - resolved final-widget identity;
   - bounded failure details.
-☐ Validate that structural segments are nonempty strings.
-☐ Reject integer segments before widget traversal begins.
-☐ Reject declared fields that resolve to scalars, functions, collections, or
+☒ Validate that structural segments are nonempty strings.
+☒ Reject integer segments before widget traversal begins.
+☒ Reject declared fields that resolve to scalars, functions, collections, or
   unsupported pointer targets before a widget container is reached.
-☐ Require every field access to be backed by declared field metadata.
-☐ Prevent arbitrary userdata indexing from being treated as field discovery.
-☐ Switch permanently to widget traversal on the first non-field segment when
+☒ Require every field access to be backed by declared field metadata.
+☒ Prevent arbitrary userdata indexing from being treated as field discovery.
+☒ Switch permanently to widget traversal on the first non-field segment when
   the current object is a widget container.
-☐ Require the final value to satisfy `df.widget:is_instance()`.
-☐ Return explicit structural failures without invoking mutation callbacks.
+☒ Require the final value to satisfy `df.widget:is_instance()`.
+☒ Return explicit structural failures without invoking mutation callbacks.
 
 Exit gate:
 
-☐ The resolver can split
+☒ The resolver can split
   `{'info', 'creatures', 'Tabs', 'Dead/Missing'}` into the correct structural
   and widget portions.
-☐ No resolver route scans unrelated DF fields or recursively searches widget
+☒ No resolver route scans unrelated DF fields or recursively searches widget
   descendants.
-☐ All new methods and classes have LuaDoc comments.
+☒ All new methods and classes have LuaDoc comments.
+
+### Phase 1 evidence
+
+- `src/dwarfspec/native_game_ui_path.lua` owns structural resolution and has no
+  dependency on `ds.lua`.
+- The resolver accepts explicit read-only services for the main interface,
+  type descriptors, declared fields, exact field reads, widget and container
+  identity checks, child lookup, and stable native identity.
+- `EFieldKind` and `EFailureKind` are immutable enums. Expected failures return
+  bounded resolution records instead of loose identifiers or thrown mutation
+  paths.
+- Structural objects in the focused fixture reject arbitrary indexing.
+  Successful access is possible only through the exact metadata object passed
+  to the injected field reader.
+- Focused coverage proves the complete example split, declared fields on
+  widget containers, permanent widget mode, zero-based widget indices,
+  pre-transition integer rejection, unsupported field kinds, final widget and
+  identity checks, bounded diagnostics, exact child lookup, and no recursive
+  widget search.
 
 ## Phase 2: Reacquirable game-UI native source
 
@@ -526,3 +545,7 @@ Exit gate:
 | 2026-07-25 | 0 | Inspect DFHack `sort/deathcause_button.lua`, `sort/info.lua`, generated types, and Lua API docs | Two authoritative mixed structural/widget paths and ordered `_fields` metadata contract recorded |
 | 2026-07-25 | 0 | Direct DFHack 53.15-r2 `D_UNITLIST`, type checks, and `getWidget(info.creatures, 'Tabs', 'Dead/Missing')` | Structural fields and final `widget_unit_list` proven; focus restored |
 | 2026-07-25 | 0 | Direct DFHack 53.15-r2 `D_HAULING`, field/type checks, and bounded exposed-widget inspection | No Hauling native widget path exists; route rows are procedural; focus restored |
+| 2026-07-25 | 1 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec native game%-UI path resolver"` | 15 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 1 | `tools/Run-UnitTests.ps1` | 399 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 1 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 226 files |
+| 2026-07-25 | 1 | `git diff --check` | Passed |
