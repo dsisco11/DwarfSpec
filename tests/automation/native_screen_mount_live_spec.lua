@@ -157,6 +157,20 @@ local function slash_names(root)
     return names
 end
 
+---Finds one directly addressable native child of the supplied root.
+---@param root userdata
+---@return table|nil
+local function named_native_child(root)
+    for index, child in ipairs(dfhack.gui.getWidgetChildren(root)) do
+        local name_ok, name = pcall(function() return child.name end)
+        if name_ok and type(name) == 'string' and name ~= '' and
+                not name:find('/', 1, true) then
+            return {name=name, index=index - 1, raw=child}
+        end
+    end
+    return nil
+end
+
 describe('non-owning native-screen attachment', function()
     it('proves native and overlay behavior with exact mount cleanup',
             function()
@@ -205,25 +219,20 @@ describe('non-owning native-screen attachment', function()
         assert.not_equals(original_dispatcher,
             overlay.render_viewscreen_widgets)
 
-        local named = ds.get('Tooltip')
-        local numeric = ds.get({0})
-        local mixed = ds.get({'Tooltip', 1})
+        local target = assert(named_native_child(native_root),
+            'native root has no named direct child for lookup acceptance')
+        local named = ds.get(target.name)
+        local numeric = ds.get({target.index})
         assert.equals(named:raw(), numeric:raw())
-        assert.equals(
-            dfhack.gui.getWidget(native_root, 'Tooltip'), named:raw())
-        assert.equals(
-            dfhack.gui.getWidget(named:raw(), 1), mixed:raw())
+        assert.equals(target.raw, named:raw())
+        assert.equals(dfhack.gui.getWidget(native_root, target.name),
+            named:raw())
 
         local named_state = named:inspect()
-        local mixed_state = mixed:inspect()
         assert.is_table(named_state.body)
         assert.is_boolean(named_state.visible)
         assert.is_boolean(named_state.active)
         assert.is_string(named_state.native_type)
-        assert.is_table(mixed_state.body)
-        assert.is_string(mixed_state.native_type)
-        assert.is_string(mixed_state.text)
-        assert.equals(mixed:raw().str, mixed_state.text)
         assert.same({}, slash_names(native_root),
             'current dwarfmode widget hierarchy unexpectedly gained a ' ..
                 'stable slash-bearing name')

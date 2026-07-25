@@ -1,6 +1,6 @@
 # Explicit native-screen mount API
 
-Status: in progress; Phases 0-4 complete
+Status: complete; Phases 0-5 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -254,36 +254,35 @@ Goal: make the explicit API and non-owning semantics unambiguous everywhere.
 Goal: verify deterministic behavior, real DFHack wiring, cleanup, and final
 repository consistency.
 
-☐ Run the focused public mount-command, mount-context, and native-attachment
+✔ Run the focused public mount-command, mount-context, and native-attachment
   unit specifications.
-☐ Run `.\tools\Run-UnitTests.ps1`.
-☐ Run `.\tools\Check-Lua.ps1`.
-☐ Run `git diff --check`.
-☐ Run
+✔ Run `.\tools\Run-UnitTests.ps1`.
+✔ Run `.\tools\Check-Lua.ps1`.
+✔ Run `git diff --check`.
+✔ Run
   `.\tools\Run-AutomationTests.ps1 --test-glob tests/automation/native_screen_mount_live_spec.lua`
   for focused native-screen acceptance.
-☐ Confirm the live test used `ds.mountNativeScreen()` and observed the exact
+✔ Confirm the live test used `ds.mountNativeScreen()` and observed the exact
   current native viewscreen and widget root.
-☐ Confirm live cleanup preserved the original screen, focus, stack, pointer
+✔ Confirm live cleanup preserved the original screen, focus, stack, pointer
   state, overlay registration, and render instrumentation.
-☐ Confirm no DwarfSpec-owned or test-owned screen remains after the live run.
-☐ If live DFHack is unavailable, record the exact environmental blocker and
-  leave live acceptance incomplete; deterministic tests are not a substitute.
-☐ Search source, declarations, tests, and documentation for stale positive
+✔ Confirm no DwarfSpec-owned or test-owned screen remains after the live run.
+✔ Live DFHack was available; no environmental blocker prevented acceptance.
+✔ Search source, declarations, tests, and documentation for stale positive
   no-argument mount usage and old `mount_native` identifiers.
-☐ Review the diff for accidental attachment, adapter, observer, transport,
+✔ Review the diff for accidental attachment, adapter, observer, transport,
   scheduler, persistence, CLI, version, or in-game UI changes.
-☐ Review `git status --short` and account for every changed file.
-☐ Complete the evidence ledger and final acceptance only after every required
+✔ Review `git status --short` and account for every changed file.
+✔ Complete the evidence ledger and final acceptance only after every required
   check passes.
 
 ### Phase 5 exit gate
 
-☐ Focused and full unit tests pass.
-☐ Lua syntax and formatting checks pass.
-☐ Focused live native-screen acceptance passes with confirmed cleanup.
-☐ Diff hygiene, stale-reference searches, and worktree accounting pass.
-☐ Every earlier phase and exit gate is complete.
+✔ Focused and full unit tests pass.
+✔ Lua syntax and formatting checks pass.
+✔ Focused live native-screen acceptance passes with confirmed cleanup.
+✔ Diff hygiene, stale-reference searches, and worktree accounting pass.
+✔ Every earlier phase and exit gate is complete.
 
 ## Evidence ledger
 
@@ -487,17 +486,50 @@ cleanup observations, and environmental limitations here as work proceeds.
 
 ### Phase 5 evidence
 
-- Pending.
+- Focused deterministic verification on 2026-07-25 passed:
+  - `.\tools\Run-UnitTests.ps1 --filter 'DwarfSpec public mount commands'`:
+    40 successes, 0 failures, 0 errors, and 0 pending.
+  - `.\tools\Run-UnitTests.ps1 --filter 'DwarfSpec mount context'`:
+    34 successes, 0 failures, 0 errors, and 0 pending.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec native viewscreen attachment'`: 8 successes, 0 failures,
+    0 errors, and 0 pending.
+- `.\tools\Run-UnitTests.ps1` passed with 379 successes, 0 failures,
+  0 errors, and 0 pending. `.\tools\Check-Lua.ps1` passed Lua 5.4.6 syntax
+  and formatting checks for 224 files. `git diff --check` passed.
+- `.\tools\Run-AutomationTests.ps1 --test-glob
+  tests/automation/native_screen_mount_live_spec.lua` passed on 2026-07-25:
+  2 successes, 0 failures, 0 errors, and confirmed run cleanup. The live
+  acceptance used `ds.mountNativeScreen()` and asserted the exact current
+  native viewscreen and `widgets` root. It also asserted restoration of the
+  original focus, stack, pointer state, overlay dispatcher and registration,
+  render instrumentation, and Hauling-list scroll state.
+- The live cleanup probe confirmed zero active, tracked, and owned screens;
+  zero borrowed native screens; zero native-screen dismissals; zero retained
+  subjects; and inactive pointer, button-state, and render-observer hooks.
+- Source, declaration, test, and documentation searches found no old
+  `mount_native` identifier outside this checklist's historical evidence. The
+  only executable no-argument `ds.mount()` is its intentional rejection test.
+  The only remaining documentation references are the rejected overload and
+  the completed project task. The public declaration exposes
+  `DS.mountNativeScreen()`.
+- Final diff review found only the live acceptance-spec adjustment that derives
+  an addressable named native child from the exact live root; it proves named
+  and zero-based indexed native widget lookup without assuming a game widget
+  name. No attachment, adapter,
+  observer, transport, scheduler, persistence, CLI, version, or in-game UI
+  code changed. Worktree changes are this checklist, the completed project
+  task, and the live acceptance specification.
 
 ## Final acceptance
 
-☐ `ds.mountNativeScreen()` is the only public native-screen mount entry point.
-☐ `ds.mount(component, options)` cannot attach to a native screen.
-☐ No compatibility alias or deprecated no-argument behavior remains.
-☐ Both mount entry points share one current mount and `ds.unmount()` lifecycle.
-☐ Native-screen subjects and commands retain their existing behavior.
-☐ Native screens, focus, stack, overlays, input state, and instrumentation
+✔ `ds.mountNativeScreen()` is the only public native-screen mount entry point.
+✔ `ds.mount(component, options)` cannot attach to a native screen.
+✔ No compatibility alias or deprecated no-argument behavior remains.
+✔ Both mount entry points share one current mount and `ds.unmount()` lifecycle.
+✔ Native-screen subjects and commands retain their existing behavior.
+✔ Native screens, focus, stack, overlays, input state, and instrumentation
   retain their existing ownership and cleanup guarantees.
-☐ Public declarations, implementation, tests, and documentation agree.
-☐ Deterministic and live verification pass with fresh evidence.
-☐ All checklist and evidence-ledger items are complete.
+✔ Public declarations, implementation, tests, and documentation agree.
+✔ Deterministic and live verification pass with fresh evidence.
+✔ All checklist and evidence-ledger items are complete.

@@ -1,7 +1,6 @@
-☐ Complete the explicit `ds.mountNativeScreen()` API and remove the unpublished
+✔ Complete the explicit `ds.mountNativeScreen()` API and remove the unpublished
     no-argument `ds.mount()` overload according to
-    `docs/explicit-native-screen-mount.todo`; mark complete only after its
-    final acceptance is recorded.
+    `docs/explicit-native-screen-mount.todo`.
 ✔ Complete the deterministic DF-cell viewport work in `docs/viewport.todo`, including the mount option, 128 by 64 default, and `ds.viewport(width, height)` command. @done(26-07-21 04:57)
 ✔ Update `ds.get(...)` to accept and parse hierarchy paths for nested components. @done(26-07-21 04:57)
 ✘ Add new `ds.screenshot(...)` method to allow taking screenshots of mounted components under test. @cancelled(26-07-21 05:12)
