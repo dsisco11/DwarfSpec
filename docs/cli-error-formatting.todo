@@ -1,6 +1,6 @@
 # CLI diagnostic output implementation
 
-Status: in progress; Phases 0-4 complete
+Status: in progress; Phases 0-5 complete
 
 Related design: `docs/test-runner-service-design.md`
 
@@ -411,32 +411,49 @@ Phase 4 evidence:
 
 Goal: document how projects select a format and pair it with an editor matcher.
 
-☐ Add `settings.error_format` and its default to
+✔ Add `settings.error_format` and its default to
   `docs/configuration.md`.
-☐ Document the three configuration values and their exact output shapes.
-☐ Document that `gcc` is also the Clang-compatible selection.
-☐ Document the required problem matcher for each format.
-☐ Document that `$gcc` is supplied by the Microsoft C/C++ extension rather
+✔ Document the three configuration values and their exact output shapes.
+✔ Document that `gcc` is also the Clang-compatible selection.
+✔ Document the required problem matcher for each format.
+✔ Document that `$gcc` is supplied by the Microsoft C/C++ extension rather
   than core VS Code.
-☐ Document the absolute-path behavior for MSBuild and GCC/Clang and the
+✔ Document the absolute-path behavior for MSBuild and GCC/Clang and the
   project-relative behavior for ESLint Compact.
-☐ Document the location-less human fallback and the fact that full traces
-  remain in results and run logs.
-☐ Update the repository's `tests/dwarfspec/config.lua` and Automation Test task
+✔ Document the location-less human fallback, the fact that full traces remain
+  in results and retained run inspection, and the separate human-readable log
+  behavior.
+✔ Update the repository's `tests/dwarfspec/config.lua` and Automation Test task
   so their selected format and problem matcher agree.
-☐ Configure the repository task for one-shot execution only; do not add
+✔ Configure the repository task for one-shot execution only; do not add
   background matcher state.
-☐ State that the task run clears previous Problems and that DwarfSpec does not
+✔ State that the task run clears previous Problems and that DwarfSpec does not
   manage Problems-panel retention or collapsing.
-☐ Link to the official VS Code task and problem-matcher documentation.
+✔ Link to the official VS Code task and problem-matcher documentation.
 
 Phase 5 exit gate:
 
-☐ Documentation examples use valid DwarfSpec configuration syntax.
-☐ The repository example pairs `msbuild` with `$mscompile`.
-☐ Manual inspection confirms the task and configuration example agree.
-☐ No automated test asserts VS Code task configuration or Problems-panel
+✔ Documentation examples use valid DwarfSpec configuration syntax.
+✔ The repository example pairs `msbuild` with `$mscompile`.
+✔ Manual inspection confirms the task and configuration example agree.
+✔ No automated test asserts VS Code task configuration or Problems-panel
   behavior.
+
+Phase 5 evidence:
+
+- `docs/configuration.md` documents the default and all supported serialized
+  values, exact output contracts, path behavior, location-less fallback,
+  retained structured diagnostics, and the boundary of the human-readable
+  `logs` command.
+- Official VS Code task and problem-matcher documentation confirms
+  `$mscompile` and `$eslint-compact` are built in with the required absolute
+  and workspace-relative path assumptions. Official C/C++ documentation
+  confirms the extension-provided `$gcc` matcher is suitable for Clang.
+- The repository config selects `error_format='msbuild'`, and its one-shot
+  Automation Test task selects `$mscompile` without `isBackground` or
+  background matcher state.
+- Manual Lua and JSON inspection passed on 2026-07-25; no automated VS Code
+  task or Problems-panel test was added.
 
 ## Phase 6: Completion verification
 
@@ -475,7 +492,7 @@ Record evidence only after running the corresponding command.
 | 2 | Structured source-location and event-schema unit tests | Complete: bounded presentation-neutral extraction, callback integration, optional-field validation, cursor/result/history retention, 274-test unit suite, and 202-file Lua checks passed on 2026-07-24 |
 | 3 | Exact formatter unit tests | Complete: all three canonical formats, both problem kinds, path and column rules, display sanitization, immutable structured input, one-line output, and location-less fallback covered by 9 focused tests; 374-test unit suite and 224-file Lua checks passed on 2026-07-25 |
 | 4 | Runner and CLI integration unit tests | Complete: project-selected formats stream in cursor order, structured events remain unchanged, failed runs persist and acknowledge, formatter failures recover cleanup, 30 focused runner tests and 29 focused CLI tests passed; 377-test unit suite and 224-file Lua checks passed on 2026-07-25 |
-| 5 | Documentation and editor-example review | Pending |
+| 5 | Documentation and editor-example review | Complete: configuration syntax, exact output examples, matcher ownership and pairing, path behavior, one-shot lifecycle, fallback and retained-data boundaries documented; repository config and task manually verified to pair `msbuild` with `$mscompile` on 2026-07-25 |
 | 6 | Focused tests, full unit suite, syntax, and diff checks | Pending |
 
 ## Final acceptance
@@ -486,8 +503,8 @@ Record evidence only after running the corresponding command.
 ☐ Matchable diagnostics contain a trustworthy source, line, column, severity,
   and message.
 ☐ Location-less problems remain visible without fabricated coordinates.
-☐ Full structured messages and traces remain available in results, history,
-  and logs.
+☐ Full structured messages and traces remain available in results and retained
+  run history; captured human-readable lines remain available through logs.
 ☐ Non-problem progress, transport, scheduling, cleanup, persistence, and exit
   behavior remain unchanged.
 ☐ DwarfSpec tests cover DwarfSpec behavior only; VS Code behavior remains

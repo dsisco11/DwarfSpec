@@ -5,5 +5,6 @@ return {
         discovery={
             test_glob='tests/automation/*.lua',
         },
+        error_format='msbuild',
     },
 }
