@@ -170,6 +170,10 @@ function Subject:redraw(options) end
 ---@return dwarfspec.SubjectInspectState
 function Subject:inspect() end
 
+---Returns a copied focus-string list for this subject's current mounted screen.
+---@return string[]
+function Subject:getFocusList() end
+
 ---Returns the stable inspected text value for this subject.
 ---@return string|nil
 function Subject:text() end

@@ -317,6 +317,18 @@ DFHack focus, screen stack, and external overlay registry intact. In contrast,
 component mounts own the component and any DwarfSpec-created host screen and
 therefore tear those resources down during unmount.
 
+`subject:getFocusList()` returns a copied list of focus strings for that
+subject's current mounted screen. The focus list belongs to the screen, not to
+the widget itself, but the call uses normal DwarfSpec subject validation:
+
+```lua
+local current_focus = ds.root():getFocusList()
+assert.is_true(#current_focus > 0)
+
+local list = ds.get('menu')
+assert.same(current_focus, list:getFocusList())
+```
+
 ## Condition waits
 
 `ds.await(description, query, options)` polls a read-only query between live

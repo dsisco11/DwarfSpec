@@ -218,6 +218,8 @@ describe('non-owning native-screen attachment', function()
         assert.same(original_stack, screen_stack())
         assert.not_equals(original_dispatcher,
             overlay.render_viewscreen_widgets)
+        assert.same(dfhack.gui.getFocusStrings(native_screen),
+            root:getFocusList())
 
         local target = assert(named_native_child(native_root),
             'native root has no named direct child for lookup acceptance')
@@ -227,6 +229,8 @@ describe('non-owning native-screen attachment', function()
         assert.equals(target.raw, named:raw())
         assert.equals(dfhack.gui.getWidget(native_root, target.name),
             named:raw())
+        assert.same(dfhack.gui.getFocusStrings(native_screen),
+            named:getFocusList())
 
         local named_state = named:inspect()
         assert.is_table(named_state.body)

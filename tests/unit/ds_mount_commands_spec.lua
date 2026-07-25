@@ -77,6 +77,7 @@ describe('DwarfSpec public mount commands', function()
     local component_mount_calls
     local native_widget_lookup_calls
     local native_invalidation_count
+    local focus_queries
     local original_native_render_dispatcher
     local native_render_failure
     local suppress_native_render
@@ -104,6 +105,7 @@ describe('DwarfSpec public mount commands', function()
         component_mount_calls = 0
         native_widget_lookup_calls = 0
         native_invalidation_count = 0
+        focus_queries = {}
         native_render_failure = nil
         suppress_native_render = false
         wait_until_failure = nil
@@ -135,6 +137,10 @@ describe('DwarfSpec public mount commands', function()
                         result[index] = child
                     end
                     return result
+                end,
+                getFocusStrings=function(target)
+                    table.insert(focus_queries, target)
+                    return target.focus_list or {}
                 end,
             },
         })
@@ -229,6 +235,7 @@ describe('DwarfSpec public mount commands', function()
         }
         native_screen = {
             name='native-screen',
+            focus_list={'dwarfmode/Default', 'dwarfmode/Info'},
             widgets=native_root,
             show_calls=0,
             dismiss_calls=0,
@@ -512,6 +519,23 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function() mounted:raw() end,
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; no current mount exists')
+    end)
+
+    it('returns copied focus strings for the current mounted subject',
+            function()
+        local mounted = ds.mountNativeScreen()
+
+        assert.same({'dwarfmode/Default', 'dwarfmode/Info'},
+            mounted:getFocusList())
+        local focus_list = mounted:getFocusList()
+        assert.same({'dwarfmode/Default', 'dwarfmode/Info'}, focus_list)
+        assert.same({native_screen, native_screen}, focus_queries)
+
+        focus_list[1] = 'mutated-by-test'
+        assert.same({'dwarfmode/Default', 'dwarfmode/Info'},
+            mounted:getFocusList())
+
+        ds.unmount()
     end)
 
     it('waits for observed native redraw and supports explicit wait opt-out',

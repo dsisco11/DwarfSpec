@@ -86,6 +86,12 @@ function Subject:inspect()
     return invoke(self, 'inspect')
 end
 
+---Returns a copied focus-string list for this subject's current mounted screen.
+---@return string[]
+function Subject:getFocusList()
+    return invoke(self, 'getFocusList')
+end
+
 ---Returns the stable inspected text value for this subject.
 ---@return string|nil
 function Subject:text()

@@ -642,6 +642,30 @@ local TestStatus = load_automation_module(package_root,
         return diagnostics.inspect_view(view, adapter)
     end
 
+    ---Returns a copied focus-string list for one current mounted subject.
+    ---@param subject table
+    ---@return string[]
+    local function get_focus_list(subject)
+        local interaction_target
+        _, interaction_target = resolve_interaction_target(subject,
+            'getFocusList')
+        local gui = dfhack and dfhack.gui
+        assert(type(gui) == 'table' and
+                type(gui.getFocusStrings) == 'function',
+            'DwarfSpec getFocusList requires dfhack.gui.getFocusStrings')
+        local focus_list = gui.getFocusStrings(
+            interaction_target:native_screen('getFocusList'))
+        assert(type(focus_list) == 'table',
+            'DFHack getFocusStrings did not return a focus list')
+        local result = {}
+        for index, focus in ipairs(focus_list) do
+            assert(type(focus) == 'string',
+                'DFHack getFocusStrings returned a non-string focus value')
+            result[index] = focus
+        end
+        return result
+    end
+
     ---Invalidates a subject's mounted screen and waits by default.
     ---@param view table|nil Defaults to the current source root.
     ---@param options table|nil
@@ -1023,6 +1047,7 @@ local TestStatus = load_automation_module(package_root,
             return ds.redraw(subject, options)
         end,
         inspect=function(subject) return ds.inspect(subject) end,
+        getFocusList=get_focus_list,
     }
 
     return ds, reset
