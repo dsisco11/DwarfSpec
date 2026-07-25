@@ -262,6 +262,159 @@ describe('DwarfSpec native widget adapter', function()
         assert.is_true(adapter:contains(reacquired))
     end)
 
+    it('reacquires a located root and its widget suffix by stable identity',
+            function()
+        local first_child = widget(
+            'stable-child', 'Status', 'df.widget_textst')
+        local first_root = widget(
+            'stable-root', nil, 'df.widget_container', {first_child})
+        local second_child = widget(
+            'stable-child', 'Status', 'df.widget_textst')
+        local second_root = widget(
+            'stable-root', nil, 'df.widget_container', {second_child})
+        local located_root = first_root
+        local locator_calls = 0
+        local located = native_widget_adapter.new(
+            nil, adapter._interaction_target, {
+                root_locator=function()
+                    locator_calls = locator_calls + 1
+                    return located_root
+                end,
+                structural_path={'info', 'creatures'},
+                get_widget=function(parent, segment)
+                    for _, child in ipairs(parent.children) do
+                        if child.name == segment then return child end
+                    end
+                    return nil
+                end,
+                get_children=function(parent)
+                    return parent.children
+                end,
+                is_container=function(raw)
+                    return raw.type_name == 'df.widget_container'
+                end,
+                identity_of=function(raw) return raw.id end,
+                name_of=function(raw) return raw.name end,
+                type_of=function(raw) return raw.type_name end,
+            })
+
+        local initial = located:resolve({'Status'})
+        located_root = second_root
+        local reacquired = located:resolve({'Status'})
+
+        assert.equals(first_child, initial)
+        assert.equals(second_child, reacquired)
+        assert.is_not.equal(initial, reacquired)
+        assert.equals('stable-root', located:captured_root_identity())
+        assert.equals('stable-child', located:identity(reacquired))
+        assert.is_true(located:contains(reacquired))
+        assert.equals(5, locator_calls)
+    end)
+
+    it('distinguishes removed, replaced, and failed located roots',
+            function()
+        local first_root = widget(
+            'stable-root', nil, 'df.widget_container')
+        local located_root = first_root
+        local locator_failure
+        local located = native_widget_adapter.new(
+            first_root, adapter._interaction_target, {
+                root_locator=function()
+                    if locator_failure then error(locator_failure, 0) end
+                    return located_root
+                end,
+                structural_path={'info', 'creatures'},
+                get_widget=function() return nil end,
+                get_children=function() return {} end,
+                is_container=function() return true end,
+                identity_of=function(raw) return raw.id end,
+            })
+
+        located_root = nil
+        local removed_ok, removed =
+            pcall(located.resolve, located, {'Status'})
+        assert.is_false(removed_ok)
+        assert.matches(
+            'structural root no longer resolves', removed, 1, true)
+
+        located_root = widget(
+            'replacement-root', nil, 'df.widget_container')
+        local replaced_ok, replaced =
+            pcall(located.resolve, located, {'Status'})
+        assert.is_false(replaced_ok)
+        assert.matches(
+            'structural root was replaced', replaced, 1, true)
+        assert.matches(
+            'captured_identity=string:stable%-root ' ..
+                'current_identity=string:replacement%-root',
+            replaced)
+
+        located_root = first_root
+        locator_failure = 'main interface access exploded'
+        local failed_ok, failed =
+            pcall(located.resolve, located, {'Status'})
+        assert.is_false(failed_ok)
+        assert.matches('because reacquisition failed:', failed, 1, true)
+        assert.matches(
+            'main interface access exploded', failed, 1, true)
+    end)
+
+    it('checks screen currentness before invoking a root locator', function()
+        local located_root = widget(
+            'stable-root', nil, 'df.widget_container')
+        local locator_calls = 0
+        local located = native_widget_adapter.new(
+            located_root, adapter._interaction_target, {
+                root_locator=function()
+                    locator_calls = locator_calls + 1
+                    return located_root
+                end,
+                structural_path={'info', 'creatures'},
+                get_widget=function() return nil end,
+                get_children=function() return {} end,
+                is_container=function() return true end,
+                identity_of=function(raw) return raw.id end,
+            })
+        local calls_after_creation = locator_calls
+        current = {}
+
+        local ok, failure =
+            pcall(located.resolve, located, {'Status'})
+
+        assert.is_false(ok)
+        assert.matches(
+            'pinned viewscreen is no longer current', failure, 1, true)
+        assert.equals(calls_after_creation, locator_calls)
+    end)
+
+    it('releases located-root references without mutating native objects',
+            function()
+        local located_root = widget(
+            'stable-root', nil, 'df.widget_container')
+        located_root.dismissals = 0
+        located_root.mutations = 0
+        local located = native_widget_adapter.new(
+            located_root, adapter._interaction_target, {
+                root_locator=function() return located_root end,
+                structural_path={'info', 'creatures'},
+                get_widget=function() return nil end,
+                get_children=function() return {} end,
+                is_container=function() return true end,
+                identity_of=function(raw) return raw.id end,
+            })
+
+        assert.is_true(located:cleanup())
+
+        assert.is_nil(located._root)
+        assert.is_nil(located._root_locator)
+        assert.is_nil(located._root_identity)
+        assert.is_nil(located._structural_path)
+        assert.same({}, located._known_identities)
+        assert.equals(0, located_root.dismissals)
+        assert.equals(0, located_root.mutations)
+        assert.is_false(located:cleanup())
+    end)
+
     it('normalizes get_rect geometry and falls back to rect', function()
         local preferred = widget(
             'preferred', 'Preferred', 'df.widget', nil, {

@@ -1,6 +1,6 @@
 # Native game-UI path resolution
 
-Status: in progress; Phases 0-1 complete
+Status: in progress; Phases 0-2 complete
 
 Related design:
 
@@ -339,30 +339,50 @@ Exit gate:
 
 ## Phase 2: Reacquirable game-UI native source
 
-☐ Generalize the native adapter root contract to support a root locator in
+☒ Generalize the native adapter root contract to support a root locator in
   addition to an already captured root.
-☐ Reacquire the structural widget root from `main_interface` before every
+☒ Reacquire the structural widget root from `main_interface` before every
   retained-subject operation.
-☐ Capture the structural root's stable native identity when the source is
+☒ Capture the structural root's stable native identity when the source is
   created.
-☐ Reject a structural root that is removed or replaced while the pinned
+☒ Reject a structural root that is removed or replaced while the pinned
   viewscreen remains current.
-☐ Continue reacquiring the selected widget through the recorded widget suffix.
-☐ Preserve the exact captured final-widget identity contract.
-☐ Keep the source registered with the current mount for its entire lifetime.
-☐ Reuse one registered source for repeated requests with the same structural
+☒ Continue reacquiring the selected widget through the recorded widget suffix.
+☒ Preserve the exact captured final-widget identity contract.
+☒ Keep the source registered with the current mount for its entire lifetime.
+☒ Reuse one registered source for repeated requests with the same structural
   root path and identity.
-☐ Release locator functions, retained wrappers, and identities during normal
+☒ Release locator functions, retained wrappers, and identities during normal
   and exceptional mount cleanup.
-☐ Do not take ownership of any `main_interface` object or native widget.
+☒ Do not take ownership of any `main_interface` object or native widget.
 
 Exit gate:
 
-☐ Retained game-UI subjects survive wrapper reacquisition when native identity
+☒ Retained game-UI subjects survive wrapper reacquisition when native identity
   is unchanged.
-☐ Replacement, removal, screen transition, and unmount each fail through their
+☒ Replacement, removal, screen transition, and unmount each fail through their
   distinct existing staleness contracts.
-☐ Cleanup still dismisses or mutates no native screen or base-game widget.
+☒ Cleanup still dismisses or mutates no native screen or base-game widget.
+
+### Phase 2 evidence
+
+- `NativeWidgetAdapter` accepts either a captured root or an injected
+  structural-root locator with a copied structural path.
+- Adapter creation acquires the current root and captures its stable identity.
+  Every root-dependent subject operation checks the pinned screen, invokes the
+  locator, verifies the root identity, and only then resolves the recorded
+  widget suffix.
+- Root removal, root replacement, locator failure, final-widget replacement,
+  screen transition, and unmount retain distinct failure contracts.
+- Mount source registration compares copied structural-path contents and the
+  captured root identity. A duplicate located source is cleaned immediately
+  and the already registered source is returned.
+- Normal and exceptional mount cleanup clear the root locator, current wrapper,
+  structural path, captured root identity, retained widget identities, and
+  injected services.
+- Focused fixtures record dismissal and mutation counters on borrowed roots,
+  widgets, and screens; all remain zero through successful and exceptional
+  cleanup.
 
 ## Phase 3: `ds.get()` dual-root integration
 
@@ -549,3 +569,8 @@ Exit gate:
 | 2026-07-25 | 1 | `tools/Run-UnitTests.ps1` | 399 successes; 0 failures, errors, or pending |
 | 2026-07-25 | 1 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 226 files |
 | 2026-07-25 | 1 | `git diff --check` | Passed |
+| 2026-07-25 | 2 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec native widget adapter"` | 19 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 2 | Focused mount-context located-source and exceptional-cleanup filters | 2 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 2 | `tools/Run-UnitTests.ps1` | 405 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 2 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 226 files |
+| 2026-07-25 | 2 | `git diff --check` | Passed |

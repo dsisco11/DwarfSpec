@@ -798,6 +798,199 @@ describe('DwarfSpec mount context', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('retains, reuses, and rejects located native sources by identity',
+            function()
+        local first_child = {
+            id='stable-child',
+            name='Status',
+            children={},
+        }
+        local first_root = {
+            id='stable-root',
+            children={first_child},
+            dismissals=0,
+            mutations=0,
+        }
+        local located_root = first_root
+        local pinned = {widgets={}, dismissals=0}
+        local current_screen = pinned
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return current_screen end,
+            invalidate_screen=function()
+                context.current.render_tracker:completed()
+            end,
+        })
+
+        ---Creates a source for the current structural root fixture.
+        ---@return dwarfspec.SubjectSource
+        local function located_source()
+            return native_widget_adapter.new_source(
+                located_root, target, {
+                    root_locator=function() return located_root end,
+                    structural_path={'info', 'creatures'},
+                    get_widget=function(parent, segment)
+                        for _, child in ipairs(parent.children) do
+                            if child.name == segment then return child end
+                        end
+                        return nil
+                    end,
+                    get_children=function(parent)
+                        return parent.children
+                    end,
+                    is_container=function(raw)
+                        return raw.children ~= nil
+                    end,
+                    identity_of=function(raw) return raw.id end,
+                    name_of=function(raw) return raw.name end,
+                    type_of=function() return 'df.widget_container' end,
+                })
+        end
+
+        local source = located_source()
+        context:mount_native_screen(function()
+            return {
+                root=first_root,
+                pinned_screen=pinned,
+                interaction_target=target,
+                subject_source=source,
+            }
+        end)
+        local initial = source.adapter:resolve({'Status'})
+        local retained = context:new_subject(
+            initial, '{"Status"}', {'Status'}, source)
+
+        local duplicate = located_source()
+        local registered = context:register_subject_source(duplicate)
+        local registered_count = 0
+        for _ in pairs(context.current.subject_sources) do
+            registered_count = registered_count + 1
+        end
+        assert.equals(source, registered)
+        assert.equals(1, registered_count)
+        assert.is_true(duplicate.adapter._cleaned)
+
+        local second_child = {
+            id='stable-child',
+            name='Status',
+            children={},
+        }
+        local second_root = {
+            id='stable-root',
+            children={second_child},
+            dismissals=0,
+            mutations=0,
+        }
+        located_root = second_root
+        assert.equals(second_child, retained:raw())
+
+        local replaced_child = {
+            id='replacement-child',
+            name='Status',
+            children={},
+        }
+        located_root = {
+            id='stable-root',
+            children={replaced_child},
+        }
+        local child_ok, child_failure = pcall(retained.raw, retained)
+        assert.is_false(child_ok)
+        assert.matches(
+            'because the widget was replaced', child_failure, 1, true)
+
+        located_root = nil
+        local removed_ok, removed_failure =
+            pcall(retained.raw, retained)
+        assert.is_false(removed_ok)
+        assert.matches(
+            'structural root no longer resolves',
+            removed_failure, 1, true)
+
+        located_root = {
+            id='replacement-root',
+            children={second_child},
+        }
+        local root_ok, root_failure = pcall(retained.raw, retained)
+        assert.is_false(root_ok)
+        assert.matches(
+            'structural root was replaced', root_failure, 1, true)
+
+        located_root = second_root
+        current_screen = {}
+        local screen_ok, screen_failure = pcall(retained.raw, retained)
+        assert.is_false(screen_ok)
+        assert.matches(
+            'pinned viewscreen is no longer current',
+            screen_failure, 1, true)
+
+        current_screen = pinned
+        context:unmount()
+        local unmounted_ok, unmounted_failure =
+            pcall(retained.raw, retained)
+        assert.is_false(unmounted_ok)
+        assert.matches(
+            'no current mount exists', unmounted_failure, 1, true)
+        assert.is_nil(source.adapter._root)
+        assert.is_nil(source.adapter._root_locator)
+        assert.is_nil(source.adapter._root_identity)
+        assert.is_nil(source.adapter._structural_path)
+        assert.equals(0, first_root.dismissals)
+        assert.equals(0, first_root.mutations)
+        assert.equals(0, second_root.dismissals)
+        assert.equals(0, second_root.mutations)
+        assert.equals(0, pinned.dismissals)
+    end)
+
+    it('releases a located source during exceptional native cleanup',
+            function()
+        local root = {
+            id='stable-root',
+            children={},
+            dismissals=0,
+            mutations=0,
+        }
+        local pinned = {widgets=root, dismissals=0}
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return pinned end,
+            invalidate_screen=function()
+                context.current.render_tracker:completed()
+            end,
+        })
+        local source = native_widget_adapter.new_source(root, target, {
+            root_locator=function() return root end,
+            structural_path={'info', 'creatures'},
+            get_widget=function() return nil end,
+            get_children=function() return {} end,
+            is_container=function() return true end,
+            identity_of=function(raw) return raw.id end,
+        })
+        native_observer_restore_failure =
+            'injected observation restoration conflict'
+        context:mount_native_screen(function()
+            return {
+                root=root,
+                pinned_screen=pinned,
+                interaction_target=target,
+                subject_source=source,
+            }
+        end)
+
+        local ok, failure = pcall(context.unmount, context)
+
+        assert.is_false(ok)
+        assert.matches(
+            'injected observation restoration conflict',
+            failure, 1, true)
+        assert.is_true(source.adapter._cleaned)
+        assert.is_nil(source.adapter._root_locator)
+        assert.is_nil(source.adapter._root_identity)
+        assert.is_nil(source.adapter._structural_path)
+        assert.is_true(target._cleaned)
+        assert.equals(0, root.dismissals)
+        assert.equals(0, root.mutations)
+        assert.equals(0, pinned.dismissals)
+        assert.is_nil(context.current)
+    end)
+
     it('restores observation and attachment state after capability timeout',
             function()
         local root = {kind='native-root'}

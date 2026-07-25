@@ -1,6 +1,7 @@
 -- Native DF widget traversal and retained typed-reference identity.
 
 local ESubjectSource = require('dwarfspec.subject_sources')
+local identity_labels = require('dwarfspec.identity_labels')
 
 local M = {}
 
@@ -44,6 +45,9 @@ local SELECTION_FIELDS = {
 
 ---@class dwarfspec.NativeWidgetAdapter: dwarfspec.SubjectAdapter
 ---@field _root any|nil
+---@field _root_locator function|nil
+---@field _root_identity any|nil
+---@field _structural_path dwarfspec.NativePath|nil
 ---@field _interaction_target dwarfspec.BorrowedNativeInteractionTarget|nil
 ---@field _get_widget function|nil
 ---@field _get_children function|nil
@@ -60,6 +64,27 @@ local SELECTION_FIELDS = {
 ---@field _cleaned boolean
 local NativeWidgetAdapter = {}
 NativeWidgetAdapter.__index = NativeWidgetAdapter
+
+---Copies one normalized native path without retaining caller storage.
+---@param path dwarfspec.NativePath
+---@return dwarfspec.NativePath
+local function copy_path(path)
+    local result = {}
+    for index, segment in ipairs(path) do result[index] = segment end
+    return result
+end
+
+---Returns whether two normalized paths contain the same exact segments.
+---@param left dwarfspec.NativePath|nil
+---@param right dwarfspec.NativePath|nil
+---@return boolean
+local function paths_equal(left, right)
+    if left == nil or right == nil or #left ~= #right then return false end
+    for index, segment in ipairs(left) do
+        if segment ~= right[index] then return false end
+    end
+    return true
+end
 
 ---Reads one native field without propagating userdata access failures.
 ---@param raw any
@@ -160,7 +185,7 @@ local function format_path(path_segments)
     return '{' .. table.concat(formatted, ', ') .. '}'
 end
 
----Returns the exact root after validating pinned-screen currentness.
+---Reacquires and validates the exact root after checking screen currentness.
 ---@param self dwarfspec.NativeWidgetAdapter
 ---@param operation string
 ---@return any
@@ -169,6 +194,39 @@ local function require_root(self, operation)
         self._interaction_target,
         operation .. ' native subject source is no longer available')
     self._interaction_target:assert_current(operation)
+    if self._root_locator then
+        local located_ok, current_root = pcall(self._root_locator)
+        self._interaction_target:assert_current(operation)
+        if not located_ok then
+            error(('%s rejected stale native structural root path=%s ' ..
+                'because reacquisition failed: %s'):format(
+                    operation, format_path(self._structural_path),
+                    bounded_label(current_root)), 0)
+        end
+        if current_root == nil then
+            error(('%s rejected stale native structural root path=%s ' ..
+                'because the structural root no longer resolves'):format(
+                    operation, format_path(self._structural_path)), 0)
+        end
+        local identity_ok, current_identity =
+            pcall(self._identity_of, current_root)
+        self._interaction_target:assert_current(operation)
+        if not identity_ok or current_identity == nil then
+            error(('%s rejected stale native structural root path=%s ' ..
+                'because its identity is unavailable: %s'):format(
+                    operation, format_path(self._structural_path),
+                    bounded_label(current_identity)), 0)
+        end
+        if current_identity ~= self._root_identity then
+            error(('%s rejected stale native structural root path=%s ' ..
+                'because the structural root was replaced; ' ..
+                'captured_identity=%s current_identity=%s'):format(
+                    operation, format_path(self._structural_path),
+                    identity_labels.of(self._root_identity),
+                    identity_labels.of(current_identity)), 0)
+        end
+        self._root = current_root
+    end
     return self._root
 end
 
@@ -199,6 +257,25 @@ end
 ---@return any
 function NativeWidgetAdapter:root()
     return require_root(self, 'native root access')
+end
+
+---Returns the stable identity captured for the adapter's root.
+---@return any
+function NativeWidgetAdapter:captured_root_identity()
+    assert(not self._cleaned and self._root_identity ~= nil,
+        'native root identity is no longer available')
+    return self._root_identity
+end
+
+---Returns whether another adapter represents the same located root contract.
+---@param other any
+---@return boolean
+function NativeWidgetAdapter:same_located_root(other)
+    return not self._cleaned and type(other) == 'table' and
+        not other._cleaned and self._root_locator ~= nil and
+        other._root_locator ~= nil and
+        self._root_identity == other._root_identity and
+        paths_equal(self._structural_path, other._structural_path)
 end
 
 ---Resolves every segment through one separate native getWidget call.
@@ -599,6 +676,9 @@ function NativeWidgetAdapter:cleanup()
     if self._cleaned then return false end
     self._cleaned = true
     self._root = nil
+    self._root_locator = nil
+    self._root_identity = nil
+    self._structural_path = nil
     self._interaction_target = nil
     self._get_widget = nil
     self._get_children = nil
@@ -617,7 +697,6 @@ end
 ---@param options table
 ---@return dwarfspec.NativeWidgetAdapter
 function M.new(root, interaction_target, options)
-    assert(root ~= nil, 'native widget adapter requires a widget container')
     assert(type(interaction_target) == 'table' and
         type(interaction_target.assert_current) == 'function',
         'native widget adapter requires an interaction target')
@@ -629,6 +708,23 @@ function M.new(root, interaction_target, options)
         'native widget adapter requires getWidgetChildren access')
     assert(type(options.is_container) == 'function',
         'native widget adapter requires widget-container type access')
+    local root_locator = options.root_locator
+    assert(root_locator == nil or type(root_locator) == 'function',
+        'native widget adapter root locator must be callable')
+    local structural_path = options.structural_path
+    if root_locator then
+        assert(type(structural_path) == 'table' and #structural_path > 0,
+            'located native widget adapter requires a structural path')
+        for index, segment in ipairs(structural_path) do
+            assert(type(segment) == 'string' and segment ~= '',
+                ('located native structural path segment %d must be a ' ..
+                    'nonempty string'):format(index))
+        end
+        structural_path = copy_path(structural_path)
+    else
+        assert(structural_path == nil,
+            'native structural path requires a root locator')
+    end
     local identity_of = options.identity_of or
         function(raw) return raw end
     local name_of = options.name_of or function(raw)
@@ -650,8 +746,34 @@ function M.new(root, interaction_target, options)
         'native widget adapter name access must be callable')
     assert(type(type_of) == 'function',
         'native widget adapter type access must be callable')
+    interaction_target:assert_current('native widget adapter creation')
+    if root_locator then
+        local located_ok, located_root = pcall(root_locator)
+        interaction_target:assert_current('native widget adapter creation')
+        assert(located_ok,
+            'native widget adapter root acquisition failed: ' ..
+                tostring(located_root))
+        assert(located_root ~= nil,
+            'native widget adapter root acquisition returned nil')
+        if root ~= nil then
+            local supplied_identity = identity_of(root)
+            local located_identity = identity_of(located_root)
+            assert(supplied_identity ~= nil and located_identity ~= nil and
+                supplied_identity == located_identity,
+                'native widget adapter supplied root does not match its ' ..
+                    'located structural root')
+        end
+        root = located_root
+    end
+    assert(root ~= nil, 'native widget adapter requires a widget container')
+    local root_identity = identity_of(root)
+    assert(root_identity ~= nil,
+        'native widget root identity access returned nil')
     local adapter = setmetatable({
         _root=root,
+        _root_locator=root_locator,
+        _root_identity=root_identity,
+        _structural_path=structural_path,
         _interaction_target=interaction_target,
         _get_widget=options.get_widget,
         _get_children=options.get_children,
@@ -682,7 +804,6 @@ function M.new(root, interaction_target, options)
         assert(type(value) == 'number' and value >= 1 and value % 1 == 0,
             ('native %s must be a positive integer'):format(name))
     end
-    interaction_target:assert_current('native widget adapter creation')
     remember(adapter, root)
     return adapter
 end

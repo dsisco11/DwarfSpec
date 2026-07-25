@@ -485,7 +485,22 @@ function M.new(options)
         local mount = self:require_current('subject source selection')
         assert(type(source) == 'table',
             'subject source selection requires a source table')
-        subject_adapter(mount, source)
+        local candidate_adapter = subject_adapter(mount, source)
+        if source.kind == ESubjectSource.NATIVE and
+                type(candidate_adapter.same_located_root) == 'function' then
+            for registered in pairs(mount.subject_sources) do
+                local registered_adapter = subject_adapter(mount, registered)
+                if registered ~= source and
+                        registered.kind == ESubjectSource.NATIVE and
+                        candidate_adapter:same_located_root(
+                            registered_adapter) then
+                    if type(candidate_adapter.cleanup) == 'function' then
+                        candidate_adapter:cleanup()
+                    end
+                    return registered
+                end
+            end
+        end
         mount.subject_sources[source] = true
         return source
     end
