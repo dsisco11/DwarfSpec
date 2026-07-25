@@ -867,6 +867,7 @@ describe('DwarfSpec public mount commands', function()
             'path="<root>" mount=1;', failure, 1, true)
         assert.matches('captured_screen=table#%d+ current_screen=table#%d+',
             failure)
+        assert.is_true(#failure < 8192)
         assert.equals(0, native_screen.dismiss_calls)
     end)
 
@@ -936,6 +937,31 @@ describe('DwarfSpec public mount commands', function()
         assert.same(game_ui.path, selected._descriptor.path_segments)
     end)
 
+    it('returns the viewscreen result when eligible game-UI lookup fails',
+            function()
+        local game_ui = install_game_ui()
+        game_ui.creatures.children = {}
+        local viewscreen_final = make_native_widget(
+            'Dead/Missing', 'df.widget_text', nil, {
+                str='Viewscreen result',
+            })
+        local viewscreen_tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {viewscreen_final})
+        local viewscreen_creatures = make_native_widget(
+            'creatures', 'df.widget_container', {viewscreen_tabs})
+        local viewscreen_info = make_native_widget(
+            'info', 'df.widget_container', {viewscreen_creatures})
+        native_root.children = {viewscreen_info}
+        ds.mountNativeScreen()
+
+        local selected = ds.get(game_ui.path)
+
+        assert.equals(viewscreen_final, selected:raw())
+        assert.equals('Viewscreen result', selected:text())
+        assert.same(
+            game_ui.path, selected._descriptor.path_segments)
+    end)
+
     it('rejects different viewscreen and game-UI identities as ambiguous',
             function()
         local game_ui = install_game_ui()
@@ -970,6 +996,7 @@ describe('DwarfSpec public mount commands', function()
                 'root_identity=table#%d+ widget_type="df.widget_text" ' ..
                 'widget_identity=table#%d+}',
             failure)
+        assert.is_true(#failure < 8192)
     end)
 
     it('reports both unavailable roots with the complete original path',
@@ -1044,15 +1071,22 @@ describe('DwarfSpec public mount commands', function()
         local baseline_invalidations = native_invalidation_count
 
         local inspection = ds.inspect(selected)
+        local text = selected:text()
         selected:move_pointer('center')
         local pointer_position = {dfhack.screen.getMousePos()}
         selected:input('GAME_UI_INPUT')
         ds.mouseInput(EMouseButton.LEFT, EInputState.CLICK)
         selected:redraw()
+        local tree = ds.capture_view_tree('game-ui-tree', {
+            native_root=game_ui.creatures,
+        })
 
         assert.equals('Deceased citizens', inspection.text)
+        assert.equals('Deceased citizens', text)
         assert.same(
             {x1=10, y1=5, x2=24, y2=7}, inspection.body)
+        assert.equals('Tabs', tree.children[1].view_id)
+        assert.equals(tree, run.captures['game-ui-tree'])
         assert.same({17, 6}, pointer_position)
         assert.equals('GAME_UI_INPUT',
             simulated_inputs[#simulated_inputs - 1].key)
@@ -1488,6 +1522,7 @@ describe('DwarfSpec public mount commands', function()
                 'call ds.get(path) to select it again', failure, 1, true)
         assert.matches('mount_kind="native" source="native" ' ..
             'captured_identity=table#%d+ current_identity=<nil>', failure)
+        assert.is_true(#failure < 8192)
     end)
 
     it('requires a new native subject after same-path replacement', function()
@@ -1510,6 +1545,7 @@ describe('DwarfSpec public mount commands', function()
         assert.matches(
             'stage=retained_subject_reacquisition',
             failure, 1, true)
+        assert.is_true(#failure < 8192)
         assert.matches('mount_kind="native" source="native" ' ..
             'captured_identity=table#%d+ current_identity=table#%d+',
             failure)

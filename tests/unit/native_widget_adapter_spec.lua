@@ -94,7 +94,7 @@ describe('DwarfSpec native widget adapter', function()
         end
     end)
 
-    it('normalizes live DFHack type descriptors for text inspection',
+    it('normalizes DFHack-style type descriptors for text inspection',
             function()
         local type_descriptor = setmetatable({}, {
             __tostring=function()
@@ -378,6 +378,7 @@ describe('DwarfSpec native widget adapter', function()
         assert.matches(
             'stage=retained_subject_reacquisition',
             removed, 1, true)
+        assert.is_true(#removed < 4096)
 
         located_root = widget(
             'replacement-root', nil, 'df.widget_container')
@@ -390,6 +391,7 @@ describe('DwarfSpec native widget adapter', function()
             'captured_identity=string:stable%-root ' ..
                 'current_identity=string:replacement%-root',
             replaced)
+        assert.is_true(#replaced < 4096)
 
         located_root = first_root
         locator_failure = 'main interface access exploded'
@@ -399,6 +401,7 @@ describe('DwarfSpec native widget adapter', function()
         assert.matches('because reacquisition failed:', failed, 1, true)
         assert.matches(
             'main interface access exploded', failed, 1, true)
+        assert.is_true(#failed < 4096)
     end)
 
     it('checks screen currentness before invoking a root locator', function()
@@ -429,6 +432,7 @@ describe('DwarfSpec native widget adapter', function()
         assert.matches(
             'stage=retained_subject_reacquisition',
             failure, 1, true)
+        assert.is_true(#failure < 4096)
         assert.equals(calls_after_creation, locator_calls)
     end)
 

@@ -68,9 +68,19 @@ describe('immutable DwarfSpec contract enums', function()
     end)
 
     it('exposes immutable numeric enum values', function()
-        assert.equals(1, EFieldMode.PRIMITIVE)
-        assert.equals(5, EFieldMode.SUBSTRUCT)
-        assert.equals(9, EFieldMode.CLASS_METHOD)
+        local observed = {}
+        for name, value in pairs(EFieldMode) do observed[name] = value end
+        assert.same({
+            PRIMITIVE=1,
+            STATIC_STRING=2,
+            POINTER=3,
+            STATIC_ARRAY=4,
+            SUBSTRUCT=5,
+            CONTAINER=6,
+            VECTOR_POINTER=7,
+            OBJECT_METHOD=8,
+            CLASS_METHOD=9,
+        }, observed)
         assert_immutable(EFieldMode, 'SUBSTRUCT')
         assert.equals(
             'structure_traversal',

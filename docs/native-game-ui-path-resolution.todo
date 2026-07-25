@@ -1,6 +1,6 @@
 # Native game-UI path resolution
 
-Status: in progress; Phases 0-4 complete
+Status: in progress; Phases 0-5 complete
 
 Related design:
 
@@ -496,7 +496,7 @@ Exit gate:
 
 ## Phase 5: Unit coverage
 
-☐ Add structural-resolution tests for:
+☒ Add structural-resolution tests for:
   - one field followed by one widget;
   - multiple nested fields followed by multiple widgets;
   - a widget-container intermediate with another declared field;
@@ -509,26 +509,60 @@ Exit gate:
   - path ending on a non-widget structure;
   - path ending on a widget container;
   - exact final leaf widget.
-☐ Prove the resolver never invokes callbacks or enumerates undeclared fields.
-☐ Add dual-root tests for all four success combinations in the compatibility
+☒ Prove the resolver never invokes callbacks or enumerates undeclared fields.
+☒ Add dual-root tests for all four success combinations in the compatibility
   table.
-☐ Add same-identity deduplication coverage.
-☐ Add different-identity ambiguity coverage.
-☐ Add explicit `native_root` bypass coverage.
-☐ Add overlay and component non-regression coverage.
-☐ Add retained-subject tests for stable reacquisition, structural-root
+☒ Add same-identity deduplication coverage.
+☒ Add different-identity ambiguity coverage.
+☒ Add explicit `native_root` bypass coverage.
+☒ Add overlay and component non-regression coverage.
+☒ Add retained-subject tests for stable reacquisition, structural-root
   replacement, final-widget replacement, screen transition, unmount, and
   cleanup.
-☐ Add bounded diagnostic tests for every failure category.
-☐ Add public command tests proving input, mouse input, pointer placement,
+☒ Add bounded diagnostic tests for every failure category.
+☒ Add public command tests proving input, mouse input, pointer placement,
   inspection, text access, redraw, and tree capture continue using the pinned
   native interaction target.
 
 Exit gate:
 
-☐ Focused tests pass.
-☐ The complete unit suite passes.
-☐ No unit test claims to verify DFHack runtime behavior.
+☒ Focused tests pass.
+☒ The complete unit suite passes.
+☒ No unit test claims to verify DFHack runtime behavior.
+
+### Phase 5 evidence
+
+- Resolver fixtures separately cover one field plus one widget, nested fields
+  plus nested widgets, declared fields on widget containers, underscore and
+  digit field names, zero-based widget indices, structural integer rejection,
+  missing fields, scalar and collection intermediates, non-widget endings,
+  final widget containers, and exact leaf widgets.
+- Opaque structural fixtures reject arbitrary indexing. Coverage asserts that
+  missing paths read no fields, invoke no widget lookup, enumerate only the
+  declared type metadata, and execute no input, render, or activation
+  callbacks.
+- Public dual-root coverage includes all compatibility outcomes: neither root
+  succeeds, viewscreen only succeeds, game UI only succeeds, and both roots
+  succeed. Both-root coverage separately proves same-identity deduplication
+  and different-identity ambiguity.
+- Explicit native-root, overlay, and component tests prove automatic game-UI
+  resolution is bypassed for those source contracts.
+- Located native-adapter and public-subject tests cover stable wrapper
+  reacquisition, structural-root removal and replacement, final-widget
+  removal and replacement, pinned-screen transition, unmount, normal cleanup,
+  and exceptional cleanup without native ownership.
+- The bounded-format matrix constructs every immutable native resolution
+  failure kind and then iterates the enum to reject missing cases. Separate
+  bounded tests cover ambiguity, structural-root reacquisition, final-widget
+  reacquisition, stale pinned screens, large declared-field sets, large child
+  sets, and failed diagnostic enrichment.
+- The game-UI public-command test verifies inspection, text, pointer
+  placement, keyboard input, mouse input, redraw, and native tree capture.
+  Input assertions identify the pinned native screen, while redraw and tree
+  capture pass through adapters that revalidate the same interaction target.
+- All Phase 5 coverage uses isolated Lua fixtures and mocked DFHack services.
+  It makes no claim about real DFHack runtime behavior; that evidence remains
+  assigned to Phase 6.
 
 ## Phase 6: Live DFHack acceptance
 
@@ -637,3 +671,9 @@ Exit gate:
 | 2026-07-25 | 4 | `tools/Run-UnitTests.ps1` | 420 successes; 0 failures, errors, or pending |
 | 2026-07-25 | 4 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 228 files |
 | 2026-07-25 | 4 | `git diff --check` | Passed |
+| 2026-07-25 | 5 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec native game%-UI path resolver"` | 25 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 5 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec native widget adapter"` | 20 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 5 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"` | 54 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 5 | `tools/Run-UnitTests.ps1` | 426 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 5 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 228 files |
+| 2026-07-25 | 5 | `git diff --check` | Passed |

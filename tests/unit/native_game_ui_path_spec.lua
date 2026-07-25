@@ -147,6 +147,23 @@ local function fixture()
 end
 
 describe('DwarfSpec native game-UI path resolver', function()
+    it('resolves one structural field followed by one widget', function()
+        local f = fixture()
+        local container = f:object(
+            'container', {widget=true, container=true})
+        local leaf = f:object('leaf', {widget=true})
+        f:add_field(
+            f.main, 'container', EFieldKind.WIDGET, container)
+        f:add_widget(container, 'Leaf', leaf)
+
+        local result = f:resolver():resolve({'container', 'Leaf'})
+
+        assert.is_nil(result.failure)
+        assert.same({'container'}, result.structural_segments)
+        assert.same({'Leaf'}, result.widget_segments)
+        assert.equals(leaf, result.widget)
+    end)
+
     it('splits nested structural fields from the widget suffix', function()
         local f = fixture()
         local info = f:object('info')
@@ -178,6 +195,21 @@ describe('DwarfSpec native game-UI path resolver', function()
             {parent=creatures, segment='Tabs'},
             {parent=tabs, segment='Dead/Missing'},
         }, f.calls.get_widget)
+    end)
+
+    it('resolves declared DF field names containing underscores and digits',
+            function()
+        local f = fixture()
+        local final = f:object('final', {widget=true})
+        f:add_field(
+            f.main, 'unit_list2', EFieldKind.WIDGET, final)
+
+        local result = f:resolver():resolve({'unit_list2'})
+
+        assert.is_nil(result.failure)
+        assert.same({'unit_list2'}, result.structural_segments)
+        assert.same({}, result.widget_segments)
+        assert.equals(final, result.widget)
     end)
 
     it('continues through declared fields on a widget container', function()
@@ -491,6 +523,22 @@ describe('DwarfSpec native game-UI path resolver', function()
             no_identity.failure.kind)
     end)
 
+    it('accepts an exact final widget container', function()
+        local f = fixture()
+        local container = f:object(
+            'container', {widget=true, container=true})
+        f:add_field(
+            f.main, 'container', EFieldKind.WIDGET, container)
+
+        local result = f:resolver():resolve({'container'})
+
+        assert.is_nil(result.failure)
+        assert.equals(container, result.widget)
+        assert.equals(container, result.widget_root)
+        assert.same({'container'}, result.structural_segments)
+        assert.same({}, result.widget_segments)
+    end)
+
     it('never invokes mutation callbacks while resolving failures',
             function()
         local f = fixture()
@@ -520,6 +568,22 @@ describe('DwarfSpec native game-UI path resolver', function()
             EFailureKind.UNSUPPORTED_FIELD,
             result.failure.kind)
         assert.equals(0, f.mutation_count)
+    end)
+
+    it('never enumerates structural objects or undeclared object fields',
+            function()
+        local f = fixture()
+        local declared = f:object('declared')
+        f:add_field(
+            f.main, 'declared', EFieldKind.COMPOUND, declared)
+
+        local result = f:resolver():resolve({'undeclared'})
+
+        assert.equals(EFailureKind.MISSING_FIELD, result.failure.kind)
+        assert.same({'declared'}, result.failure.available_fields)
+        assert.equals(1, #f.calls.get_fields)
+        assert.equals(0, #f.calls.read_field)
+        assert.equals(0, #f.calls.get_widget)
     end)
 
     it('bounds injected error labels in failure records', function()
@@ -656,5 +720,134 @@ describe('DwarfSpec native game-UI path resolver', function()
         assert.equals(dead, result.widget)
         assert.equals(EFailureKind.UNSUPPORTED_FIELD, scalar.failure.kind)
         assert.equals(EFieldKind.SCALAR, scalar.failure.field_kind)
+    end)
+
+    it('formats every failure kind within deterministic bounds', function()
+        local cases = {}
+
+        ---Adds one failed resolution to the bounded-format matrix.
+        ---@param expected DwarfSpecENativeResolutionFailureKind
+        ---@param result dwarfspec.GameUIPathResolution
+        local function add(expected, result)
+            table.insert(cases, {expected=expected, result=result})
+        end
+
+        local invalid = fixture()
+        add(EFailureKind.INVALID_PATH, invalid:resolver():resolve(nil))
+
+        local unavailable = fixture()
+        unavailable.impl.get_main_interface = function() return nil end
+        add(EFailureKind.MAIN_INTERFACE_UNAVAILABLE,
+            unavailable:resolver():resolve({'field'}))
+
+        local no_type = fixture()
+        no_type.impl.get_type = function() error(string.rep('t', 512)) end
+        add(EFailureKind.TYPE_UNAVAILABLE,
+            no_type:resolver():resolve({'field'}))
+
+        local no_metadata = fixture()
+        no_metadata.impl.get_fields =
+            function() error(string.rep('m', 512)) end
+        add(EFailureKind.FIELD_METADATA_UNAVAILABLE,
+            no_metadata:resolver():resolve({'field'}))
+
+        local invalid_segment = fixture()
+        add(EFailureKind.INVALID_STRUCTURAL_SEGMENT,
+            invalid_segment:resolver():resolve({0}))
+
+        local missing = fixture()
+        add(EFailureKind.MISSING_FIELD,
+            missing:resolver():resolve({'missing'}))
+
+        local non_container = fixture()
+        local structure = non_container:object('structure')
+        non_container:add_field(
+            non_container.main, 'structure',
+            EFieldKind.COMPOUND, structure)
+        add(EFailureKind.NON_CONTAINER_VALUE,
+            non_container:resolver():resolve({'structure', 'missing'}))
+
+        local unsupported = fixture()
+        unsupported:add_field(
+            unsupported.main, 'scalar', EFieldKind.SCALAR, 42)
+        add(EFailureKind.UNSUPPORTED_FIELD,
+            unsupported:resolver():resolve({'scalar'}))
+
+        local read_failed = fixture()
+        local read_child = read_failed:object(
+            'read-child', {widget=true})
+        read_failed:add_field(
+            read_failed.main, 'child',
+            EFieldKind.WIDGET, read_child)
+        read_failed.impl.read_field =
+            function() error(string.rep('r', 512)) end
+        add(EFailureKind.FIELD_ACCESS_FAILED,
+            read_failed:resolver():resolve({'child'}))
+
+        local invalid_value = fixture()
+        local invalid_child = invalid_value:object(
+            'invalid-child', {widget=true})
+        invalid_value:add_field(
+            invalid_value.main, 'child',
+            EFieldKind.WIDGET, invalid_child)
+        invalid_value.impl.read_field = function() return 42 end
+        add(EFailureKind.UNSUPPORTED_FIELD_VALUE,
+            invalid_value:resolver():resolve({'child'}))
+
+        local lookup_failed = fixture()
+        local lookup_container = lookup_failed:object(
+            'container', {widget=true, container=true})
+        lookup_failed:add_field(
+            lookup_failed.main, 'container',
+            EFieldKind.WIDGET, lookup_container)
+        lookup_failed.impl.get_widget =
+            function() error(string.rep('w', 512)) end
+        add(EFailureKind.WIDGET_LOOKUP_FAILED,
+            lookup_failed:resolver():resolve({'container', 'Missing'}))
+
+        local widget_missing = fixture()
+        local missing_container = widget_missing:object(
+            'container', {widget=true, container=true})
+        widget_missing:add_field(
+            widget_missing.main, 'container',
+            EFieldKind.WIDGET, missing_container)
+        add(EFailureKind.MISSING_WIDGET,
+            widget_missing:resolver():resolve({'container', 'Missing'}))
+
+        local final_invalid = fixture()
+        local final_structure = final_invalid:object('structure')
+        final_invalid:add_field(
+            final_invalid.main, 'structure',
+            EFieldKind.COMPOUND, final_structure)
+        add(EFailureKind.FINAL_NOT_WIDGET,
+            final_invalid:resolver():resolve({'structure'}))
+
+        local identity_missing = fixture()
+        local identity_widget = identity_missing:object(
+            'widget', {widget=true})
+        identity_missing:add_field(
+            identity_missing.main, 'widget',
+            EFieldKind.WIDGET, identity_widget)
+        identity_missing.identities[identity_widget] = nil
+        add(EFailureKind.IDENTITY_UNAVAILABLE,
+            identity_missing:resolver():resolve({'widget'}))
+
+        local observed = {}
+        for _, case in ipairs(cases) do
+            local result = case.result
+            local formatted =
+                native_game_ui_path.format_failure(result)
+            assert.equals(case.expected, result.failure.kind)
+            assert.is_not_nil(result.failure.stage)
+            assert.matches(
+                'kind=' .. case.expected, formatted, 1, true)
+            assert.is_true(#formatted < 4096)
+            observed[case.expected] = true
+        end
+        for _, kind in pairs(EFailureKind) do
+            assert.is_true(
+                observed[kind],
+                'missing bounded diagnostic case for ' .. kind)
+        end
     end)
 end)
