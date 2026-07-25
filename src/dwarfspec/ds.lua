@@ -112,6 +112,9 @@ local subject_requests_module = load_automation_module(package_root,
     'dwarfspec.subject_requests', '/src/dwarfspec/subject_requests.lua')
 local identity_labels = load_automation_module(package_root,
     'dwarfspec.identity_labels', '/src/dwarfspec/identity_labels.lua')
+local EResolutionStage = load_automation_module(package_root,
+    'dwarfspec.native_resolution_stages',
+    '/src/dwarfspec/native_resolution_stages.lua')
 local EMouseButton = load_automation_module(package_root,
     'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
 local EInputState = load_automation_module(package_root,
@@ -527,9 +530,13 @@ local TestStatus = load_automation_module(package_root,
         local ok, result = pcall(function()
             local view = context.mount_context:resolve_path_segments(
                 path_segments, diagnostic_path, source)
+            local root = source.adapter:root()
             return {
                 view=view,
                 identity=source.adapter:identity(view),
+                type=source.adapter:native_type(view),
+                root_identity=source.adapter:captured_root_identity(),
+                root_type=source.adapter:native_type(root),
             }
         end)
         if ok then
@@ -542,6 +549,45 @@ local TestStatus = load_automation_module(package_root,
             success=false,
             failure=tostring(result),
         }
+    end
+
+    ---Formats a failed game-UI result with optional native child evidence.
+    ---@param mount table
+    ---@param resolution dwarfspec.GameUIPathResolution
+    ---@param diagnostic_path string
+    ---@return string
+    local function format_game_ui_failure(
+            mount, resolution, diagnostic_path)
+        local original =
+            native_game_ui_path_module.format_failure(resolution)
+        if resolution.failure.stage ~=
+                EResolutionStage.WIDGET_TRAVERSAL or
+                resolution.widget_root == nil or
+                #resolution.structural_segments == 0 then
+            return original
+        end
+
+        local source
+        local capture_ok, captured = pcall(function()
+            source = native_subject_source_factory(
+                resolution.widget_root, mount.interaction_target, {
+                    root_locator=native_game_ui_resolver:root_locator(
+                        resolution.structural_segments),
+                    structural_path=resolution.structural_segments,
+                })
+            local _, failure =
+                source.adapter:resolve(resolution.widget_segments)
+            assert(failure,
+                'game-UI diagnostic lookup unexpectedly succeeded')
+            return source.adapter:format_resolution_failure(
+                failure, resolution.widget_segments, diagnostic_path)
+        end)
+        if source and source.adapter and
+                type(source.adapter.cleanup) == 'function' then
+            pcall(source.adapter.cleanup, source.adapter)
+        end
+        if capture_ok then return captured end
+        return original .. '; diagnostic_capture_failed=true'
     end
 
     ---Creates or reuses a located source for one game-UI resolution.
@@ -600,11 +646,23 @@ local TestStatus = load_automation_module(package_root,
             if viewscreen.identity == game_resolution.widget_identity then
                 return viewscreen
             end
-            error(('DwarfSpec get failed: native_path=%s is ambiguous; ' ..
-                'viewscreen_identity=%s game_ui_identity=%s'):format(
+            error(('DwarfSpec get failed: stage=%s native_path=%s is ' ..
+                'ambiguous; viewscreen={root_type=%q root_identity=%s ' ..
+                'widget_type=%q widget_identity=%s}; ' ..
+                'game_ui={root_type=%q root_identity=%s widget_type=%q ' ..
+                'widget_identity=%s}'):format(
+                    EResolutionStage.AMBIGUITY_CHECK,
                     diagnostic_path,
+                    viewscreen.root_type,
+                    identity_labels.of(viewscreen.root_identity),
+                    viewscreen.type,
                     identity_labels.of(viewscreen.identity),
-                    identity_labels.of(game_resolution.widget_identity)), 0)
+                    game_resolution.widget_root_type,
+                    identity_labels.of(
+                        game_resolution.widget_root_identity),
+                    game_resolution.widget_type,
+                    identity_labels.of(
+                        game_resolution.widget_identity)), 0)
         end
         if viewscreen.success then return viewscreen end
         if game_success then
@@ -617,13 +675,15 @@ local TestStatus = load_automation_module(package_root,
             game_failure = bounded_text(game_resolution)
         elseif type(game_resolution) == 'table' and
                 game_resolution.failure then
-            game_failure =
-                native_game_ui_path_module.format_failure(game_resolution)
+            game_failure = format_game_ui_failure(
+                mount, game_resolution, diagnostic_path)
         else
             game_failure = 'invalid game-UI resolver result'
         end
-        error(('DwarfSpec get failed: native_path=%s was unavailable from ' ..
+        error(('DwarfSpec get failed: stage=%s native_path=%s was ' ..
+            'unavailable from ' ..
             'both native roots; viewscreen={%s}; game_ui={%s}'):format(
+                EResolutionStage.AMBIGUITY_CHECK,
                 diagnostic_path, bounded_text(viewscreen.failure),
                 bounded_text(game_failure)), 0)
     end

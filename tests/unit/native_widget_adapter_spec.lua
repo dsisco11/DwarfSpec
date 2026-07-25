@@ -211,6 +211,11 @@ describe('DwarfSpec native widget adapter', function()
         assert.equals(first, second)
         assert.matches('native_path={"Parent", "Missing"}',
             first, 1, true)
+        assert.matches('stage=widget_traversal', first, 1, true)
+        assert.matches('structural_prefix={}', first, 1, true)
+        assert.matches(
+            'widget_suffix={"Parent", "Missing"}', first, 1, true)
+        assert.matches('kind=missing_widget', first, 1, true)
         assert.matches('missing segment%[2%]="Missing"', first)
         assert.matches('parent_name="Parent"', first, 1, true)
         assert.matches('parent_type="df.widget_container"',
@@ -221,6 +226,40 @@ describe('DwarfSpec native widget adapter', function()
             first, 1, true)
         assert.matches('... (+3 more)', first, 1, true)
         assert.is_nil(first:find('Child12', 1, true))
+        assert.is_true(#first < 4096)
+    end)
+
+    it('preserves missing-widget evidence when child capture fails',
+            function()
+        local parent = widget(
+            'parent', 'Parent', 'df.widget_container')
+        root.children = {parent}
+        local path = {'Parent', 'Missing'}
+        local resolved, failure = adapter:resolve(path)
+        adapter._get_children = function()
+            error('diagnostic child enumeration failed')
+        end
+
+        local formatted =
+            adapter:format_resolution_failure(failure, path)
+
+        assert.is_nil(resolved)
+        assert.matches('stage=widget_traversal', formatted, 1, true)
+        assert.matches('kind=missing_widget', formatted, 1, true)
+        assert.matches('missing segment%[2%]="Missing"', formatted)
+        assert.matches(
+            'diagnostic_capture_failed=true', formatted, 1, true)
+        assert.is_nil(formatted:find(
+            'diagnostic child enumeration failed', 1, true))
+
+        current = {}
+        local stale_capture =
+            adapter:format_resolution_failure(failure, path)
+        assert.matches('kind=missing_widget', stale_capture, 1, true)
+        assert.matches(
+            'diagnostic_capture_failed=true', stale_capture, 1, true)
+        assert.is_nil(stale_capture:find(
+            'pinned viewscreen is no longer current', 1, true))
     end)
 
     it('validates the pinned screen before invoking native services',
@@ -336,6 +375,9 @@ describe('DwarfSpec native widget adapter', function()
         assert.is_false(removed_ok)
         assert.matches(
             'structural root no longer resolves', removed, 1, true)
+        assert.matches(
+            'stage=retained_subject_reacquisition',
+            removed, 1, true)
 
         located_root = widget(
             'replacement-root', nil, 'df.widget_container')
@@ -384,6 +426,9 @@ describe('DwarfSpec native widget adapter', function()
         assert.is_false(ok)
         assert.matches(
             'pinned viewscreen is no longer current', failure, 1, true)
+        assert.matches(
+            'stage=retained_subject_reacquisition',
+            failure, 1, true)
         assert.equals(calls_after_creation, locator_calls)
     end)
 

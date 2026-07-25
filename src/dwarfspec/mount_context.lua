@@ -2,6 +2,8 @@
 
 local subject_paths = require('dwarfspec.subject_paths')
 local ESubjectSource = require('dwarfspec.subject_sources')
+local EResolutionStage =
+    require('dwarfspec.native_resolution_stages')
 local identity_labels = require('dwarfspec.identity_labels')
 
 local M = {}
@@ -401,7 +403,8 @@ function M.new(options)
                 type(adapter.format_resolution_failure) == 'function' then
             assert(false, ('DwarfSpec get failed: mount=%s %s')
                 :format(tostring(mount.id),
-                    adapter:format_resolution_failure(failure, segments)))
+                    adapter:format_resolution_failure(
+                        failure, segments, diagnostic_path)))
         end
         local resolved = {}
         for index = 1, failure.index - 1 do
@@ -546,21 +549,28 @@ function M.new(options)
     function context:resolve_subject(subject, operation)
         local mount = self.current
         assert(mount and mount.alive,
-            ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
-                'no current mount exists'):format(operation,
-                    subject.control_path, tostring(subject.mount_id)))
+            ('stage=%s DwarfSpec %s rejected stale subject ' ..
+                'control_path=%q from mount %s; no current mount exists')
+                :format(
+                    EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                    operation, subject.control_path,
+                    tostring(subject.mount_id)))
         assert(self.subject_mounts[subject] == mount.id and
             subject.mount_id == mount.id,
-            ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
-                'current mount is %s'):format(operation, subject.control_path,
+            ('stage=%s DwarfSpec %s rejected stale subject ' ..
+                'control_path=%q from mount %s; current mount is %s')
+                :format(
+                    EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                    operation, subject.control_path,
                     tostring(subject.mount_id), tostring(mount.id)))
         local descriptor = subject._descriptor
         assert(descriptor and mount.subject_sources[descriptor.source] and
             descriptor.adapter == subject_adapter(
                 mount, descriptor.source),
-            ('DwarfSpec %s subject control_path=%q mount=%s descriptor ' ..
-            'is no longer available'):format(operation,
-                subject.control_path, tostring(subject.mount_id)))
+            ('stage=%s DwarfSpec %s subject control_path=%q mount=%s ' ..
+            'descriptor is no longer available'):format(
+                EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                operation, subject.control_path, tostring(subject.mount_id)))
         if mount.category == 'native' then
             mount.interaction_target:assert_current(operation, {
                 mount_kind=mount.category,
@@ -572,11 +582,14 @@ function M.new(options)
         local view = descriptor.adapter:resolve(descriptor.path_segments)
         if uses_native_subjects(mount, descriptor.source) then
             if not view then
-                error(('DwarfSpec %s rejected stale native subject path=%s ' ..
+                error(('stage=%s DwarfSpec %s rejected stale native ' ..
+                    'subject path=%s ' ..
                     'mount=%s because the widget no longer resolves; call ' ..
                     'ds.get(path) to select it again; mount_kind=%q ' ..
                     'source=%q captured_identity=%s current_identity=%s')
-                    :format(operation, subject.control_path,
+                    :format(
+                        EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                        operation, subject.control_path,
                         tostring(subject.mount_id), mount.category,
                         source_kind(descriptor.source),
                         identity_labels.of(descriptor.captured_identity),
@@ -584,22 +597,28 @@ function M.new(options)
             end
             local current_identity = descriptor.adapter:identity(view)
             if current_identity ~= descriptor.captured_identity then
-                error(('DwarfSpec %s rejected stale native subject path=%s ' ..
+                error(('stage=%s DwarfSpec %s rejected stale native ' ..
+                    'subject path=%s ' ..
                     'mount=%s because the widget was replaced; call ' ..
                     'ds.get(path) to select the replacement; mount_kind=%q ' ..
                     'source=%q captured_identity=%s current_identity=%s')
-                    :format(operation, subject.control_path,
+                    :format(
+                        EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                        operation, subject.control_path,
                         tostring(subject.mount_id), mount.category,
                         source_kind(descriptor.source),
                         identity_labels.of(descriptor.captured_identity),
                         identity_labels.of(current_identity)), 0)
             end
             if not descriptor.adapter:contains(view) then
-                error(('DwarfSpec %s rejected native subject path=%s ' ..
+                error(('stage=%s DwarfSpec %s rejected native subject ' ..
+                    'path=%s ' ..
                     'mount=%s because the widget is outside the pinned ' ..
                     'hierarchy; mount_kind=%q source=%q captured_identity=%s ' ..
-                    'current_identity=%s'):format(operation,
-                        subject.control_path, tostring(subject.mount_id),
+                    'current_identity=%s'):format(
+                        EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                        operation, subject.control_path,
+                        tostring(subject.mount_id),
                         mount.category, source_kind(descriptor.source),
                         identity_labels.of(descriptor.captured_identity),
                         identity_labels.of(current_identity)), 0)

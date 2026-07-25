@@ -1,7 +1,12 @@
 -- Native DF widget traversal and retained typed-reference identity.
 
 local ESubjectSource = require('dwarfspec.subject_sources')
+local EResolutionStage =
+    require('dwarfspec.native_resolution_stages')
+local EResolutionFailureKind =
+    require('dwarfspec.native_resolution_failure_kinds')
 local identity_labels = require('dwarfspec.identity_labels')
+local subject_paths = require('dwarfspec.subject_paths')
 
 local M = {}
 
@@ -192,35 +197,46 @@ end
 local function require_root(self, operation)
     assert(not self._cleaned and self._root ~= nil and
         self._interaction_target,
-        operation .. ' native subject source is no longer available')
+        ('stage=%s %s native subject source is no longer available')
+            :format(
+                EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                operation))
     self._interaction_target:assert_current(operation)
     if self._root_locator then
         local located_ok, current_root = pcall(self._root_locator)
         self._interaction_target:assert_current(operation)
         if not located_ok then
-            error(('%s rejected stale native structural root path=%s ' ..
+            error(('stage=%s %s rejected stale native structural root ' ..
+                'path=%s ' ..
                 'because reacquisition failed: %s'):format(
+                    EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
                     operation, format_path(self._structural_path),
                     bounded_label(current_root)), 0)
         end
         if current_root == nil then
-            error(('%s rejected stale native structural root path=%s ' ..
+            error(('stage=%s %s rejected stale native structural root ' ..
+                'path=%s ' ..
                 'because the structural root no longer resolves'):format(
+                    EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
                     operation, format_path(self._structural_path)), 0)
         end
         local identity_ok, current_identity =
             pcall(self._identity_of, current_root)
         self._interaction_target:assert_current(operation)
         if not identity_ok or current_identity == nil then
-            error(('%s rejected stale native structural root path=%s ' ..
+            error(('stage=%s %s rejected stale native structural root ' ..
+                'path=%s ' ..
                 'because its identity is unavailable: %s'):format(
+                    EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
                     operation, format_path(self._structural_path),
                     bounded_label(current_identity)), 0)
         end
         if current_identity ~= self._root_identity then
-            error(('%s rejected stale native structural root path=%s ' ..
+            error(('stage=%s %s rejected stale native structural root ' ..
+                'path=%s ' ..
                 'because the structural root was replaced; ' ..
                 'captured_identity=%s current_identity=%s'):format(
+                    EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
                     operation, format_path(self._structural_path),
                     identity_labels.of(self._root_identity),
                     identity_labels.of(current_identity)), 0)
@@ -626,48 +642,64 @@ end
 ---Formats a bounded deterministic child summary for one failed lookup.
 ---@param failure table
 ---@param path_segments dwarfspec.NativePathSegment[]
+---@param diagnostic_path string|nil
 ---@return string
 function NativeWidgetAdapter:format_resolution_failure(
-        failure, path_segments)
-    require_root(self, 'native lookup diagnostics')
-    local parent = failure.parent
-    local parent_name = self:name(parent) or '<unnamed>'
-    local parent_type = self:native_type(parent)
-    local children = self:children(parent)
-    local indexed = {}
-    local named = {}
-    local named_total = 0
-    for index, child in ipairs(children) do
-        local zero_index = index - 1
-        local child_name = self:name(child)
-        local child_type = self:native_type(child)
-        if index <= self._child_summary_limit then
-            table.insert(indexed, ('%d:{name=%q,type=%q}'):format(
-                zero_index, bounded_label(child_name or '<unnamed>'),
-                child_type))
-        end
-        if child_name and child_name ~= '' then
-            named_total = named_total + 1
-            if #named < self._child_summary_limit then
-                table.insert(named, ('%q:{index=%d,type=%q}'):format(
-                    bounded_label(child_name), zero_index, child_type))
+        failure, path_segments, diagnostic_path)
+    local original_path = diagnostic_path or
+        subject_paths.format_native(path_segments)
+    local structural_path = self._structural_path or {}
+    local base = ('stage=%s native_path=%s structural_prefix=%s ' ..
+        'widget_suffix=%s kind=%s missing segment[%d]=%s'):format(
+            EResolutionStage.WIDGET_TRAVERSAL,
+            original_path,
+            subject_paths.format_native(structural_path),
+            subject_paths.format_native(path_segments),
+            EResolutionFailureKind.MISSING_WIDGET,
+            failure.index,
+            format_segment(failure.segment))
+    local capture_ok, captured = pcall(function()
+        require_root(self, 'native lookup diagnostics')
+        local parent = failure.parent
+        local parent_name = self:name(parent) or '<unnamed>'
+        local parent_type = self:native_type(parent)
+        local children = self:children(parent)
+        local indexed = {}
+        local named = {}
+        local named_total = 0
+        for index, child in ipairs(children) do
+            local zero_index = index - 1
+            local child_name = self:name(child)
+            local child_type = self:native_type(child)
+            if index <= self._child_summary_limit then
+                table.insert(indexed, ('%d:{name=%q,type=%q}'):format(
+                    zero_index, bounded_label(child_name or '<unnamed>'),
+                    child_type))
+            end
+            if child_name and child_name ~= '' then
+                named_total = named_total + 1
+                if #named < self._child_summary_limit then
+                    table.insert(named, ('%q:{index=%d,type=%q}'):format(
+                        bounded_label(child_name), zero_index, child_type))
+                end
             end
         end
-    end
-    if #children > self._child_summary_limit then
-        table.insert(indexed, ('... (+%d more)'):format(
-            #children - self._child_summary_limit))
-    end
-    if named_total > self._child_summary_limit then
-        table.insert(named, ('... (+%d more)'):format(
-            named_total - self._child_summary_limit))
-    end
-    return ('native_path=%s missing segment[%d]=%s; parent_name=%q ' ..
-        'parent_type=%q; named children=[%s]; indexed children=[%s]')
-        :format(format_path(path_segments), failure.index,
-            format_segment(failure.segment), bounded_label(parent_name),
-            parent_type, table.concat(named, ', '),
-            table.concat(indexed, ', '))
+        if #children > self._child_summary_limit then
+            table.insert(indexed, ('... (+%d more)'):format(
+                #children - self._child_summary_limit))
+        end
+        if named_total > self._child_summary_limit then
+            table.insert(named, ('... (+%d more)'):format(
+                named_total - self._child_summary_limit))
+        end
+        return ('%s; parent_name=%q ' ..
+            'parent_type=%q; named children=[%s]; indexed children=[%s]')
+            :format(base, bounded_label(parent_name),
+                parent_type, table.concat(named, ', '),
+                table.concat(indexed, ', '))
+    end)
+    if capture_ok then return captured end
+    return base .. '; diagnostic_capture_failed=true'
 end
 
 ---Releases the borrowed native root, services, and retained identities.

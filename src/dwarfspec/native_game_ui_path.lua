@@ -1,6 +1,11 @@
 -- Deterministic structural-to-widget path resolution for native game UI.
 
 local immutable_enum = require('dwarfspec.immutable_enum')
+local EFailureKind =
+    require('dwarfspec.native_resolution_failure_kinds')
+local EResolutionStage =
+    require('dwarfspec.native_resolution_stages')
+local subject_paths = require('dwarfspec.subject_paths')
 
 local M = {}
 
@@ -19,6 +24,7 @@ M.EFieldMode = immutable_enum.define_numeric({
     OBJECT_METHOD=8,
     CLASS_METHOD=9,
 })
+M.EResolutionStage = EResolutionStage
 
 ---@enum DwarfSpecEGameUIFieldKind
 M.EFieldKind = immutable_enum.define({
@@ -30,28 +36,14 @@ M.EFieldKind = immutable_enum.define({
     POINTER='pointer',
 })
 
----@enum DwarfSpecEGameUIPathFailureKind
-M.EFailureKind = immutable_enum.define({
-    INVALID_PATH='invalid_path',
-    MAIN_INTERFACE_UNAVAILABLE='main_interface_unavailable',
-    TYPE_UNAVAILABLE='type_unavailable',
-    FIELD_METADATA_UNAVAILABLE='field_metadata_unavailable',
-    INVALID_STRUCTURAL_SEGMENT='invalid_structural_segment',
-    MISSING_FIELD='missing_field',
-    UNSUPPORTED_FIELD='unsupported_field',
-    FIELD_ACCESS_FAILED='field_access_failed',
-    UNSUPPORTED_FIELD_VALUE='unsupported_field_value',
-    WIDGET_LOOKUP_FAILED='widget_lookup_failed',
-    MISSING_WIDGET='missing_widget',
-    FINAL_NOT_WIDGET='final_not_widget',
-    IDENTITY_UNAVAILABLE='identity_unavailable',
-})
+M.EFailureKind = EFailureKind
 
 local field_kind_members = {}
 for _, value in pairs(M.EFieldKind) do field_kind_members[value] = true end
 
 ---@class dwarfspec.GameUIPathFailure
----@field kind DwarfSpecEGameUIPathFailureKind
+---@field kind DwarfSpecENativeResolutionFailureKind
+---@field stage DwarfSpecENativeResolutionStage
 ---@field index integer|nil
 ---@field segment string|integer|nil
 ---@field current_type string|nil
@@ -66,8 +58,10 @@ for _, value in pairs(M.EFieldKind) do field_kind_members[value] = true end
 ---@field widget_segments dwarfspec.NativePath
 ---@field widget_root any|nil
 ---@field widget_root_identity any|nil
+---@field widget_root_type string|nil
 ---@field widget any|nil
 ---@field widget_identity any|nil
+---@field widget_type string|nil
 ---@field failure dwarfspec.GameUIPathFailure|nil
 
 ---@class dwarfspec.NativeGameUIPathResolver
@@ -95,7 +89,8 @@ end
 ---@param value any
 ---@return string
 local function bounded_label(value)
-    local label = tostring(value)
+    local ok, label = pcall(tostring, value)
+    if not ok then return '<unavailable>' end
     if #label <= LABEL_LIMIT then return label end
     return label:sub(1, LABEL_LIMIT - 3) .. '...'
 end
@@ -116,6 +111,10 @@ end
 local function safe_type_label(self, value)
     local ok, type_descriptor = pcall(self._get_type, value)
     if not ok or type_descriptor == nil then return nil end
+    if type(type_descriptor) == 'table' then
+        type_descriptor =
+            type_descriptor._name or type_descriptor.name or type_descriptor
+    end
     return bounded_label(type_descriptor)
 end
 
@@ -129,35 +128,56 @@ local function new_resolution(path)
         widget_segments={},
         widget_root=nil,
         widget_root_identity=nil,
+        widget_root_type=nil,
         widget=nil,
         widget_identity=nil,
+        widget_type=nil,
         failure=nil,
     }
 end
 
 ---Attaches one expected failure to a resolution record.
 ---@param resolution dwarfspec.GameUIPathResolution
----@param kind DwarfSpecEGameUIPathFailureKind
+---@param kind DwarfSpecENativeResolutionFailureKind
 ---@param values table|nil
 ---@return dwarfspec.GameUIPathResolution
 local function fail(resolution, kind, values)
-    local failure = {kind=kind}
+    local failure = {
+        kind=kind,
+        stage=#resolution.widget_segments > 0 and
+            EResolutionStage.WIDGET_TRAVERSAL or
+            EResolutionStage.STRUCTURE_TRAVERSAL,
+    }
     for name, value in pairs(values or {}) do failure[name] = value end
     resolution.failure = failure
     return resolution
 end
 
----Returns bounded deterministic declared-field names for diagnostics.
+---Returns bounded declared-field names in their documented definition order.
 ---@param fields table
+---@param field_order string[]|nil
 ---@return string[], integer
-local function summarize_fields(fields)
+local function summarize_fields(fields, field_order)
     local names = {}
-    for name, metadata in pairs(fields) do
-        if type(name) == 'string' and type(metadata) == 'table' then
+    local seen = {}
+    for _, name in ipairs(field_order or {}) do
+        if type(name) == 'string' and type(fields[name]) == 'table' and
+                not seen[name] then
             table.insert(names, bounded_label(name))
+            seen[name] = true
         end
     end
-    table.sort(names)
+    local remaining = {}
+    for name, metadata in pairs(fields) do
+        if type(name) == 'string' and type(metadata) == 'table' and
+                not seen[name] then
+            table.insert(remaining, name)
+        end
+    end
+    table.sort(remaining)
+    for _, name in ipairs(remaining) do
+        table.insert(names, bounded_label(name))
+    end
     local summary = {}
     for index = 1, math.min(#names, FIELD_SUMMARY_LIMIT) do
         summary[index] = names[index]
@@ -199,7 +219,7 @@ end
 ---@param resolution dwarfspec.GameUIPathResolution
 ---@param index integer
 ---@param segment string|integer
----@return any|nil, table|nil
+---@return any|nil, table|nil, string[]|nil
 local function declared_fields(self, current, resolution, index, segment)
     local type_ok, type_descriptor = pcall(self._get_type, current)
     if not type_ok or type_descriptor == nil then
@@ -208,9 +228,10 @@ local function declared_fields(self, current, resolution, index, segment)
             segment=segment,
             detail=bounded_label(type_descriptor),
         })
-        return nil
+        return nil, nil, nil
     end
-    local fields_ok, fields = pcall(self._get_fields, type_descriptor)
+    local fields_ok, fields, field_order =
+        pcall(self._get_fields, type_descriptor)
     if not fields_ok or type(fields) ~= 'table' then
         fail(resolution, M.EFailureKind.FIELD_METADATA_UNAVAILABLE, {
             index=index,
@@ -218,9 +239,10 @@ local function declared_fields(self, current, resolution, index, segment)
             current_type=bounded_label(type_descriptor),
             detail=bounded_label(fields),
         })
-        return nil
+        return nil, nil, nil
     end
-    return type_descriptor, fields
+    return type_descriptor, fields,
+        type(field_order) == 'table' and field_order or nil
 end
 
 ---Returns whether one declared field kind can continue structural traversal.
@@ -241,9 +263,12 @@ end
 local function resolve_widgets(
         self, current, path, start_index, resolution)
     resolution.widget_root = current
+    resolution.widget_root_type = safe_type_label(self, current)
+    for index = start_index, #path do
+        table.insert(resolution.widget_segments, path[index])
+    end
     for index = start_index, #path do
         local segment = path[index]
-        table.insert(resolution.widget_segments, segment)
         local lookup_ok, child = pcall(self._get_widget, current, segment)
         if not lookup_ok then
             return fail(resolution, M.EFailureKind.WIDGET_LOOKUP_FAILED, {
@@ -285,6 +310,7 @@ local function capture_identities(self, resolution)
     end
     resolution.widget_root_identity = root_identity
     resolution.widget_identity = widget_identity
+    resolution.widget_type = safe_type_label(self, resolution.widget)
     return resolution
 end
 
@@ -326,7 +352,7 @@ function NativeGameUIPathResolver:resolve(path)
                 })
         end
 
-        local type_descriptor, fields =
+        local type_descriptor, fields, field_order =
             declared_fields(self, current, resolution, index, segment)
         if not type_descriptor then return resolution end
         local metadata = fields[segment]
@@ -375,8 +401,12 @@ function NativeGameUIPathResolver:resolve(path)
                 self, current, normalized, index, resolution)
             break
         else
-            local available, omitted = summarize_fields(fields)
-            return fail(resolution, M.EFailureKind.MISSING_FIELD, {
+            local available, omitted =
+                summarize_fields(fields, field_order)
+            local failure_kind = #resolution.structural_segments > 0 and
+                M.EFailureKind.NON_CONTAINER_VALUE or
+                M.EFailureKind.MISSING_FIELD
+            return fail(resolution, failure_kind, {
                 index=index,
                 segment=segment,
                 current_type=bounded_label(type_descriptor),
@@ -388,6 +418,7 @@ function NativeGameUIPathResolver:resolve(path)
 
     if resolution.widget == nil then
         resolution.widget_root = current
+        resolution.widget_root_type = safe_type_label(self, current)
         resolution.widget = current
     end
     if not safe_predicate(self._is_widget, resolution.widget) then
@@ -428,6 +459,11 @@ function M.format_failure(resolution)
     local failure = resolution.failure
     local parts = {
         'kind=' .. bounded_label(failure.kind),
+        'stage=' .. bounded_label(failure.stage),
+        'structural_prefix=' ..
+            subject_paths.format_native(resolution.structural_segments),
+        'widget_suffix=' ..
+            subject_paths.format_native(resolution.widget_segments),
     }
     if failure.index ~= nil then
         table.insert(parts, 'index=' .. bounded_label(failure.index))
@@ -586,6 +622,7 @@ function M.new_dfhack(options)
         local declared = assert(type_descriptor._fields,
             'DF type descriptor does not expose _fields')
         local result = {}
+        local order = {}
         for name, metadata in pairs(declared) do
             if type(name) == 'string' and type(metadata) == 'table' then
                 result[name] = {
@@ -593,9 +630,10 @@ function M.new_dfhack(options)
                     kind=classify_df_field(metadata),
                     df_metadata=metadata,
                 }
+                table.insert(order, name)
             end
         end
-        return result
+        return result, order
     end
 
     ---Reads one exact field whose normalized metadata was already found.

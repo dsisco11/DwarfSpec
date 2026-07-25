@@ -5,6 +5,7 @@ local native_game_ui_path = require('dwarfspec.native_game_ui_path')
 local EFieldMode = native_game_ui_path.EFieldMode
 local EFieldKind = native_game_ui_path.EFieldKind
 local EFailureKind = native_game_ui_path.EFailureKind
+local EResolutionStage = native_game_ui_path.EResolutionStage
 
 ---Creates one declared field description.
 ---@param name string
@@ -20,6 +21,7 @@ local function fixture()
     local state = {
         types={},
         fields={},
+        field_orders={},
         values={},
         widgets={},
         containers={},
@@ -48,6 +50,10 @@ local function fixture()
         local type_name = options.type_name or ('type.' .. id)
         self.types[value] = type_name
         self.fields[type_name] = options.fields or {}
+        self.field_orders[type_name] = {}
+        for name in pairs(options.fields or {}) do
+            table.insert(self.field_orders[type_name], name)
+        end
         self.values[value] = {}
         self.widgets[value] = options.widget == true
         self.containers[value] = options.container == true
@@ -65,6 +71,7 @@ local function fixture()
     function state:add_field(parent, name, kind, value)
         local metadata = field(name, kind)
         self.fields[self.types[parent]][name] = metadata
+        table.insert(self.field_orders[self.types[parent]], name)
         self.values[parent][metadata] = value
         return metadata
     end
@@ -88,7 +95,7 @@ local function fixture()
         end,
         get_fields=function(type_name)
             table.insert(state.calls.get_fields, type_name)
-            return state.fields[type_name]
+            return state.fields[type_name], state.field_orders[type_name]
         end,
         read_field=function(parent, metadata)
             table.insert(state.calls.read_field, {
@@ -348,6 +355,56 @@ describe('DwarfSpec native game-UI path resolver', function()
         assert.equals(3, result.failure.omitted_field_count)
         assert.equals(0, #f.calls.read_field)
         assert.equals(0, #f.calls.get_widget)
+        assert.is_true(
+            #native_game_ui_path.format_failure(result) < 1024)
+    end)
+
+    it('preserves declared field order in bounded diagnostics', function()
+        local f = fixture()
+        for _, name in ipairs({'zeta', 'alpha', 'middle'}) do
+            f:add_field(
+                f.main, name, EFieldKind.COMPOUND,
+                f:object('value-' .. name))
+        end
+
+        local result = f:resolver():resolve({'missing'})
+
+        assert.same(
+            {'zeta', 'alpha', 'middle'},
+            result.failure.available_fields)
+    end)
+
+    it('labels traversal stages and separates both path portions',
+            function()
+        local f = fixture()
+        local structure = f:object('structure')
+        local container = f:object(
+            'container', {widget=true, container=true})
+        f:add_field(
+            f.main, 'structure', EFieldKind.COMPOUND, structure)
+        f:add_field(
+            f.main, 'container', EFieldKind.WIDGET, container)
+
+        local structural =
+            f:resolver():resolve({'structure', 'missing'})
+        local widget =
+            f:resolver():resolve({'container', 'Missing', 'Nested'})
+        local formatted = native_game_ui_path.format_failure(widget)
+
+        assert.equals(
+            EFailureKind.NON_CONTAINER_VALUE,
+            structural.failure.kind)
+        assert.equals(
+            EResolutionStage.STRUCTURE_TRAVERSAL,
+            structural.failure.stage)
+        assert.equals(
+            EResolutionStage.WIDGET_TRAVERSAL,
+            widget.failure.stage)
+        assert.matches(
+            'structural_prefix={"container"}', formatted, 1, true)
+        assert.matches(
+            'widget_suffix={"Missing", "Nested"}', formatted, 1, true)
+        assert.matches('current_type=type.container', formatted, 1, true)
     end)
 
     it('reports unavailable roots, types, and declared metadata',
@@ -358,6 +415,9 @@ describe('DwarfSpec native game-UI path resolver', function()
         assert.equals(
             EFailureKind.MAIN_INTERFACE_UNAVAILABLE,
             unavailable.failure.kind)
+        assert.equals(
+            EResolutionStage.STRUCTURE_TRAVERSAL,
+            unavailable.failure.stage)
 
         f.impl.get_main_interface = function() return f.main end
         f.impl.get_type = function() error('type failure') end

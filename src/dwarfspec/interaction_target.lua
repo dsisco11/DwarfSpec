@@ -2,7 +2,24 @@
 
 local M = {}
 
+local EResolutionStage =
+    require('dwarfspec.native_resolution_stages')
 local identity_labels = require('dwarfspec.identity_labels')
+
+local DIAGNOSTIC_LABEL_LIMIT = 256
+
+---Returns a bounded scalar diagnostic without dumping compound values.
+---@param value any
+---@return string
+local function bounded_diagnostic(value)
+    if type(value) == 'table' or type(value) == 'userdata' then
+        return identity_labels.of(value)
+    end
+    local ok, label = pcall(tostring, value)
+    if not ok then return '<unavailable>' end
+    if #label <= DIAGNOSTIC_LABEL_LIMIT then return label end
+    return label:sub(1, DIAGNOSTIC_LABEL_LIMIT - 3) .. '...'
+end
 
 ---@class dwarfspec.InteractionTarget
 ---@field _screen table|nil
@@ -90,11 +107,14 @@ function BorrowedNativeInteractionTarget:assert_current(
         'interaction operation must be a nonempty string')
     assert(not self._cleaned and self._screen and
         self._get_current_viewscreen,
-        operation .. ' native screen is no longer available')
+        ('stage=%s %s native screen is no longer available'):format(
+            EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+            operation))
     local ok, current = pcall(self._get_current_viewscreen)
     assert(ok,
-        ('DwarfSpec %s could not query the current viewscreen: %s')
-            :format(operation, tostring(current)))
+        ('stage=%s DwarfSpec %s could not query the current viewscreen: %s')
+            :format(EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                operation, bounded_diagnostic(current)))
     local context = ''
     if diagnostics then
         context = (' mount_kind=%q source=%q path=%q mount=%s;')
@@ -103,9 +123,12 @@ function BorrowedNativeInteractionTarget:assert_current(
                 tostring(diagnostics.mount_id))
     end
     assert(current == self._screen,
-        ('DwarfSpec %s rejected stale native-screen mount;%s pinned ' ..
+        ('stage=%s DwarfSpec %s rejected stale native-screen mount;%s ' ..
+        'pinned ' ..
         'viewscreen is no longer current; captured_screen=%s ' ..
-        'current_screen=%s'):format(operation, context,
+        'current_screen=%s'):format(
+            EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+            operation, context,
             identity_labels.of(self._screen),
             identity_labels.of(current)))
     return self._screen

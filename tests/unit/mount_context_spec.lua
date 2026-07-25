@@ -588,6 +588,7 @@ describe('DwarfSpec mount context', function()
         assert.equals(2, context.current.id)
         assert.equals('second', second_subject:raw().name)
         assert.has_error(function() first_subject:raw() end,
+            'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; current mount is 2')
         local invoked = false
@@ -626,6 +627,7 @@ describe('DwarfSpec mount context', function()
             'unmount:explicit', 'settle:explicit',
         }, events)
         assert.has_error(function() root_subject:raw() end,
+            'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; no current mount exists')
         assert.same({

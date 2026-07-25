@@ -99,6 +99,7 @@ describe('borrowed native-screen interaction target', function()
         assert.is_false(target:cleanup())
         assert.equals(0, screen.dismissals)
         assert.has_error(function() target:native_screen('input') end,
+            'stage=retained_subject_reacquisition ' ..
             'input native screen is no longer available')
     end)
 

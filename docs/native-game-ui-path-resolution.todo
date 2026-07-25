@@ -1,6 +1,6 @@
 # Native game-UI path resolution
 
-Status: in progress; Phases 0-3 complete
+Status: in progress; Phases 0-4 complete
 
 Related design:
 
@@ -436,7 +436,7 @@ Exit gate:
 
 ## Phase 4: Diagnostics and failure contracts
 
-☐ Distinguish these failure categories explicitly:
+☒ Distinguish these failure categories explicitly:
   - unavailable `df.global.game.main_interface`;
   - missing declared structural field;
   - invalid structural segment type;
@@ -448,21 +448,51 @@ Exit gate:
   - replaced structural root;
   - replaced final widget;
   - stale pinned viewscreen.
-☐ Include the structural prefix and widget suffix separately in diagnostics.
-☐ Include the current DF type at the failing structural segment.
-☐ Include a bounded ordered list of available declared data fields.
-☐ Continue using bounded native-child summaries after widget traversal starts.
-☐ Include both candidate roots, types, and stable identity labels in ambiguity
+☒ Include the structural prefix and widget suffix separately in diagnostics.
+☒ Include the current DF type at the failing structural segment.
+☒ Include a bounded ordered list of available declared data fields.
+☒ Continue using bounded native-child summaries after widget traversal starts.
+☒ Include both candidate roots, types, and stable identity labels in ambiguity
   diagnostics.
-☐ Avoid dumping arbitrary DF field values or entire interface structures.
-☐ Preserve the original failure when diagnostic capture also fails.
+☒ Avoid dumping arbitrary DF field values or entire interface structures.
+☒ Preserve the original failure when diagnostic capture also fails.
 
 Exit gate:
 
-☐ Every failure identifies whether it occurred during structure traversal,
+☒ Every failure identifies whether it occurred during structure traversal,
   widget traversal, ambiguity checking, or retained-subject reacquisition.
-☐ Diagnostic size remains bounded for all injected large-field and
+☒ Diagnostic size remains bounded for all injected large-field and
   large-widget fixtures.
+
+### Phase 4 evidence
+
+- The enums in `native_resolution_stages.lua` and
+  `native_resolution_failure_kinds.lua` provide immutable identifiers shared
+  by structural traversal, widget traversal, ambiguity checks, and
+  retained-subject reacquisition. Every expected resolver failure record
+  receives one stage and one failure kind.
+- Structural diagnostics include separate copied structural and widget path
+  portions, the current bounded DF type when available, the exact failure
+  kind, and declared field names in documented definition order. Field names
+  are capped at 12 entries with an omitted count.
+- `NON_CONTAINER_VALUE` distinguishes a traversed non-container structure
+  from a missing field on the main interface. Existing kinds separately cover
+  unavailable interfaces and metadata, invalid segments, unsupported fields
+  and values, field access, incomplete structural paths, widget lookup, final
+  type, and stable identity.
+- Native missing-widget diagnostics retain the full original path, structural
+  prefix, complete widget suffix, failing segment, parent type, and bounded
+  named and indexed child summaries.
+- Ambiguity diagnostics include both viewscreen and game-UI root types, root
+  identities, final widget types, and final widget identities. Compound
+  values are represented only by bounded opaque identity labels.
+- Structural-root replacement, final-widget replacement, stale pinned
+  viewscreens, mount replacement, and unmount all identify retained-subject
+  reacquisition explicitly.
+- Native child-summary capture is protected separately. Enumeration or
+  current-screen failure returns the original stage, kind, path, and missing
+  segment with `diagnostic_capture_failed=true` and does not expose the
+  secondary exception.
 
 ## Phase 5: Unit coverage
 
@@ -601,3 +631,9 @@ Exit gate:
 | 2026-07-25 | 3 | `tools/Run-UnitTests.ps1` | 417 successes; 0 failures, errors, or pending |
 | 2026-07-25 | 3 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 226 files |
 | 2026-07-25 | 3 | `git diff --check` | Passed |
+| 2026-07-25 | 4 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec native game%-UI path resolver"` | 20 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 4 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec native widget adapter"` | 20 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 4 | `tools/Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"` | 53 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 4 | `tools/Run-UnitTests.ps1` | 420 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 4 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 228 files |
+| 2026-07-25 | 4 | `git diff --check` | Passed |

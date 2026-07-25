@@ -3,6 +3,10 @@
 local immutable_enum = require('dwarfspec.immutable_enum')
 local EFieldMode =
     require('dwarfspec.native_game_ui_path').EFieldMode
+local EResolutionStage =
+    require('dwarfspec.native_resolution_stages')
+local EResolutionFailureKind =
+    require('dwarfspec.native_resolution_failure_kinds')
 local ErrorFormat = require('dwarfspec.error_formats')
 local EventType = require('dwarfspec.automation.event_types')
 local OwnerKind = require('dwarfspec.automation.owner_kinds')
@@ -68,6 +72,17 @@ describe('immutable DwarfSpec contract enums', function()
         assert.equals(5, EFieldMode.SUBSTRUCT)
         assert.equals(9, EFieldMode.CLASS_METHOD)
         assert_immutable(EFieldMode, 'SUBSTRUCT')
+        assert.equals(
+            'structure_traversal',
+            EResolutionStage.STRUCTURE_TRAVERSAL)
+        assert.equals(
+            'retained_subject_reacquisition',
+            EResolutionStage.RETAINED_SUBJECT_REACQUISITION)
+        assert_immutable(EResolutionStage, 'AMBIGUITY_CHECK')
+        assert.equals(
+            'non_container_value',
+            EResolutionFailureKind.NON_CONTAINER_VALUE)
+        assert_immutable(EResolutionFailureKind, 'MISSING_WIDGET')
     end)
 
     it('rejects invalid definitions and duplicate values', function()

@@ -399,6 +399,7 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(screen.active)
         assert.equals(0, cleanup.pending_count(registry))
         assert.has_error(function() mounted:raw() end,
+            'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; no current mount exists')
         reset('before example')
@@ -553,7 +554,8 @@ describe('DwarfSpec public mount commands', function()
         local mounted = ds.mountNativeScreen()
 
         assert.equals(native_root, mounted:raw())
-        assert.equals(native_root, ds.root():raw())
+        local root_subject = ds.root()
+        assert.equals(native_root, root_subject:raw())
         ds.input('SELECT')
         assert.equals(native_screen, simulated_inputs[1].screen)
         assert.equals('SELECT', simulated_inputs[1].key)
@@ -599,6 +601,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, run.mount_cleanup_probe().tracked_screen_count)
         assert.equals(0, native_screen.dismiss_calls)
         assert.has_error(function() mounted:raw() end,
+            'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; no current mount exists')
     end)
@@ -956,8 +959,17 @@ describe('DwarfSpec public mount commands', function()
             'native_path={"info", "creatures", "Tabs", "Dead/Missing"}',
             failure, 1, true)
         assert.matches('is ambiguous;', failure, 1, true)
-        assert.matches('viewscreen_identity=table#%d+', failure)
-        assert.matches('game_ui_identity=table#%d+', failure)
+        assert.matches('stage=ambiguity_check', failure, 1, true)
+        assert.matches(
+            'viewscreen={root_type="df.widget_container" ' ..
+                'root_identity=table#%d+ widget_type="df.widget_text" ' ..
+                'widget_identity=table#%d+}',
+            failure)
+        assert.matches(
+            'game_ui={root_type="df.widget_container" ' ..
+                'root_identity=table#%d+ widget_type="df.widget_text" ' ..
+                'widget_identity=table#%d+}',
+            failure)
     end)
 
     it('reports both unavailable roots with the complete original path',
@@ -976,7 +988,16 @@ describe('DwarfSpec public mount commands', function()
             'was unavailable from both native roots',
             failure, 1, true)
         assert.matches('viewscreen={', failure, 1, true)
-        assert.matches('game_ui={kind=missing_widget', failure, 1, true)
+        assert.matches('stage=ambiguity_check', failure, 1, true)
+        assert.matches(
+            'game_ui={stage=widget_traversal', failure, 1, true)
+        assert.matches(
+            'structural_prefix={"info", "creatures"}',
+            failure, 1, true)
+        assert.matches(
+            'widget_suffix={"Tabs", "Dead/Missing"}',
+            failure, 1, true)
+        assert.matches('kind=missing_widget', failure, 1, true)
     end)
 
     it('does not enter unrelated game interfaces after a native miss',
@@ -1485,6 +1506,9 @@ describe('DwarfSpec public mount commands', function()
             'subject ' ..
             'path={"Status"} mount=1 because the widget was replaced; call ' ..
                 'ds.get(path) to select the replacement',
+            failure, 1, true)
+        assert.matches(
+            'stage=retained_subject_reacquisition',
             failure, 1, true)
         assert.matches('mount_kind="native" source="native" ' ..
             'captured_identity=table#%d+ current_identity=table#%d+',
