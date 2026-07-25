@@ -1,6 +1,6 @@
 # CLI diagnostic output implementation
 
-Status: in progress; Phases 0-5 complete
+Status: complete; Phases 0-6 complete
 
 Related design: `docs/test-runner-service-design.md`
 
@@ -44,29 +44,29 @@ manage stale Problems.
 
 ## Locked implementation contract
 
-☐ Keep structured service events presentation-neutral.
-☐ Perform all format selection and diagnostic rendering in the external
+✔ Keep structured service events presentation-neutral.
+✔ Perform all format selection and diagnostic rendering in the external
   command.
-☐ Configure the format with `settings.error_format` in
+✔ Configure the format with `settings.error_format` in
   `tests/dwarfspec/config.lua`.
-☐ Support exactly these serialized configuration values:
+✔ Support exactly these serialized configuration values:
   `msbuild`, `gcc`, and `eslint`.
-☐ Treat `gcc` as the shared GCC/Clang-compatible format.
-☐ Default `settings.error_format` to `msbuild` when it is omitted.
-☐ Represent the supported values with an immutable enum created by
+✔ Treat `gcc` as the shared GCC/Clang-compatible format.
+✔ Default `settings.error_format` to `msbuild` when it is omitted.
+✔ Represent the supported values with an immutable enum created by
   `dwarfspec.immutable_enum.define`.
-☐ Apply `error_format` only to `problem.recorded` diagnostics.
-☐ Preserve the current human-readable queue, run, test progress, cleanup,
+✔ Apply `error_format` only to `problem.recorded` diagnostics.
+✔ Preserve the current human-readable queue, run, test progress, cleanup,
   scheduler, and final-summary lines.
-☐ Emit one physical output line for each formatted diagnostic.
-☐ Retain the complete original problem message and trace in the structured
+✔ Emit one physical output line for each formatted diagnostic.
+✔ Retain the complete original problem message and trace in the structured
   event journal and persisted result.
-☐ Never invent a file or line number when no source location is known.
-☐ Fall back to a human-readable problem line when no matchable source location
+✔ Never invent a file or line number when no source location is known.
+✔ Fall back to a human-readable problem line when no matchable source location
   is available.
-☐ Preserve current process exit codes, cleanup behavior, result persistence,
+✔ Preserve current process exit codes, cleanup behavior, result persistence,
   acknowledgement, and recovery behavior.
-☐ Do not add a CLI option or environment variable for selecting the format as
+✔ Do not add a CLI option or environment variable for selecting the format as
   part of this work.
 
 ## Canonical output contracts
@@ -106,15 +106,15 @@ workspace folder.
 
 ## Global engineering rules
 
-☐ Add LuaDoc comments to every new or changed Lua function, method, and
+✔ Add LuaDoc comments to every new or changed Lua function, method, and
   class-like module or table, including private helpers.
-☐ Use immutable enums instead of loose string comparisons for the supported
+✔ Use immutable enums instead of loose string comparisons for the supported
   error-format identifiers.
-☐ Keep source-location extraction separate from output-format rendering.
-☐ Keep formatter functions deterministic and free of filesystem writes or
+✔ Keep source-location extraction separate from output-format rendering.
+✔ Keep formatter functions deterministic and free of filesystem writes or
   DFHack dependencies.
-☐ Preserve unrelated worktree changes.
-☐ Record only fresh verification evidence in this checklist.
+✔ Preserve unrelated worktree changes.
+✔ Record only fresh verification evidence in this checklist.
 
 ## Phase 0: Baseline and diagnostic fixtures
 
@@ -459,27 +459,61 @@ Phase 5 evidence:
 
 Goal: verify the complete DwarfSpec behavior and record reproducible evidence.
 
-☐ Run the focused configuration, event, output-handler, report-formatter,
+✔ Run the focused configuration, event, output-handler, report-formatter,
   runner, and CLI unit tests.
-☐ Run `tools/Check-Lua.ps1`.
-☐ Run `tools/Run-UnitTests.ps1`.
-☐ Run `git diff --check`.
-☐ Review the diff for accidental scheduler, transport, persistence, cleanup,
+✔ Run `tools/Check-Lua.ps1`.
+✔ Run `tools/Run-UnitTests.ps1`.
+✔ Run `git diff --check`.
+✔ Review the diff for accidental scheduler, transport, persistence, cleanup,
   exit-code, or in-game UI changes.
-☐ Confirm all new or changed Lua functions and class-like modules have LuaDoc
+✔ Confirm all new or changed Lua functions and class-like modules have LuaDoc
   comments.
-☐ Record exact commands, results, and any environmental limitations in the
+✔ Record exact commands, results, and any environmental limitations in the
   evidence ledger.
 
 Phase 6 exit gate:
 
-☐ All focused DwarfSpec unit tests pass.
-☐ The full DwarfSpec unit suite passes.
-☐ Lua syntax checks pass.
-☐ `git diff --check` passes.
-☐ Every earlier phase and exit gate is complete.
-☐ No live DFHack run or VS Code integration test is required to complete this
+✔ All focused DwarfSpec unit tests pass.
+✔ The full DwarfSpec unit suite passes.
+✔ Lua syntax checks pass.
+✔ `git diff --check` passes.
+✔ Every earlier phase and exit gate is complete.
+✔ No live DFHack run or VS Code integration test is required to complete this
   deterministic formatting work.
+
+Phase 6 evidence:
+
+- Focused commands on 2026-07-25:
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec external project configuration'`: 9 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'automation structured events'`: 8 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'automation Busted output collection'`: 1 success.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec native reports'`: 9 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'standard diagnostic formatter'`: 9 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec external runner'`: 30 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec CLI selection'`: 29 successes.
+  All focused commands reported 0 failures, 0 errors, and 0 pending.
+- `.\tools\Run-UnitTests.ps1` reported 377 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-25.
+- `.\tools\Check-Lua.ps1` passed Lua 5.4.6 syntax and formatting checks for
+  224 files on 2026-07-25.
+- `git diff --check` passed on 2026-07-25.
+- The scoped review covered feature commits `b17c96b`, `c982412`, `04c0240`,
+  `4902041`, `a1f551f`, and `92a406e`. Changes are limited to the planned
+  configuration, structured problem data, diagnostic presentation, runner
+  consumption, tests, documentation, and editor task pairing. No scheduler,
+  transport protocol, persistence policy, cleanup contract, exit-code
+  mapping, or in-game UI behavior was changed.
+- A declaration audit found LuaDoc on every named function and class-like
+  module in the 15 feature-touched Lua files.
+- No live DFHack run or VS Code integration test was performed; neither is
+  required for this deterministic external formatting contract.
 
 ## Evidence ledger
 
@@ -493,19 +527,19 @@ Record evidence only after running the corresponding command.
 | 3 | Exact formatter unit tests | Complete: all three canonical formats, both problem kinds, path and column rules, display sanitization, immutable structured input, one-line output, and location-less fallback covered by 9 focused tests; 374-test unit suite and 224-file Lua checks passed on 2026-07-25 |
 | 4 | Runner and CLI integration unit tests | Complete: project-selected formats stream in cursor order, structured events remain unchanged, failed runs persist and acknowledge, formatter failures recover cleanup, 30 focused runner tests and 29 focused CLI tests passed; 377-test unit suite and 224-file Lua checks passed on 2026-07-25 |
 | 5 | Documentation and editor-example review | Complete: configuration syntax, exact output examples, matcher ownership and pairing, path behavior, one-shot lifecycle, fallback and retained-data boundaries documented; repository config and task manually verified to pair `msbuild` with `$mscompile` on 2026-07-25 |
-| 6 | Focused tests, full unit suite, syntax, and diff checks | Pending |
+| 6 | Focused tests, full unit suite, syntax, and diff checks | Complete: seven focused groups passed with 95 total successes; full suite passed with 377 successes; Lua 5.4.6 checks passed for 224 files; scoped diff, LuaDoc, and `git diff --check` audits passed on 2026-07-25 |
 
 ## Final acceptance
 
-☐ A consumer project selects `msbuild`, `gcc`, or `eslint` with
+✔ A consumer project selects `msbuild`, `gcc`, or `eslint` with
   `settings.error_format`.
-☐ Live `problem.recorded` events render in the selected standard format.
-☐ Matchable diagnostics contain a trustworthy source, line, column, severity,
+✔ Live `problem.recorded` events render in the selected standard format.
+✔ Matchable diagnostics contain a trustworthy source, line, column, severity,
   and message.
-☐ Location-less problems remain visible without fabricated coordinates.
-☐ Full structured messages and traces remain available in results and retained
+✔ Location-less problems remain visible without fabricated coordinates.
+✔ Full structured messages and traces remain available in results and retained
   run history; captured human-readable lines remain available through logs.
-☐ Non-problem progress, transport, scheduling, cleanup, persistence, and exit
+✔ Non-problem progress, transport, scheduling, cleanup, persistence, and exit
   behavior remain unchanged.
-☐ DwarfSpec tests cover DwarfSpec behavior only; VS Code behavior remains
+✔ DwarfSpec tests cover DwarfSpec behavior only; VS Code behavior remains
   outside the automated test contract.
