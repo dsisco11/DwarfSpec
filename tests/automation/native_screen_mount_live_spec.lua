@@ -181,6 +181,7 @@ describe('non-owning native-screen attachment', function()
             'native acceptance must start at dwarfmode/Default')
         assert.is_true(#df.global.plotinfo.hauling.routes > 10,
             'native acceptance requires a scrollable Hauling route list')
+        assert.equals(df.global.cur_year_tick, ds.getTick())
 
         local run = ds.current_run()
         run.native_overlay_events = {}

@@ -329,6 +329,19 @@ local list = ds.get('menu')
 assert.same(current_focus, list:getFocusList())
 ```
 
+## World time
+
+`ds.getTick()` returns the current in-year Dwarf Fortress simulation tick from
+`df.global.cur_year_tick`. It is a read-only top-level command and does not
+require a mount:
+
+```lua
+local tick = ds.getTick()
+assert.is_true(tick >= 0)
+```
+
+It fails explicitly when no loaded world exposes a valid tick counter.
+
 ## Condition waits
 
 `ds.await(description, query, options)` polls a read-only query between live

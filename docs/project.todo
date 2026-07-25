@@ -12,7 +12,6 @@ Frontend:
     ☐ test-runner UI should have the ability to click through command log items and see the snapshots of the component tree at that point in time.
 
 Testing Features:
-    ☐ Add a `ds.getTime()` method to return the current tick count of the world.
     ☐ Refactor `ds.get()` so it is more like a Cypress get assertion, returning a `DSQuery` object that can be chained with `.should(...)` and `.find(...)` methods.
         - get method will become more of an async query with a timeout.
         - get method acts as an implicit assertion.

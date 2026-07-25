@@ -540,6 +540,17 @@ local TestStatus = load_automation_module(package_root,
             scheduler, description, query, wait_options(options, true))
     end
 
+    ---Returns the current in-year simulation tick for the loaded DF world.
+    ---@return integer
+    function ds.getTick()
+        local global = df and df.global
+        local tick = global and global.cur_year_tick
+        assert(type(tick) == 'number' and tick % 1 == 0 and tick >= 0,
+            'DwarfSpec getTick requires a loaded world with a valid ' ..
+                'df.global.cur_year_tick')
+        return tick
+    end
+
     ---Mounts one owned component or complete screen.
     ---@param component any
     ---@param options table|nil

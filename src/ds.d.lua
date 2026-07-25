@@ -204,6 +204,10 @@ function DS.wait_frames(count, options) end
 ---@return T
 function DS.await(description, query, options) end
 
+---Returns the current in-year simulation tick for the loaded DF world.
+---@return integer
+function DS.getTick() end
+
 ---Mounts one owned component or complete screen.
 ---@param component any
 ---@param options? dwarfspec.MountOptions

@@ -146,6 +146,7 @@ describe('DwarfSpec public mount commands', function()
         })
         rawset(_G, 'df', {
             global={
+                cur_year_tick=12345,
                 gps={mouse_x=4, mouse_y=5},
                 enabler={
                     mouse_focus=false,
@@ -381,6 +382,17 @@ describe('DwarfSpec public mount commands', function()
 
         assert.is_false(screen.active)
         assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('returns the current world tick without requiring a mount', function()
+        assert.equals(12345, ds.getTick())
+        df.global.cur_year_tick = 12346
+        assert.equals(12346, ds.getTick())
+
+        df.global.cur_year_tick = nil
+        assert.has_error(function() ds.getTick() end,
+            'DwarfSpec getTick requires a loaded world with a valid ' ..
+                'df.global.cur_year_tick')
     end)
 
     it('requires explicit unmount before mounting another component',
