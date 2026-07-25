@@ -1,0 +1,327 @@
+# Explicit native-screen mount API
+
+Status: planned
+
+Related design: `docs/non-owning-native-screen-mount-proposal.md`
+
+## Purpose
+
+Replace the ambiguous no-argument `ds.mount()` overload with an explicit
+`ds.mountNativeScreen()` command. Component mounting remains
+`ds.mount(component, options)`, while both entry points continue to use the
+same one-current-mount lifecycle and `ds.unmount()` cleanup command.
+
+DwarfSpec `0.2.0` has not been published. This is a clean API correction:
+there is no compatibility alias, deprecation period, migration shim, or legacy
+documentation requirement.
+
+This checklist is the implementation completion contract. A phase is complete
+only when every task and exit-gate item in that phase is checked and its fresh
+evidence is recorded in the evidence ledger.
+
+## Locked public contract
+
+☐ Add `ds.mountNativeScreen()` with that exact spelling.
+☐ Make `ds.mount(component, options)` exclusively responsible for component
+  and complete-screen mounts.
+☐ Reject both `ds.mount()` and `ds.mount(nil)` with an actionable diagnostic
+  that directs the caller to `ds.mountNativeScreen()`.
+☐ Reject arguments passed to `ds.mountNativeScreen()` instead of silently
+  ignoring them.
+☐ Do not retain the no-argument `ds.mount()` behavior as an alias.
+☐ Keep `ds.unmount()` as the shared release operation for every mount kind.
+☐ Keep the one-current-mount rule across both entry points.
+☐ Return the borrowed native root subject from `ds.mountNativeScreen()`.
+☐ Preserve `ds.root()`, `ds.get()`, `ds.inspect()`, input, pointer, redraw,
+  capture, staleness, and cleanup behavior for native-screen mounts.
+☐ Keep `ESubjectSource.NATIVE` and `ESubjectSource.OVERLAY` unchanged; they
+  select subject hierarchies within a native-screen mount, not mount kinds.
+☐ Do not introduce a mount-target string, target option, or mount-kind enum.
+☐ Keep the current `0.2.0-1` version; this unpublished API correction does not
+  require another version bump.
+
+## Ownership and behavior invariants
+
+☐ `ds.mountNativeScreen()` pins the exact current native DF viewscreen and its
+  native widget root.
+☐ It creates, shows, resizes, replaces, dismisses, and owns no `ZScreen` or
+  native game screen.
+☐ DFHack focus, viewscreen stack, current viewscreen, overlay registration,
+  and native navigation remain externally owned.
+☐ Native and registered-overlay input continues through the pinned native
+  viewscreen and normal DFHack overlay dispatch.
+☐ Native redraw continues to wait on the existing observed completed-render
+  boundary unless `{wait=false}` is supplied.
+☐ A changed current viewscreen continues to make the mount and its subjects
+  stale instead of retargeting or navigating.
+☐ Cleanup continues to restore pointer/button state, rendering
+  instrumentation, and retained references without dismissing the screen.
+☐ No runner transport, scheduler, persistence, CLI, or in-game runner UI
+  behavior changes as part of this work.
+
+## Affected surfaces
+
+Production and declarations:
+
+- `src/dwarfspec/ds.lua`
+- `src/dwarfspec/mount_context.lua`
+- `src/ds.d.lua`
+
+Primary deterministic coverage:
+
+- `tests/unit/ds_mount_commands_spec.lua`
+- `tests/unit/mount_context_spec.lua`
+- `tests/unit/native_attachment_spec.lua`
+
+Live acceptance:
+
+- `tests/automation/native_screen_mount_live_spec.lua`
+
+Documentation:
+
+- `docs/architecture.md`
+- `docs/writing-tests.md`
+- `docs/non-owning-native-screen-mount-proposal.md`
+- `docs/project.todo`
+
+The inventory must remain search-driven. Add any other positive no-argument
+mount call, public declaration, diagnostic, or example found during
+implementation to this list and update it in the same change.
+
+## Global engineering rules
+
+☐ Add LuaDoc comments to every new or changed Lua function, method, and
+  class-like module or table.
+☐ Preserve the existing native attachment, interaction target, render
+  observer, subject adapters, and cleanup stack instead of duplicating them.
+☐ Keep public camel-case spelling and internal snake-case spelling consistent.
+☐ Preserve unrelated worktree changes.
+☐ Use Mermaid for any graph added or revised in documentation.
+☐ Record only fresh verification evidence in this checklist.
+☐ Do not add package-manifest or VS Code task-configuration tests.
+
+## Phase 0: Baseline and call-site inventory
+
+Goal: establish the exact pre-change surface and verification baseline.
+
+☐ Confirm the workspace and Git remote identify the intended DwarfSpec
+  repository.
+☐ Record `git status --short` and preserve unrelated changes.
+☐ Run `.\tools\Run-UnitTests.ps1`.
+☐ Run `.\tools\Check-Lua.ps1`.
+☐ Inventory every positive `ds.mount()` no-argument call in source, tests, and
+  documentation.
+☐ Inventory every `mount_native` declaration and call.
+☐ Inventory diagnostics that currently mention only
+  `ds.mount(component, options)`.
+☐ Characterize the current behavior of `ds.mount()`, `ds.mount(nil)`, and
+  repeated component/native mounts before editing.
+
+### Phase 0 exit gate
+
+☐ Baseline unit and Lua checks pass or every pre-existing failure is recorded.
+☐ Every affected public, internal, test, and documentation call site is listed.
+☐ No production behavior has changed.
+
+## Phase 1: Explicit public and internal entry points
+
+Goal: separate component mounting from native-screen mounting without changing
+the underlying mount lifecycle.
+
+☐ Add `ds.mountNativeScreen(...)` to the run-scoped `ds` object.
+☐ Validate that the command receives no arguments.
+☐ Route the command through the existing native attachment factory and mount
+  context.
+☐ Refactor `ds.mount` to require a non-nil component and preserve its existing
+  component options behavior.
+☐ Give `ds.mount()` and `ds.mount(nil)` the same actionable
+  `mountNativeScreen()` guidance.
+☐ Rename `mount_context:mount_native(...)` to
+  `mount_context:mount_native_screen(...)`.
+☐ Update internal diagnostics to use “native-screen mount” when the mount kind
+  matters and “native attachment” when describing the borrowed implementation
+  resource.
+☐ Keep the same mount ID, subject source, interaction target, cleanup entries,
+  observer, and returned root subject.
+☐ Keep cross-kind second-mount rejection at the shared mount-context boundary.
+☐ Do not export a compatibility alias or alternate spelling.
+
+### Phase 1 exit gate
+
+☐ `ds.mountNativeScreen()` reaches the existing native attachment path.
+☐ `ds.mount()` cannot enter native attachment through missing or nil input.
+☐ Native-screen ownership, input, rendering, staleness, and cleanup code is
+  otherwise unchanged.
+☐ Every changed Lua declaration has LuaDoc.
+
+## Phase 2: Public declarations and repository call sites
+
+Goal: make the explicit API the only positive native-screen mounting form in
+the repository.
+
+☐ Add `DS.mountNativeScreen()` to `src/ds.d.lua` with a non-owning/current
+  native-screen contract and borrowed root-subject return type.
+☐ Remove the no-argument overload from the `DS.mount` declaration.
+☐ Make the `DS.mount` parameter non-optional and document its owned component
+  behavior.
+☐ Replace positive native-screen calls in unit tests with
+  `ds.mountNativeScreen()`.
+☐ Replace the live acceptance call with `ds.mountNativeScreen()`.
+☐ Retain intentional `ds.mount()` and `ds.mount(nil)` calls only in explicit
+  rejection tests.
+☐ Replace internal `mount_native` calls with `mount_native_screen`.
+☐ Update no-current-mount diagnostics so they recognize either valid mount
+  entry point where guidance is appropriate.
+☐ Search source and tests for stale aliases or positive no-argument calls.
+
+### Phase 2 exit gate
+
+☐ LuaLS exposes separate component and native-screen mount commands.
+☐ No executable positive path uses the removed overload.
+☐ Rejection fixtures are the only remaining executable `ds.mount()` calls
+  without a component.
+☐ No duplicate native attachment implementation was introduced.
+
+## Phase 3: Deterministic API coverage
+
+Goal: prove the new boundary and preserve all existing native-screen behavior.
+
+☐ Test that `ds.mountNativeScreen()` returns the exact borrowed native root
+  subject.
+☐ Test that it constructs, shows, resizes, replaces, and dismisses no screen.
+☐ Test rejection of arguments to `ds.mountNativeScreen()`.
+☐ Test actionable rejection of `ds.mount()` and `ds.mount(nil)`.
+☐ Test component-to-native, native-to-component, and native-to-native
+  second-mount rejection.
+☐ Test explicit unmount followed by successful mounting through the other
+  entry point.
+☐ Preserve tests for native/overlay source selection, subject lookup,
+  inspection, input, arbitrary pointer placement, redraw waiting, staleness,
+  and LIFO cleanup.
+☐ Preserve failure-path tests for attachment, observer installation, input,
+  render, timeout, abort, runner recovery, and cleanup conflicts.
+☐ Assert that the removed no-argument behavior is not exposed under another
+  alias.
+☐ Run the focused public mount-command, mount-context, and native-attachment
+  unit specifications.
+
+### Phase 3 exit gate
+
+☐ Focused unit tests pass.
+☐ Tests cover the new public success path and every removed-overload rejection
+  path.
+☐ Tests prove behavior and ownership invariants rather than only method
+  presence.
+☐ No packaging or editor-configuration test was added.
+
+## Phase 4: Architecture and user documentation
+
+Goal: make the explicit API and non-owning semantics unambiguous everywhere.
+
+☐ Update `docs/architecture.md` to contrast owned
+  `ds.mount(component, options)` with non-owning
+  `ds.mountNativeScreen()`.
+☐ Update every native-screen example in `docs/writing-tests.md`.
+☐ Revise `docs/non-owning-native-screen-mount-proposal.md` so the accepted
+  design uses `ds.mountNativeScreen()` and the rejected alternative is the
+  no-argument overload.
+☐ Update the proposal's Mermaid flowchart and labels if they mention
+  `ds.mount()`.
+☐ Remove rationale claiming that one-current-mount semantics requires one
+  public entry point.
+☐ Explain that both entry points still converge on one mount context and share
+  `ds.unmount()`.
+☐ Explain that “mount” describes the DwarfSpec test lifecycle while
+  “attachment” describes the non-owning native implementation.
+☐ Keep `ESubjectSource` documentation scoped to native and overlay subject
+  selection.
+☐ Update `docs/project.todo` to link this checklist and mark its task complete
+  only after final acceptance.
+☐ Search all documentation for stale positive no-argument examples or
+  compatibility language.
+
+### Phase 4 exit gate
+
+☐ Every public example uses the explicit API.
+☐ Documentation consistently distinguishes owned component mounts from the
+  borrowed native-screen mount.
+☐ All revised graphs use Mermaid.
+☐ No migration or legacy-support section was added.
+
+## Phase 5: Full and live acceptance
+
+Goal: verify deterministic behavior, real DFHack wiring, cleanup, and final
+repository consistency.
+
+☐ Run the focused public mount-command, mount-context, and native-attachment
+  unit specifications.
+☐ Run `.\tools\Run-UnitTests.ps1`.
+☐ Run `.\tools\Check-Lua.ps1`.
+☐ Run `git diff --check`.
+☐ Run
+  `.\tools\Run-AutomationTests.ps1 --test-glob tests/automation/native_screen_mount_live_spec.lua`
+  for focused native-screen acceptance.
+☐ Confirm the live test used `ds.mountNativeScreen()` and observed the exact
+  current native viewscreen and widget root.
+☐ Confirm live cleanup preserved the original screen, focus, stack, pointer
+  state, overlay registration, and render instrumentation.
+☐ Confirm no DwarfSpec-owned or test-owned screen remains after the live run.
+☐ If live DFHack is unavailable, record the exact environmental blocker and
+  leave live acceptance incomplete; deterministic tests are not a substitute.
+☐ Search source, declarations, tests, and documentation for stale positive
+  no-argument mount usage and old `mount_native` identifiers.
+☐ Review the diff for accidental attachment, adapter, observer, transport,
+  scheduler, persistence, CLI, version, or in-game UI changes.
+☐ Review `git status --short` and account for every changed file.
+☐ Complete the evidence ledger and final acceptance only after every required
+  check passes.
+
+### Phase 5 exit gate
+
+☐ Focused and full unit tests pass.
+☐ Lua syntax and formatting checks pass.
+☐ Focused live native-screen acceptance passes with confirmed cleanup.
+☐ Diff hygiene, stale-reference searches, and worktree accounting pass.
+☐ Every earlier phase and exit gate is complete.
+
+## Evidence ledger
+
+Record commands, results, relevant file paths, behavioral observations,
+cleanup observations, and environmental limitations here as work proceeds.
+
+### Phase 0 evidence
+
+- Pending.
+
+### Phase 1 evidence
+
+- Pending.
+
+### Phase 2 evidence
+
+- Pending.
+
+### Phase 3 evidence
+
+- Pending.
+
+### Phase 4 evidence
+
+- Pending.
+
+### Phase 5 evidence
+
+- Pending.
+
+## Final acceptance
+
+☐ `ds.mountNativeScreen()` is the only public native-screen mount entry point.
+☐ `ds.mount(component, options)` cannot attach to a native screen.
+☐ No compatibility alias or deprecated no-argument behavior remains.
+☐ Both mount entry points share one current mount and `ds.unmount()` lifecycle.
+☐ Native-screen subjects and commands retain their existing behavior.
+☐ Native screens, focus, stack, overlays, input state, and instrumentation
+  retain their existing ownership and cleanup guarantees.
+☐ Public declarations, implementation, tests, and documentation agree.
+☐ Deterministic and live verification pass with fresh evidence.
+☐ All checklist and evidence-ledger items are complete.
