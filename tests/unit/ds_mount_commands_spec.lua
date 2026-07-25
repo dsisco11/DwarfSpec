@@ -332,8 +332,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
         assert.has_error(function() mounted:raw() end,
             'DwarfSpec subject raw access rejected stale subject ' ..
-            'control_path="<root>" from mount 1; no component is currently ' ..
-                'mounted')
+            'control_path="<root>" from mount 1; no current mount exists')
         reset('before example')
         assert.equals(0, cleanup.pending_count(registry))
     end)
@@ -495,8 +494,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, native_screen.dismiss_calls)
         assert.has_error(function() mounted:raw() end,
             'DwarfSpec subject raw access rejected stale subject ' ..
-            'control_path="<root>" from mount 1; no component is currently ' ..
-                'mounted')
+            'control_path="<root>" from mount 1; no current mount exists')
     end)
 
     it('waits for observed native redraw and supports explicit wait opt-out',
@@ -1166,8 +1164,8 @@ describe('DwarfSpec public mount commands', function()
     end)
 
     it('reports public commands clearly without a current mount', function()
-        local suffix = ' requires a mounted component; call ' ..
-            'ds.mount(component, options) first'
+        local suffix = ' requires a current mount; call ' ..
+            'ds.mount(component, options) or ds.mountNativeScreen() first'
         assert.has_error(function() ds.root() end,
             'DwarfSpec root' .. suffix)
         assert.has_error(function() ds.get('missing') end,
@@ -1246,7 +1244,7 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(ok)
         assert.matches('DwarfSpec redraw rejected stale subject',
             failure, 1, true)
-        assert.matches('no component is currently mounted',
+        assert.matches('no current mount exists',
             failure, 1, true)
     end)
 

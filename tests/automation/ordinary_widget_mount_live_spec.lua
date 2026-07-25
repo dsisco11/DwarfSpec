@@ -173,7 +173,7 @@ describe('ordinary widget component host', function()
         assert.is_false(available)
         assert.matches('subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount ', stale_error, 1, true)
-        assert.matches('no component is currently mounted', stale_error,
+        assert.matches('no current mount exists', stale_error,
             1, true)
     end)
 end)

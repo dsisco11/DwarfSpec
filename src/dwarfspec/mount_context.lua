@@ -446,8 +446,9 @@ function M.new(options)
         assert(type(operation) == 'string' and operation ~= '',
             'mount operation name must be a nonempty string')
         assert(self.current and self.current.alive,
-            ('DwarfSpec %s requires a mounted component; call ' ..
-                'ds.mount(component, options) first'):format(operation))
+            ('DwarfSpec %s requires a current mount; call ' ..
+                'ds.mount(component, options) or ' ..
+                    'ds.mountNativeScreen() first'):format(operation))
         return self.current
     end
 
@@ -531,7 +532,7 @@ function M.new(options)
         local mount = self.current
         assert(mount and mount.alive,
             ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
-                'no component is currently mounted'):format(operation,
+                'no current mount exists'):format(operation,
                     subject.control_path, tostring(subject.mount_id)))
         assert(self.subject_mounts[subject] == mount.id and
             subject.mount_id == mount.id,

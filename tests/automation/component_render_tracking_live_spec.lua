@@ -89,7 +89,8 @@ describe('automatic component render tracking', function()
         assert.equals(0, lifecycle.active_screen_count)
         assert.equals(0, lifecycle.subject_count)
         assert.has_error(function() ds.root() end,
-            'DwarfSpec root requires a mounted component; call ' ..
-                'ds.mount(component, options) first')
+            'DwarfSpec root requires a current mount; call ' ..
+                'ds.mount(component, options) or ' ..
+                    'ds.mountNativeScreen() first')
     end)
 end)

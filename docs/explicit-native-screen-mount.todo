@@ -1,6 +1,6 @@
 # Explicit native-screen mount API
 
-Status: in progress; Phases 0-1 complete
+Status: in progress; Phases 0-2 complete
 
 Related design: `docs/non-owning-native-screen-mount-proposal.md`
 
@@ -160,28 +160,28 @@ the underlying mount lifecycle.
 Goal: make the explicit API the only positive native-screen mounting form in
 the repository.
 
-☐ Add `DS.mountNativeScreen()` to `src/ds.d.lua` with a non-owning/current
+✔ Add `DS.mountNativeScreen()` to `src/ds.d.lua` with a non-owning/current
   native-screen contract and borrowed root-subject return type.
-☐ Remove the no-argument overload from the `DS.mount` declaration.
-☐ Make the `DS.mount` parameter non-optional and document its owned component
+✔ Remove the no-argument overload from the `DS.mount` declaration.
+✔ Make the `DS.mount` parameter non-optional and document its owned component
   behavior.
-☐ Replace positive native-screen calls in unit tests with
+✔ Replace positive native-screen calls in unit tests with
   `ds.mountNativeScreen()`.
-☐ Replace the live acceptance call with `ds.mountNativeScreen()`.
-☐ Retain intentional `ds.mount()` and `ds.mount(nil)` calls only in explicit
+✔ Replace the live acceptance call with `ds.mountNativeScreen()`.
+✔ Retain intentional `ds.mount()` and `ds.mount(nil)` calls only in explicit
   rejection tests.
-☐ Replace internal `mount_native` calls with `mount_native_screen`.
-☐ Update no-current-mount diagnostics so they recognize either valid mount
+✔ Replace internal `mount_native` calls with `mount_native_screen`.
+✔ Update no-current-mount diagnostics so they recognize either valid mount
   entry point where guidance is appropriate.
-☐ Search source and tests for stale aliases or positive no-argument calls.
+✔ Search source and tests for stale aliases or positive no-argument calls.
 
 ### Phase 2 exit gate
 
-☐ LuaLS exposes separate component and native-screen mount commands.
-☐ No executable positive path uses the removed overload.
-☐ Rejection fixtures are the only remaining executable `ds.mount()` calls
+✔ LuaLS exposes separate component and native-screen mount commands.
+✔ No executable positive path uses the removed overload.
+✔ Rejection fixtures are the only remaining executable `ds.mount()` calls
   without a component.
-☐ No duplicate native attachment implementation was introduced.
+✔ No duplicate native attachment implementation was introduced.
 
 ## Phase 3: Deterministic API coverage
 
@@ -394,7 +394,36 @@ cleanup observations, and environmental limitations here as work proceeds.
 
 ### Phase 2 evidence
 
-- Pending.
+- `src/ds.d.lua` now declares distinct `DS.mount(component, options)` and
+  `DS.mountNativeScreen()` methods. The component parameter is required, the
+  old no-argument overload is gone, and the native method documents its
+  current-screen, non-owning, borrowed-subject contract.
+- The positive native calls in `tests/unit/ds_mount_commands_spec.lua` and
+  `tests/automation/native_screen_mount_live_spec.lua` use
+  `ds.mountNativeScreen()`. The only executable `ds.mount()` without a
+  component is the intentional unit rejection fixture, accompanied by the
+  equivalent explicit-`nil` rejection fixture.
+- `mount_native` no longer appears in `src/` or `tests/`; all mount-context
+  callers use `mount_native_screen`.
+- `require_current` guidance now says `requires a current mount; call
+  ds.mount(component, options) or ds.mountNativeScreen() first`.
+  Stale-subject diagnostics likewise say `no current mount exists`.
+  Exact public, unit, automation, and framework recovery expectations were
+  updated to the same contract.
+- Runtime and declaration export searches find only `mount` and
+  `mountNativeScreen`; no compatibility alias, positive no-argument call, or
+  duplicate native attachment implementation was found.
+- Focused verification on 2026-07-25:
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec public mount commands'`: 39 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter 'DwarfSpec mount context'`:
+    34 successes.
+  - `.\tools\Run-UnitTests.ps1 --filter
+    'DwarfSpec native viewscreen attachment'`: 8 successes.
+  All focused commands reported 0 failures, 0 errors, and 0 pending.
+- `.\tools\Run-UnitTests.ps1` reported 378 successes, 0 failures, 0 errors,
+  and 0 pending on 2026-07-25. `.\tools\Check-Lua.ps1` passed Lua 5.4.6
+  syntax and formatting checks for 224 files. `git diff --check` passed.
 
 ### Phase 3 evidence
 

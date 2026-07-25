@@ -627,7 +627,7 @@ describe('DwarfSpec mount context', function()
         }, events)
         assert.has_error(function() root_subject:raw() end,
             'DwarfSpec subject raw access rejected stale subject ' ..
-            'control_path="<root>" from mount 1; no component is currently mounted')
+            'control_path="<root>" from mount 1; no current mount exists')
         assert.same({
             current_mount_id=nil,
             active_screen_count=0,
@@ -1204,8 +1204,8 @@ describe('DwarfSpec mount context', function()
 
     it('reports every command clearly when there is no current mount',
             function()
-        local expected = ' requires a mounted component; call ' ..
-            'ds.mount(component, options) first'
+        local expected = ' requires a current mount; call ' ..
+            'ds.mount(component, options) or ds.mountNativeScreen() first'
         assert.has_error(function() context:root() end,
             'DwarfSpec root' .. expected)
         assert.has_error(function() context:unmount() end,
