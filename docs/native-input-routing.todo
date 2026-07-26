@@ -1,6 +1,6 @@
 # Native input routing
 
-Status: not started
+Status: in progress; Phase 1 complete
 
 Related implementation:
 
@@ -69,52 +69,52 @@ Excluded:
 
 ### Tasks
 
-☐ Record the initial repository identity and worktree state.
-☐ Replace the shared `native_screen(...)` input concept with an explicit
+✔ Record the initial repository identity and worktree state.
+✔ Replace the shared `native_screen(...)` input concept with an explicit
   mount-specific input-target operation.
-☐ Preserve the owned-component policy:
+✔ Preserve the owned-component policy:
   - require the owned host to remain mounted and active;
   - target its native host;
   - allow a current descendant only when it belongs to the owned host's screen
     chain;
   - never select an unrelated current screen.
-☐ Implement the borrowed-native policy:
+✔ Implement the borrowed-native policy:
   - query the current top viewscreen immediately before each
     `gui.simulateInput` call;
   - explicitly pass the resolved screen to `gui.simulateInput`;
   - report a bounded error when the current screen cannot be queried or is
     absent.
-☐ Refactor native attachment to validate and borrow the base DF viewscreen and
+✔ Refactor native attachment to validate and borrow the base DF viewscreen and
   its widget root independently from the current top screen.
-☐ Remove the requirement that the base DF viewscreen be current when attaching
+✔ Remove the requirement that the base DF viewscreen be current when attaching
   or dispatching native input.
-☐ Remove top-screen identity changes as a native mount and subject staleness
+✔ Remove top-screen identity changes as a native mount and subject staleness
   condition.
-☐ Preserve widget identity and source-lifecycle staleness checks.
-☐ Route all keyboard, text, click, button, and wheel commands through the
+✔ Preserve widget identity and source-lifecycle staleness checks.
+✔ Route all keyboard, text, click, button, and wheel commands through the
   mount-specific input-target operation.
-☐ Resolve the native target once immediately before each actual
+✔ Resolve the native target once immediately before each actual
   `gui.simulateInput` call; if a command makes multiple calls, resolve each one
   independently.
-☐ Preserve existing redraw, focus-list, pointer placement, and temporary
+✔ Preserve existing redraw, focus-list, pointer placement, and temporary
   button-state behavior except where they invoke the shared input dispatcher.
-☐ Preserve partial-construction cleanup, the single-active-mount rule, and
+✔ Preserve partial-construction cleanup, the single-active-mount rule, and
   primary failure reporting.
-☐ Update `docs/mount-command-automation-coverage.todo` to remove requirements
+✔ Update `docs/mount-command-automation-coverage.todo` to remove requirements
   that:
   - reject mounting beneath a fullscreen DFHack screen;
   - mark subjects stale solely because the top screen changed;
   - require the borrowed base DF screen to remain current.
-☐ Add or update LuaDoc comments for every changed function, method, class, and
+✔ Add or update LuaDoc comments for every changed function, method, class, and
   class-like table.
 
 ### Phase 1 exit gate
 
-☐ Owned and native mounts have distinct input-target policies.
-☐ Every simulated input call receives an explicit non-nil target.
-☐ Native attachment and input work when another screen is current.
-☐ Non-input behavior and genuine staleness checks remain intact.
-☐ The two tasklists describe the same routing contract.
+✔ Owned and native mounts have distinct input-target policies.
+✔ Every simulated input call receives an explicit non-nil target.
+✔ Native attachment and input work when another screen is current.
+✔ Non-input behavior and genuine staleness checks remain intact.
+✔ The two tasklists describe the same routing contract.
 
 ## Phase 2: Add regression coverage
 
@@ -200,7 +200,38 @@ Excluded:
 
 ### Phase 1 evidence
 
-- Pending.
+- Initial state on 2026-07-26: repository
+  `D:\CODE\DFHack\DwarfSpec`, branch `cli-error-formatting`, remote
+  `https://github.com/dsisco11/DwarfSpec.git`, with an empty
+  `git status --short`.
+- `interaction_target.lua` now exposes `input_screen()` on distinct owned and
+  borrowed target classes. Owned targets retain their active host-chain
+  resolver; borrowed targets query the current viewscreen per input while
+  `assert_current()` and `native_screen()` retain the borrowed base DF screen
+  for subject and non-input operations.
+- `native_attachment.lua` now acquires and validates only the base native DF
+  viewscreen and its widgets. Current input-screen access remains exclusively
+  in the borrowed interaction target.
+- `ds.lua` has one simulated-input boundary. All keyboard, text, click, button,
+  and wheel routes call it, and the only production `simulateInput` call is
+  `simulateInput(input_screen, keys)` after a non-nil assertion.
+- Existing unit contracts were updated to preserve native subject access
+  across top-screen changes while retaining widget removal, replacement,
+  invalid-root, partial-cleanup, unmount, pointer, and button-state coverage.
+- Focused `interaction target`: 6 successes, 0 failures, 0 errors, 0 pending.
+- Focused `native viewscreen attachment`: 8 successes, 0 failures, 0 errors,
+  0 pending.
+- Focused `screen transition`: 3 successes, 0 failures, 0 errors, 0 pending.
+- Full `.\tools\Run-UnitTests.ps1`: 442 successes, 0 failures, 0 errors,
+  0 pending.
+- `.\tools\Check-Lua.ps1`: Lua 5.4.6 syntax and formatting passed for
+  230 files.
+- The older coverage checklist now requires successful fullscreen-overlay
+  coexistence, live-stack input routing, retained subjects across stack
+  transitions, and staleness only after actual widget or source lifecycle
+  changes.
+- Searches found no obsolete current/native mismatch or top-screen staleness
+  requirements in either checklist. `git diff --check` passed.
 
 ### Phase 2 evidence
 

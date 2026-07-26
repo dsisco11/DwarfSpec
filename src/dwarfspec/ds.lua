@@ -383,7 +383,6 @@ local TestStatus = load_automation_module(package_root,
             mount_dependencies.invalidate_native_screen or
             function() return dfhack.screen.invalidate() end
         native_attachment = native_attachment_module.new({
-            get_current_viewscreen=context.current_viewscreen,
             get_native_viewscreen=get_native_viewscreen,
             is_widget_root=is_native_widget_root,
             interaction_target_factory=function(screen)
@@ -516,7 +515,7 @@ local TestStatus = load_automation_module(package_root,
     ---Resolves a subject or omitted target against the implicit mount.
     ---@param value any
     ---@param operation string
-    ---@return any, dwarfspec.InteractionTarget|nil, table|nil, dwarfspec.SubjectAdapter|nil
+    ---@return any, dwarfspec.OwnedScreenInteractionTarget|dwarfspec.BorrowedNativeInteractionTarget|nil, table|nil, dwarfspec.SubjectAdapter|nil
     local function resolve_interaction_target(value, operation)
         if value == nil then
             local mount = context.mount_context:require_current(operation)
@@ -532,6 +531,18 @@ local TestStatus = load_automation_module(package_root,
         end
         error(('DwarfSpec %s requires a subject from the current mount; ' ..
             'use ds.get(control_path) or ds.root()'):format(operation), 2)
+    end
+
+    ---Dispatches simulated input through the current mount's input ingress.
+    ---@param target dwarfspec.OwnedScreenInteractionTarget|dwarfspec.BorrowedNativeInteractionTarget
+    ---@param operation string
+    ---@param keys string|table|nil
+    ---@return any
+    local function simulate_input(target, operation, keys)
+        local input_screen = target:input_screen(operation)
+        assert(input_screen ~= nil,
+            ('DwarfSpec %s requires an input viewscreen'):format(operation))
+        return require('gui').simulateInput(input_screen, keys)
     end
 
     ---Resolves and registers one explicit source for a native-screen mount.
@@ -1070,7 +1081,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Returns the current positive integral native window dimensions.
-    ---@param target dwarfspec.InteractionTarget
+    ---@param target dwarfspec.OwnedScreenInteractionTarget|dwarfspec.BorrowedNativeInteractionTarget
     ---@param operation string
     ---@return integer, integer
     local function current_window_size(target, operation)
@@ -1246,8 +1257,7 @@ local TestStatus = load_automation_module(package_root,
         local interaction_target
         _, interaction_target = resolve_interaction_target(subject, 'input')
         return context.mount_context:mutate('input', function()
-            require('gui').simulateInput(
-                interaction_target:native_screen('input'), keys)
+            simulate_input(interaction_target, 'input', keys)
         end)
     end
 
@@ -1306,8 +1316,7 @@ local TestStatus = load_automation_module(package_root,
         return mutate_pointer('mouseInput', function()
             local dispatch = function()
                 pointer_adapter_module.sync(context.pointer)
-                require('gui').simulateInput(
-                    interaction_target:native_screen('mouse input'), key)
+                simulate_input(interaction_target, 'mouse input', key)
             end
             if not fields or action == EInputState.CLICK then
                 pointer_adapter_module.with_mouse_focus(
@@ -1339,8 +1348,7 @@ local TestStatus = load_automation_module(package_root,
             pointer_adapter_module.with_mouse_focus(
                 context.pointer, function()
                     pointer_adapter_module.sync(context.pointer)
-                    require('gui').simulateInput(
-                        interaction_target:native_screen('click'), key)
+                    simulate_input(interaction_target, 'click', key)
                 end)
         end)
     end
@@ -1354,13 +1362,11 @@ local TestStatus = load_automation_module(package_root,
         _, interaction_target = resolve_interaction_target(subject, 'type')
         return context.mount_context:mutate('type', function()
             assert(type(text) == 'string', 'text input must be a string')
-            local gui = require('gui')
             for index = 1, #text do
                 assert(text:byte(index) >= 1,
                     'text input cannot contain NUL bytes')
-                gui.simulateInput(
-                    interaction_target:native_screen('type'),
-                        ('STRING_A%03d'):format(text:byte(index)))
+                simulate_input(interaction_target, 'type',
+                    ('STRING_A%03d'):format(text:byte(index)))
             end
         end)
     end

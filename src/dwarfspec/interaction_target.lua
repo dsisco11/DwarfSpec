@@ -1,4 +1,4 @@
--- Interaction routing for DwarfSpec-owned component screens.
+-- Mount-specific interaction routing for owned and borrowed screens.
 
 local M = {}
 
@@ -21,13 +21,13 @@ local function bounded_diagnostic(value)
     return label:sub(1, DIAGNOSTIC_LABEL_LIMIT - 3) .. '...'
 end
 
----@class dwarfspec.InteractionTarget
+---@class dwarfspec.OwnedScreenInteractionTarget
 ---@field _screen table|nil
 ---@field _is_active fun(screen: table): boolean
 ---@field _resolve_native_screen fun(screen: table): any
 ---@field _cleaned boolean
-local InteractionTarget = {}
-InteractionTarget.__index = InteractionTarget
+local OwnedScreenInteractionTarget = {}
+OwnedScreenInteractionTarget.__index = OwnedScreenInteractionTarget
 
 ---@class dwarfspec.BorrowedNativeInteractionTarget
 ---@field _screen any|nil
@@ -40,7 +40,7 @@ BorrowedNativeInteractionTarget.__index = BorrowedNativeInteractionTarget
 ---Returns the owned screen while it remains available and active.
 ---@param operation string
 ---@return table
-function InteractionTarget:assert_current(operation)
+function OwnedScreenInteractionTarget:assert_current(operation)
     assert(type(operation) == 'string' and operation ~= '',
         'interaction operation must be a nonempty string')
     assert(not self._cleaned and self._screen,
@@ -50,17 +50,27 @@ function InteractionTarget:assert_current(operation)
     return self._screen
 end
 
----Returns the native viewscreen that should receive normal DFHack input.
+---Returns the active native screen belonging to the owned component.
 ---@param operation string
 ---@return any
-function InteractionTarget:native_screen(operation)
+function OwnedScreenInteractionTarget:native_screen(operation)
     local screen = self:assert_current(operation)
     return self._resolve_native_screen(screen)
 end
 
+---Returns the owned native screen that should receive simulated input.
+---@param operation string
+---@return any
+function OwnedScreenInteractionTarget:input_screen(operation)
+    local screen = self:native_screen(operation)
+    assert(screen ~= nil,
+        operation .. ' input screen is no longer available')
+    return screen
+end
+
 ---Invalidates the owned screen after validating its current lifecycle.
 ---@return any
-function InteractionTarget:invalidate()
+function OwnedScreenInteractionTarget:invalidate()
     local screen = self:assert_current('redraw')
     assert(type(screen.invalidate) == 'function',
         'mounted screen does not support redraw')
@@ -69,7 +79,7 @@ end
 
 ---Releases this non-owning interaction reference without dismissing its screen.
 ---@return boolean
-function InteractionTarget:cleanup()
+function OwnedScreenInteractionTarget:cleanup()
     if self._cleaned then return false end
     self._cleaned = true
     self._screen = nil
@@ -79,7 +89,7 @@ end
 ---Creates an interaction target for one DwarfSpec-owned screen.
 ---@param screen table
 ---@param options table
----@return dwarfspec.InteractionTarget
+---@return dwarfspec.OwnedScreenInteractionTarget
 function M.new_owned_screen(screen, options)
     assert(type(screen) == 'table',
         'owned-screen interaction target requires a screen table')
@@ -94,12 +104,12 @@ function M.new_owned_screen(screen, options)
         _is_active=options.is_active,
         _resolve_native_screen=options.resolve_native_screen,
         _cleaned=false,
-    }, InteractionTarget)
+    }, OwnedScreenInteractionTarget)
 end
 
----Returns the pinned native viewscreen only while it remains exactly current.
+---Returns the pinned native viewscreen while the borrowed mount remains live.
 ---@param operation string
----@param diagnostics table|nil
+---@param diagnostics table|nil Accepted for uniform mount validation.
 ---@return any
 function BorrowedNativeInteractionTarget:assert_current(
         operation, diagnostics)
@@ -110,38 +120,32 @@ function BorrowedNativeInteractionTarget:assert_current(
         ('stage=%s %s native screen is no longer available'):format(
             EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
             operation))
-    local ok, current = pcall(self._get_current_viewscreen)
-    assert(ok,
-        ('stage=%s DwarfSpec %s could not query the current viewscreen: %s')
-            :format(EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
-                operation, bounded_diagnostic(current)))
-    local context = ''
-    if diagnostics then
-        context = (' mount_kind=%q source=%q path=%q mount=%s;')
-            :format(tostring(diagnostics.mount_kind),
-                tostring(diagnostics.source), tostring(diagnostics.path),
-                tostring(diagnostics.mount_id))
-    end
-    assert(current == self._screen,
-        ('stage=%s DwarfSpec %s rejected stale native-screen mount;%s ' ..
-        'pinned ' ..
-        'viewscreen is no longer current; captured_screen=%s ' ..
-        'current_screen=%s'):format(
-            EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
-            operation, context,
-            identity_labels.of(self._screen),
-            identity_labels.of(current)))
     return self._screen
 end
 
----Returns the pinned viewscreen for normal DFHack input dispatch.
+---Returns the pinned base DF viewscreen for non-input operations.
 ---@param operation string
 ---@return any
 function BorrowedNativeInteractionTarget:native_screen(operation)
     return self:assert_current(operation)
 end
 
----Invalidates the native screen globally after validating its identity.
+---Returns the viewscreen that should receive simulated native input now.
+---@param operation string
+---@return any
+function BorrowedNativeInteractionTarget:input_screen(operation)
+    self:assert_current(operation)
+    local ok, current = pcall(self._get_current_viewscreen)
+    assert(ok,
+        ('DwarfSpec %s could not query the current input viewscreen: %s')
+            :format(operation, bounded_diagnostic(current)))
+    assert(current ~= nil,
+        ('DwarfSpec %s requires a current input viewscreen')
+            :format(operation))
+    return current
+end
+
+---Invalidates native rendering while preserving the borrowed screen.
 ---@return any
 function BorrowedNativeInteractionTarget:invalidate()
     self:assert_current('redraw')

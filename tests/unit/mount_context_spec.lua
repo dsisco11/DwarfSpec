@@ -918,13 +918,8 @@ describe('DwarfSpec mount context', function()
 
         located_root = second_root
         current_screen = {}
-        local screen_ok, screen_failure = pcall(retained.raw, retained)
-        assert.is_false(screen_ok)
-        assert.matches(
-            'pinned viewscreen is no longer current',
-            screen_failure, 1, true)
+        assert.equals(second_child, retained:raw())
 
-        current_screen = pinned
         context:unmount()
         local unmounted_ok, unmounted_failure =
             pcall(retained.raw, retained)

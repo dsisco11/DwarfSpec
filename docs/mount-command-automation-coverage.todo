@@ -369,7 +369,7 @@ attachment without mutating persistent game state.
   bounded native root, type, names, state, bounds, and available text.
 ☐ Repeat native root, lookup, and tree capture with explicit
   `ESubjectSource.NATIVE`.
-☐ Capture bounded screen cells while the native screen remains current.
+☐ Capture bounded screen cells while the native attachment remains active.
 ☐ Exercise `Subject:text()` directly on the stable live native text widget.
 ☐ Exercise native `Subject:move_pointer()` and `Subject:hover()` and prove the
   pointer lies within the widget's rendered bounds.
@@ -420,28 +420,34 @@ attachment without mutating persistent game state.
   evidence.
 ☐ Text, click, and keyboard observations use test-owned overlay instrumentation
   without bypassing normal dispatch.
-☐ The borrowed native screen remains exact, current, unowned, and undismissed.
+☐ The borrowed base DF screen remains exact, unowned, and undismissed even
+  when another viewscreen is current.
 ☐ Native and independently owned overlay cleanup both pass.
 
-## Phase 6: Live rejection, staleness, and recovery contracts
+## Phase 6: Live routing, staleness, and recovery contracts
 
-Goal: prove the unit-covered failure boundaries that depend on real DFHack
-screen or overlay lifecycle.
+Goal: prove the input-routing and failure boundaries that depend on real DFHack
+screen or overlay lifecycle. Native input-routing details are governed by
+`docs/native-input-routing.todo`.
 
 ### Tasks
 
 ☐ For each component mount host, reject native/overlay source options and prove
   the current mount remains usable.
-☐ Show a test-owned DFHack Lua screen above the native game screen and prove a
-  new native attachment rejects the current/DF viewscreen mismatch.
+☐ Show a test-owned registered fullscreen overlay above the native game screen
+  and prove a new native attachment succeeds while retaining the base DF
+  widget root.
+☐ Prove native input enters through that current fullscreen overlay and normal
+  DFHack handling controls consumption and backing-screen pass-through.
 ☐ Dismiss only that test-owned screen and prove the original native screen,
   focus, and stack are restored.
 ☐ While a native attachment is active, show a test-owned screen transition and
-  prove retained native subjects become stale before widget dereference or
-  input dispatch.
-☐ Restore the original screen and prove the stale subject does not silently
-  rebind.
-☐ Unmount and perform a fresh native attachment to prove remount recovery.
+  prove retained native subjects remain usable while subsequent input follows
+  the new current screen.
+☐ Restore the original screen and prove input follows it without remounting or
+  silently rebinding the retained subject to a different widget.
+☐ Unmount and perform a fresh native attachment to prove ordinary mount
+  lifecycle recovery.
 ☐ With a test-owned registered overlay subject, prove staleness after:
   - disablement;
   - removal;
@@ -454,14 +460,17 @@ screen or overlay lifecycle.
 ☐ Prove the original failure remains primary and partial render observation,
   subjects, attachment state, pointer/button state, and cleanup entries are
   removed.
-☐ Verify the process remains responsive and the original native screen remains
-  current after every rejection case.
+☐ Verify the process remains responsive and every test-owned screen transition
+  is restored after each routing or rejection case.
 
 ### Phase 6 exit gate
 
-☐ All live rejection cases leave independently verified clean state.
-☐ Native and overlay subjects fail explicitly after real lifecycle changes.
-☐ Recovery requires and successfully creates fresh subjects and attachments.
+☐ All live routing and rejection cases leave independently verified clean
+  state.
+☐ Native and overlay subjects fail explicitly after actual widget or source
+  lifecycle changes, not merely because the top viewscreen changed.
+☐ Actual replacements require fresh subjects, and unmount permits a fresh
+  attachment.
 ☐ No test dismisses or navigates the borrowed native game screen.
 
 ## Phase 7: Full verification and coverage closure

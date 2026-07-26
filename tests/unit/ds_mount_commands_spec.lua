@@ -929,23 +929,19 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, native_screen.navigation_calls)
     end)
 
-    it('rejects native subject access immediately after a screen transition',
+    it('retains native subject access across a top-screen transition',
             function()
         local mounted = ds.mountNativeScreen()
-        current_native_screen = {
+        local next_screen = {
             name='next-native-screen',
             widgets={kind='next-widget-root'},
         }
+        current_native_screen = next_screen
 
-        local ok, failure = pcall(mounted.raw, mounted)
-        assert.is_false(ok)
-        assert.matches('DwarfSpec subject raw access rejected stale ' ..
-            'native%-screen mount;', failure)
-        assert.matches('mount_kind="native" source="native" ' ..
-            'path="<root>" mount=1;', failure, 1, true)
-        assert.matches('captured_screen=table#%d+ current_screen=table#%d+',
-            failure)
-        assert.is_true(#failure < 8192)
+        assert.equals(native_root, mounted:raw())
+        ds.input('SELECT')
+        assert.equals(next_screen,
+            simulated_inputs[#simulated_inputs].screen)
         assert.equals(0, native_screen.dismiss_calls)
     end)
 
@@ -2363,31 +2359,28 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, df.global.enabler.tracking_on)
     end)
 
-    it('rejects input and pointer operations after a native screen change',
+    it('routes input after a native screen change without rebinding subjects',
             function()
         local mounted = ds.mountNativeScreen()
         ds.move_pointer(4, 5)
         local lookup_count = native_widget_lookup_calls
-        current_native_screen = {
+        local next_screen = {
             name='replacement-screen',
             widgets={kind='replacement-root'},
         }
+        current_native_screen = next_screen
 
-        for _, operation in ipairs({
-                function() ds.input('SELECT') end,
-                function() ds.mouseInput(EMouseButton.LEFT) end,
-                function() mounted:click() end,
-                function() ds.move_pointer(4, 5) end}) do
-            local ok, failure = pcall(operation)
-            assert.is_false(ok)
-            assert.matches('rejected stale native%-screen mount',
-                failure)
-        end
+        ds.input('SELECT')
+        ds.mouseInput(EMouseButton.LEFT)
+        ds.move_pointer(4, 5)
+        assert.equals(native_root, mounted:raw())
+        assert.equals(next_screen, simulated_inputs[1].screen)
+        assert.equals(next_screen, simulated_inputs[2].screen)
         assert.same({4, 5}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
         })
-        assert.equals(lookup_count, native_widget_lookup_calls)
+        assert.is_true(native_widget_lookup_calls >= lookup_count)
 
         ds.unmount()
 

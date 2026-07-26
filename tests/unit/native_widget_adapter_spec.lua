@@ -262,26 +262,18 @@ describe('DwarfSpec native widget adapter', function()
             'pinned viewscreen is no longer current', 1, true))
     end)
 
-    it('validates the pinned screen before invoking native services',
+    it('keeps native services available across top-screen changes',
             function()
         local service_call_count = #calls
         current = {}
 
-        local resolve_ok, resolve_failure = pcall(function()
-            adapter:resolve({'Missing'})
-        end)
-        assert.is_false(resolve_ok)
-        assert.matches('DwarfSpec native subject resolution rejected stale ' ..
-            'native%-screen mount; pinned viewscreen is no longer current;',
-            resolve_failure)
-        local children_ok, children_failure = pcall(function()
-            adapter:children(root)
-        end)
-        assert.is_false(children_ok)
-        assert.matches('DwarfSpec native child enumeration rejected stale ' ..
-            'native%-screen mount; pinned viewscreen is no longer current;',
-            children_failure)
-        assert.equals(service_call_count, #calls)
+        local resolved, failure = adapter:resolve({'Missing'})
+        local children = adapter:children(root)
+
+        assert.is_nil(resolved)
+        assert.is_table(failure)
+        assert.same({}, children)
+        assert.is_true(#calls > service_call_count)
     end)
 
     it('uses stable injected identity across reacquired wrappers', function()
@@ -404,7 +396,7 @@ describe('DwarfSpec native widget adapter', function()
         assert.is_true(#failed < 4096)
     end)
 
-    it('checks screen currentness before invoking a root locator', function()
+    it('invokes a root locator across top-screen changes', function()
         local located_root = widget(
             'stable-root', nil, 'df.widget_container')
         local locator_calls = 0
@@ -423,17 +415,13 @@ describe('DwarfSpec native widget adapter', function()
         local calls_after_creation = locator_calls
         current = {}
 
-        local ok, failure =
+        local ok, resolved, failure =
             pcall(located.resolve, located, {'Status'})
 
-        assert.is_false(ok)
-        assert.matches(
-            'pinned viewscreen is no longer current', failure, 1, true)
-        assert.matches(
-            'stage=retained_subject_reacquisition',
-            failure, 1, true)
-        assert.is_true(#failure < 4096)
-        assert.equals(calls_after_creation, locator_calls)
+        assert.is_true(ok)
+        assert.is_nil(resolved)
+        assert.is_table(failure)
+        assert.is_true(locator_calls > calls_after_creation)
     end)
 
     it('releases located-root references without mutating native objects',
