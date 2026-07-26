@@ -1,6 +1,6 @@
 # Pointer coordinate unification
 
-Status: ready for implementation
+Status: in progress; Phase 0 complete
 
 Related implementation:
 
@@ -217,25 +217,63 @@ production edits.
 
 ### Tasks
 
-☐ Verify repository path, branch, remote, and initial `git status --short`.
-☐ Record focused unit baselines for pointer support and mount commands.
-☐ Record the full unit baseline.
-☐ Record the Lua syntax/formatting baseline.
-☐ Run the existing focused interaction live specification and record behavior
+✔ Verify repository path, branch, remote, and initial `git status --short`.
+✔ Record focused unit baselines for pointer support and mount commands.
+✔ Record the full unit baseline.
+✔ Record the Lua syntax/formatting baseline.
+✔ Run the existing focused interaction live specification and record behavior
   and cleanup independently.
-☐ Confirm the current public declarations and README wording for
+✔ Confirm the current public declarations and README wording for
   `move_pointer`, `hover`, `click`, and `mouseInput`.
-☐ Confirm every pointer cleanup assertion that currently snapshots only
+✔ Confirm every pointer cleanup assertion that currently snapshots only
   `getMousePos` or `gps.mouse_x/y` and assign its update to a later phase.
-☐ Confirm the public API and conversion decisions above before changing code.
+✔ Confirm the public API and conversion decisions above before changing code.
 
 ### Phase 0 exit gate
 
-☐ Baseline unit, syntax, focused live, process, and cleanup evidence is
+✔ Baseline unit, syntax, focused live, process, and cleanup evidence is
   recorded separately.
-☐ Every existing pointer test affected by paired ownership is listed in the
+✔ Every existing pointer test affected by paired ownership is listed in the
   implementation notes or mapped to a later task.
-☐ No production code has changed.
+✔ No production code has changed.
+
+### Phase 0 implementation notes
+
+Repository baseline:
+
+- workspace: `D:\CODE\DFHack\DwarfSpec`;
+- branch: `cli-error-formatting`;
+- remote: `origin https://github.com/dsisco11/DwarfSpec.git`;
+- baseline commit: `c38b957`;
+- initial worktree: clean.
+
+Current public contract:
+
+- `README.md` documents `ds.move_pointer(x, y)` as exact zero-based native
+  screen coordinates without naming their UI-grid units.
+- `src/ds.d.lua` declares the numeric two-argument overload and calls the
+  pointer virtual.
+- Subject `move_pointer` and `hover` accept grid-derived anchors.
+- Subject click moves to a grid-derived subject position before native input.
+- `ds.mouseInput()` dispatches at the current virtual pointer and has no
+  coordinate-space parameter.
+
+Affected test migration map:
+
+| Existing coverage | Current incomplete assertion | Assigned work |
+|---|---|---|
+| `tests/unit/automation_interaction_support_spec.lua` | snapshots and restores only `getMousePos` and `gps.mouse_x/y` | Phase 2 paired adapter ownership and conflict coverage |
+| `tests/unit/ds_mount_commands_spec.lua` | fixtures expose only `getMousePos` and grid fields; cleanup and input assertions omit pixel state | Phase 3 command migration |
+| `tests/automation/interaction_live_spec.lua` | snapshots and restores only `getMousePos` | Phase 5 focused live coverage |
+| `tests/automation/native_screen_mount_live_spec.lua` | `pointer_state()` captures only `getMousePos`, `mouse_x`, and `mouse_y` | Phase 5 native live coverage |
+| `tests/automation/overlay_widget_mount_live_spec.lua` | hover evidence observes only grid coordinates | Phase 5 focused live coverage |
+| `tests/framework/command_project/tests/live/mount_failure_recovery_spec.ds.lua` | failure recovery restores only the grid accessor identity | Phase 5 live failure-cleanup coverage |
+| `tests/framework/command_project/tests/live/overlay_failure_recovery_spec.ds.lua` | failure recovery restores only the grid accessor identity | Phase 5 live failure-cleanup coverage |
+
+`tests/unit/automation_host_spec.lua` and
+`tests/framework/service_project_gamma/tests/live/shared_spec.ds.lua` assert
+the aggregate `pointer_active` probe only. They remain valid aggregate checks
+and require no coordinate-specific migration.
 
 ## Phase 1: Coordinate-space and geometry model
 
@@ -473,12 +511,15 @@ cleanup evidence are all current.
 
 | Evidence | Command or source | Result |
 |---|---|---|
-| Initial repository identity | pending | pending |
-| Initial worktree | `git status --short` | pending |
-| Baseline focused units | pending | pending |
-| Baseline full units | `.\Tools\Run-UnitTests.ps1` | pending |
-| Baseline syntax | `.\Tools\Check-Lua.ps1` | pending |
-| Baseline focused live | pending | pending |
+| Initial repository identity | `Get-Location`; `git branch --show-current`; `git remote -v`; `git log -1 --oneline` | `D:\CODE\DFHack\DwarfSpec`; branch `cli-error-formatting`; `origin` is `https://github.com/dsisco11/DwarfSpec.git`; commit `c38b957` |
+| Initial worktree | `git status --short` | clean |
+| Baseline focused pointer units | `.\Tools\Run-UnitTests.ps1 --filter "automation interaction support"` | 5 successes, 0 failures, 0 errors, 0 pending |
+| Baseline focused command units | `.\Tools\Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"` | 57 successes, 0 failures, 0 errors, 0 pending |
+| Baseline full units | `.\Tools\Run-UnitTests.ps1` | 429 successes, 0 failures, 0 errors, 0 pending |
+| Baseline syntax | `.\Tools\Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 229 files |
+| Baseline focused live | `.\Tools\Run-AutomationTests.ps1 --test-glob tests/automation/interaction_live_spec.lua` | 1 success, 0 failures, 0 errors, 0 pending; 109 ms |
+| Baseline cleanup confirmation | focused interaction live result | `cleanup_confirmed=true`; one pending cleanup action completed |
+| Baseline process state | `Get-Process`; DFHack Lua precondition query | PID 36940; `Dwarf Fortress.exe`; DFHack responsive; `viewscreen_dwarfmodest`; focus `dwarfmode/Default`; map and world loaded |
 | Implemented focused pointer units | pending | pending |
 | Implemented focused command units | pending | pending |
 | Implemented full units | `.\Tools\Run-UnitTests.ps1` | pending |
@@ -486,8 +527,8 @@ cleanup evidence are all current.
 | Implemented focused interaction live | pending | pending |
 | Implemented focused native live | pending | pending |
 | Implemented full live | `.\Tools\Run-AutomationTests.ps1` | pending |
-| Cleanup confirmation | pending | pending |
-| Process/resource state | pending | pending |
+| Implemented cleanup confirmation | pending | pending |
+| Implemented process/resource state | pending | pending |
 | Package/module coverage | pending | pending |
 | Diff validation | `git diff --check` | pending |
 
