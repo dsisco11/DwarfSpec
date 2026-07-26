@@ -342,23 +342,23 @@ Goal: replace grid-only virtualization with atomic paired state and cleanup.
 
 ### Tasks
 
-☐ Extend the pointer adapter state with current paired position, original raw
+✔ Extend the pointer adapter state with current paired position, original raw
   coordinate snapshot, both original accessors, both patched accessors, and one
   cleanup entry.
-☐ Refactor `set()` to accept normalized paired state and claim ownership once.
-☐ Write both raw coordinate pairs on every set.
-☐ Patch both `getMousePos()` and `getMousePixels()`.
-☐ Add `sync()` for reapplying the active paired state immediately before
+✔ Refactor `set()` to accept normalized paired state and claim ownership once.
+✔ Write both raw coordinate pairs on every set.
+✔ Patch both `getMousePos()` and `getMousePixels()`.
+✔ Add `sync()` for reapplying the active paired state immediately before
   native dispatch.
-☐ Refactor `position()` to return or copy the full paired state without
+✔ Refactor `position()` to return or copy the full paired state without
   exposing mutable internal tables.
-☐ Remove `with_interface_mouse()`.
-☐ Make `clear()` and cleanup restore raw coordinates, accessors, and adapter
+✔ Remove `with_interface_mouse()`.
+✔ Make `clear()` and cleanup restore raw coordinates, accessors, and adapter
   state.
-☐ Make restoration best-effort across independent accessor conflicts.
-☐ Preserve button-state behavior and cleanup ordering.
-☐ Update the cleanup probe so pointer activity represents paired ownership.
-☐ Add unit coverage for:
+✔ Make restoration best-effort across independent accessor conflicts.
+✔ Preserve button-state behavior and cleanup ordering.
+✔ Update the cleanup probe so pointer activity represents paired ownership.
+✔ Add unit coverage for:
   - first claim and repeated moves;
   - one cleanup entry across repeated moves;
   - both raw coordinate pairs during ownership;
@@ -375,12 +375,44 @@ Goal: replace grid-only virtualization with atomic paired state and cleanup.
 
 ### Phase 2 exit gate
 
-☐ No adapter path can change only one coordinate pair.
-☐ No native dispatch path has a private grid-only coordinate mutation.
-☐ Cleanup restores every state item it can safely own even when another item
+✔ No adapter path can change only one coordinate pair.
+✔ No native dispatch path has a private grid-only coordinate mutation.
+✔ Cleanup restores every state item it can safely own even when another item
   has an ownership conflict.
-☐ Focused and full unit suites pass.
-☐ Lua syntax and formatting checks pass.
+✔ Focused and full unit suites pass.
+✔ Lua syntax and formatting checks pass.
+
+### Phase 2 implementation notes
+
+- The pointer adapter now owns one defensive paired position, one exact raw
+  snapshot, both Lua accessor identities, and one cleanup entry. Repeated sets
+  update the paired position without replacing the snapshot or cleanup entry.
+- `set()` and `sync()` use the same internal writer for `mouse_x`, `mouse_y`,
+  `precise_mouse_x`, and `precise_mouse_y`. Both patched accessors read the
+  logical paired position instead of volatile raw fields.
+- `position()` returns a deep copy, and the adapter copies every input position
+  before retaining it.
+- Restoration attempts all four raw fields and both accessors independently.
+  Accessors replaced by another owner are retained and named in the cleanup
+  failure after all safely owned state and adapter internals are restored.
+- The grid-only `with_interface_mouse()` owner was removed. Mouse clicks,
+  wheel input, button transitions, and subject clicks now resynchronize through
+  `sync()`; temporary focus/tracking flags remain independently scoped.
+- The cleanup probe now asks the adapter whether paired ownership is active.
+
+Validation evidence:
+
+| Evidence | Result |
+|---|---|
+| Focused adapter units | 13 successes, 0 failures |
+| Focused mount-command units | 57 successes, 0 failures |
+| Full unit suite | 437 successes, 0 failures |
+| Lua syntax and formatting | 230 files passed |
+| Source ownership audit | All production raw/accessor writes are confined to the pointer adapter |
+| Legacy-path audit | No production `with_interface_mouse` reference remains |
+| Package configuration | No module or manifest change required |
+| Live automation | Not required or run |
+| Cleanup | Valid, sentinel, single-conflict, dual-conflict, continuation, and button-order paths passed |
 
 ## Phase 3: Public command migration
 

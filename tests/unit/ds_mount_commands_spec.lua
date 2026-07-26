@@ -182,6 +182,7 @@ describe('DwarfSpec public mount commands', function()
             getTickCount=function() return dfhack_time end,
             screen={
                 getMousePos=function() return 90, 91 end,
+                getMousePixels=function() return 900, 910 end,
                 getWindowSize=function() return 80, 25 end,
             },
             gui={
@@ -213,7 +214,18 @@ describe('DwarfSpec public mount commands', function()
         rawset(_G, 'df', {
             global={
                 cur_year_tick=12345,
-                gps={mouse_x=4, mouse_y=5},
+                gps={
+                    mouse_x=4,
+                    mouse_y=5,
+                    precise_mouse_x=40,
+                    precise_mouse_y=50,
+                    dimx=80,
+                    dimy=25,
+                    screen_pixel_x=800,
+                    screen_pixel_y=200,
+                    tile_pixel_x=10,
+                    tile_pixel_y=8,
+                },
                 enabler={
                     mouse_focus=false,
                     tracking_on=0,
@@ -236,6 +248,8 @@ describe('DwarfSpec public mount commands', function()
                     key=key,
                     x=df.global.gps.mouse_x,
                     y=df.global.gps.mouse_y,
+                    pixel_x=df.global.gps.precise_mouse_x,
+                    pixel_y=df.global.gps.precise_mouse_y,
                     mouse_focus=df.global.enabler.mouse_focus,
                     tracking_on=df.global.enabler.tracking_on,
                     left_down=df.global.enabler.mouse_lbut_down,
@@ -687,7 +701,16 @@ describe('DwarfSpec public mount commands', function()
             overlay='gui/example.CleanupOverlay',
         })
         ds.move_pointer(7, 8)
+        assert.is_true(run.mount_cleanup_probe().pointer_active)
         ds.mouseInput(EMouseButton.LEFT, EInputState.DOWN)
+        assert.same({7, 8}, {dfhack.screen.getMousePos()})
+        assert.same({75, 68}, {dfhack.screen.getMousePixels()})
+        assert.same({7, 8, 75, 68}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
 
         local names = {}
         for _, entry in ipairs(registry.entries) do
@@ -707,6 +730,13 @@ describe('DwarfSpec public mount commands', function()
         assert.is_nil(native_subject._descriptor)
         assert.is_nil(overlay_subject._descriptor)
         assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+        assert.same({4, 5, 40, 50}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
         assert.equals(0, df.global.enabler.mouse_lbut_down)
         assert.equals(0, df.global.enabler.mouse_lbut_lift)
         assert.is_false(df.global.enabler.mouse_focus)
@@ -1830,13 +1860,16 @@ describe('DwarfSpec public mount commands', function()
         for _, input in ipairs(simulated_inputs) do
             assert.equals('native-screen', input.screen.name)
             assert.same({10, 20}, {input.x, input.y})
+            assert.same({105, 164}, {input.pixel_x, input.pixel_y})
             assert.is_true(input.mouse_focus)
             assert.equals(1, input.tracking_on)
         end
         assert.same({10, 20}, {dfhack.screen.getMousePos()})
-        assert.same({4, 5}, {
+        assert.same({10, 20, 105, 164}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
         })
         assert.is_false(df.global.enabler.mouse_focus)
         assert.equals(0, df.global.enabler.tracking_on)
@@ -2027,7 +2060,7 @@ describe('DwarfSpec public mount commands', function()
         end
     end)
 
-    it('restores temporary pointer and button state after input failures',
+    it('preserves paired pointer ownership and restores input failure flags',
             function()
         local mounted = ds.mount(TestWidget, {
             frame_body={x1=10, y1=20, x2=14, y2=24},
@@ -2040,9 +2073,11 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(click_ok)
         assert.matches('injected simulateInput failure',
             click_failure, 1, true)
-        assert.same({4, 5}, {
+        assert.same({10, 20, 105, 164}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
         })
         assert.is_false(df.global.enabler.mouse_focus)
         assert.equals(0, df.global.enabler.tracking_on)

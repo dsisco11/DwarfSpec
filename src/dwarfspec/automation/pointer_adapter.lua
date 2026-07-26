@@ -26,6 +26,9 @@ local M = {}
 ---Injected boundaries used by the pointer adapter.
 ---@class DwarfSpecPointerAdapterDependencies
 ---@field get_geometry? fun():DwarfSpecPointerGeometry
+---@field screen? table
+---@field gps? table
+---@field enabler? table
 
 local GEOMETRY_FIELDS = {
     {name='grid_width', gps_name='dimx'},
@@ -47,10 +50,15 @@ function M.new(cleanup_module, cleanup_registry, dependencies)
         cleanup_module=cleanup_module,
         cleanup_registry=cleanup_registry,
         get_geometry=dependencies.get_geometry,
-        x=nil,
-        y=nil,
+        screen=dependencies.screen,
+        gps=dependencies.gps,
+        enabler=dependencies.enabler,
+        current_position=nil,
+        original_raw_position=nil,
         original_get_mouse_pos=nil,
+        original_get_mouse_pixels=nil,
         patched_get_mouse_pos=nil,
+        patched_get_mouse_pixels=nil,
         cleanup_entry=nil,
         original_button_state=nil,
         button_cleanup_entry=nil,
@@ -134,89 +142,202 @@ function M.normalize_position(x, y, space, geometry)
     error('unsupported pointer coordinate space: ' .. tostring(space), 2)
 end
 
----Restores the original pointer function and rejects conflicting patches.
----@param adapter table
-local function restore(adapter)
-    if not adapter.patched_get_mouse_pos then return end
-    if dfhack.screen.getMousePos ~= adapter.patched_get_mouse_pos then
-        error('automation pointer restoration refused: getMousePos changed externally')
+---Validates and defensively copies one paired pointer position.
+---@param position table
+---@return DwarfSpecPointerPosition
+local function copy_position(position)
+    assert(type(position) == 'table',
+        'paired pointer position must be a table')
+    local copy = {grid={}, pixels={}}
+    for _, space in ipairs({'grid', 'pixels'}) do
+        assert(type(position[space]) == 'table',
+            ('paired pointer position requires %s coordinates'):format(space))
+        for _, axis in ipairs({'x', 'y'}) do
+            local value = position[space][axis]
+            assert(type(value) == 'number' and value % 1 == 0,
+                ('paired pointer %s %s coordinate must be an integer')
+                    :format(space, axis))
+            copy[space][axis] = value
+        end
     end
-    dfhack.screen.getMousePos = adapter.original_get_mouse_pos
-    adapter.original_get_mouse_pos = nil
-    adapter.patched_get_mouse_pos = nil
-    adapter.x = nil
-    adapter.y = nil
+    return copy
 end
 
----Installs or updates the virtual interface pointer position.
+---Writes both raw coordinate pairs from the active logical position.
 ---@param adapter table
----@param x integer
----@param y integer
-function M.set(adapter, x, y)
-    assert(type(x) == 'number' and x % 1 == 0,
-        'pointer x coordinate must be an integer')
-    assert(type(y) == 'number' and y % 1 == 0,
-        'pointer y coordinate must be an integer')
-    if not adapter.patched_get_mouse_pos then
-        adapter.original_get_mouse_pos = dfhack.screen.getMousePos
+local function apply_position(adapter)
+    local position = assert(adapter.current_position,
+        'pointer synchronization requires an active pointer position')
+    local gps = assert(adapter.gps,
+        'pointer adapter requires an injected gps boundary')
+    gps.mouse_x = position.grid.x
+    gps.mouse_y = position.grid.y
+    gps.precise_mouse_x = position.pixels.x
+    gps.precise_mouse_y = position.pixels.y
+end
+
+---Runs one restoration operation and records failure without stopping cleanup.
+---@param failures string[]
+---@param label string
+---@param operation function
+local function attempt_restoration(failures, label, operation)
+    local ok, failure = xpcall(operation, debug.traceback)
+    if not ok then
+        table.insert(failures,
+            ('%s restoration failed: %s'):format(label, tostring(failure)))
+    end
+end
+
+---Restores one accessor only when the adapter still owns its patch.
+---@param adapter table
+---@param field string
+---@param patched function|nil
+---@param original function|nil
+---@param failures string[]
+local function restore_accessor(adapter, field, patched, original, failures)
+    local screen = adapter.screen
+    if screen[field] ~= patched then
+        table.insert(failures, field .. ' changed externally')
+        return
+    end
+    attempt_restoration(failures, field, function()
+        screen[field] = original
+    end)
+end
+
+---Restores all pointer state and reports accessor conflicts after best effort.
+---@param adapter table
+local function restore(adapter)
+    if not adapter.current_position then return end
+    local failures = {}
+    local gps = adapter.gps
+    local original = adapter.original_raw_position
+    for _, field in ipairs({
+            'mouse_x',
+            'mouse_y',
+            'precise_mouse_x',
+            'precise_mouse_y'}) do
+        attempt_restoration(failures, 'gps.' .. field, function()
+            gps[field] = original[field]
+        end)
+    end
+    restore_accessor(adapter, 'getMousePos',
+        adapter.patched_get_mouse_pos,
+        adapter.original_get_mouse_pos,
+        failures)
+    restore_accessor(adapter, 'getMousePixels',
+        adapter.patched_get_mouse_pixels,
+        adapter.original_get_mouse_pixels,
+        failures)
+
+    adapter.current_position = nil
+    adapter.original_raw_position = nil
+    adapter.original_get_mouse_pos = nil
+    adapter.original_get_mouse_pixels = nil
+    adapter.patched_get_mouse_pos = nil
+    adapter.patched_get_mouse_pixels = nil
+    adapter.cleanup_entry = nil
+    if #failures > 0 then
+        error('automation pointer restoration conflicts: ' ..
+            table.concat(failures, '; '), 0)
+    end
+end
+
+---Claims pointer ownership once and applies one normalized paired position.
+---@param adapter table
+---@param position DwarfSpecPointerPosition
+function M.set(adapter, position)
+    local screen = assert(adapter.screen,
+        'pointer adapter requires an injected screen boundary')
+    local gps = assert(adapter.gps,
+        'pointer adapter requires an injected gps boundary')
+    position = copy_position(position)
+    if not adapter.current_position then
+        adapter.original_raw_position = {
+            mouse_x=gps.mouse_x,
+            mouse_y=gps.mouse_y,
+            precise_mouse_x=gps.precise_mouse_x,
+            precise_mouse_y=gps.precise_mouse_y,
+        }
+        adapter.original_get_mouse_pos = screen.getMousePos
+        adapter.original_get_mouse_pixels = screen.getMousePixels
+        ---Returns the active logical UI-grid coordinate.
+        ---@return integer, integer
         adapter.patched_get_mouse_pos = function()
-            return adapter.x, adapter.y
+            local current = adapter.current_position.grid
+            return current.x, current.y
         end
-        dfhack.screen.getMousePos = adapter.patched_get_mouse_pos
+        ---Returns the active logical screen-pixel coordinate.
+        ---@return integer, integer
+        adapter.patched_get_mouse_pixels = function()
+            local current = adapter.current_position.pixels
+            return current.x, current.y
+        end
+        adapter.current_position = position
+        screen.getMousePos = adapter.patched_get_mouse_pos
+        screen.getMousePixels = adapter.patched_get_mouse_pixels
         adapter.cleanup_entry = adapter.cleanup_module.push(
             adapter.cleanup_registry, 'virtual pointer', function()
                 restore(adapter)
             end)
+    else
+        adapter.current_position = position
     end
-    adapter.x = x
-    adapter.y = y
+    apply_position(adapter)
 end
 
----Returns the active virtual pointer position.
+---Returns a defensive copy of the active paired pointer position.
 ---@param adapter table
----@return integer, integer
+---@return DwarfSpecPointerPosition
 function M.position(adapter)
-    assert(adapter.patched_get_mouse_pos,
+    assert(adapter.current_position,
         'mouse input requires a pointer position; call ds.move_pointer() ' ..
         'or subject:hover() first')
-    return adapter.x, adapter.y
+    return copy_position(adapter.current_position)
+end
+
+---Reapplies both active raw coordinate pairs before native input dispatch.
+---@param adapter table
+function M.sync(adapter)
+    assert(adapter.current_position,
+        'mouse input requires a pointer position; call ds.move_pointer() ' ..
+        'or subject:hover() first')
+    apply_position(adapter)
+end
+
+---Returns whether this adapter currently owns a paired pointer position.
+---@param adapter table
+---@return boolean
+function M.is_active(adapter)
+    return adapter.current_position ~= nil
 end
 
 ---Removes the virtual pointer adapter immediately.
 ---@param adapter table
 function M.clear(adapter)
-    if not adapter.patched_get_mouse_pos then return end
-    restore(adapter)
-    adapter.cleanup_module.release(adapter.cleanup_registry,
-        adapter.cleanup_entry)
-    adapter.cleanup_entry = nil
+    if not adapter.current_position then return end
+    local cleanup_entry = adapter.cleanup_entry
+    local ok, failure = xpcall(function()
+        restore(adapter)
+    end, debug.traceback)
+    adapter.cleanup_module.release(adapter.cleanup_registry, cleanup_entry)
+    if not ok then error(failure, 0) end
 end
 
----Runs one input operation with temporary native interface mouse coordinates.
----@param x integer
----@param y integer
+---Runs one mouse operation with temporary native focus and tracking flags.
+---@param adapter table
 ---@param operation function
 ---@return any
-function M.with_interface_mouse(x, y, operation)
-    local gps = df.global.gps
-    local enabler = df.global.enabler
-    local original_x = gps.mouse_x
-    local original_y = gps.mouse_y
-    local original_mouse_focus = enabler and enabler.mouse_focus
-    local original_tracking_on = enabler and enabler.tracking_on
-    gps.mouse_x = x
-    gps.mouse_y = y
-    if enabler then
-        enabler.mouse_focus = true
-        enabler.tracking_on = 1
-    end
+function M.with_mouse_focus(adapter, operation)
+    local enabler = assert(adapter.enabler,
+        'pointer adapter requires an injected enabler boundary')
+    local original_mouse_focus = enabler.mouse_focus
+    local original_tracking_on = enabler.tracking_on
+    enabler.mouse_focus = true
+    enabler.tracking_on = 1
     local ok, first, second, third = xpcall(operation, debug.traceback)
-    gps.mouse_x = original_x
-    gps.mouse_y = original_y
-    if enabler then
-        enabler.mouse_focus = original_mouse_focus
-        enabler.tracking_on = original_tracking_on
-    end
+    enabler.mouse_focus = original_mouse_focus
+    enabler.tracking_on = original_tracking_on
     if not ok then error(first, 0) end
     return first, second, third
 end
@@ -236,7 +357,8 @@ local BUTTON_STATE_FIELDS = {
 ---@param adapter table
 local function claim_button_state(adapter)
     if adapter.button_cleanup_entry then return end
-    local enabler = df.global.enabler
+    local enabler = assert(adapter.enabler,
+        'pointer adapter requires an injected enabler boundary')
     local original = {}
     for _, field in ipairs(BUTTON_STATE_FIELDS) do
         original[field] = enabler[field]
@@ -262,7 +384,7 @@ end
 function M.with_button_state(adapter, down_field, lift_field, is_down,
         operation)
     claim_button_state(adapter)
-    local enabler = df.global.enabler
+    local enabler = adapter.enabler
     local previous_down = enabler[down_field]
     local previous_lift = enabler[lift_field]
     local previous_mouse_focus = enabler.mouse_focus

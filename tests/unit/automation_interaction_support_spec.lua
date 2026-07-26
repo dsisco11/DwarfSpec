@@ -7,6 +7,62 @@ local diagnostics = assert(loadfile(
 local pointer_adapter = assert(loadfile(
     'src/dwarfspec/automation/pointer_adapter.lua'))()
 
+---Creates one paired logical pointer position for adapter tests.
+---@param grid_x integer
+---@param grid_y integer
+---@param pixel_x integer
+---@param pixel_y integer
+---@return table
+local function paired_position(grid_x, grid_y, pixel_x, pixel_y)
+    return {
+        grid={x=grid_x, y=grid_y},
+        pixels={x=pixel_x, y=pixel_y},
+    }
+end
+
+---Creates isolated pointer boundaries without reading DFHack globals.
+---@param original_raw table|nil
+---@return table
+local function pointer_fixture(original_raw)
+    original_raw = original_raw or {}
+    local original_get_mouse_pos = function() return 90, 91 end
+    local original_get_mouse_pixels = function() return 900, 910 end
+    local screen = {
+        getMousePos=original_get_mouse_pos,
+        getMousePixels=original_get_mouse_pixels,
+    }
+    local gps = {
+        mouse_x=original_raw.mouse_x or 4,
+        mouse_y=original_raw.mouse_y or 5,
+        precise_mouse_x=original_raw.precise_mouse_x or 40,
+        precise_mouse_y=original_raw.precise_mouse_y or 50,
+    }
+    local enabler = {
+        mouse_focus=false,
+        tracking_on=0,
+        mouse_lbut_down=0,
+        mouse_lbut_lift=0,
+        mouse_rbut_down=0,
+        mouse_rbut_lift=0,
+        mouse_mbut_down=0,
+        mouse_mbut_lift=0,
+    }
+    local registry = cleanup.new({})
+    return {
+        screen=screen,
+        gps=gps,
+        enabler=enabler,
+        registry=registry,
+        original_get_mouse_pos=original_get_mouse_pos,
+        original_get_mouse_pixels=original_get_mouse_pixels,
+        adapter=pointer_adapter.new(cleanup, registry, {
+            screen=screen,
+            gps=gps,
+            enabler=enabler,
+        }),
+    }
+end
+
 describe('automation interaction support', function()
     local original_dfhack
     local original_df
@@ -271,106 +327,261 @@ describe('automation interaction support', function()
         end
     end)
 
-    it('restores the virtual pointer and temporary native click position', function()
-        local registry = cleanup.new({})
-        local adapter = pointer_adapter.new(cleanup, registry)
-        local original_pointer = dfhack.screen.getMousePos
+    it('claims paired ownership once and returns defensive copies', function()
+        local fixture = pointer_fixture()
+        local adapter = fixture.adapter
+        local first = paired_position(10, 11, 105, 92)
 
         assert.has_error(function() pointer_adapter.position(adapter) end,
             'mouse input requires a pointer position; call ' ..
             'ds.move_pointer() or subject:hover() first')
-        pointer_adapter.set(adapter, 10, 11)
-        assert.same({10, 11}, {dfhack.screen.getMousePos()})
-        assert.same({10, 11}, {pointer_adapter.position(adapter)})
-        local observed_x
-        local observed_y
-        pointer_adapter.with_interface_mouse(12, 13, function()
-            observed_x = df.global.gps.mouse_x
-            observed_y = df.global.gps.mouse_y
-            assert.is_true(df.global.enabler.mouse_focus)
-            assert.equals(1, df.global.enabler.tracking_on)
-        end)
-        assert.same({12, 13}, {observed_x, observed_y})
-        assert.same({4, 5}, {df.global.gps.mouse_x, df.global.gps.mouse_y})
-        assert.is_false(df.global.enabler.mouse_focus)
-        assert.equals(0, df.global.enabler.tracking_on)
+        pointer_adapter.set(adapter, first)
+        first.grid.x = 99
+        first.pixels.y = 999
 
-        local input_ok, input_error = pcall(function()
-            pointer_adapter.with_interface_mouse(14, 15, function()
-                error('simulated input failed', 0)
-            end)
-        end)
-        assert.is_false(input_ok)
-        assert.matches('simulated input failed', input_error, 1, true)
-        assert.same({4, 5}, {df.global.gps.mouse_x, df.global.gps.mouse_y})
-        assert.is_false(df.global.enabler.mouse_focus)
-        assert.equals(0, df.global.enabler.tracking_on)
+        assert.is_true(pointer_adapter.is_active(adapter))
+        assert.equals(1, cleanup.pending_count(fixture.registry))
+        assert.same({10, 11}, {fixture.screen.getMousePos()})
+        assert.same({105, 92}, {fixture.screen.getMousePixels()})
+        assert.same({10, 11, 105, 92}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+
+        local returned = pointer_adapter.position(adapter)
+        returned.grid.x = 77
+        returned.pixels.y = 88
+        assert.same(paired_position(10, 11, 105, 92),
+            pointer_adapter.position(adapter))
+
+        pointer_adapter.set(adapter, paired_position(12, 13, 125, 108))
+        assert.equals(1, cleanup.pending_count(fixture.registry))
+        assert.same({12, 13}, {fixture.screen.getMousePos()})
+        assert.same({125, 108}, {fixture.screen.getMousePixels()})
+
+        fixture.gps.mouse_x = 1
+        fixture.gps.mouse_y = 2
+        fixture.gps.precise_mouse_x = 3
+        fixture.gps.precise_mouse_y = 4
+        assert.same({12, 13}, {fixture.screen.getMousePos()})
+        assert.same({125, 108}, {fixture.screen.getMousePixels()})
+        pointer_adapter.sync(adapter)
+        assert.same({12, 13, 125, 108}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
 
         pointer_adapter.clear(adapter)
-        assert.equals(original_pointer, dfhack.screen.getMousePos)
-        assert.equals(0, cleanup.pending_count(registry))
+        assert.same({4, 5, 40, 50}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        assert.equals(fixture.original_get_mouse_pos,
+            fixture.screen.getMousePos)
+        assert.equals(fixture.original_get_mouse_pixels,
+            fixture.screen.getMousePixels)
+        assert.is_false(pointer_adapter.is_active(adapter))
+        assert.is_nil(adapter.current_position)
+        assert.is_nil(adapter.original_raw_position)
+        assert.equals(0, cleanup.pending_count(fixture.registry))
     end)
 
-    it('holds and releases native button state with cleanup restoration',
+    it('restores exact invalid raw sentinel coordinates during cleanup',
             function()
-        local registry = cleanup.new({})
-        local adapter = pointer_adapter.new(cleanup, registry)
+        local fixture = pointer_fixture({
+            mouse_x=-1,
+            mouse_y=-1,
+            precise_mouse_x=-1,
+            precise_mouse_y=-1,
+        })
+        pointer_adapter.set(fixture.adapter,
+            paired_position(2, 3, 25, 28))
 
-        pointer_adapter.with_button_state(adapter,
-            'mouse_lbut_down', 'mouse_lbut_lift', true, function()
-                assert.equals(1, df.global.enabler.mouse_lbut_down)
-                assert.equals(0, df.global.enabler.mouse_lbut_lift)
-            end)
-        assert.equals(1, df.global.enabler.mouse_lbut_down)
-        assert.equals(0, df.global.enabler.mouse_lbut_lift)
-        assert.is_true(df.global.enabler.mouse_focus)
-        assert.equals(1, df.global.enabler.tracking_on)
+        local ok = cleanup.run(fixture.registry, 'sentinel restoration')
 
-        pointer_adapter.with_button_state(adapter,
-            'mouse_lbut_down', 'mouse_lbut_lift', false, function()
-                assert.equals(0, df.global.enabler.mouse_lbut_down)
-                assert.equals(1, df.global.enabler.mouse_lbut_lift)
+        assert.is_true(ok)
+        assert.same({-1, -1, -1, -1}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        assert.equals(fixture.original_get_mouse_pos,
+            fixture.screen.getMousePos)
+        assert.equals(fixture.original_get_mouse_pixels,
+            fixture.screen.getMousePixels)
+        assert.is_false(pointer_adapter.is_active(fixture.adapter))
+    end)
+
+    it('preserves paired ownership across button transitions and failure',
+            function()
+        local fixture = pointer_fixture()
+        local adapter = fixture.adapter
+        pointer_adapter.set(adapter, paired_position(10, 11, 105, 92))
+
+        local focus_ok, focus_error = pcall(function()
+            pointer_adapter.with_mouse_focus(adapter, function()
+                pointer_adapter.sync(adapter)
+                assert.is_true(fixture.enabler.mouse_focus)
+                assert.equals(1, fixture.enabler.tracking_on)
+                error('focused operation failed', 0)
             end)
-        assert.equals(0, df.global.enabler.mouse_lbut_down)
-        assert.equals(0, df.global.enabler.mouse_lbut_lift)
-        assert.is_false(df.global.enabler.mouse_focus)
-        assert.equals(0, df.global.enabler.tracking_on)
+        end)
+        assert.is_false(focus_ok)
+        assert.matches('focused operation failed', focus_error, 1, true)
+        assert.is_false(fixture.enabler.mouse_focus)
+        assert.equals(0, fixture.enabler.tracking_on)
 
         local transition_ok, transition_error = pcall(function()
             pointer_adapter.with_button_state(adapter,
                 'mouse_rbut_down', 'mouse_rbut_lift', true, function()
+                    pointer_adapter.sync(adapter)
                     error('button transition failed', 0)
                 end)
         end)
         assert.is_false(transition_ok)
         assert.matches('button transition failed', transition_error, 1, true)
-        assert.equals(0, df.global.enabler.mouse_rbut_down)
-        assert.equals(0, df.global.enabler.mouse_rbut_lift)
+        assert.equals(0, fixture.enabler.mouse_rbut_down)
+        assert.equals(0, fixture.enabler.mouse_rbut_lift)
+        assert.same({10, 11, 105, 92}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
 
         pointer_adapter.with_button_state(adapter,
-            'mouse_lbut_down', 'mouse_lbut_lift', true, function() end)
-        local cleanup_ok = cleanup.run(registry, 'button state test')
+            'mouse_lbut_down', 'mouse_lbut_lift', true, function()
+                pointer_adapter.sync(adapter)
+                assert.equals(1, fixture.enabler.mouse_lbut_down)
+                assert.equals(0, fixture.enabler.mouse_lbut_lift)
+            end)
+        assert.equals(1, fixture.enabler.mouse_lbut_down)
+        assert.equals(0, fixture.enabler.mouse_lbut_lift)
+        assert.is_true(fixture.enabler.mouse_focus)
+        assert.equals(1, fixture.enabler.tracking_on)
+
+        pointer_adapter.with_button_state(adapter,
+            'mouse_lbut_down', 'mouse_lbut_lift', false, function()
+                pointer_adapter.sync(adapter)
+                assert.equals(0, fixture.enabler.mouse_lbut_down)
+                assert.equals(1, fixture.enabler.mouse_lbut_lift)
+            end)
+        assert.equals(0, fixture.enabler.mouse_lbut_down)
+        assert.equals(0, fixture.enabler.mouse_lbut_lift)
+        assert.is_false(fixture.enabler.mouse_focus)
+        assert.equals(0, fixture.enabler.tracking_on)
+
+        local names = {}
+        for _, entry in ipairs(fixture.registry.entries) do
+            table.insert(names, entry.name)
+        end
+        assert.same({'virtual pointer', 'mouse button state'}, names)
+        local cleanup_ok = cleanup.run(
+            fixture.registry, 'button state test')
         assert.is_true(cleanup_ok)
-        assert.equals(0, df.global.enabler.mouse_lbut_down)
-        assert.is_false(df.global.enabler.mouse_focus)
-        assert.equals(0, df.global.enabler.tracking_on)
-        assert.equals(0, cleanup.pending_count(registry))
+        assert.equals(0, fixture.enabler.mouse_lbut_down)
+        assert.is_false(fixture.enabler.mouse_focus)
+        assert.equals(0, fixture.enabler.tracking_on)
+        assert.same({4, 5, 40, 50}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        assert.equals(0, cleanup.pending_count(fixture.registry))
     end)
 
-    it('rejects restoration if another owner replaces the pointer function', function()
-        local registry = cleanup.new({})
-        local adapter = pointer_adapter.new(cleanup, registry)
-        pointer_adapter.set(adapter, 10, 11)
-        dfhack.screen.getMousePos = function() return 0, 0 end
+    it('restores independently across grid, pixel, and dual conflicts',
+            function()
+        local cases = {
+            {grid=true, pixel=false},
+            {grid=false, pixel=true},
+            {grid=true, pixel=true},
+        }
+        for _, case in ipairs(cases) do
+            local fixture = pointer_fixture()
+            local external_grid = function() return 1, 2 end
+            local external_pixels = function() return 3, 4 end
+            pointer_adapter.set(fixture.adapter,
+                paired_position(10, 11, 105, 92))
+            if case.grid then
+                fixture.screen.getMousePos = external_grid
+            end
+            if case.pixel then
+                fixture.screen.getMousePixels = external_pixels
+            end
 
-        local first_ok, first_failures = cleanup.run(registry, 'conflict proof')
-        assert.is_false(first_ok)
-        assert.equals(1, #first_failures)
-        local ok, failures = cleanup.run(registry, 'post-conflict proof')
-        assert.is_true(ok)
-        assert.equals(1, #registry.failures)
-        assert.matches('changed externally', registry.failures[1].message,
-            1, true)
-        assert.same(0, #failures)
+            local ok, failures = cleanup.run(
+                fixture.registry, 'accessor conflict')
+
+            assert.is_false(ok)
+            assert.equals(1, #failures)
+            assert.same({4, 5, 40, 50}, {
+                fixture.gps.mouse_x,
+                fixture.gps.mouse_y,
+                fixture.gps.precise_mouse_x,
+                fixture.gps.precise_mouse_y,
+            })
+            assert.equals(
+                case.grid and external_grid or
+                    fixture.original_get_mouse_pos,
+                fixture.screen.getMousePos)
+            assert.equals(
+                case.pixel and external_pixels or
+                    fixture.original_get_mouse_pixels,
+                fixture.screen.getMousePixels)
+            assert.equals(case.grid,
+                failures[1].message:find(
+                    'getMousePos changed externally', 1, true) ~= nil)
+            assert.equals(case.pixel,
+                failures[1].message:find(
+                    'getMousePixels changed externally', 1, true) ~= nil)
+            assert.is_false(pointer_adapter.is_active(fixture.adapter))
+            assert.is_nil(fixture.adapter.original_raw_position)
+            assert.is_nil(fixture.adapter.original_get_mouse_pos)
+            assert.is_nil(fixture.adapter.original_get_mouse_pixels)
+            assert.is_nil(fixture.adapter.patched_get_mouse_pos)
+            assert.is_nil(fixture.adapter.patched_get_mouse_pixels)
+            assert.is_nil(fixture.adapter.cleanup_entry)
+            assert.equals(0, cleanup.pending_count(fixture.registry))
+        end
+    end)
+
+    it('continues cleanup after simultaneous accessor conflicts', function()
+        local fixture = pointer_fixture()
+        local earlier_cleanup_ran = false
+        cleanup.push(fixture.registry, 'earlier resource', function()
+            earlier_cleanup_ran = true
+        end)
+        pointer_adapter.set(fixture.adapter,
+            paired_position(10, 11, 105, 92))
+        local external_grid = function() return 1, 2 end
+        local external_pixels = function() return 3, 4 end
+        fixture.screen.getMousePos = external_grid
+        fixture.screen.getMousePixels = external_pixels
+
+        local ok, failures = cleanup.run(
+            fixture.registry, 'continuation proof')
+
+        assert.is_false(ok)
+        assert.equals(1, #failures)
+        assert.is_true(earlier_cleanup_ran)
+        assert.equals(external_grid, fixture.screen.getMousePos)
+        assert.equals(external_pixels, fixture.screen.getMousePixels)
+        assert.same({4, 5, 40, 50}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        assert.is_false(pointer_adapter.is_active(fixture.adapter))
+        assert.equals(0, cleanup.pending_count(fixture.registry))
     end)
 end)

@@ -132,11 +132,15 @@ local TestStatus = load_automation_module(package_root,
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
+    local pointer_screen = mount_dependencies.pointer_screen or dfhack.screen
+    local pointer_gps = mount_dependencies.pointer_gps or df.global.gps
+    local pointer_enabler =
+        mount_dependencies.pointer_enabler or df.global.enabler
 
     ---Returns the current effective grid and pixel geometry from DF.
     ---@return DwarfSpecPointerGeometry
     local function get_production_pointer_geometry()
-        local gps = assert(df and df.global and df.global.gps,
+        local gps = assert(pointer_gps,
             'DwarfSpec requires df.global.gps for pointer geometry')
         return {
             grid_width=gps.dimx,
@@ -160,6 +164,9 @@ local TestStatus = load_automation_module(package_root,
         diagnostics=diagnostics,
         pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry, {
             get_geometry=get_pointer_geometry,
+            screen=pointer_screen,
+            gps=pointer_gps,
+            enabler=pointer_enabler,
         }),
         run=scheduler.run,
         current_viewscreen=mount_dependencies.current_viewscreen or
@@ -465,7 +472,8 @@ local TestStatus = load_automation_module(package_root,
     })
     context.run.mount_cleanup_probe = function()
         local state = context.mount_context:cleanup_state()
-        state.pointer_active = context.pointer.patched_get_mouse_pos ~= nil
+        state.pointer_active =
+            pointer_adapter_module.is_active(context.pointer)
         state.button_state_active =
             context.pointer.button_cleanup_entry ~= nil
         state.map_view_position_active =
@@ -1147,7 +1155,11 @@ local TestStatus = load_automation_module(package_root,
                 ('pointer y coordinate %d is outside the current window ' ..
                     'height %d'):format(y, height))
             context.mount_context:mutate('move_pointer', function()
-                pointer_adapter_module.set(context.pointer, x, y)
+                local geometry =
+                    pointer_adapter_module.geometry(context.pointer)
+                local position = pointer_adapter_module.normalize_position(
+                    x, y, EPointerSpace.GRID, geometry)
+                pointer_adapter_module.set(context.pointer, position)
             end)
             return x, y
         end
@@ -1185,7 +1197,10 @@ local TestStatus = load_automation_module(package_root,
             assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
         end
         context.mount_context:mutate('move_pointer', function()
-            pointer_adapter_module.set(context.pointer, x, y)
+            local geometry = pointer_adapter_module.geometry(context.pointer)
+            local position = pointer_adapter_module.normalize_position(
+                x, y, EPointerSpace.GRID, geometry)
+            pointer_adapter_module.set(context.pointer, position)
         end)
         return x, y
     end
@@ -1262,16 +1277,16 @@ local TestStatus = load_automation_module(package_root,
             assert(action == nil,
                 'mouse wheel input does not accept a button action')
         end
-        local x, y = pointer_adapter_module.position(context.pointer)
+        pointer_adapter_module.position(context.pointer)
         return context.mount_context:mutate('mouseInput', function()
             local dispatch = function()
-                pointer_adapter_module.with_interface_mouse(x, y, function()
-                    require('gui').simulateInput(
-                        interaction_target:native_screen('mouse input'), key)
-                end)
+                pointer_adapter_module.sync(context.pointer)
+                require('gui').simulateInput(
+                    interaction_target:native_screen('mouse input'), key)
             end
             if not fields or action == EInputState.CLICK then
-                dispatch()
+                pointer_adapter_module.with_mouse_focus(
+                    context.pointer, dispatch)
             else
                 pointer_adapter_module.with_button_state(
                     context.pointer,
@@ -1294,12 +1309,14 @@ local TestStatus = load_automation_module(package_root,
         local key = ({left='_MOUSE_L', right='_MOUSE_R',
             middle='_MOUSE_M'})[button or 'left']
         assert(key, 'unsupported mouse button: ' .. tostring(button))
-        local x, y = ds.move_pointer(requested_view)
+        ds.move_pointer(requested_view)
         return context.mount_context:mutate('click', function()
-            pointer_adapter_module.with_interface_mouse(x, y, function()
-                require('gui').simulateInput(
-                    interaction_target:native_screen('click'), key)
-            end)
+            pointer_adapter_module.with_mouse_focus(
+                context.pointer, function()
+                    pointer_adapter_module.sync(context.pointer)
+                    require('gui').simulateInput(
+                        interaction_target:native_screen('click'), key)
+                end)
         end)
     end
 
