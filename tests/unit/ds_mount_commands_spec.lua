@@ -89,6 +89,7 @@ describe('DwarfSpec public mount commands', function()
     local native_render_failure
     local suppress_native_render
     local wait_until_failure
+    local wait_until_dispatch
 
     ---Installs one declared main-interface path ending in a native widget.
     ---@param final_widget table|nil
@@ -174,6 +175,7 @@ describe('DwarfSpec public mount commands', function()
         native_render_failure = nil
         suppress_native_render = false
         wait_until_failure = nil
+        wait_until_dispatch = nil
         simulated_inputs = {}
         simulate_input_failure = nil
         simulate_input_dispatch = nil
@@ -301,6 +303,7 @@ describe('DwarfSpec public mount commands', function()
                 if wait_until_failure then
                     error(wait_until_failure, 0)
                 end
+                if wait_until_dispatch then wait_until_dispatch() end
                 local result = query()
                 if not result and current_tracker then
                     current_tracker:completed()
@@ -1558,6 +1561,38 @@ describe('DwarfSpec public mount commands', function()
             end
         end
         assert.equals(1, pointer_entries)
+    end)
+
+    it('reapplies paired raw coordinates after each render wait', function()
+        ds.mountNativeScreen()
+        wait_until_dispatch = function()
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
+        end
+
+        ds.move_pointer(2, 3)
+        assert.same({2, 3, 25, 28}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
+
+        ds.mouseInput(EMouseButton.SCROLL_DOWN)
+        assert.same({2, 3, 25, 28}, {
+            simulated_inputs[1].x,
+            simulated_inputs[1].y,
+            simulated_inputs[1].pixel_x,
+            simulated_inputs[1].pixel_y,
+        })
+        assert.same({2, 3, 25, 28}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
     end)
 
     it('reads fresh effective geometry for every numeric pointer move',

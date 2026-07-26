@@ -1132,6 +1132,17 @@ local TestStatus = load_automation_module(package_root,
         return clipped
     end
 
+    ---Runs one pointer mutation and reapplies paired raw state after rendering.
+    ---@param operation string
+    ---@param action function
+    ---@return any
+    local function mutate_pointer(operation, action)
+        local results = table.pack(
+            context.mount_context:mutate(operation, action))
+        pointer_adapter_module.sync(context.pointer)
+        return table.unpack(results, 1, results.n)
+    end
+
     ---Moves the virtual pointer to coordinates or an anchor inside a subject.
     ---@overload fun(x: integer, y: integer, space: DwarfSpecEPointerSpace|nil): integer, integer
     ---@param view table|integer|nil
@@ -1171,7 +1182,7 @@ local TestStatus = load_automation_module(package_root,
             local geometry = pointer_adapter_module.geometry(context.pointer)
             local position = pointer_adapter_module.normalize_position(
                 x, y, space, geometry)
-            context.mount_context:mutate('move_pointer', function()
+            mutate_pointer('move_pointer', function()
                 pointer_adapter_module.set(context.pointer, position)
             end)
             return x, y
@@ -1209,7 +1220,7 @@ local TestStatus = load_automation_module(package_root,
         else
             assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
         end
-        context.mount_context:mutate('move_pointer', function()
+        mutate_pointer('move_pointer', function()
             local geometry = pointer_adapter_module.geometry(context.pointer)
             local position = pointer_adapter_module.normalize_position(
                 x, y, EPointerSpace.GRID, geometry)
@@ -1292,7 +1303,7 @@ local TestStatus = load_automation_module(package_root,
                 'mouse wheel input does not accept a button action')
         end
         pointer_adapter_module.position(context.pointer)
-        return context.mount_context:mutate('mouseInput', function()
+        return mutate_pointer('mouseInput', function()
             local dispatch = function()
                 pointer_adapter_module.sync(context.pointer)
                 require('gui').simulateInput(
@@ -1324,7 +1335,7 @@ local TestStatus = load_automation_module(package_root,
             middle='_MOUSE_M'})[button or 'left']
         assert(key, 'unsupported mouse button: ' .. tostring(button))
         ds.move_pointer(requested_view)
-        return context.mount_context:mutate('click', function()
+        return mutate_pointer('click', function()
             pointer_adapter_module.with_mouse_focus(
                 context.pointer, function()
                     pointer_adapter_module.sync(context.pointer)

@@ -66,8 +66,11 @@ end
 local function pointer_state()
     local state = {
         get_mouse_pos=dfhack.screen.getMousePos,
+        get_mouse_pixels=dfhack.screen.getMousePixels,
         mouse_x=df.global.gps.mouse_x,
         mouse_y=df.global.gps.mouse_y,
+        precise_mouse_x=df.global.gps.precise_mouse_x,
+        precise_mouse_y=df.global.gps.precise_mouse_y,
     }
     for _, field in ipairs(BUTTON_FIELDS) do
         state[field] = df.global.enabler[field]

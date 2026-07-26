@@ -1,6 +1,6 @@
 # Pointer coordinate unification
 
-Status: in progress; Phases 0-4 complete
+Status: in progress; Phases 0-5 complete
 
 Related implementation:
 
@@ -555,46 +555,82 @@ the running Premium game.
 
 ### Tasks
 
-☐ Extend the focused interaction automation specification instead of adding a
+✔ Extend the focused interaction automation specification instead of adding a
   test-only production command.
-☐ Snapshot before each pointer example:
+✔ Snapshot before each pointer example:
   - both original Lua accessor functions;
   - both raw grid coordinates;
   - both raw pixel coordinates;
   - relevant button/focus/tracking state.
-☐ Through `ds.move_pointer(x, y)`, assert:
+✔ Through `ds.move_pointer(x, y)`, assert:
   - returned grid coordinates;
   - `dfhack.screen.getMousePos()` grid coordinates;
   - `dfhack.screen.getMousePixels()` derived center pixels;
   - both raw coordinate pairs;
   - one active pointer cleanup claim.
-☐ Through explicit `EPointerSpace.GRID`, assert the same behavior.
-☐ Through explicit `EPointerSpace.PIXELS`, assert:
+✔ Through explicit `EPointerSpace.GRID`, assert the same behavior.
+✔ Through explicit `EPointerSpace.PIXELS`, assert:
   - exact returned pixels;
   - exact `getMousePixels()` result;
   - exact raw pixel fields;
   - derived `getMousePos()` grid cell;
   - matching raw grid fields.
-☐ Use the live effective `tile_pixel_x/y` values in expected conversions; do
+✔ Use the live effective `tile_pixel_x/y` values in expected conversions; do
   not hardcode the current UI scale.
-☐ Exercise one subject anchor and confirm both coordinate representations.
-☐ Dispatch one public click or wheel action and confirm both raw coordinate
+✔ Exercise one subject anchor and confirm both coordinate representations.
+✔ Dispatch one public click or wheel action and confirm both raw coordinate
   pairs are synchronized at the real input boundary.
-☐ Add an assertion that cleanup restores both accessors and all four original
+✔ Add an assertion that cleanup restores both accessors and all four original
   raw coordinates.
-☐ Preserve independent `cleanup_confirmed=true` evidence.
-☐ Update existing native-screen pointer snapshots to include
+✔ Preserve independent `cleanup_confirmed=true` evidence.
+✔ Update existing native-screen pointer snapshots to include
   `getMousePixels()` and precise coordinates.
-☐ Keep live tests independent of execution order and physical cursor position.
+✔ Keep live tests independent of execution order and physical cursor position.
 
 ### Phase 5 exit gate
 
-☐ Default grid, explicit grid, explicit pixels, subject anchor, input
+✔ Default grid, explicit grid, explicit pixels, subject anchor, input
   synchronization, and cleanup pass through public commands.
-☐ Expected conversions use current runtime geometry.
-☐ The live test does not change UI-scale settings, resolution, or persistent
+✔ Expected conversions use current runtime geometry.
+✔ The live test does not change UI-scale settings, resolution, or persistent
   fortress state.
-☐ Cleanup is independently confirmed.
+✔ Cleanup is independently confirmed.
+
+### Phase 5 implementation notes
+
+- The focused interaction specification snapshots both pointer accessors, all
+  four raw coordinates, and every mouse focus, tracking, and button field
+  before each example.
+- Default-grid, explicit-grid, exact-pixel, and subject-anchor moves assert
+  both public accessor results and both raw coordinate pairs. Expected pixel
+  centers and derived grid cells use the live `tile_pixel_x/y`, dimensions,
+  and pixel bounds.
+- The input-boundary case deliberately invalidates all four raw coordinates,
+  dispatches a public left click, and records both accessor and raw values
+  inside the widget's real `_MOUSE_L` handler.
+- Premium DF rewrites raw pointer fields while DwarfSpec waits for rendering.
+  Pointer-changing commands now reapply the paired state after that wait while
+  retaining synchronization immediately before native input dispatch.
+- Explicit unmount asserts exact restoration of both accessor functions, all
+  four raw coordinates, and mouse input state. The runner separately confirms
+  complete run cleanup.
+- Native-screen success and injected-failure snapshots now include
+  `getMousePixels()` and `precise_mouse_x/y`.
+
+Validation evidence:
+
+| Evidence | Result |
+|---|---|
+| Focused interaction live | 2 repeats; 2 successes per repeat, 0 failures |
+| Focused interaction cleanup | `cleanup_confirmed=true` |
+| Focused native-screen live | 3 successes, 0 failures |
+| Focused native-screen cleanup | `cleanup_confirmed=true` |
+| Focused mount-command units | 60 successes, 0 failures |
+| Full unit suite | 440 successes, 0 failures |
+| Lua syntax and formatting | 230 files passed |
+| Input-boundary audit | Handler observed matching accessor and raw grid/pixel pairs |
+| Cleanup snapshot audit | Both accessors, four raw coordinates, focus, tracking, and buttons restored |
+| State-mutation audit | No UI-scale, resolution, or persistent fortress setting changed |
 
 ## Phase 6: Regression and completion evidence
 
