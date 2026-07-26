@@ -6,6 +6,7 @@ local diagnostics = assert(loadfile(
     'src/dwarfspec/automation/diagnostics.lua'))()
 local pointer_adapter = assert(loadfile(
     'src/dwarfspec/automation/pointer_adapter.lua'))()
+local EPointerSpace = require('dwarfspec.pointer_spaces')
 
 ---Creates one paired logical pointer position for adapter tests.
 ---@param grid_x integer
@@ -179,7 +180,8 @@ describe('automation interaction support', function()
     end)
 
     it('normalizes non-square grid cells to their center pixels', function()
-        local position = pointer_adapter.normalize_position(2, 1, 'grid', {
+        local position = pointer_adapter.normalize_position(
+            2, 1, EPointerSpace.GRID, {
             grid_width=4,
             grid_height=3,
             pixel_width=43,
@@ -194,7 +196,7 @@ describe('automation interaction support', function()
 
     it('preserves exact pixels while deriving their grid cell', function()
         local position = pointer_adapter.normalize_position(
-            21, 17, 'pixels', {
+            21, 17, EPointerSpace.PIXELS, {
                 grid_width=4,
                 grid_height=3,
                 pixel_width=43,
@@ -210,7 +212,7 @@ describe('automation interaction support', function()
     it('clamps residual right and bottom pixels to the last grid cell',
             function()
         local position = pointer_adapter.normalize_position(
-            42, 24, 'pixels', {
+            42, 24, EPointerSpace.PIXELS, {
                 grid_width=4,
                 grid_height=3,
                 pixel_width=43,
@@ -233,45 +235,45 @@ describe('automation interaction support', function()
             cell_pixel_height=8,
         }
         local cases = {
-            {nil, 0, 'grid',
+            {nil, 0, EPointerSpace.GRID,
                 'grid x coordinate must be an integer; got nil'},
-            {'1', 0, 'grid',
+            {'1', 0, EPointerSpace.GRID,
                 'grid x coordinate must be an integer; got 1'},
-            {1.5, 0, 'grid',
+            {1.5, 0, EPointerSpace.GRID,
                 'grid x coordinate must be an integer; got 1.5'},
-            {-1, 0, 'grid',
+            {-1, 0, EPointerSpace.GRID,
                 'grid x coordinate -1 is outside [0, 3]'},
-            {4, 0, 'grid',
+            {4, 0, EPointerSpace.GRID,
                 'grid x coordinate 4 is outside [0, 3]'},
-            {0, nil, 'grid',
+            {0, nil, EPointerSpace.GRID,
                 'grid y coordinate must be an integer; got nil'},
-            {0, '1', 'grid',
+            {0, '1', EPointerSpace.GRID,
                 'grid y coordinate must be an integer; got 1'},
-            {0, 1.5, 'grid',
+            {0, 1.5, EPointerSpace.GRID,
                 'grid y coordinate must be an integer; got 1.5'},
-            {0, -1, 'grid',
+            {0, -1, EPointerSpace.GRID,
                 'grid y coordinate -1 is outside [0, 2]'},
-            {0, 3, 'grid',
+            {0, 3, EPointerSpace.GRID,
                 'grid y coordinate 3 is outside [0, 2]'},
-            {nil, 0, 'pixels',
+            {nil, 0, EPointerSpace.PIXELS,
                 'pixels x coordinate must be an integer; got nil'},
-            {'1', 0, 'pixels',
+            {'1', 0, EPointerSpace.PIXELS,
                 'pixels x coordinate must be an integer; got 1'},
-            {1.5, 0, 'pixels',
+            {1.5, 0, EPointerSpace.PIXELS,
                 'pixels x coordinate must be an integer; got 1.5'},
-            {-1, 0, 'pixels',
+            {-1, 0, EPointerSpace.PIXELS,
                 'pixels x coordinate -1 is outside [0, 42]'},
-            {43, 0, 'pixels',
+            {43, 0, EPointerSpace.PIXELS,
                 'pixels x coordinate 43 is outside [0, 42]'},
-            {0, nil, 'pixels',
+            {0, nil, EPointerSpace.PIXELS,
                 'pixels y coordinate must be an integer; got nil'},
-            {0, '1', 'pixels',
+            {0, '1', EPointerSpace.PIXELS,
                 'pixels y coordinate must be an integer; got 1'},
-            {0, 1.5, 'pixels',
+            {0, 1.5, EPointerSpace.PIXELS,
                 'pixels y coordinate must be an integer; got 1.5'},
-            {0, -1, 'pixels',
+            {0, -1, EPointerSpace.PIXELS,
                 'pixels y coordinate -1 is outside [0, 24]'},
-            {0, 25, 'pixels',
+            {0, 25, EPointerSpace.PIXELS,
                 'pixels y coordinate 25 is outside [0, 24]'},
         }
 

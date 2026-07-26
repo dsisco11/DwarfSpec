@@ -3,7 +3,7 @@
 local immutable_enum = require('dwarfspec.immutable_enum')
 
 ---@enum DwarfSpecEPointerSpace
-return immutable_enum.define({
-    GRID='grid',
-    PIXELS='pixels',
+return immutable_enum.define_numeric({
+    GRID=1,
+    PIXELS=2,
 })

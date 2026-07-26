@@ -25,8 +25,8 @@
 ---| 'up'
 
 ---@alias dwarfspec.EPointerSpace
----| 'grid'
----| 'pixels'
+---| 1
+---| 2
 
 ---@alias dwarfspec.ESubjectSource
 ---| 'native'
@@ -51,8 +51,8 @@
 
 ---Immutable identifiers for pointer coordinate systems.
 ---@class dwarfspec.EPointerSpaceEnum
----@field GRID `grid`
----@field PIXELS `pixels`
+---@field GRID `1`
+---@field PIXELS `2`
 
 ---Immutable identifiers for inspectable native and registered-overlay sources.
 ---@class dwarfspec.ESubjectSourceEnum

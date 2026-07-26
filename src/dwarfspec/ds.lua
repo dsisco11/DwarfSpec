@@ -1133,32 +1133,45 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Moves the virtual pointer to coordinates or an anchor inside a subject.
-    ---@overload fun(x: integer, y: integer): integer, integer
+    ---@overload fun(x: integer, y: integer, space: DwarfSpecEPointerSpace|nil): integer, integer
     ---@param view table|integer|nil
     ---@param anchor string|integer|nil
+    ---@param space DwarfSpecEPointerSpace|nil
     ---@return integer, integer
-    function ds.move_pointer(view, anchor)
-        if type(view) == 'number' then
+    function ds.move_pointer(view, anchor, space)
+        local explicit_space = space ~= nil
+        if explicit_space and
+                (type(view) == 'table' or view == nil) then
+            error('pointer coordinate space is only valid with numeric ' ..
+                'coordinates', 2)
+        end
+        if type(view) == 'number' or explicit_space then
             local target
             _, target = resolve_interaction_target(nil, 'move_pointer')
             local x = view
             local y = anchor
-            assert(x % 1 == 0 and x >= 0,
-                'pointer x coordinate must be a nonnegative integer')
-            assert(type(y) == 'number' and y % 1 == 0 and y >= 0,
-                'pointer y coordinate must be a nonnegative integer')
-            local width, height = current_window_size(target, 'move_pointer')
-            assert(x < width,
-                ('pointer x coordinate %d is outside the current window ' ..
-                    'width %d'):format(x, width))
-            assert(y < height,
-                ('pointer y coordinate %d is outside the current window ' ..
-                    'height %d'):format(y, height))
+            space = space or EPointerSpace.GRID
+            assert(space == EPointerSpace.GRID or
+                    space == EPointerSpace.PIXELS,
+                'unsupported pointer coordinate space: ' .. tostring(space))
+            if space == EPointerSpace.GRID then
+                assert(type(x) == 'number' and x % 1 == 0 and x >= 0,
+                    'pointer x coordinate must be a nonnegative integer')
+                assert(type(y) == 'number' and y % 1 == 0 and y >= 0,
+                    'pointer y coordinate must be a nonnegative integer')
+                local width, height =
+                    current_window_size(target, 'move_pointer')
+                assert(x < width,
+                    ('pointer x coordinate %d is outside the current ' ..
+                        'window width %d'):format(x, width))
+                assert(y < height,
+                    ('pointer y coordinate %d is outside the current ' ..
+                        'window height %d'):format(y, height))
+            end
+            local geometry = pointer_adapter_module.geometry(context.pointer)
+            local position = pointer_adapter_module.normalize_position(
+                x, y, space, geometry)
             context.mount_context:mutate('move_pointer', function()
-                local geometry =
-                    pointer_adapter_module.geometry(context.pointer)
-                local position = pointer_adapter_module.normalize_position(
-                    x, y, EPointerSpace.GRID, geometry)
                 pointer_adapter_module.set(context.pointer, position)
             end)
             return x, y
@@ -1206,11 +1219,12 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Moves the virtual pointer over a subject and waits for its render.
-    ---@param view table|nil
-    ---@param anchor string|nil
+    ---@param view table|integer|nil
+    ---@param anchor string|integer|nil
+    ---@param space DwarfSpecEPointerSpace|nil
     ---@return integer, integer
-    function ds.hover(view, anchor)
-        return ds.move_pointer(view, anchor)
+    function ds.hover(view, anchor, space)
+        return ds.move_pointer(view, anchor, space)
     end
 
     ---Sends supported native input and waits for the live screen to settle.

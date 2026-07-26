@@ -42,16 +42,24 @@ end
 
 ---Moves the pointer over this subject and preserves it for fluent chaining.
 ---@param anchor string|nil
+---@param space any
 ---@return dwarfspec.Subject
-function Subject:hover(anchor)
+function Subject:hover(anchor, space)
+    assert(space == nil,
+        'subject pointer commands use UI-grid coordinates and do not accept ' ..
+        'a pointer space')
     invoke(self, 'hover', anchor)
     return self
 end
 
 ---Moves the pointer to this subject and preserves it for fluent chaining.
 ---@param anchor string|nil
+---@param space any
 ---@return dwarfspec.Subject
-function Subject:move_pointer(anchor)
+function Subject:move_pointer(anchor, space)
+    assert(space == nil,
+        'subject pointer commands use UI-grid coordinates and do not accept ' ..
+        'a pointer space')
     invoke(self, 'move_pointer', anchor)
     return self
 end

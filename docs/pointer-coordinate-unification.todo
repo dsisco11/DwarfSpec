@@ -1,6 +1,6 @@
 # Pointer coordinate unification
 
-Status: in progress; Phase 0 complete
+Status: in progress; Phases 0-3 complete
 
 Related implementation:
 
@@ -420,38 +420,73 @@ Goal: route all public pointer and mouse commands through paired ownership.
 
 ### Tasks
 
-☐ Extend `ds.move_pointer()` overload parsing with the optional pointer space.
-☐ Preserve the existing numeric grid overload and exact errors where their
+✔ Extend `ds.move_pointer()` overload parsing with the optional pointer space.
+✔ Preserve the existing numeric grid overload and exact errors where their
   contract has not changed.
-☐ Route numeric grid input through fresh geometry and paired normalization.
-☐ Route numeric pixel input through fresh geometry and paired normalization.
-☐ Keep subject bounds clipping and anchor selection in grid coordinates, then
+✔ Route numeric grid input through fresh geometry and paired normalization.
+✔ Route numeric pixel input through fresh geometry and paired normalization.
+✔ Keep subject bounds clipping and anchor selection in grid coordinates, then
   normalize the selected cell into paired state.
-☐ Extend `ds.hover()` numeric routing to accept the pointer space.
-☐ Keep fluent subject calls implicitly grid-based.
-☐ Update `ds.mouseInput()` to read the paired position and call `sync()` before
+✔ Extend `ds.hover()` numeric routing to accept the pointer space.
+✔ Keep fluent subject calls implicitly grid-based.
+✔ Update `ds.mouseInput()` to read the paired position and call `sync()` before
   dispatch.
-☐ Update `ds.click()` to use the paired pointer produced by its subject move and
+✔ Update `ds.click()` to use the paired pointer produced by its subject move and
   call the common synchronization path before dispatch.
-☐ Ensure button down/up state transitions resynchronize both coordinate pairs.
-☐ Update command-level unit fixtures to model:
+✔ Ensure button down/up state transitions resynchronize both coordinate pairs.
+✔ Update command-level unit fixtures to model:
   - `getMousePixels`;
   - precise raw mouse fields;
   - effective grid and pixel geometry.
-☐ Add command-level unit coverage for default grid, explicit grid, explicit
+✔ Add command-level unit coverage for default grid, explicit grid, explicit
   pixels, subject anchors, hover, clicks, wheel input, button transitions,
   repeat moves, invalid space, and all cleanup paths.
-☐ Update cleanup-state expectations without weakening existing screen,
+✔ Update cleanup-state expectations without weakening existing screen,
   subject, button, or render assertions.
 
 ### Phase 3 exit gate
 
-☐ Every public pointer-changing route reaches the same adapter owner.
-☐ Existing grid-coordinate call sites remain source-compatible.
-☐ Pixel calls preserve exact requested pixels and expose the derived grid.
-☐ Subject calls still return their selected grid coordinates.
-☐ Focused and full unit suites pass.
-☐ Lua syntax and formatting checks pass.
+✔ Every public pointer-changing route reaches the same adapter owner.
+✔ Existing grid-coordinate call sites remain source-compatible.
+✔ Pixel calls preserve exact requested pixels and expose the derived grid.
+✔ Subject calls still return their selected grid coordinates.
+✔ Focused and full unit suites pass.
+✔ Lua syntax and formatting checks pass.
+
+### Phase 3 implementation notes
+
+- `ds.move_pointer(x, y)` remains the default grid overload with its prior
+  validation messages. Explicit `GRID` follows the same path; explicit
+  `PIXELS` validates against current pixel dimensions and returns the exact
+  requested pixels.
+- `EPointerSpace` uses immutable numeric enum values so raw `"grid"` and
+  `"pixels"` strings are distinguishable and rejected. Callers use the stable
+  `GRID` and `PIXELS` member names rather than their backing values.
+- Numeric moves and hovers read fresh effective geometry, normalize once, and
+  call the paired adapter owner. Residual right and bottom pixels retain their
+  exact pixel coordinate while exposing the clamped final grid cell.
+- Subject bounds and anchors remain grid-based. Top-level and fluent subject
+  calls reject coordinate-space arguments instead of silently ignoring them.
+- Mouse clicks, wheel input, subject clicks, button down, and button up all
+  resynchronize both raw coordinate pairs immediately before dispatch.
+- Cleanup tests now assert both accessors, both raw pairs, pointer-probe state,
+  button state, subject cleanup, native attachment state, and render cleanup
+  across explicit unmount, failure reset, abort/recovery, and repeat cycles.
+
+Validation evidence:
+
+| Evidence | Result |
+|---|---|
+| Focused mount-command units | 59 successes, 0 failures |
+| Focused adapter units | 13 successes, 0 failures |
+| Focused immutable-enum units | 5 successes, 0 failures |
+| Full unit suite | 439 successes, 0 failures |
+| Lua syntax and formatting | 230 files passed |
+| Public-route audit | Move, hover, click, wheel, down, and up converge on paired set/sync |
+| Compatibility audit | Existing default-grid validation cases retain exact messages |
+| Cleanup | Explicit, failure, abort/recovery, repeated, grid, and pixel paths passed |
+| Package configuration | No module or manifest change required |
+| Live automation | Not required or run |
 
 ## Phase 4: Public declarations and documentation
 

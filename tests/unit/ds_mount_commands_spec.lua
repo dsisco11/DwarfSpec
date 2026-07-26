@@ -700,7 +700,7 @@ describe('DwarfSpec public mount commands', function()
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.CleanupOverlay',
         })
-        ds.move_pointer(7, 8)
+        ds.move_pointer(75, 68, EPointerSpace.PIXELS)
         assert.is_true(run.mount_cleanup_probe().pointer_active)
         ds.mouseInput(EMouseButton.LEFT, EInputState.DOWN)
         assert.same({7, 8}, {dfhack.screen.getMousePos()})
@@ -814,6 +814,13 @@ describe('DwarfSpec public mount commands', function()
             assert.equals(0, cleanup.pending_count(registry),
                 scenario.name)
             assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+            assert.same({4, 5, 40, 50}, {
+                df.global.gps.mouse_x,
+                df.global.gps.mouse_y,
+                df.global.gps.precise_mouse_x,
+                df.global.gps.precise_mouse_y,
+            })
             assert.equals(0, df.global.enabler.mouse_lbut_down,
                 scenario.name)
             assert.equals(original_native_render_dispatcher,
@@ -827,6 +834,7 @@ describe('DwarfSpec public mount commands', function()
             assert.equals(0, state.subject_count, scenario.name)
             assert.equals(0, state.native_screen_dismissal_count,
                 scenario.name)
+            assert.is_false(state.pointer_active, scenario.name)
             assert.is_false(state.button_state_active, scenario.name)
             assert.is_false(state.render_observer_active, scenario.name)
             simulate_input_failure = nil
@@ -853,6 +861,13 @@ describe('DwarfSpec public mount commands', function()
             assert.is_nil(retained._descriptor, reason)
             assert.equals(0, cleanup.pending_count(registry), reason)
             assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+            assert.same({4, 5, 40, 50}, {
+                df.global.gps.mouse_x,
+                df.global.gps.mouse_y,
+                df.global.gps.precise_mouse_x,
+                df.global.gps.precise_mouse_y,
+            })
             assert.equals(0, df.global.enabler.mouse_rbut_down,
                 reason)
             assert.equals(original_native_render_dispatcher,
@@ -864,6 +879,7 @@ describe('DwarfSpec public mount commands', function()
             assert.equals(0, state.borrowed_native_screen_count,
                 reason)
             assert.equals(0, state.subject_count, reason)
+            assert.is_false(state.pointer_active, reason)
             assert.is_false(state.button_state_active, reason)
             assert.is_false(state.render_observer_active, reason)
         end
@@ -883,6 +899,13 @@ describe('DwarfSpec public mount commands', function()
             assert.is_nil(retained._descriptor)
             assert.equals(0, cleanup.pending_count(registry))
             assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+            assert.same({4, 5, 40, 50}, {
+                df.global.gps.mouse_x,
+                df.global.gps.mouse_y,
+                df.global.gps.precise_mouse_x,
+                df.global.gps.precise_mouse_y,
+            })
             assert.equals(0, df.global.enabler.mouse_mbut_down)
             assert.equals(original_native_render_dispatcher,
                 package.loaded['plugins.overlay']
@@ -1486,12 +1509,79 @@ describe('DwarfSpec public mount commands', function()
             ds.get('Offscreen'):inspect().body)
     end)
 
-    it('supports arbitrary in-window pointer coordinates', function()
+    it('supports default grid, explicit grid, pixels, hover, and repeats',
+            function()
         ds.mountNativeScreen()
 
         assert.same({0, 0}, {ds.move_pointer(0, 0)})
-        assert.same({79, 24}, {ds.move_pointer(79, 24)})
+        assert.same({0, 0}, {dfhack.screen.getMousePos()})
+        assert.same({5, 4}, {dfhack.screen.getMousePixels()})
+
+        assert.same({79, 24}, {
+            ds.move_pointer(79, 24, EPointerSpace.GRID),
+        })
         assert.same({79, 24}, {dfhack.screen.getMousePos()})
+        assert.same({795, 196}, {dfhack.screen.getMousePixels()})
+
+        assert.same({126, 93}, {
+            ds.move_pointer(126, 93, EPointerSpace.PIXELS),
+        })
+        assert.same({12, 11}, {dfhack.screen.getMousePos()})
+        assert.same({126, 93}, {dfhack.screen.getMousePixels()})
+        assert.same({12, 11, 126, 93}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
+        df.global.gps.mouse_x = -1
+        df.global.gps.mouse_y = -1
+        df.global.gps.precise_mouse_x = -1
+        df.global.gps.precise_mouse_y = -1
+        ds.mouseInput(EMouseButton.SCROLL_DOWN)
+        assert.same({12, 11, 126, 93}, {
+            simulated_inputs[1].x,
+            simulated_inputs[1].y,
+            simulated_inputs[1].pixel_x,
+            simulated_inputs[1].pixel_y,
+        })
+
+        assert.same({799, 199}, {
+            ds.hover(799, 199, EPointerSpace.PIXELS),
+        })
+        assert.same({79, 24}, {dfhack.screen.getMousePos()})
+        assert.same({799, 199}, {dfhack.screen.getMousePixels()})
+        local pointer_entries = 0
+        for _, entry in ipairs(registry.entries) do
+            if entry.name == 'virtual pointer' then
+                pointer_entries = pointer_entries + 1
+            end
+        end
+        assert.equals(1, pointer_entries)
+    end)
+
+    it('reads fresh effective geometry for every numeric pointer move',
+            function()
+        ds.mountNativeScreen()
+
+        ds.move_pointer(2, 3, EPointerSpace.GRID)
+        assert.same({25, 28}, {dfhack.screen.getMousePixels()})
+
+        df.global.gps.tile_pixel_x = 6
+        df.global.gps.tile_pixel_y = 4
+        df.global.gps.screen_pixel_x = 480
+        df.global.gps.screen_pixel_y = 100
+        ds.move_pointer(2, 3, EPointerSpace.GRID)
+
+        assert.same({2, 3}, {dfhack.screen.getMousePos()})
+        assert.same({15, 14}, {dfhack.screen.getMousePixels()})
+
+        df.global.gps.screen_pixel_x = 483
+        df.global.gps.screen_pixel_y = 103
+        ds.move_pointer(482, 102, EPointerSpace.PIXELS)
+
+        assert.same({79, 24}, {dfhack.screen.getMousePos()})
+        assert.same({482, 102}, {dfhack.screen.getMousePixels()})
     end)
 
     it('rejects invalid arbitrary pointer coordinates explicitly', function()
@@ -1527,6 +1617,79 @@ describe('DwarfSpec public mount commands', function()
                 expected='pointer y coordinate 25 is outside the current ' ..
                     'window height 25',
             },
+            {
+                invoke=function()
+                    ds.move_pointer(80, 0, EPointerSpace.GRID)
+                end,
+                expected='pointer x coordinate 80 is outside the current ' ..
+                    'window width 80',
+            },
+        }
+        for _, case in ipairs(cases) do
+            assert.has_error(case.invoke, case.expected)
+        end
+    end)
+
+    it('rejects invalid pixel coordinates and pointer spaces explicitly',
+            function()
+        ds.mountNativeScreen()
+        local cases = {
+            {
+                invoke=function()
+                    ds.move_pointer('bad', 0, EPointerSpace.PIXELS)
+                end,
+                expected='pixels x coordinate must be an integer; got bad',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0, nil, EPointerSpace.PIXELS)
+                end,
+                expected='pixels y coordinate must be an integer; got nil',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0, 'bad', EPointerSpace.PIXELS)
+                end,
+                expected='pixels y coordinate must be an integer; got bad',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(-1, 0, EPointerSpace.PIXELS)
+                end,
+                expected='pixels x coordinate -1 is outside [0, 799]',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0, -1, EPointerSpace.PIXELS)
+                end,
+                expected='pixels y coordinate -1 is outside [0, 199]',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0.5, 0, EPointerSpace.PIXELS)
+                end,
+                expected='pixels x coordinate must be an integer; got 0.5',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(800, 0, EPointerSpace.PIXELS)
+                end,
+                expected='pixels x coordinate 800 is outside [0, 799]',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0, 200, EPointerSpace.PIXELS)
+                end,
+                expected='pixels y coordinate 200 is outside [0, 199]',
+            },
+            {
+                invoke=function() ds.move_pointer(0, 0, 'pixels') end,
+                expected='unsupported pointer coordinate space: pixels',
+            },
+            {
+                invoke=function() ds.move_pointer(0, 0, 3) end,
+                expected='unsupported pointer coordinate space: 3',
+            },
         }
         for _, case in ipairs(cases) do
             assert.has_error(case.invoke, case.expected)
@@ -1555,7 +1718,23 @@ describe('DwarfSpec public mount commands', function()
 
         for anchor, coordinates in pairs(expected) do
             assert.same(coordinates, {ds.move_pointer(subject, anchor)})
+            assert.same(coordinates, {dfhack.screen.getMousePos()})
+            assert.same({
+                coordinates[1] * 10 + 5,
+                coordinates[2] * 8 + 4,
+            }, {dfhack.screen.getMousePixels()})
         end
+        assert.has_error(function()
+            ds.move_pointer(subject, 'center', EPointerSpace.GRID)
+        end, 'pointer coordinate space is only valid with numeric coordinates')
+        assert.has_error(function()
+            subject:move_pointer('center', EPointerSpace.GRID)
+        end, 'subject pointer commands use UI-grid coordinates and do not ' ..
+            'accept a pointer space')
+        assert.has_error(function()
+            subject:hover('center', EPointerSpace.PIXELS)
+        end, 'subject pointer commands use UI-grid coordinates and do not ' ..
+            'accept a pointer space')
     end)
 
     it('makes a retained native subject stale after removal', function()
@@ -1841,6 +2020,10 @@ describe('DwarfSpec public mount commands', function()
                 {EMouseButton.MIDDLE},
                 {EMouseButton.SCROLL_UP},
                 {EMouseButton.SCROLL_DOWN}}) do
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
             ds.mouseInput(input[1], input[2])
         end
 
@@ -1928,7 +2111,15 @@ describe('DwarfSpec public mount commands', function()
         native_subject:input('NATIVE_SUBJECT')
         overlay_subject:input('OVERLAY_SUBJECT')
         overlay_subject:type('A')
+        df.global.gps.mouse_x = -1
+        df.global.gps.mouse_y = -1
+        df.global.gps.precise_mouse_x = -1
+        df.global.gps.precise_mouse_y = -1
         native_subject:click()
+        df.global.gps.mouse_x = -1
+        df.global.gps.mouse_y = -1
+        df.global.gps.precise_mouse_x = -1
+        df.global.gps.precise_mouse_y = -1
         overlay_subject:click()
 
         assert.same({
@@ -1953,9 +2144,17 @@ describe('DwarfSpec public mount commands', function()
             simulated_inputs[5].x,
             simulated_inputs[5].y,
         })
+        assert.same({35, 36}, {
+            simulated_inputs[5].pixel_x,
+            simulated_inputs[5].pixel_y,
+        })
         assert.same({22, 11}, {
             simulated_inputs[6].x,
             simulated_inputs[6].y,
+        })
+        assert.same({225, 92}, {
+            simulated_inputs[6].pixel_x,
+            simulated_inputs[6].pixel_y,
         })
         assert.equals(0, native_callback_calls)
         assert.equals(0, overlay_callback_calls)
@@ -2036,9 +2235,20 @@ describe('DwarfSpec public mount commands', function()
         }
 
         for _, transition in ipairs(transitions) do
+            mounted:move_pointer('top_left')
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
             ds.mouseInput(transition.button, EInputState.DOWN)
             local down_input = simulated_inputs[#simulated_inputs]
             assert.equals(transition.key, down_input.key)
+            assert.same({10, 20, 105, 164}, {
+                down_input.x,
+                down_input.y,
+                down_input.pixel_x,
+                down_input.pixel_y,
+            })
             assert.equals(1, down_input[transition.record_down])
             assert.equals(0, down_input[transition.record_lift])
             assert.equals(1, df.global.enabler[transition.down_field])
@@ -2048,9 +2258,19 @@ describe('DwarfSpec public mount commands', function()
             mounted:move_pointer('bottom_right')
             assert.equals(1, df.global.enabler[transition.down_field])
 
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
             ds.mouseInput(transition.button, EInputState.UP)
             local up_input = simulated_inputs[#simulated_inputs]
             assert.is_nil(up_input.key)
+            assert.same({14, 24, 145, 196}, {
+                up_input.x,
+                up_input.y,
+                up_input.pixel_x,
+                up_input.pixel_y,
+            })
             assert.equals(0, up_input[transition.record_down])
             assert.equals(1, up_input[transition.record_lift])
             assert.equals(0, df.global.enabler[transition.down_field])
@@ -2095,6 +2315,13 @@ describe('DwarfSpec public mount commands', function()
         ds.unmount()
 
         assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+        assert.same({4, 5, 40, 50}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
         assert.equals(0, df.global.enabler.mouse_lbut_down)
         assert.equals(0, df.global.enabler.mouse_lbut_lift)
         assert.is_false(df.global.enabler.mouse_focus)
