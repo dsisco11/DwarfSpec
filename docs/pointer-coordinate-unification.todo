@@ -1,6 +1,6 @@
 # Pointer coordinate unification
 
-Status: in progress; Phases 0-5 complete
+Status: complete; Phases 0-6 complete
 
 Related implementation:
 
@@ -61,32 +61,32 @@ evidence is recorded in the evidence ledger.
 
 ## Locked public API decisions
 
-☐ Add the immutable `ds.EPointerSpace` enum with exactly:
+✔ Add the immutable `ds.EPointerSpace` enum with exactly:
   - `ds.EPointerSpace.GRID`;
   - `ds.EPointerSpace.PIXELS`.
-☐ Keep `ds.move_pointer(x, y)` backward-compatible and interpret omitted space
+✔ Keep `ds.move_pointer(x, y)` backward-compatible and interpret omitted space
   as `ds.EPointerSpace.GRID`.
-☐ Add the explicit coordinate overload:
+✔ Add the explicit coordinate overload:
 
   ```lua
   ds.move_pointer(x, y, ds.EPointerSpace.PIXELS)
   ```
 
-☐ Allow `ds.EPointerSpace.GRID` explicitly in the same overload.
-☐ Reject loose strings, unknown enum values, and a pointer space supplied to a
+✔ Allow `ds.EPointerSpace.GRID` explicitly in the same overload.
+✔ Reject loose strings, unknown enum values, and a pointer space supplied to a
   subject/anchor overload.
-☐ Keep subject bounds and pointer anchors grid-based; a subject move derives
+✔ Keep subject bounds and pointer anchors grid-based; a subject move derives
   its grid cell first and then resolves the paired pixel position.
-☐ Keep `Subject:move_pointer(anchor)`, `Subject:hover(anchor)`, and
+✔ Keep `Subject:move_pointer(anchor)`, `Subject:hover(anchor)`, and
   `Subject:click(button)` source-compatible.
-☐ Keep `ds.hover()` routed through `ds.move_pointer()` and accept the same
+✔ Keep `ds.hover()` routed through `ds.move_pointer()` and accept the same
   coordinate-space overload when numeric coordinates are supplied.
-☐ Return coordinates in the caller's requested space for numeric calls.
-☐ Continue returning grid coordinates for subject and anchor calls.
-☐ Do not add separate `move_pointer_pixels`, `hover_pixels`, or map-pointer
+✔ Return coordinates in the caller's requested space for numeric calls.
+✔ Continue returning grid coordinates for subject and anchor calls.
+✔ Do not add separate `move_pointer_pixels`, `hover_pixels`, or map-pointer
   commands.
-☐ Do not expose raw `gps` fields through the public API.
-☐ Reserve `EPointerSpace` against project-defined custom commands.
+✔ Do not expose raw `gps` fields through the public API.
+✔ Reserve `EPointerSpace` against project-defined custom commands.
 
 ## Locked coordinate contract
 
@@ -99,70 +99,70 @@ One active pointer position contains both representations:
 }
 ```
 
-☐ Grid input derives the canonical center pixel of the selected cell:
+✔ Grid input derives the canonical center pixel of the selected cell:
 
   ```lua
   pixel_x = grid_x * tile_pixel_x + math.floor(tile_pixel_x / 2)
   pixel_y = grid_y * tile_pixel_y + math.floor(tile_pixel_y / 2)
   ```
 
-☐ Pixel input preserves the exact requested pixel and derives its grid cell:
+✔ Pixel input preserves the exact requested pixel and derives its grid cell:
 
   ```lua
   grid_x = math.floor(pixel_x / tile_pixel_x)
   grid_y = math.floor(pixel_y / tile_pixel_y)
   ```
 
-☐ Clamp a pixel-derived grid coordinate to the last current grid cell when
+✔ Clamp a pixel-derived grid coordinate to the last current grid cell when
   screen pixels extend beyond `dim * tile_pixel`; do not move or round the
   caller's exact pixel coordinate.
-☐ Validate grid coordinates against the current `dimx` and `dimy`.
-☐ Validate pixel coordinates against the current `screen_pixel_x` and
+✔ Validate grid coordinates against the current `dimx` and `dimy`.
+✔ Validate pixel coordinates against the current `screen_pixel_x` and
   `screen_pixel_y`.
-☐ Reject missing, nonnumeric, fractional, negative, or out-of-window
+✔ Reject missing, nonnumeric, fractional, negative, or out-of-window
   coordinates with errors that identify the coordinate space, axis, supplied
   value, and current bound.
-☐ Reject missing, nonnumeric, zero, or negative runtime geometry with an error
+✔ Reject missing, nonnumeric, zero, or negative runtime geometry with an error
   that identifies the invalid `gps` field.
-☐ Read and validate fresh runtime geometry for every pointer move.
-☐ Never infer the runtime scale from
+✔ Read and validate fresh runtime geometry for every pointer move.
+✔ Never infer the runtime scale from
   `init.display.interface_scaling_percentage` or desired grid settings.
 
 ## Locked ownership and restoration contract
 
-☐ The first pointer move in a cleanup scope atomically snapshots:
+✔ The first pointer move in a cleanup scope atomically snapshots:
   - `gps.mouse_x`;
   - `gps.mouse_y`;
   - `gps.precise_mouse_x`;
   - `gps.precise_mouse_y`;
   - `dfhack.screen.getMousePos`;
   - `dfhack.screen.getMousePixels`.
-☐ Later moves update the active logical position without replacing the original
+✔ Later moves update the active logical position without replacing the original
   snapshot or adding cleanup entries.
-☐ A pointer move writes both raw coordinate pairs from the paired logical
+✔ A pointer move writes both raw coordinate pairs from the paired logical
   position.
-☐ A pointer move installs paired Lua accessors that return the logical grid and
+✔ A pointer move installs paired Lua accessors that return the logical grid and
   pixel coordinates respectively.
-☐ Lua accessors remain stable across render waits even when DF refreshes raw
+✔ Lua accessors remain stable across render waits even when DF refreshes raw
   mouse state from the physical pointer.
-☐ Before native mouse dispatch, resynchronize both raw coordinate pairs from
+✔ Before native mouse dispatch, resynchronize both raw coordinate pairs from
   the active logical position.
-☐ `ds.mouseInput()`, top-level and fluent clicks, wheel input, button down, and
+✔ `ds.mouseInput()`, top-level and fluent clicks, wheel input, button down, and
   button up all use the same resynchronization path.
-☐ Remove the grid-only `with_interface_mouse()` path; do not retain a second
+✔ Remove the grid-only `with_interface_mouse()` path; do not retain a second
   coordinate owner for simulated input.
-☐ Preserve existing button-state ownership independently from pointer-position
+✔ Preserve existing button-state ownership independently from pointer-position
   ownership.
-☐ Immediate clear, mount cleanup, example cleanup, failure cleanup, abort, and
+✔ Immediate clear, mount cleanup, example cleanup, failure cleanup, abort, and
   timeout restore both raw coordinate pairs.
-☐ Cleanup restores both original Lua accessors only when DS still owns them.
-☐ If either Lua accessor was replaced externally, report the exact ownership
+✔ Cleanup restores both original Lua accessors only when DS still owns them.
+✔ If either Lua accessor was replaced externally, report the exact ownership
   conflict without overwriting the external function.
-☐ An accessor conflict must not prevent best-effort restoration of the raw
+✔ An accessor conflict must not prevent best-effort restoration of the raw
   coordinates, the other accessor, or the adapter's internal state.
-☐ Cleanup releases exactly one pointer-position cleanup entry and leaves the
+✔ Cleanup releases exactly one pointer-position cleanup entry and leaves the
   pointer probe inactive.
-☐ Cleanup restoration writes the exact original raw values, including invalid
+✔ Cleanup restoration writes the exact original raw values, including invalid
   `-1` sentinel positions; it does not run those values through conversion.
 
 ## Proposed internal boundaries
@@ -639,36 +639,36 @@ cleanup evidence are all current.
 
 ### Tasks
 
-☐ Run focused pointer-adapter unit coverage.
-☐ Run focused mount-command unit coverage.
-☐ Run the complete unit suite.
-☐ Run Lua syntax and formatting checks.
-☐ Run the focused interaction live specification.
-☐ Run the focused native-screen live specification.
-☐ Run the complete live automation suite.
-☐ Record functional live results separately from cleanup confirmation.
-☐ Record any pre-existing or unrelated full-live failures without treating
+✔ Run focused pointer-adapter unit coverage.
+✔ Run focused mount-command unit coverage.
+✔ Run the complete unit suite.
+✔ Run Lua syntax and formatting checks.
+✔ Run the focused interaction live specification.
+✔ Run the focused native-screen live specification.
+✔ Run the complete live automation suite.
+✔ Record functional live results separately from cleanup confirmation.
+✔ Record any pre-existing or unrelated full-live failures without treating
   focused success as a full-suite pass.
-☐ Verify no DwarfSpec-owned screen, subject, pointer accessor, raw pointer
+✔ Verify no DwarfSpec-owned screen, subject, pointer accessor, raw pointer
   position, button state, or render hook remains active.
-☐ Run `git diff --check`.
-☐ Review package manifests if a new production module was added and include
+✔ Run `git diff --check`.
+✔ Review package manifests if a new production module was added and include
   `pointer_spaces.lua` in every required module list.
-☐ Review README, writing guide, LuaLS declarations, changelog, and reserved
+✔ Review README, writing guide, LuaLS declarations, changelog, and reserved
   commands against the final implementation.
-☐ Check every task and exit gate in this document or record a concrete blocker.
+✔ Check every task and exit gate in this document or record a concrete blocker.
 
 ### Phase 6 exit gate
 
-☐ Focused unit coverage passes.
-☐ Full unit coverage passes.
-☐ Syntax and formatting checks pass.
-☐ Focused live behavior passes.
-☐ Focused live cleanup is confirmed.
-☐ Full live results and cleanup are recorded accurately.
-☐ Package coverage is complete.
-☐ `git diff --check` passes.
-☐ Every checklist item is checked or explicitly blocked.
+✔ Focused unit coverage passes.
+✔ Full unit coverage passes.
+✔ Syntax and formatting checks pass.
+✔ Focused live behavior passes.
+✔ Focused live cleanup is confirmed.
+✔ Full live results and cleanup are recorded accurately.
+✔ Package coverage is complete.
+✔ `git diff --check` passes.
+✔ Every checklist item is checked or explicitly blocked.
 
 ## Evidence ledger
 
@@ -683,17 +683,20 @@ cleanup evidence are all current.
 | Baseline focused live | `.\Tools\Run-AutomationTests.ps1 --test-glob tests/automation/interaction_live_spec.lua` | 1 success, 0 failures, 0 errors, 0 pending; 109 ms |
 | Baseline cleanup confirmation | focused interaction live result | `cleanup_confirmed=true`; one pending cleanup action completed |
 | Baseline process state | `Get-Process`; DFHack Lua precondition query | PID 36940; `Dwarf Fortress.exe`; DFHack responsive; `viewscreen_dwarfmodest`; focus `dwarfmode/Default`; map and world loaded |
-| Implemented focused pointer units | pending | pending |
-| Implemented focused command units | pending | pending |
-| Implemented full units | `.\Tools\Run-UnitTests.ps1` | pending |
-| Implemented syntax | `.\Tools\Check-Lua.ps1` | pending |
-| Implemented focused interaction live | pending | pending |
-| Implemented focused native live | pending | pending |
-| Implemented full live | `.\Tools\Run-AutomationTests.ps1` | pending |
-| Implemented cleanup confirmation | pending | pending |
-| Implemented process/resource state | pending | pending |
-| Package/module coverage | pending | pending |
-| Diff validation | `git diff --check` | pending |
+| Implemented focused pointer units | `.\Tools\Run-UnitTests.ps1 --filter "automation interaction support"` | 13 successes, 0 failures, 0 errors, 0 pending |
+| Implemented focused command units | `.\Tools\Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"` | 60 successes, 0 failures, 0 errors, 0 pending |
+| Implemented full units | `.\Tools\Run-UnitTests.ps1` | 440 successes, 0 failures, 0 errors, 0 pending |
+| Implemented syntax | `.\Tools\Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 230 files |
+| Implemented focused interaction live | `.\Tools\Run-AutomationTests.ps1 --test-glob tests/automation/interaction_live_spec.lua` | 2 successes, 0 failures, 0 errors, 0 pending |
+| Implemented focused native live | `.\Tools\Run-AutomationTests.ps1 --test-glob tests/automation/native_screen_mount_live_spec.lua` | 3 successes, 0 failures, 0 errors, 0 pending |
+| Implemented full live | `.\Tools\Run-AutomationTests.ps1` | Final run: 28 successes, 0 failures, 0 errors, 0 pending |
+| Transient unrelated full-live result | first full run; isolated complete-screen rerun; final full rerun | First run: 27 successes and one existing pause-state assertion failure at `complete_screen_mount_live_spec.lua:194`; isolated file passed 2 of 2; final full run passed 28 of 28 |
+| Implemented cleanup confirmation | focused interaction, focused native, isolated complete-screen, and full-live results | Every run reported `cleanup_confirmed=true`; final full run also reported `mount_cleanup_verified=true` |
+| Implemented process/resource state | focused pointer snapshots; final host report; `dwarfspec status` | Accessors, raw coordinates, buttons, screens, subjects, and render hooks restored; executor idle; queue 0; quarantine none |
+| Package/module coverage | `dwarfspec-0.2.0-1.rockspec`; `src/dwarfspec/pointer_spaces.lua` | Rockspec automatically discovers every module beneath `src/`; no explicit module list requires updating |
+| Public contract audit | README; writing guide; LuaLS declarations; changelog; `config_schema.lua` | Final grid/pixel API, runtime geometry, cleanup behavior, and `EPointerSpace` reservation agree |
+| Checklist audit | all locked contracts, phase tasks, and exit gates | 0 unchecked items; 153 checked items; no blockers |
+| Diff validation | `git diff --check` | passed |
 
 ## Explicit non-goals
 
