@@ -52,7 +52,7 @@ dismiss a screen, instantiate a native widget, or take ownership of an overlay.
 - Support native widget traversal by name and zero-based child index.
 - Preserve the existing fluent `dwarfspec.Subject` API for native and Lua
   widgets.
-- Support pointer placement by subject or arbitrary native screen coordinates.
+- Support pointer placement by subject or arbitrary native UI-grid cells.
 - Exercise DFHack's real native input and overlay-registry dispatch paths.
 - Instrument completed rendering so `ds.redraw()` waits by default.
 - Restore pointer state and render instrumentation during every cleanup path.
@@ -249,7 +249,7 @@ Extend the existing top-level command with an absolute-coordinate overload:
 ds.move_pointer(42, 17)
 ```
 
-Coordinates are zero-based DF screen coordinates, integral, and within the
+Coordinates are zero-based native UI-grid cells, integral, and within the
 current window bounds.
 
 ### Input and redraw

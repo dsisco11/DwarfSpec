@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ds.setViewPos({x=..., y=..., z=...})` controls the zero-based map-view
   origin and automatically restores the example's original position during
   cleanup.
+- `ds.EPointerSpace` and the optional `ds.move_pointer(x, y, space)` and
+  `ds.hover(x, y, space)` overloads support exact screen-pixel positioning
+  while preserving existing UI-grid calls.
 - Native-screen `ds.get()` accepts complete paths rooted at
   `df.global.game.main_interface`. It traverses exact declared DF data fields,
   switches once to exact native-widget traversal, and retains the structural
@@ -24,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Native-screen subject commands can use `native_root` as an advanced
   single-root bypass for genuine ambiguity or unsupported DF structures while
   retaining the mounted viewscreen as their input and render target.
+
+### Fixed
+
+- Keep DwarfSpec's UI-grid and screen-pixel pointer positions synchronized for
+  moves and native mouse input, and restore both representations during
+  cleanup.
 
 ## [0.2.0] - 2026-07-24
 

@@ -24,9 +24,14 @@
 ---| 'down'
 ---| 'up'
 
----@alias dwarfspec.EPointerSpace
----| 1
----| 2
+---The `ds.EPointerSpace.GRID` coordinate-space value.
+---@alias dwarfspec.GridPointerSpace 1
+
+---The `ds.EPointerSpace.PIXELS` coordinate-space value.
+---@alias dwarfspec.PixelPointerSpace 2
+
+---A pointer coordinate space obtained from `ds.EPointerSpace`.
+---@alias dwarfspec.EPointerSpace dwarfspec.GridPointerSpace|dwarfspec.PixelPointerSpace
 
 ---@alias dwarfspec.ESubjectSource
 ---| 'native'
@@ -49,10 +54,11 @@
 ---@field DOWN `down`
 ---@field UP `up`
 
----Immutable identifiers for pointer coordinate systems.
+---Immutable pointer coordinate spaces. Use these members instead of backing
+---values: `GRID` addresses UI-grid cells and `PIXELS` addresses screen pixels.
 ---@class dwarfspec.EPointerSpaceEnum
----@field GRID `1`
----@field PIXELS `2`
+---@field GRID dwarfspec.GridPointerSpace Zero-based UI-grid cells; the default.
+---@field PIXELS dwarfspec.PixelPointerSpace Exact zero-based screen pixels.
 
 ---Immutable identifiers for inspectable native and registered-overlay sources.
 ---@class dwarfspec.ESubjectSourceEnum
@@ -157,12 +163,12 @@ local Subject = {}
 ---@return dwarfspec.Subject
 function Subject:click(button) end
 
----Moves the pointer over this subject and preserves it for fluent chaining.
+---Moves the pointer over this subject in UI-grid cells and preserves it.
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return dwarfspec.Subject
 function Subject:hover(anchor) end
 
----Moves the pointer to this subject and preserves it for fluent chaining.
+---Moves the pointer to this subject in UI-grid cells and preserves it.
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return dwarfspec.Subject
 function Subject:move_pointer(anchor) end
@@ -293,15 +299,26 @@ function DS.redraw(view, options) end
 ---@return table
 function DS.capture_view_tree(name, options) end
 
----Moves the virtual pointer to an anchor inside a subject or exact screen cells.
+---Moves the pointer by subject anchor, UI-grid cell, or exact screen pixel.
+---Numeric calls default to `EPointerSpace.GRID`. Explicit pixel calls preserve
+---the requested pixel exactly and expose its derived UI-grid cell. DwarfSpec
+---reads current effective renderer geometry for each move and restores both
+---coordinate representations automatically during cleanup.
 ---@overload fun(x: integer, y: integer): integer, integer
+---@overload fun(x: integer, y: integer, space: dwarfspec.GridPointerSpace): integer, integer
+---@overload fun(x: integer, y: integer, space: dwarfspec.PixelPointerSpace): integer, integer
 ---@param view? dwarfspec.Subject Defaults to the current source root.
----@param anchor? dwarfspec.PointerAnchor
+---@param anchor? dwarfspec.PointerAnchor Subject anchors use UI-grid cells.
 ---@return integer x
 ---@return integer y
 function DS.move_pointer(view, anchor) end
 
----Moves the virtual pointer over a subject and waits for its render.
+---Moves the pointer over a subject or numeric coordinate and waits for render.
+---Subject anchors use UI-grid cells. Numeric calls use the same coordinate
+---space and return rules as `move_pointer`.
+---@overload fun(x: integer, y: integer): integer, integer
+---@overload fun(x: integer, y: integer, space: dwarfspec.GridPointerSpace): integer, integer
+---@overload fun(x: integer, y: integer, space: dwarfspec.PixelPointerSpace): integer, integer
 ---@param view? dwarfspec.Subject
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return integer x

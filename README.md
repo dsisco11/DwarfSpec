@@ -226,7 +226,7 @@ frames is itself part of the behavior being tested.
 | `subject:inspect()` | Return stable, read-only information about the selected view. |
 | `subject:text()` | Return the selected view's inspected text value. |
 | `subject:raw()` | Access the native object as an exceptional escape hatch. |
-| `ds.move_pointer(x, y)` | Move the pointer to exact zero-based native screen coordinates. |
+| `ds.move_pointer(x, y, space)` | Move by zero-based UI-grid cell by default, or by exact screen pixel with `EPointerSpace.PIXELS`. |
 | `subject:move_pointer(anchor)` | Move the pointer into the selected view. |
 | `subject:hover(anchor)` | Hover the selected view and preserve the subject. |
 | `subject:click(button)` | Click the selected view and preserve the subject. |
@@ -237,6 +237,31 @@ frames is itself part of the behavior being tested.
 | `ds.capture_view_tree(name, options)` | Retain the selected source's structured view tree. |
 | `ds.capture_screen(name, options)` | Retain a bounded screen-cell capture. |
 | `ds.stage_overlay_registration(source, name)` | Stage a run-owned script only for separately selected real-registration integration coverage. |
+
+### Pointer coordinate spaces
+
+Use `ds.EPointerSpace.GRID` for UI-grid cells and
+`ds.EPointerSpace.PIXELS` for exact screen pixels:
+
+```lua
+ds.move_pointer(12, 8) -- GRID is the backward-compatible default
+ds.move_pointer(12, 8, ds.EPointerSpace.GRID)
+ds.move_pointer(420, 260, ds.EPointerSpace.PIXELS)
+```
+
+`ds.hover()` accepts the same numeric coordinate-space overloads.
+
+UI widgets, subjects, and subject anchors use UI-grid cells. Premium map mouse
+interaction uses screen pixels, so use `PIXELS` when a test must target an exact
+rendered map location. Map tiles are a third coordinate system: map-view
+positions such as those returned by `ds.getViewPos()` are not pointer
+coordinates.
+
+DwarfSpec reads the effective renderer geometry on every move, so conversion
+tracks the current runtime UI scale. Configured scaling preferences are not
+used as a substitute for that live geometry. DwarfSpec keeps the UI-grid and
+pixel positions paired for input and automatically restores both during
+cleanup.
 
 See [Writing live tests](docs/writing-tests.md) for owned-component, borrowed
 native-screen, and external-overlay contracts.

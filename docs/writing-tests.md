@@ -193,6 +193,34 @@ Unlike `subject:click()`, `ds.mouseInput()` does not move the pointer. It sends
 the selected button or wheel input at the position established by
 `subject:hover()` or `subject:move_pointer()`.
 
+### Choosing pointer coordinates
+
+Pointer coordinates can use either zero-based UI-grid cells or zero-based
+screen pixels:
+
+```lua
+ds.move_pointer(17, 9) -- UI-grid cells are the default
+ds.move_pointer(17, 9, ds.EPointerSpace.GRID)
+ds.move_pointer(640, 360, ds.EPointerSpace.PIXELS) -- exact screen pixel
+```
+
+Use UI-grid cells for UI widgets and text-mode screen locations. Subjects and
+their `center`, corner, and edge anchors are always resolved in UI-grid cells,
+so fluent `subject:move_pointer()` and `subject:hover()` do not accept a
+coordinate-space argument.
+
+Use screen pixels when Premium map interaction must target an exact rendered
+location. A map tile is not a UI-grid cell or a screen pixel; map-view
+coordinates such as `ds.getViewPos()` describe map tiles and are not accepted
+as pointer coordinates.
+
+DwarfSpec reads the effective renderer geometry for every pointer move. This
+tracks runtime UI-scale, resolution, and window changes; a configured scaling
+preference is not treated as the current conversion geometry. Grid input is
+paired with the selected cell's center pixel, while pixel input remains exact
+and is paired with its derived grid cell. Mouse input resynchronizes the pair,
+and cleanup automatically restores both coordinate representations.
+
 `subject:raw()` exposes the underlying object for an exceptional API that
 DwarfSpec does not model. It returns a Lua table for a Lua-view subject and
 typed DF userdata for a native widget subject. Both are borrowed references
@@ -326,8 +354,9 @@ ambiguity fail explicitly with bounded diagnostics.
 
 The current Hauling route rows are procedurally rendered from
 `df.global.plotinfo.hauling` on the supported DFHack host. They are not native
-widget userdata and therefore cannot be returned by `ds.get()`. Screen
-coordinates can drive that interface, but do not constitute widget identity.
+widget userdata and therefore cannot be returned by `ds.get()`. UI-grid or
+screen-pixel coordinates can drive that interface, but do not
+constitute widget identity.
 
 An attached native screen can also select an enabled widget from DFHack's live
 overlay registry. This source is externally owned and must be named exactly:
@@ -370,10 +399,11 @@ ds.get('menu'):redraw()             -- also waits
 ds.redraw(nil, {wait=false})        -- invalidates without waiting
 ```
 
-Absolute pointer coordinates are zero-based DF screen cells and must be inside
-the current window. DwarfSpec restores the pointer and button state captured
-at attachment during cleanup. `ds.viewport()` is intentionally unavailable
-because DwarfSpec does not own or resize the native game window.
+Absolute pointer coordinates must be inside the current UI-grid or screen-pixel
+bounds for their selected space. DwarfSpec restores the paired pointer and
+button state captured at attachment during cleanup. `ds.viewport()` is
+intentionally unavailable because DwarfSpec does not own or resize the native
+game window.
 
 The attached viewscreen and native widget hierarchy are pinned. If game input,
 a script, or another system changes the current viewscreen, subsequent subject

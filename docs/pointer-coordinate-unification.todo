@@ -1,6 +1,6 @@
 # Pointer coordinate unification
 
-Status: in progress; Phases 0-3 complete
+Status: in progress; Phases 0-4 complete
 
 Related implementation:
 
@@ -494,28 +494,59 @@ Goal: make the coordinate-space contract discoverable and unambiguous.
 
 ### Tasks
 
-☐ Add LuaLS overloads for numeric grid and pixel calls without weakening the
+✔ Add LuaLS overloads for numeric grid and pixel calls without weakening the
   subject/anchor types.
-☐ Document `EPointerSpace`, default grid behavior, exact pixel behavior, and
+✔ Document `EPointerSpace`, default grid behavior, exact pixel behavior, and
   subject-anchor behavior in `src/ds.d.lua`.
-☐ Update README command documentation with concise examples for both spaces.
-☐ Update `docs/writing-tests.md` with guidance for choosing grid versus pixels.
-☐ State that UI widgets and subject anchors use grid coordinates.
-☐ State that Premium map interaction uses screen pixels.
-☐ State that DS reads the effective runtime UI scale for every move.
-☐ Document automatic paired restoration.
-☐ Add an Unreleased changelog entry describing the fix and compatible API
+✔ Update README command documentation with concise examples for both spaces.
+✔ Update `docs/writing-tests.md` with guidance for choosing grid versus pixels.
+✔ State that UI widgets and subject anchors use grid coordinates.
+✔ State that Premium map interaction uses screen pixels.
+✔ State that DS reads the effective runtime UI scale for every move.
+✔ Document automatic paired restoration.
+✔ Add an Unreleased changelog entry describing the fix and compatible API
   extension.
-☐ Avoid documenting raw `gps` mutation as a user-facing mechanism.
+✔ Avoid documenting raw `gps` mutation as a user-facing mechanism.
 
 ### Phase 4 exit gate
 
-☐ Public names and overloads match production exactly.
-☐ Documentation distinguishes screen pixels, UI-grid cells, and map tiles.
-☐ Documentation does not imply that configured UI-scale preferences are the
+✔ Public names and overloads match production exactly.
+✔ Documentation distinguishes screen pixels, UI-grid cells, and map tiles.
+✔ Documentation does not imply that configured UI-scale preferences are the
   runtime conversion authority.
-☐ Lua syntax and formatting checks pass.
-☐ `git diff --check` passes.
+✔ Lua syntax and formatting checks pass.
+✔ `git diff --check` passes.
+
+### Phase 4 implementation notes
+
+- LuaLS exposes separate numeric literal overloads for `EPointerSpace.GRID`
+  and `EPointerSpace.PIXELS` while retaining the subject and anchor parameter
+  types on the primary declarations.
+- The README and test-writing guide distinguish UI-grid cells, exact screen
+  pixels, and map tiles. They direct widget and subject-anchor interaction to
+  UI-grid coordinates and Premium map interaction to screen pixels.
+- Public documentation identifies effective renderer geometry at the time of
+  each move as the conversion authority. Configured scaling preferences are
+  explicitly not treated as authoritative runtime geometry.
+- Pointer movement, input synchronization, and cleanup are documented as
+  paired operations that keep and restore both coordinate representations.
+- The Unreleased changelog records both the synchronization fix and the
+  source-compatible coordinate-space extension.
+
+Validation evidence:
+
+| Evidence | Result |
+|---|---|
+| Lua syntax and formatting | 230 files passed |
+| Full unit suite | 439 successes, 0 failures |
+| Declaration audit | Numeric grid/pixel overloads match production `EPointerSpace` members |
+| Subject typing audit | Primary subject and anchor declaration types remain unchanged |
+| Terminology audit | Public docs distinguish UI-grid cells, screen pixels, and map tiles |
+| Runtime-scale audit | Docs use fresh effective renderer geometry, not configured preferences |
+| Raw mutation audit | No public guidance mutates raw `gps` mouse fields |
+| Diff validation | `git diff --check` passed |
+| Package configuration | No module or manifest change required |
+| Live automation | Not required or run |
 
 ## Phase 5: Focused live automation
 
