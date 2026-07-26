@@ -1,0 +1,220 @@
+# Native input routing
+
+Status: not started
+
+Related implementation:
+
+- `src/dwarfspec/native_attachment.lua`
+- `src/dwarfspec/interaction_target.lua`
+- `src/dwarfspec/ds.lua`
+- `tests/unit/native_attachment_spec.lua`
+- `tests/unit/interaction_target_spec.lua`
+- `tests/unit/ds_mount_commands_spec.lua`
+- `tests/automation/native_screen_mount_live_spec.lua`
+
+## Purpose
+
+Make `ds.mountNativeScreen()` route simulated player input through the
+viewscreen that is current at dispatch time while preserving the deliberately
+targeted behavior of `ds.mount(component)`.
+
+The native mount continues to borrow the base DF viewscreen and its widgets for
+subject lookup. It does not own that screen, and the base DF screen does not
+have to be the top screen while the mount is active.
+
+This checklist supersedes conflicting native-screen transition requirements in
+`docs/mount-command-automation-coverage.todo`.
+
+## Acceptance contract
+
+☐ Component mounts dispatch input only within their owned screen boundary.
+☐ An unrelated current screen never becomes a component mount's input target.
+☐ Native mounts can attach while a registered fullscreen DFHack overlay is
+  current.
+☐ Native subject lookup remains rooted at the borrowed base DF widgets.
+☐ Immediately before every native `gui.simulateInput` call, DwarfSpec resolves
+  and explicitly passes the current top viewscreen.
+☐ DwarfSpec does not manually replay unhandled input; normal DFHack handling
+  controls consumption and pass-through.
+☐ Showing or dismissing a fullscreen screen changes subsequent native input
+  routing without requiring remounting.
+☐ A top-screen change alone does not make the native mount or its subjects
+  stale.
+☐ Genuine subject removal, replacement, disablement, or source invalidation
+  remains an explicit stale-subject failure.
+☐ Unmounting never dismisses, replaces, resizes, or navigates borrowed screens.
+☐ Pointer, button, focus, screen-stack, overlay, and cleanup state is restored
+  after successful and failed tests.
+
+## Scope
+
+Included:
+
+- separating owned-component input targets from native input ingress;
+- accepting a native mount beneath a registered fullscreen overlay;
+- dynamically resolving the native input target;
+- unit and live regression coverage;
+- reconciling the older coverage checklist.
+
+Excluded:
+
+- changing the public mount APIs;
+- targetless `gui.simulateInput`;
+- custom input bubbling or direct `onInput()` calls;
+- changing native or overlay subject-source selection;
+- changing pointer coordinate-system behavior;
+- redesigning redraw or focus-list behavior.
+
+## Phase 1: Implement mount-specific input routing
+
+### Tasks
+
+☐ Record the initial repository identity and worktree state.
+☐ Replace the shared `native_screen(...)` input concept with an explicit
+  mount-specific input-target operation.
+☐ Preserve the owned-component policy:
+  - require the owned host to remain mounted and active;
+  - target its native host;
+  - allow a current descendant only when it belongs to the owned host's screen
+    chain;
+  - never select an unrelated current screen.
+☐ Implement the borrowed-native policy:
+  - query the current top viewscreen immediately before each
+    `gui.simulateInput` call;
+  - explicitly pass the resolved screen to `gui.simulateInput`;
+  - report a bounded error when the current screen cannot be queried or is
+    absent.
+☐ Refactor native attachment to validate and borrow the base DF viewscreen and
+  its widget root independently from the current top screen.
+☐ Remove the requirement that the base DF viewscreen be current when attaching
+  or dispatching native input.
+☐ Remove top-screen identity changes as a native mount and subject staleness
+  condition.
+☐ Preserve widget identity and source-lifecycle staleness checks.
+☐ Route all keyboard, text, click, button, and wheel commands through the
+  mount-specific input-target operation.
+☐ Resolve the native target once immediately before each actual
+  `gui.simulateInput` call; if a command makes multiple calls, resolve each one
+  independently.
+☐ Preserve existing redraw, focus-list, pointer placement, and temporary
+  button-state behavior except where they invoke the shared input dispatcher.
+☐ Preserve partial-construction cleanup, the single-active-mount rule, and
+  primary failure reporting.
+☐ Update `docs/mount-command-automation-coverage.todo` to remove requirements
+  that:
+  - reject mounting beneath a fullscreen DFHack screen;
+  - mark subjects stale solely because the top screen changed;
+  - require the borrowed base DF screen to remain current.
+☐ Add or update LuaDoc comments for every changed function, method, class, and
+  class-like table.
+
+### Phase 1 exit gate
+
+☐ Owned and native mounts have distinct input-target policies.
+☐ Every simulated input call receives an explicit non-nil target.
+☐ Native attachment and input work when another screen is current.
+☐ Non-input behavior and genuine staleness checks remain intact.
+☐ The two tasklists describe the same routing contract.
+
+## Phase 2: Add regression coverage
+
+### Unit coverage
+
+☐ Prove an owned target uses its host or an owned descendant.
+☐ Prove an owned target rejects or ignores an unrelated current screen.
+☐ Prove a borrowed native target queries the current top screen for every input
+  dispatch and follows screen changes without remounting.
+☐ Prove native attachment succeeds beneath a different current screen while
+  retaining the base DF widget root.
+☐ Prove representative keyboard, text, click, button, and wheel routes use the
+  shared mount-specific dispatch boundary.
+☐ Prove every simulated input receives an explicit target.
+☐ Prove retained native subjects survive top-screen changes when their widget
+  identities remain valid.
+☐ Preserve tests for genuine widget removal, replacement, invalid roots,
+  dependency failures, partial construction, and post-cleanup use.
+☐ Prove component input remains targeted after the refactor.
+☐ Prove cleanup mutates no base, fullscreen, or parent screen.
+
+### Live automation
+
+☐ Add a test-owned registered fullscreen overlay that records normal keyboard
+  and mouse input through its public lifecycle.
+☐ Give the overlay deterministic registration, enablement, rendering,
+  consumption, dismissal, and independent cleanup.
+☐ Do not call its `onInput()` method directly from the test.
+☐ Show the overlay before `ds.mountNativeScreen()` and prove mounting succeeds.
+☐ Prove native root lookup still reads the borrowed base DF widgets.
+☐ Dispatch representative keyboard input and prove the current overlay
+  receives it.
+☐ Place the real pointer over a rendered target, dispatch representative mouse
+  input, and prove the current overlay receives it.
+☐ Prove consumed input is not replayed by DwarfSpec.
+☐ Prove unconsumed input follows normal DFHack pass-through with an observable,
+  reversible backing-screen result.
+☐ Dismiss and reshow the overlay during the same native mount and prove
+  subsequent input follows each current screen without remounting.
+☐ Retain and use a native subject across those transitions.
+☐ Prove `ds.unmount()` leaves the overlay and base DF screen untouched.
+☐ Independently restore overlay registration and configuration, focus, screen
+  stack, pointer/button state, reversible backing state, and DwarfSpec cleanup.
+
+### Phase 2 exit gate
+
+☐ Unit tests cover all input command families through the shared dispatch
+  boundary without duplicating every command live.
+☐ Live keyboard and mouse input enter through the registered fullscreen
+  overlay.
+☐ Handled and pass-through behavior are separately proven.
+☐ Component targeting, retained native subjects, and exact cleanup are proven.
+
+## Phase 3: Verify and close
+
+### Tasks
+
+☐ Run the focused native attachment, interaction target, and mount-command unit
+  specifications.
+☐ Run the focused native-screen automation specification and require
+  `cleanup_confirmed=true`.
+☐ Run the full unit suite.
+☐ Run Lua syntax and formatting checks.
+☐ Run the full automation suite and require confirmed cleanup.
+☐ Build and inspect the local rock because packaged production source changed.
+☐ Verify the rock contains changed production modules and no test-only fixture.
+☐ Run `git diff --check` and `git diff --cached --check`.
+☐ Account for every worktree change.
+☐ Verify the DFHack process remains responsive and no test-owned screens,
+  overlays, input state, or cleanup entries remain.
+☐ Record all focused, full, syntax, package, process, diff, and cleanup
+  evidence below.
+
+### Phase 3 exit gate
+
+☐ Focused and full unit, live, and syntax checks pass.
+☐ Package and diff checks pass.
+☐ Functional behavior and cleanup are independently confirmed.
+☐ The older coverage checklist links to the new assertions and contains no
+  obsolete rejection requirements.
+
+## Evidence ledger
+
+### Phase 1 evidence
+
+- Pending.
+
+### Phase 2 evidence
+
+- Pending.
+
+### Phase 3 evidence
+
+- Pending.
+
+## Final acceptance
+
+☐ Component mounts remain targeted.
+☐ Native mounts follow the live viewscreen stack.
+☐ Registered fullscreen overlays can coexist with native mounts.
+☐ Native subject roots remain stable across unrelated top-screen changes.
+☐ Genuine subject staleness still fails explicitly.
+☐ Borrowed screens and all test-owned state are clean after verification.
