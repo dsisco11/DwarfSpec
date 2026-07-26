@@ -789,6 +789,21 @@ local TestStatus = load_automation_module(package_root,
         return time
     end
 
+    ---Returns a copy of the current map-view origin.
+    ---@return dwarfspec.MapViewPosition
+    function ds.getViewPos()
+        local ok, x, y, z = pcall(context.get_map_view_position)
+        assert(ok, 'DwarfSpec could not query the current map-view position: ' ..
+            tostring(x))
+        for axis, value in pairs({x=x, y=y, z=z}) do
+            assert(type(value) == 'number' and value % 1 == 0 and
+                    value >= 0,
+                ('DFHack returned an invalid map-view %s coordinate: %s')
+                    :format(axis, tostring(value)))
+        end
+        return {x=x, y=y, z=z}
+    end
+
     ---Sets the map-view origin and restores its original position after the example.
     ---@param position table
     ---@return table
@@ -802,21 +817,11 @@ local TestStatus = load_automation_module(package_root,
                     :format(axis))
         end
         if context.map_view_cleanup_entry == nil then
-            local ok, original_x, original_y, original_z =
-                pcall(context.get_map_view_position)
-            assert(ok, 'DwarfSpec could not query the current map-view ' ..
-                'position: ' .. tostring(original_x))
-            for axis, value in pairs({
-                    x=original_x, y=original_y, z=original_z}) do
-                assert(type(value) == 'number' and value % 1 == 0 and
-                        value >= 0,
-                    ('DFHack returned an invalid map-view %s coordinate: %s')
-                        :format(axis, tostring(value)))
-            end
+            local original = ds.getViewPos()
             context.map_view_cleanup_entry = cleanup_module.push(
                 cleanup_registry, 'restore map-view position', function()
                     local restored = context.set_map_view_position(
-                        original_x, original_y, original_z)
+                        original.x, original.y, original.z)
                     assert(restored ~= false,
                         'DFHack rejected the original map-view position')
                     context.map_view_cleanup_entry = nil

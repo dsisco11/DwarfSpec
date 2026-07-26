@@ -82,6 +82,7 @@ describe('DwarfSpec public mount commands', function()
     local focus_queries
     local dfhack_time
     local map_view_position
+    local map_view_get_failure
     local map_view_set_failure
     local original_native_render_dispatcher
     local native_render_failure
@@ -167,6 +168,7 @@ describe('DwarfSpec public mount commands', function()
         focus_queries = {}
         dfhack_time = 67890
         map_view_position = {x=12, y=34, z=5}
+        map_view_get_failure = nil
         map_view_set_failure = nil
         native_render_failure = nil
         suppress_native_render = false
@@ -325,6 +327,9 @@ describe('DwarfSpec public mount commands', function()
                     return current_native_screen
                 end,
                 get_map_view_position=function()
+                    if map_view_get_failure then
+                        error(map_view_get_failure, 0)
+                    end
                     return map_view_position.x, map_view_position.y,
                         map_view_position.z
                 end,
@@ -1660,6 +1665,22 @@ describe('DwarfSpec public mount commands', function()
         assert.same({x=12, y=34, z=5}, map_view_position)
         assert.is_false(run.mount_cleanup_probe().map_view_position_active)
         assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('gets a copied current map-view position without scheduling cleanup',
+            function()
+        local position = ds.getViewPos()
+
+        assert.same({x=12, y=34, z=5}, position)
+        position.x = 99
+        assert.same({x=12, y=34, z=5}, ds.getViewPos())
+        assert.equals(0, cleanup.pending_count(registry))
+        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
+
+        map_view_get_failure = 'injected map-view getter failure'
+        assert.has_error(function() ds.getViewPos() end,
+            'DwarfSpec could not query the current map-view position: ' ..
+                'injected map-view getter failure')
     end)
 
     it('validates map-view coordinates and restores after setter failures',

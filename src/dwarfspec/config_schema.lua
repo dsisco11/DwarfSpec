@@ -13,6 +13,7 @@ local RESERVED_COMMANDS = {
     click=true,
     current_run=true,
     get=true,
+    getViewPos=true,
     hover=true,
     input=true,
     inspect=true,

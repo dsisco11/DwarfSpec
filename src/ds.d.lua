@@ -219,6 +219,10 @@ function DS.getTick() end
 ---@return integer
 function DS.getTime() end
 
+---Returns a copy of the current zero-based map-view origin.
+---@return dwarfspec.MapViewPosition
+function DS.getViewPos() end
+
 ---Sets the map-view origin for the current example.
 ---The original position is restored automatically during example cleanup.
 ---@param position dwarfspec.MapViewPosition
