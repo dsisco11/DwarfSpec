@@ -831,6 +831,22 @@ local TestStatus = load_automation_module(package_root,
         return time
     end
 
+    ---Returns whether the current DFHack focus matches one focus path.
+    ---@param path string
+    ---@return boolean
+    function ds.hasFocus(path)
+        assert(type(path) == 'string' and path ~= '',
+            'focus path must be a nonempty string')
+        local gui = dfhack and dfhack.gui
+        assert(type(gui) == 'table' and
+                type(gui.matchFocusString) == 'function',
+            'DwarfSpec hasFocus requires dfhack.gui.matchFocusString')
+        local focused = gui.matchFocusString(path)
+        assert(type(focused) == 'boolean',
+            'DFHack matchFocusString did not return a boolean')
+        return focused
+    end
+
     ---Returns a copy of the current map-view origin.
     ---@return dwarfspec.MapViewPosition
     function ds.getViewPos()

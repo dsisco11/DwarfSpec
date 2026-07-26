@@ -81,6 +81,7 @@ describe('DwarfSpec public mount commands', function()
     local native_widget_lookup_calls
     local native_invalidation_count
     local focus_queries
+    local focus_match_queries
     local dfhack_time
     local map_view_position
     local map_view_get_failure
@@ -168,6 +169,7 @@ describe('DwarfSpec public mount commands', function()
         native_widget_lookup_calls = 0
         native_invalidation_count = 0
         focus_queries = {}
+        focus_match_queries = {}
         dfhack_time = 67890
         map_view_position = {x=12, y=34, z=5}
         map_view_get_failure = nil
@@ -210,6 +212,10 @@ describe('DwarfSpec public mount commands', function()
                 getFocusStrings=function(target)
                     table.insert(focus_queries, target)
                     return target.focus_list or {}
+                end,
+                matchFocusString=function(path)
+                    table.insert(focus_match_queries, path)
+                    return path == 'dwarfmode/Default'
                 end,
             },
         })
@@ -504,6 +510,21 @@ describe('DwarfSpec public mount commands', function()
         dfhack.getTickCount = nil
         assert.has_error(function() ds.getTime() end,
             'DwarfSpec getTime requires dfhack.getTickCount')
+    end)
+
+    it('matches the current DFHack focus without requiring a mount',
+            function()
+        assert.is_true(ds.hasFocus('dwarfmode/Default'))
+        assert.is_false(ds.hasFocus('dwarfmode/Info'))
+        assert.same({'dwarfmode/Default', 'dwarfmode/Info'},
+            focus_match_queries)
+
+        assert.has_error(function() ds.hasFocus('') end,
+            'focus path must be a nonempty string')
+        dfhack.gui.matchFocusString = nil
+        assert.has_error(function()
+            ds.hasFocus('dwarfmode/Default')
+        end, 'DwarfSpec hasFocus requires dfhack.gui.matchFocusString')
     end)
 
     it('requires explicit unmount before mounting another component',

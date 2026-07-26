@@ -235,6 +235,10 @@ describe('non-owning native-screen attachment', function()
         assert.is_true(dfhack.gui.matchFocusString(
             'dwarfmode/Default', dfhack.gui.getDFViewscreen(true)),
             'native acceptance must start at dwarfmode/Default')
+        assert.is_true(ds.hasFocus('dwarfmode/Default'),
+            'DwarfSpec must match the current native focus')
+        assert.is_false(ds.hasFocus('dwarfmode/Info'),
+            'DwarfSpec must reject an inactive native focus')
         assert.is_true(#df.global.plotinfo.hauling.routes > 10,
             'native acceptance requires a scrollable Hauling route list')
         assert.equals(df.global.cur_year_tick, ds.getTick())

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `ds.hasFocus(path)` reports whether the current DFHack focus matches a focus
+  path without requiring a mount.
 - `ds.getViewPos()` returns a copy of the current zero-based map-view origin.
 - `ds.setViewPos({x=..., y=..., z=...})` controls the zero-based map-view
   origin and automatically restores the example's original position during

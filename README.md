@@ -215,6 +215,7 @@ frames is itself part of the behavior being tested.
 |---|---|
 | `ds.await(description, query, options)` | Poll a condition between live frames. |
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
+| `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
 | `ds.getViewPos()` | Return a copy of the current zero-based map-view origin. |
 | `ds.setViewPos({x=..., y=..., z=...})` | Set the zero-based map-view origin for the example; cleanup restores the original position. |
 | `ds.mount()` | Attach non-owningly to the current native DF viewscreen and return its widget-root subject. |

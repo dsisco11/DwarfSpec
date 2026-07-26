@@ -436,6 +436,14 @@ local list = ds.get('menu')
 assert.same(current_focus, list:getFocusList())
 ```
 
+`ds.hasFocus(path)` reports whether the current DFHack focus matches a focus
+path. It is read-only and does not require a mount:
+
+```lua
+assert.is_true(ds.hasFocus('dwarfmode/Default'))
+assert.is_false(ds.hasFocus('dwarfmode/Info'))
+```
+
 ## World time
 
 `ds.getTick()` returns the current in-year Dwarf Fortress simulation tick from

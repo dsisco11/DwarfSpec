@@ -235,6 +235,11 @@ function DS.getTick() end
 ---@return integer
 function DS.getTime() end
 
+---Returns whether the current DFHack focus matches one focus path.
+---@param path string
+---@return boolean
+function DS.hasFocus(path) end
+
 ---Returns a copy of the current zero-based map-view origin.
 ---@return dwarfspec.MapViewPosition
 function DS.getViewPos() end
