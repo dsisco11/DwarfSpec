@@ -80,4 +80,26 @@ describe('Lua view subject adapter', function()
             'Lua view subject source is no longer available')
         assert.is_false(adapter:contains(child))
     end)
+
+    it('exposes bounded DFHack list scroll state', function()
+        local list = {
+            view_id='list',
+            visible=true,
+            active=true,
+            page_top=7,
+            page_size=12,
+            choices={'one', 'two'},
+            subviews={},
+        }
+        local adapter = lua_view_adapter.new(list)
+
+        assert.same({
+            scroll_position=7,
+            visible_row_count=12,
+        }, adapter:optional_fields(list))
+        local inspection = adapter:inspect(list)
+        assert.equals(7, inspection.scroll_position)
+        assert.equals(12, inspection.visible_row_count)
+        assert.is_nil(inspection.choices)
+    end)
 end)

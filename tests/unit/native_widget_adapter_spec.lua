@@ -647,16 +647,29 @@ describe('DwarfSpec native widget adapter', function()
         local radio = widget(
             'radio', 'Radio', 'df.widget_radio_rows', nil, {
                 selected_idx=5,
+                rows={
+                    scroll=13,
+                    num_visible=9,
+                },
             })
-        root.children = {rows, tabs, dropdown, radio}
+        local native_table = widget(
+            'table', 'Table', 'df.widget_table', nil, {
+                entries={
+                    scroll=14,
+                    num_visible=10,
+                },
+            })
+        root.children = {rows, tabs, dropdown, radio, native_table}
         rows.parent = root
         tabs.parent = root
         dropdown.parent = root
         radio.parent = root
+        native_table.parent = root
         adapter:resolve({'Rows'})
         adapter:resolve({'Tabs'})
         adapter:resolve({'Dropdown'})
         adapter:resolve({'Radio'})
+        adapter:resolve({'Table'})
 
         local rows_inspection = adapter:inspect(rows)
         assert.equals('df.widget_scroll_rows',
@@ -668,7 +681,13 @@ describe('DwarfSpec native widget adapter', function()
         assert.is_nil(rows_inspection.secret)
         assert.equals(3, adapter:inspect(tabs).selected_index)
         assert.equals(4, adapter:inspect(dropdown).selected_index)
-        assert.equals(5, adapter:inspect(radio).selected_index)
+        local radio_inspection = adapter:inspect(radio)
+        assert.equals(5, radio_inspection.selected_index)
+        assert.equals(13, radio_inspection.scroll_position)
+        assert.equals(9, radio_inspection.visible_row_count)
+        local table_inspection = adapter:inspect(native_table)
+        assert.equals(14, table_inspection.scroll_position)
+        assert.equals(10, table_inspection.visible_row_count)
     end)
 
     it('captures native trees deterministically within every bound', function()

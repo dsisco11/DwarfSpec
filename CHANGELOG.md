@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Expose normalized `scroll_position` and `visible_row_count` when inspecting
+  DFHack Lua lists and native `widget_radio_rows` and `widget_table` controls,
+  as well as direct native `widget_scroll_rows` controls.
 - Keep DwarfSpec's UI-grid and screen-pixel pointer positions synchronized for
   moves and native mouse input, and restore both representations during
   cleanup.

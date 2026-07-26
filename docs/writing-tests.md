@@ -255,6 +255,9 @@ cannot be selected by `ds.get()` merely because text or pixels are visible.
 `subject:inspect()` keeps the common bounded fields and may add
 `native_type`, `name`, `effective_visible`, `effective_active`,
 `scroll_position`, `visible_row_count`, and `selected_index` when applicable.
+Scroll state is normalized from DFHack Lua list `page_top` and `page_size`,
+native `widget_scroll_rows`, and the embedded scroll rows owned by
+`widget_radio_rows` and `widget_table`.
 It does not expose an unbounded map of native fields or invoke arbitrary widget
 callbacks.
 

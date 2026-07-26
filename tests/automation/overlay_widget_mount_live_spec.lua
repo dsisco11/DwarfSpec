@@ -142,6 +142,17 @@ function OverlayWidgetHarness:submit()
 end
 
 describe('overlay widget component host', function()
+    it('inspects DFHack list scroll state', function()
+        ds.mount(MouseInputBacking)
+        local list = ds.get('native_list')
+        local raw = list:raw()
+        local state = list:inspect()
+
+        assert.equals(raw.page_top, state.scroll_position)
+        assert.equals(raw.page_size, state.visible_row_count)
+        assert.is_nil(state.choices)
+    end)
+
     it('routes positioned wheel input overlay-first and falls through once',
             function()
         local backing = MouseInputBacking{}

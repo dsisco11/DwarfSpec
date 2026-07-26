@@ -101,6 +101,26 @@ local function safe_field(raw, field)
     return nil
 end
 
+---Returns the documented scroll-rows widget represented by one native widget.
+---@param raw any
+---@param type_name string
+---@return any|nil
+local function scroll_rows_widget(raw, type_name)
+    if type_name == 'df.widget_scroll_rows' or
+            type_name == 'df.widget_scroll_rowsst' then
+        return raw
+    end
+    if type_name == 'df.widget_radio_rows' or
+            type_name == 'df.widget_radio_rowsst' then
+        return safe_field(raw, 'rows')
+    end
+    if type_name == 'df.widget_table' or
+            type_name == 'df.widget_tablest' then
+        return safe_field(raw, 'entries')
+    end
+    return nil
+end
+
 ---Copies a valid integral inclusive rectangle into a plain table.
 ---@param rect any
 ---@return table|nil
@@ -599,10 +619,10 @@ function NativeWidgetAdapter:optional_fields(raw)
         effective_visible=self:effective_visible(raw),
         effective_active=self:effective_active(raw),
     }
-    if type_name == 'df.widget_scroll_rows' or
-            type_name == 'df.widget_scroll_rowsst' then
-        local scroll = safe_field(raw, 'scroll')
-        local visible_rows = safe_field(raw, 'num_visible')
+    local scroll_rows = scroll_rows_widget(raw, type_name)
+    if scroll_rows ~= nil then
+        local scroll = safe_field(scroll_rows, 'scroll')
+        local visible_rows = safe_field(scroll_rows, 'num_visible')
         if type(scroll) == 'number' and scroll % 1 == 0 then
             result.scroll_position = scroll
         end
