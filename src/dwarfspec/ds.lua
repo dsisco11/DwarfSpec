@@ -144,6 +144,22 @@ local TestStatus = load_automation_module(package_root,
             function() return dfhack.gui.getCurViewscreen(true) end,
         get_window_size=mount_dependencies.get_window_size or
             function() return dfhack.screen.getWindowSize() end,
+        get_map_view_position=mount_dependencies.get_map_view_position or
+            function()
+                local global = assert(df and df.global,
+                    'DwarfSpec requires df.global for map-view access')
+                return global.window_x, global.window_y, global.window_z
+            end,
+        set_map_view_position=mount_dependencies.set_map_view_position or
+            function(x, y, z)
+                local global = assert(df and df.global,
+                    'DwarfSpec requires df.global for map-view access')
+                global.window_x = x
+                global.window_y = y
+                global.window_z = z
+                return true
+            end,
+        map_view_cleanup_entry=nil,
     }
     local publisher = context.run.event_publisher
 
@@ -430,6 +446,8 @@ local TestStatus = load_automation_module(package_root,
         state.pointer_active = context.pointer.patched_get_mouse_pos ~= nil
         state.button_state_active =
             context.pointer.button_cleanup_entry ~= nil
+        state.map_view_position_active =
+            context.map_view_cleanup_entry ~= nil
         state.render_observer_active =
             context.mount_context.current ~= nil and
             context.mount_context.current.render_observer ~= nil
@@ -769,6 +787,48 @@ local TestStatus = load_automation_module(package_root,
         assert(type(time) == 'number' and time % 1 == 0 and time >= 0,
             'DFHack getTickCount did not return a valid millisecond clock')
         return time
+    end
+
+    ---Sets the map-view origin and restores its original position after the example.
+    ---@param position table
+    ---@return table
+    function ds.setViewPos(position)
+        assert(type(position) == 'table',
+            'map-view position must be a table with x, y, and z coordinates')
+        for _, axis in ipairs({'x', 'y', 'z'}) do
+            local value = position[axis]
+            assert(type(value) == 'number' and value % 1 == 0 and value >= 0,
+                ('map-view %s coordinate must be a nonnegative integer')
+                    :format(axis))
+        end
+        if context.map_view_cleanup_entry == nil then
+            local ok, original_x, original_y, original_z =
+                pcall(context.get_map_view_position)
+            assert(ok, 'DwarfSpec could not query the current map-view ' ..
+                'position: ' .. tostring(original_x))
+            for axis, value in pairs({
+                    x=original_x, y=original_y, z=original_z}) do
+                assert(type(value) == 'number' and value % 1 == 0 and
+                        value >= 0,
+                    ('DFHack returned an invalid map-view %s coordinate: %s')
+                        :format(axis, tostring(value)))
+            end
+            context.map_view_cleanup_entry = cleanup_module.push(
+                cleanup_registry, 'restore map-view position', function()
+                    local restored = context.set_map_view_position(
+                        original_x, original_y, original_z)
+                    assert(restored ~= false,
+                        'DFHack rejected the original map-view position')
+                    context.map_view_cleanup_entry = nil
+                end)
+        end
+        local ok, accepted = pcall(context.set_map_view_position,
+            position.x, position.y, position.z)
+        assert(ok, 'DwarfSpec could not set the map-view position: ' ..
+            tostring(accepted))
+        assert(accepted ~= false,
+            'DFHack rejected the requested map-view position')
+        return {x=position.x, y=position.y, z=position.z}
     end
 
     ---Mounts one owned component or complete screen.

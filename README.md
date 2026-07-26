@@ -215,6 +215,7 @@ frames is itself part of the behavior being tested.
 |---|---|
 | `ds.await(description, query, options)` | Poll a condition between live frames. |
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
+| `ds.setViewPos({x=..., y=..., z=...})` | Set the zero-based map-view origin for the example; cleanup restores the original position. |
 | `ds.mount()` | Attach non-owningly to the current native DF viewscreen and return its widget-root subject. |
 | `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject. |
 | `ds.root(options)` | Return the selected native, registered-overlay, or component root subject. |

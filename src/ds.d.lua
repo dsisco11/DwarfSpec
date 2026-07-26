@@ -79,6 +79,11 @@
 ---@field width integer
 ---@field height integer
 
+---@class dwarfspec.MapViewPosition
+---@field x integer Zero-based map tile at the left edge of the view.
+---@field y integer Zero-based map tile at the top edge of the view.
+---@field z integer Zero-based map z-level.
+
 ---@class dwarfspec.OverlayPosition
 ---@field x integer
 ---@field y integer
@@ -213,6 +218,12 @@ function DS.getTick() end
 ---Returns DFHack's current millisecond clock value.
 ---@return integer
 function DS.getTime() end
+
+---Sets the map-view origin for the current example.
+---The original position is restored automatically during example cleanup.
+---@param position dwarfspec.MapViewPosition
+---@return dwarfspec.MapViewPosition
+function DS.setViewPos(position) end
 
 ---Mounts one owned component or complete screen.
 ---@param component any

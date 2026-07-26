@@ -22,6 +22,7 @@ local RESERVED_COMMANDS = {
     protocol_version=true,
     redraw=true,
     root=true,
+    setViewPos=true,
     stage_overlay_registration=true,
     type=true,
     unmount=true,

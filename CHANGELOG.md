@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `ds.setViewPos({x=..., y=..., z=...})` controls the zero-based map-view
+  origin and automatically restores the example's original position during
+  cleanup.
 - Native-screen `ds.get()` accepts complete paths rooted at
   `df.global.game.main_interface`. It traverses exact declared DF data fields,
   switches once to exact native-widget traversal, and retains the structural

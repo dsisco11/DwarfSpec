@@ -195,9 +195,9 @@ describe('DwarfSpec external project configuration', function()
                     'commands must be a table',
             },
             {
-                module={commands={redraw=function() end}},
+                module={commands={setViewPos=function() end}},
                 expected='tests/dwarfspec/config.lua: ' ..
-                    'custom command conflicts with ds.redraw',
+                    'custom command conflicts with ds.setViewPos',
             },
         }
         for _, case in ipairs(cases) do

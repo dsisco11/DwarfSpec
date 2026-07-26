@@ -81,6 +81,8 @@ describe('DwarfSpec public mount commands', function()
     local native_invalidation_count
     local focus_queries
     local dfhack_time
+    local map_view_position
+    local map_view_set_failure
     local original_native_render_dispatcher
     local native_render_failure
     local suppress_native_render
@@ -164,6 +166,8 @@ describe('DwarfSpec public mount commands', function()
         native_invalidation_count = 0
         focus_queries = {}
         dfhack_time = 67890
+        map_view_position = {x=12, y=34, z=5}
+        map_view_set_failure = nil
         native_render_failure = nil
         suppress_native_render = false
         wait_until_failure = nil
@@ -319,6 +323,17 @@ describe('DwarfSpec public mount commands', function()
                 boundary=boundary,
                 current_viewscreen=function()
                     return current_native_screen
+                end,
+                get_map_view_position=function()
+                    return map_view_position.x, map_view_position.y,
+                        map_view_position.z
+                end,
+                set_map_view_position=function(x, y, z)
+                    if map_view_set_failure then
+                        error(map_view_set_failure, 0)
+                    end
+                    map_view_position = {x=x, y=y, z=z}
+                    return true
                 end,
                 native_viewscreen=function() return native_df_screen end,
                 is_native_widget_root=function(root)
@@ -575,6 +590,7 @@ describe('DwarfSpec public mount commands', function()
             subject_count=2,
             pointer_active=false,
             button_state_active=false,
+            map_view_position_active=false,
             render_observer_active=true,
         }, run.mount_cleanup_probe())
         assert.has_error(function()
@@ -1626,6 +1642,68 @@ describe('DwarfSpec public mount commands', function()
             'DwarfSpec click' .. suffix)
         assert.has_error(function() ds.type('text') end,
             'DwarfSpec type' .. suffix)
+    end)
+
+    it('sets and restores the current map-view position without a mount',
+            function()
+        assert.same({x=40, y=50, z=6},
+            ds.setViewPos({x=40, y=50, z=6}))
+        assert.same({x=40, y=50, z=6}, map_view_position)
+        assert.is_true(run.mount_cleanup_probe().map_view_position_active)
+
+        ds.setViewPos({x=41, y=52, z=7})
+        assert.same({x=41, y=52, z=7}, map_view_position)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        reset('map-view position example cleanup')
+
+        assert.same({x=12, y=34, z=5}, map_view_position)
+        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('validates map-view coordinates and restores after setter failures',
+            function()
+        for _, case in ipairs({
+                {
+                    position=nil,
+                    expected='map-view position must be a table with x, y, ' ..
+                        'and z coordinates',
+                },
+                {
+                    position={x=-1, y=2, z=3},
+                    expected='map-view x coordinate must be a nonnegative ' ..
+                        'integer',
+                },
+                {
+                    position={x=1, y=2.5, z=3},
+                    expected='map-view y coordinate must be a nonnegative ' ..
+                        'integer',
+                },
+                {
+                    position={x=1, y=2, z='3'},
+                    expected='map-view z coordinate must be a nonnegative ' ..
+                        'integer',
+                },
+            }) do
+            assert.has_error(function()
+                ds.setViewPos(case.position)
+            end, case.expected)
+        end
+        assert.equals(0, cleanup.pending_count(registry))
+
+        map_view_set_failure = 'injected map-view setter failure'
+        local ok, failure = pcall(ds.setViewPos,
+            {x=40, y=50, z=6})
+        assert.is_false(ok)
+        assert.matches('injected map-view setter failure',
+            failure, 1, true)
+        assert.is_true(run.mount_cleanup_probe().map_view_position_active)
+
+        map_view_set_failure = nil
+        reset('failed map-view position example cleanup')
+        assert.same({x=12, y=34, z=5}, map_view_position)
+        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
     end)
 
     it('redraws the subject screen and waits by default', function()
