@@ -430,6 +430,12 @@ Goal: prove the input-routing and failure boundaries that depend on real DFHack
 screen or overlay lifecycle. Native input-routing details are governed by
 `docs/native-input-routing.todo`.
 
+Current native-routing assertions are
+`tests/unit/ds_mount_commands_spec.lua:2103`,
+`tests/unit/ds_mount_commands_spec.lua:2442`,
+`tests/automation/native_input_routing_live_spec.lua:150`, and
+`tests/automation/native_input_routing_live_spec.lua:337`.
+
 ### Tasks
 
 ☐ For each component mount host, reject native/overlay source options and prove

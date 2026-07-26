@@ -37,7 +37,8 @@ test = {
 build = {
     type = "builtin",
     -- LuaRocks automatically discovers every Lua module beneath src/.
-    -- Keeping production code there prevents tests from entering the rock.
+    -- Suppress its default copying of the repository's tests directory.
+    copy_directories = {},
     install = {
         bin = {
             dwarfspec = "bin/dwarfspec",

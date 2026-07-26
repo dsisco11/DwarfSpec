@@ -1,6 +1,6 @@
 # Native input routing
 
-Status: in progress; Phases 1-2 complete
+Status: complete; Phases 1-3 complete
 
 Related implementation:
 
@@ -174,28 +174,28 @@ Excluded:
 
 ### Tasks
 
-☐ Run the focused native attachment, interaction target, and mount-command unit
+✔ Run the focused native attachment, interaction target, and mount-command unit
   specifications.
-☐ Run the focused native-screen automation specification and require
+✔ Run the focused native-screen automation specification and require
   `cleanup_confirmed=true`.
-☐ Run the full unit suite.
-☐ Run Lua syntax and formatting checks.
-☐ Run the full automation suite and require confirmed cleanup.
-☐ Build and inspect the local rock because packaged production source changed.
-☐ Verify the rock contains changed production modules and no test-only fixture.
-☐ Run `git diff --check` and `git diff --cached --check`.
-☐ Account for every worktree change.
-☐ Verify the DFHack process remains responsive and no test-owned screens,
+✔ Run the full unit suite.
+✔ Run Lua syntax and formatting checks.
+✔ Run the full automation suite and require confirmed cleanup.
+✔ Build and inspect the local rock because packaged production source changed.
+✔ Verify the rock contains changed production modules and no test-only fixture.
+✔ Run `git diff --check` and `git diff --cached --check`.
+✔ Account for every worktree change.
+✔ Verify the DFHack process remains responsive and no test-owned screens,
   overlays, input state, or cleanup entries remain.
-☐ Record all focused, full, syntax, package, process, diff, and cleanup
+✔ Record all focused, full, syntax, package, process, diff, and cleanup
   evidence below.
 
 ### Phase 3 exit gate
 
-☐ Focused and full unit, live, and syntax checks pass.
-☐ Package and diff checks pass.
-☐ Functional behavior and cleanup are independently confirmed.
-☐ The older coverage checklist links to the new assertions and contains no
+✔ Focused and full unit, live, and syntax checks pass.
+✔ Package and diff checks pass.
+✔ Functional behavior and cleanup are independently confirmed.
+✔ The older coverage checklist links to the new assertions and contains no
   obsolete rejection requirements.
 
 ## Evidence ledger
@@ -270,13 +270,53 @@ Excluded:
 
 ### Phase 3 evidence
 
-- Pending.
+- Focused native attachment:
+  `.\tools\Run-UnitTests.ps1 --filter "native viewscreen attachment"`:
+  8 successes, 0 failures, 0 errors, 0 pending.
+- Focused interaction target:
+  `.\tools\Run-UnitTests.ps1 --filter "interaction target"`:
+  6 successes, 0 failures, 0 errors, 0 pending.
+- Focused mount commands:
+  `.\tools\Run-UnitTests.ps1 --filter "DwarfSpec public mount commands"`:
+  60 successes, 0 failures, 0 errors, 0 pending.
+- Focused `native_screen_mount_live_spec.lua`: 3 successes, 0 failures,
+  0 errors, 0 pending; `cleanup_confirmed=true`.
+- Focused `native_input_routing_live_spec.lua`: 2 successes, 0 failures,
+  0 errors, 0 pending; `cleanup_confirmed=true`.
+- Full `.\tools\Run-UnitTests.ps1`: 442 successes, 0 failures, 0 errors,
+  0 pending.
+- `.\tools\Check-Lua.ps1`: Lua 5.4.6 syntax and formatting passed for
+  232 files.
+- Full `.\tools\Run-AutomationTests.ps1`: 30 successes, 0 failures, 0 errors,
+  0 pending; `cleanup_confirmed=true`.
+- The first local rock inspection found that LuaRocks' format-3 builtin
+  autodetection copied the repository's `tests` directory into the artifact.
+  `dwarfspec-0.2.0-1.rockspec` now sets `copy_directories = {}` to make the
+  intended production-only boundary explicit.
+- The rebuilt `dist\dwarfspec-0.2.0-1.all.rock` contains 85 entries, including
+  `lua/dwarfspec/ds.lua`, `lua/dwarfspec/interaction_target.lua`, and
+  `lua/dwarfspec/native_attachment.lua`; it contains zero `tests/` entries and
+  no `native_input_fullscreen_probe.lua`.
+- `tools\Publish.ps1` linted the rockspec and rebuilt the portable rock
+  successfully.
+- `git diff --check` and `git diff --cached --check` passed. The final
+  worktree changes are the rockspec package-boundary fix and the two planning
+  documents updated with exact assertion links and completion evidence.
+- Dwarf Fortress process 36940 remained responsive. A direct DFHack process
+  probe found the base screen current at `dwarfmode/Default`, zero staged
+  DwarfSpec overlays, no active run, zero pressed mouse buttons, and pointer
+  tracking disabled.
+- Final DwarfSpec service status: executor idle, queue 0, quarantine none.
+- `docs/mount-command-automation-coverage.todo` links the governing routing
+  task and exact unit/live assertions. Searches found no obsolete requirement
+  to reject fullscreen coexistence, keep the base screen current, or stale a
+  subject solely for a top-screen change.
 
 ## Final acceptance
 
-☐ Component mounts remain targeted.
-☐ Native mounts follow the live viewscreen stack.
-☐ Registered fullscreen overlays can coexist with native mounts.
-☐ Native subject roots remain stable across unrelated top-screen changes.
-☐ Genuine subject staleness still fails explicitly.
-☐ Borrowed screens and all test-owned state are clean after verification.
+✔ Component mounts remain targeted.
+✔ Native mounts follow the live viewscreen stack.
+✔ Registered fullscreen overlays can coexist with native mounts.
+✔ Native subject roots remain stable across unrelated top-screen changes.
+✔ Genuine subject staleness still fails explicitly.
+✔ Borrowed screens and all test-owned state are clean after verification.
