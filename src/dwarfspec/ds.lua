@@ -119,6 +119,8 @@ local EMouseButton = load_automation_module(package_root,
     'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
 local EInputState = load_automation_module(package_root,
     'dwarfspec.input_states', '/src/dwarfspec/input_states.lua')
+local EPointerSpace = load_automation_module(package_root,
+    'dwarfspec.pointer_spaces', '/src/dwarfspec/pointer_spaces.lua')
 local ESubjectSource = load_automation_module(package_root,
     'dwarfspec.subject_sources', '/src/dwarfspec/subject_sources.lua')
 local EventType = load_automation_module(package_root,
@@ -130,6 +132,24 @@ local TestStatus = load_automation_module(package_root,
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
+
+    ---Returns the current effective grid and pixel geometry from DF.
+    ---@return DwarfSpecPointerGeometry
+    local function get_production_pointer_geometry()
+        local gps = assert(df and df.global and df.global.gps,
+            'DwarfSpec requires df.global.gps for pointer geometry')
+        return {
+            grid_width=gps.dimx,
+            grid_height=gps.dimy,
+            pixel_width=gps.screen_pixel_x,
+            pixel_height=gps.screen_pixel_y,
+            cell_pixel_width=gps.tile_pixel_x,
+            cell_pixel_height=gps.tile_pixel_y,
+        }
+    end
+
+    local get_pointer_geometry = mount_dependencies.get_pointer_geometry or
+        get_production_pointer_geometry
     local context = {
         package_root=package_root,
         project=project,
@@ -138,7 +158,9 @@ local TestStatus = load_automation_module(package_root,
         cleanup_module=cleanup_module,
         cleanup_registry=cleanup_registry,
         diagnostics=diagnostics,
-        pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry),
+        pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry, {
+            get_geometry=get_pointer_geometry,
+        }),
         run=scheduler.run,
         current_viewscreen=mount_dependencies.current_viewscreen or
             function() return dfhack.gui.getCurViewscreen(true) end,
@@ -468,6 +490,7 @@ local TestStatus = load_automation_module(package_root,
         protocol_version=1,
         EMouseButton=EMouseButton,
         EInputState=EInputState,
+        EPointerSpace=EPointerSpace,
         ESubjectSource=ESubjectSource,
     }
 

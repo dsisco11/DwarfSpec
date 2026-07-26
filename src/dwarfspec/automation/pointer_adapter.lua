@@ -1,15 +1,52 @@
 -- Production reversible virtual pointer adapter for live automation.
 
+local EPointerSpace = require('dwarfspec.pointer_spaces')
+
 local M = {}
+
+---Validated effective runtime grid and pixel geometry.
+---@class DwarfSpecPointerGeometry
+---@field grid_width integer
+---@field grid_height integer
+---@field pixel_width integer
+---@field pixel_height integer
+---@field cell_pixel_width integer
+---@field cell_pixel_height integer
+
+---One zero-based coordinate in a declared pointer space.
+---@class DwarfSpecPointerCoordinate
+---@field x integer
+---@field y integer
+
+---One logical pointer position represented in both coordinate systems.
+---@class DwarfSpecPointerPosition
+---@field grid DwarfSpecPointerCoordinate
+---@field pixels DwarfSpecPointerCoordinate
+
+---Injected boundaries used by the pointer adapter.
+---@class DwarfSpecPointerAdapterDependencies
+---@field get_geometry? fun():DwarfSpecPointerGeometry
+
+local GEOMETRY_FIELDS = {
+    {name='grid_width', gps_name='dimx'},
+    {name='grid_height', gps_name='dimy'},
+    {name='pixel_width', gps_name='screen_pixel_x'},
+    {name='pixel_height', gps_name='screen_pixel_y'},
+    {name='cell_pixel_width', gps_name='tile_pixel_x'},
+    {name='cell_pixel_height', gps_name='tile_pixel_y'},
+}
 
 ---Creates an inactive pointer adapter scoped to one cleanup registry.
 ---@param cleanup_module table
 ---@param cleanup_registry table
+---@param dependencies DwarfSpecPointerAdapterDependencies|nil
 ---@return table
-function M.new(cleanup_module, cleanup_registry)
+function M.new(cleanup_module, cleanup_registry, dependencies)
+    dependencies = dependencies or {}
     return {
         cleanup_module=cleanup_module,
         cleanup_registry=cleanup_registry,
+        get_geometry=dependencies.get_geometry,
         x=nil,
         y=nil,
         original_get_mouse_pos=nil,
@@ -18,6 +55,83 @@ function M.new(cleanup_module, cleanup_registry)
         original_button_state=nil,
         button_cleanup_entry=nil,
     }
+end
+
+---Validates and copies one effective runtime pointer geometry.
+---@param geometry table
+---@return DwarfSpecPointerGeometry
+function M.validate_geometry(geometry)
+    assert(type(geometry) == 'table',
+        'pointer geometry must be a table')
+    local validated = {}
+    for _, field in ipairs(GEOMETRY_FIELDS) do
+        local value = geometry[field.name]
+        assert(type(value) == 'number' and value % 1 == 0 and value > 0,
+            ('pointer geometry gps.%s must be a positive integer; got %s')
+                :format(field.gps_name, tostring(value)))
+        validated[field.name] = value
+    end
+    return validated
+end
+
+---Reads and validates fresh effective geometry from the injected provider.
+---@param adapter table
+---@return DwarfSpecPointerGeometry
+function M.geometry(adapter)
+    assert(type(adapter.get_geometry) == 'function',
+        'pointer adapter requires an effective-geometry provider')
+    return M.validate_geometry(adapter.get_geometry())
+end
+
+---Validates one zero-based pointer coordinate against its current bound.
+---@param value any
+---@param space string
+---@param axis string
+---@param bound integer
+local function validate_coordinate(value, space, axis, bound)
+    assert(type(value) == 'number' and value % 1 == 0,
+        ('%s %s coordinate must be an integer; got %s')
+            :format(space, axis, tostring(value)))
+    assert(value >= 0 and value < bound,
+        ('%s %s coordinate %s is outside [0, %d]')
+            :format(space, axis, tostring(value), bound - 1))
+end
+
+---Normalizes grid or pixel input into one paired logical pointer position.
+---@param x any
+---@param y any
+---@param space string
+---@param geometry DwarfSpecPointerGeometry
+---@return DwarfSpecPointerPosition
+function M.normalize_position(x, y, space, geometry)
+    geometry = M.validate_geometry(geometry)
+    if space == EPointerSpace.GRID then
+        validate_coordinate(x, 'grid', 'x', geometry.grid_width)
+        validate_coordinate(y, 'grid', 'y', geometry.grid_height)
+        return {
+            grid={x=x, y=y},
+            pixels={
+                x=x * geometry.cell_pixel_width +
+                    math.floor(geometry.cell_pixel_width / 2),
+                y=y * geometry.cell_pixel_height +
+                    math.floor(geometry.cell_pixel_height / 2),
+            },
+        }
+    end
+    if space == EPointerSpace.PIXELS then
+        validate_coordinate(x, 'pixels', 'x', geometry.pixel_width)
+        validate_coordinate(y, 'pixels', 'y', geometry.pixel_height)
+        return {
+            grid={
+                x=math.min(math.floor(x / geometry.cell_pixel_width),
+                    geometry.grid_width - 1),
+                y=math.min(math.floor(y / geometry.cell_pixel_height),
+                    geometry.grid_height - 1),
+            },
+            pixels={x=x, y=y},
+        }
+    end
+    error('unsupported pointer coordinate space: ' .. tostring(space), 2)
 end
 
 ---Restores the original pointer function and rejects conflicting patches.

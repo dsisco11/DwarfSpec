@@ -161,6 +161,13 @@ describe('DwarfSpec consumer extensions', function()
             'ds.EInputState')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={EPointerSpace=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.EPointerSpace')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={redraw=function() end},
         }
         assert.has_error(function() extensions.load(descriptor, loader) end,

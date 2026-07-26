@@ -95,6 +95,182 @@ describe('automation interaction support', function()
         assert.is_true(inspection.focused)
     end)
 
+    it('reads fresh validated geometry from the injected provider', function()
+        local calls = 0
+        local supplied = {
+            grid_width=4,
+            grid_height=3,
+            pixel_width=43,
+            pixel_height=25,
+            cell_pixel_width=10,
+            cell_pixel_height=8,
+        }
+        local adapter = pointer_adapter.new(cleanup, cleanup.new({}), {
+            get_geometry=function()
+                calls = calls + 1
+                return supplied
+            end,
+        })
+
+        local first = pointer_adapter.geometry(adapter)
+        supplied.grid_width = 5
+        local second = pointer_adapter.geometry(adapter)
+
+        assert.equals(2, calls)
+        assert.equals(4, first.grid_width)
+        assert.equals(5, second.grid_width)
+        assert.is_not.equal(supplied, second)
+    end)
+
+    it('normalizes non-square grid cells to their center pixels', function()
+        local position = pointer_adapter.normalize_position(2, 1, 'grid', {
+            grid_width=4,
+            grid_height=3,
+            pixel_width=43,
+            pixel_height=25,
+            cell_pixel_width=10,
+            cell_pixel_height=8,
+        })
+
+        assert.same({x=2, y=1}, position.grid)
+        assert.same({x=25, y=12}, position.pixels)
+    end)
+
+    it('preserves exact pixels while deriving their grid cell', function()
+        local position = pointer_adapter.normalize_position(
+            21, 17, 'pixels', {
+                grid_width=4,
+                grid_height=3,
+                pixel_width=43,
+                pixel_height=25,
+                cell_pixel_width=10,
+                cell_pixel_height=8,
+            })
+
+        assert.same({x=2, y=2}, position.grid)
+        assert.same({x=21, y=17}, position.pixels)
+    end)
+
+    it('clamps residual right and bottom pixels to the last grid cell',
+            function()
+        local position = pointer_adapter.normalize_position(
+            42, 24, 'pixels', {
+                grid_width=4,
+                grid_height=3,
+                pixel_width=43,
+                pixel_height=25,
+                cell_pixel_width=10,
+                cell_pixel_height=8,
+            })
+
+        assert.same({x=3, y=2}, position.grid)
+        assert.same({x=42, y=24}, position.pixels)
+    end)
+
+    it('rejects every invalid coordinate category on both axes', function()
+        local geometry = {
+            grid_width=4,
+            grid_height=3,
+            pixel_width=43,
+            pixel_height=25,
+            cell_pixel_width=10,
+            cell_pixel_height=8,
+        }
+        local cases = {
+            {nil, 0, 'grid',
+                'grid x coordinate must be an integer; got nil'},
+            {'1', 0, 'grid',
+                'grid x coordinate must be an integer; got 1'},
+            {1.5, 0, 'grid',
+                'grid x coordinate must be an integer; got 1.5'},
+            {-1, 0, 'grid',
+                'grid x coordinate -1 is outside [0, 3]'},
+            {4, 0, 'grid',
+                'grid x coordinate 4 is outside [0, 3]'},
+            {0, nil, 'grid',
+                'grid y coordinate must be an integer; got nil'},
+            {0, '1', 'grid',
+                'grid y coordinate must be an integer; got 1'},
+            {0, 1.5, 'grid',
+                'grid y coordinate must be an integer; got 1.5'},
+            {0, -1, 'grid',
+                'grid y coordinate -1 is outside [0, 2]'},
+            {0, 3, 'grid',
+                'grid y coordinate 3 is outside [0, 2]'},
+            {nil, 0, 'pixels',
+                'pixels x coordinate must be an integer; got nil'},
+            {'1', 0, 'pixels',
+                'pixels x coordinate must be an integer; got 1'},
+            {1.5, 0, 'pixels',
+                'pixels x coordinate must be an integer; got 1.5'},
+            {-1, 0, 'pixels',
+                'pixels x coordinate -1 is outside [0, 42]'},
+            {43, 0, 'pixels',
+                'pixels x coordinate 43 is outside [0, 42]'},
+            {0, nil, 'pixels',
+                'pixels y coordinate must be an integer; got nil'},
+            {0, '1', 'pixels',
+                'pixels y coordinate must be an integer; got 1'},
+            {0, 1.5, 'pixels',
+                'pixels y coordinate must be an integer; got 1.5'},
+            {0, -1, 'pixels',
+                'pixels y coordinate -1 is outside [0, 24]'},
+            {0, 25, 'pixels',
+                'pixels y coordinate 25 is outside [0, 24]'},
+        }
+
+        for _, case in ipairs(cases) do
+            assert.has_error(function()
+                pointer_adapter.normalize_position(
+                    case[1], case[2], case[3], geometry)
+            end, case[4])
+        end
+        assert.has_error(function()
+            pointer_adapter.normalize_position(0, 0, 'tiles', geometry)
+        end, 'unsupported pointer coordinate space: tiles')
+    end)
+
+    it('rejects every invalid effective-geometry field', function()
+        local valid = {
+            grid_width=4,
+            grid_height=3,
+            pixel_width=43,
+            pixel_height=25,
+            cell_pixel_width=10,
+            cell_pixel_height=8,
+        }
+        local fields = {
+            {name='grid_width', gps_name='dimx'},
+            {name='grid_height', gps_name='dimy'},
+            {name='pixel_width', gps_name='screen_pixel_x'},
+            {name='pixel_height', gps_name='screen_pixel_y'},
+            {name='cell_pixel_width', gps_name='tile_pixel_x'},
+            {name='cell_pixel_height', gps_name='tile_pixel_y'},
+        }
+        local invalid_values = {
+            {label='nil'},
+            {value='bad', label='bad'},
+            {value=0, label='0'},
+            {value=-1, label='-1'},
+            {value=1.5, label='1.5'},
+        }
+
+        assert.has_error(function()
+            pointer_adapter.validate_geometry(false)
+        end, 'pointer geometry must be a table')
+        for _, field in ipairs(fields) do
+            for _, invalid in ipairs(invalid_values) do
+                local geometry = {}
+                for name, value in pairs(valid) do geometry[name] = value end
+                geometry[field.name] = invalid.value
+                assert.has_error(function()
+                    pointer_adapter.validate_geometry(geometry)
+                end, ('pointer geometry gps.%s must be a positive integer; ' ..
+                    'got %s'):format(field.gps_name, invalid.label))
+            end
+        end
+    end)
+
     it('restores the virtual pointer and temporary native click position', function()
         local registry = cleanup.new({})
         local adapter = pointer_adapter.new(cleanup, registry)

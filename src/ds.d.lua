@@ -24,6 +24,10 @@
 ---| 'down'
 ---| 'up'
 
+---@alias dwarfspec.EPointerSpace
+---| 'grid'
+---| 'pixels'
+
 ---@alias dwarfspec.ESubjectSource
 ---| 'native'
 ---| 'overlay'
@@ -44,6 +48,11 @@
 ---@field CLICK `click`
 ---@field DOWN `down`
 ---@field UP `up`
+
+---Immutable identifiers for pointer coordinate systems.
+---@class dwarfspec.EPointerSpaceEnum
+---@field GRID `grid`
+---@field PIXELS `pixels`
 
 ---Immutable identifiers for inspectable native and registered-overlay sources.
 ---@class dwarfspec.ESubjectSourceEnum
@@ -194,6 +203,7 @@ function Subject:raw() end
 ---@field protocol_version integer
 ---@field EMouseButton dwarfspec.EMouseButtonEnum
 ---@field EInputState dwarfspec.EInputStateEnum
+---@field EPointerSpace dwarfspec.EPointerSpaceEnum
 ---@field ESubjectSource dwarfspec.ESubjectSourceEnum
 local DS = {}
 

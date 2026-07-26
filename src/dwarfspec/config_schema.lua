@@ -7,6 +7,7 @@ local M = {}
 local RESERVED_COMMANDS = {
     EInputState=true,
     EMouseButton=true,
+    EPointerSpace=true,
     await=true,
     capture_screen=true,
     capture_view_tree=true,

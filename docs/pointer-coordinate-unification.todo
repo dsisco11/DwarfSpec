@@ -282,30 +282,59 @@ changing public command behavior.
 
 ### Tasks
 
-☐ Add `src/dwarfspec/pointer_spaces.lua` using
+✔ Add `src/dwarfspec/pointer_spaces.lua` using
   `dwarfspec.immutable_enum`.
-☐ Add the enum to the production namespace and reserved-command schema.
-☐ Add LuaLS declarations for `dwarfspec.EPointerSpace` and
+✔ Add the enum to the production namespace and reserved-command schema.
+✔ Add LuaLS declarations for `dwarfspec.EPointerSpace` and
   `DS.EPointerSpace`.
-☐ Add an injected effective-geometry provider with the production `gps`
+✔ Add an injected effective-geometry provider with the production `gps`
   implementation.
-☐ Add documented adapter helpers for geometry validation and paired-position
+✔ Add documented adapter helpers for geometry validation and paired-position
   normalization.
-☐ Add unit coverage for grid-to-center-pixel conversion with non-square cell
+✔ Add unit coverage for grid-to-center-pixel conversion with non-square cell
   sizes.
-☐ Add unit coverage for exact pixel preservation and pixel-to-grid conversion.
-☐ Add unit coverage for right and bottom residual pixels clamping to the last
+✔ Add unit coverage for exact pixel preservation and pixel-to-grid conversion.
+✔ Add unit coverage for right and bottom residual pixels clamping to the last
   grid cell.
-☐ Add unit coverage for every invalid coordinate and invalid geometry field.
-☐ Add immutable-enum and reserved-name coverage.
+✔ Add unit coverage for every invalid coordinate and invalid geometry field.
+✔ Add immutable-enum and reserved-name coverage.
 
 ### Phase 1 exit gate
 
-☐ Conversion has one production implementation.
-☐ Conversion tests do not access real DF globals.
-☐ The enum is immutable and exported but no command accepts it yet.
-☐ Focused and full unit suites pass.
-☐ Lua syntax and formatting checks pass.
+✔ Conversion has one production implementation.
+✔ Conversion tests do not access real DF globals.
+✔ The enum is immutable and exported but no command accepts it yet.
+✔ Focused and full unit suites pass.
+✔ Lua syntax and formatting checks pass.
+
+### Phase 1 implementation notes
+
+- `pointer_adapter.normalize_position()` is the sole conversion boundary. Grid
+  input maps to cell-center pixels; pixel input is preserved exactly while its
+  grid coordinate is derived and clamped for residual right and bottom pixels.
+- The adapter validates and defensively copies all six effective-geometry
+  fields. Errors identify the corresponding `gps` field.
+- `ds.lua` injects a provider that reads current values from `df.global.gps`.
+  Conversion tests supply local geometry tables and do not read DF globals.
+- `ds.EPointerSpace` exports immutable `GRID` and `PIXELS` values and is
+  reserved against extension-command conflicts. No pointer command parses a
+  coordinate-space argument in this phase.
+- The rockspec discovers source modules automatically, so the new enum requires
+  no explicit package-manifest entry.
+
+Validation evidence:
+
+| Evidence | Result |
+|---|---|
+| Focused adapter units | 11 successes, 0 failures |
+| Focused immutable-enum units | 5 successes, 0 failures |
+| Focused extension-schema units | 6 successes, 0 failures |
+| Focused public namespace/mouse unit | 1 success, 0 failures |
+| Full unit suite | 435 successes, 0 failures |
+| Lua syntax and formatting | 230 files passed |
+| Package configuration | Source-module auto-discovery confirmed; no manifest edit required |
+| Live automation | Not required or run; public pointer behavior is unchanged |
+| Cleanup | No ownership behavior changed; existing cleanup coverage passes in the full suite |
 
 ## Phase 2: Paired pointer ownership
 

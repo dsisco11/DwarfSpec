@@ -14,6 +14,7 @@ local lua_view_adapter = assert(loadfile(
 local EventType = require('dwarfspec.automation.event_types')
 local EMouseButton = require('dwarfspec.mouse_buttons')
 local EInputState = require('dwarfspec.input_states')
+local EPointerSpace = require('dwarfspec.pointer_spaces')
 local EFieldMode =
     require('dwarfspec.native_game_ui_path').EFieldMode
 local TestStatus = require('dwarfspec.automation.test_statuses')
@@ -1795,6 +1796,8 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(EMouseButton.SCROLL_DOWN,
             ds.EMouseButton.SCROLL_DOWN)
         assert.equals(EInputState.CLICK, ds.EInputState.CLICK)
+        assert.equals(EPointerSpace.GRID, ds.EPointerSpace.GRID)
+        assert.equals(EPointerSpace.PIXELS, ds.EPointerSpace.PIXELS)
         assert.is_nil(ds.EMouseInput)
         assert.has_error(function()
             ds.mouseInput(EMouseButton.LEFT)
