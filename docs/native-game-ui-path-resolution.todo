@@ -1,6 +1,6 @@
 # Native game-UI path resolution
 
-Status: in progress; Phases 0-5 complete
+Status: in progress; Phases 0-6 complete
 
 Related design:
 
@@ -566,33 +566,66 @@ Exit gate:
 
 ## Phase 6: Live DFHack acceptance
 
-☐ Extend the existing non-owning native-screen specification instead of
+☒ Extend the existing non-owning native-screen specification instead of
   creating a separate owned screen or direct-callback harness.
-☐ Establish the required real base-game menu through normal DFHack input.
-☐ Resolve a stable base-game control through a complete `main_interface` path
+☒ Establish the required real base-game menu through normal DFHack input.
+☒ Resolve a stable base-game control through a complete `main_interface` path
   without `native_root`.
-☐ Resolve and inspect a real `info.creatures` list row through the structural
+☒ Resolve and inspect a real `info.creatures` list row through the structural
   and widget path proven in Phase 0.
-☐ Verify the returned raw value is the same native userdata identity resolved
+☒ Verify the returned raw value is the same native userdata identity resolved
   by direct DFHack APIs.
-☐ Verify text and bounds from the DwarfSpec subject against the live control.
-☐ Place the pointer within the resolved row's rendered bounds.
-☐ Dispatch one safe, reversible input through the subject and prove an
+☒ Verify text and bounds from the DwarfSpec subject against the live control.
+☒ Place the pointer within the resolved row's rendered bounds.
+☒ Dispatch one safe, reversible input through the subject and prove an
   observable base-game response.
-☐ Call `ds.redraw()` and prove completed rendering through the native observer.
-☐ Prove the viewscreen, focus list, and screen stack remain unchanged by
+☒ Call `ds.redraw()` and prove completed rendering through the native observer.
+☒ Prove the viewscreen, focus list, and screen stack remain unchanged by
   mounting and querying.
-☐ Restore the original menu, pointer state, instrumentation, and test fixture
+☒ Restore the original menu, pointer state, instrumentation, and test fixture
   state during cleanup.
-☐ Record unit, live-host, and cleanup evidence separately.
+☒ Record unit, live-host, and cleanup evidence separately.
 
 Exit gate:
 
-☐ At least one full `main_interface` path and one real widget-backed list-row
+☒ At least one full `main_interface` path and one real widget-backed list-row
   scenario pass against a supported DFHack host.
-☐ Cleanup verification passes even if lookup, input, or assertion is injected
+☒ Cleanup verification passes even if lookup, input, or assertion is injected
   to fail.
-☐ No coordinate-only lookup is accepted as evidence for widget resolution.
+☒ No coordinate-only lookup is accepted as evidence for widget resolution.
+
+### Phase 6 evidence
+
+- The existing `native_screen_mount_live_spec.lua` now opens
+  `dwarfmode/Info/CREATURES` with normal `D_UNITLIST` input while retaining the
+  original borrowed viewscreen. No owned screen or direct widget callback was
+  introduced.
+- The live subject path is
+  `{'info', 'creatures', 'Tabs', 'Residents', 0, 'Unit List', 1, row_index}`.
+  It traverses both declared `main_interface` fields before switching to exact
+  native widget traversal and returns a real `widget_container` resident row.
+- Direct `dfhack.gui.getWidget()` resolution and `row:raw()` return the same DF
+  userdata. The subject rectangle equals the row's live `rect`, and subject
+  text contains the live `Job` text widget's exact string.
+- `row:move_pointer('center')` places the DF pointer inside the inspected row
+  rectangle. `row:input('STANDARDSCROLL_DOWN')` or its upward counterpart
+  changes the real resident-list `cursor_idx`; the original cursor is then
+  restored.
+- `row:redraw()` advances the registered overlay render probe before returning,
+  proving completion through the borrowed native render observer. The current
+  viewscreen, focus list, and native screen stack remain byte-for-byte
+  equivalent across lookup, inspection, input, and redraw.
+- Successful cleanup restores the original menu, resident cursor, Hauling
+  scroll position, pointer provider and coordinates, physical button fields,
+  render instrumentation, focus, and screen stack. The mount owns no screen
+  and records no native dismissal.
+- A separate live case injects a missing widget segment after a full game-UI
+  prefix, confirms lookup failure, and then proves the pointer,
+  instrumentation, subjects, borrowed mount, screen, focus, and stack are all
+  restored.
+- Widget identity is established by the complete path and direct DFHack API
+  comparison before pointer coordinates are read. Coordinates are used only
+  for the subsequent interaction assertion.
 
 ## Phase 7: Public contract and documentation
 
@@ -677,3 +710,10 @@ Exit gate:
 | 2026-07-25 | 5 | `tools/Run-UnitTests.ps1` | 426 successes; 0 failures, errors, or pending |
 | 2026-07-25 | 5 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 228 files |
 | 2026-07-25 | 5 | `git diff --check` | Passed |
+| 2026-07-25 | 6 | `tools/Run-AutomationTests.ps1 --test-glob tests/automation/native_screen_mount_live_spec.lua` | DFHack 53.15-r2; 3 live successes; full `info.creatures` resident-row path, raw identity, text, bounds, input, redraw, and injected-failure restoration passed |
+| 2026-07-25 | 6 | Focused live runner cleanup report | Terminal `cleanup_confirmed=true`; no active or tracked screen, borrowed mount, subject, pointer patch, button state, render observer, or native-screen dismissal remained |
+| 2026-07-25 | 6 | `tools/Run-AutomationTests.ps1` | 26 live successes; 0 failures, errors, or pending |
+| 2026-07-25 | 6 | Full live runner cleanup report | Terminal `cleanup_confirmed=true` |
+| 2026-07-25 | 6 | `tools/Run-UnitTests.ps1` | 426 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 6 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 228 files |
+| 2026-07-25 | 6 | `git diff --check` | Passed |
