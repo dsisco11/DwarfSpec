@@ -242,6 +242,8 @@ describe('DwarfSpec public mount commands', function()
         })
         package.loaded.gui = {
             simulateInput=function(native_screen, key)
+                assert(native_screen ~= nil,
+                    'simulated input requires an explicit target screen')
                 if simulate_input_failure then
                     error(simulate_input_failure)
                 end
@@ -2098,7 +2100,7 @@ describe('DwarfSpec public mount commands', function()
         end, 'mouse wheel input does not accept a button action')
     end)
 
-    it('routes native and overlay subject input through the pinned screen',
+    it('routes every subject input family through the live input screen',
             function()
         local native_callback_calls = 0
         local overlay_callback_calls = 0
@@ -2138,19 +2140,39 @@ describe('DwarfSpec public mount commands', function()
             overlay='gui/example.InputOverlay',
         })
 
+        local top_level_screen = {name='top-level'}
+        local native_subject_screen = {name='native-subject'}
+        local overlay_subject_screen = {name='overlay-subject'}
+        local first_type_screen = {name='type-first'}
+        local second_type_screen = {name='type-second'}
+        local native_click_screen = {name='native-click'}
+        local overlay_click_screen = {name='overlay-click'}
+
+        current_native_screen = top_level_screen
         ds.input('TOP_LEVEL')
+        current_native_screen = native_subject_screen
         native_subject:input('NATIVE_SUBJECT')
+        current_native_screen = overlay_subject_screen
         overlay_subject:input('OVERLAY_SUBJECT')
-        overlay_subject:type('A')
+        current_native_screen = first_type_screen
+        simulate_input_dispatch = function(_, key)
+            if key == 'STRING_A065' then
+                current_native_screen = second_type_screen
+            end
+        end
+        overlay_subject:type('AB')
+        simulate_input_dispatch = nil
         df.global.gps.mouse_x = -1
         df.global.gps.mouse_y = -1
         df.global.gps.precise_mouse_x = -1
         df.global.gps.precise_mouse_y = -1
+        current_native_screen = native_click_screen
         native_subject:click()
         df.global.gps.mouse_x = -1
         df.global.gps.mouse_y = -1
         df.global.gps.precise_mouse_x = -1
         df.global.gps.precise_mouse_y = -1
+        current_native_screen = overlay_click_screen
         overlay_subject:click()
 
         assert.same({
@@ -2158,6 +2180,7 @@ describe('DwarfSpec public mount commands', function()
             'NATIVE_SUBJECT',
             'OVERLAY_SUBJECT',
             'STRING_A065',
+            'STRING_A066',
             '_MOUSE_L',
             '_MOUSE_L',
         }, {
@@ -2167,25 +2190,40 @@ describe('DwarfSpec public mount commands', function()
             simulated_inputs[4].key,
             simulated_inputs[5].key,
             simulated_inputs[6].key,
+            simulated_inputs[7].key,
         })
-        for _, input in ipairs(simulated_inputs) do
-            assert.equals(native_screen, input.screen)
-        end
+        assert.same({
+            top_level_screen,
+            native_subject_screen,
+            overlay_subject_screen,
+            first_type_screen,
+            second_type_screen,
+            native_click_screen,
+            overlay_click_screen,
+        }, {
+            simulated_inputs[1].screen,
+            simulated_inputs[2].screen,
+            simulated_inputs[3].screen,
+            simulated_inputs[4].screen,
+            simulated_inputs[5].screen,
+            simulated_inputs[6].screen,
+            simulated_inputs[7].screen,
+        })
         assert.same({3, 4}, {
-            simulated_inputs[5].x,
-            simulated_inputs[5].y,
-        })
-        assert.same({35, 36}, {
-            simulated_inputs[5].pixel_x,
-            simulated_inputs[5].pixel_y,
-        })
-        assert.same({22, 11}, {
             simulated_inputs[6].x,
             simulated_inputs[6].y,
         })
-        assert.same({225, 92}, {
+        assert.same({35, 36}, {
             simulated_inputs[6].pixel_x,
             simulated_inputs[6].pixel_y,
+        })
+        assert.same({22, 11}, {
+            simulated_inputs[7].x,
+            simulated_inputs[7].y,
+        })
+        assert.same({225, 92}, {
+            simulated_inputs[7].pixel_x,
+            simulated_inputs[7].pixel_y,
         })
         assert.equals(0, native_callback_calls)
         assert.equals(0, overlay_callback_calls)
@@ -2372,10 +2410,17 @@ describe('DwarfSpec public mount commands', function()
 
         ds.input('SELECT')
         ds.mouseInput(EMouseButton.LEFT)
+        current_native_screen = {
+            name='wheel-screen',
+            widgets={kind='replacement-root'},
+        }
+        local wheel_screen = current_native_screen
+        ds.mouseInput(EMouseButton.SCROLL_DOWN)
         ds.move_pointer(4, 5)
         assert.equals(native_root, mounted:raw())
         assert.equals(next_screen, simulated_inputs[1].screen)
         assert.equals(next_screen, simulated_inputs[2].screen)
+        assert.equals(wheel_screen, simulated_inputs[3].screen)
         assert.same({4, 5}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
@@ -2400,13 +2445,26 @@ describe('DwarfSpec public mount commands', function()
         local root_native = {name='root'}
         local child_native = {name='child', parent=root_native}
         local unrelated = {name='unrelated'}
+        local current = child_native
+        local owned_screen = {
+            active=true,
+            _native=root_native,
+        }
+        local target = interaction_target.new_owned_screen(owned_screen, {
+            is_active=function(screen_value)
+                return screen_value.active
+            end,
+            resolve_native_screen=function(screen_value)
+                return ds_factory.resolve_native_screen(
+                    screen_value, function() return current end)
+            end,
+        })
 
-        assert.equals(child_native, ds_factory.resolve_native_screen(
-            {_native=root_native}, function() return child_native end))
-        assert.equals(root_native, ds_factory.resolve_native_screen(
-            {_native=root_native}, function() return unrelated end))
-        assert.equals(root_native, ds_factory.resolve_native_screen(
-            {_native=root_native}, function() error('unavailable') end))
+        assert.equals(child_native, target:input_screen('input'))
+        current = unrelated
+        assert.equals(root_native, target:input_screen('input'))
+        current = nil
+        assert.equals(root_native, target:input_screen('input'))
     end)
 
     it('publishes structured command results and bounded diagnostics',

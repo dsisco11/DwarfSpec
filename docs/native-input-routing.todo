@@ -1,6 +1,6 @@
 # Native input routing
 
-Status: in progress; Phase 1 complete
+Status: in progress; Phases 1-2 complete
 
 Related implementation:
 
@@ -11,6 +11,8 @@ Related implementation:
 - `tests/unit/interaction_target_spec.lua`
 - `tests/unit/ds_mount_commands_spec.lua`
 - `tests/automation/native_screen_mount_live_spec.lua`
+- `tests/automation/native_input_routing_live_spec.lua`
+- `tests/automation/support/native_input_fullscreen_probe.lua`
 
 ## Purpose
 
@@ -120,53 +122,53 @@ Excluded:
 
 ### Unit coverage
 
-☐ Prove an owned target uses its host or an owned descendant.
-☐ Prove an owned target rejects or ignores an unrelated current screen.
-☐ Prove a borrowed native target queries the current top screen for every input
+✔ Prove an owned target uses its host or an owned descendant.
+✔ Prove an owned target rejects or ignores an unrelated current screen.
+✔ Prove a borrowed native target queries the current top screen for every input
   dispatch and follows screen changes without remounting.
-☐ Prove native attachment succeeds beneath a different current screen while
+✔ Prove native attachment succeeds beneath a different current screen while
   retaining the base DF widget root.
-☐ Prove representative keyboard, text, click, button, and wheel routes use the
+✔ Prove representative keyboard, text, click, button, and wheel routes use the
   shared mount-specific dispatch boundary.
-☐ Prove every simulated input receives an explicit target.
-☐ Prove retained native subjects survive top-screen changes when their widget
+✔ Prove every simulated input receives an explicit target.
+✔ Prove retained native subjects survive top-screen changes when their widget
   identities remain valid.
-☐ Preserve tests for genuine widget removal, replacement, invalid roots,
+✔ Preserve tests for genuine widget removal, replacement, invalid roots,
   dependency failures, partial construction, and post-cleanup use.
-☐ Prove component input remains targeted after the refactor.
-☐ Prove cleanup mutates no base, fullscreen, or parent screen.
+✔ Prove component input remains targeted after the refactor.
+✔ Prove cleanup mutates no base, fullscreen, or parent screen.
 
 ### Live automation
 
-☐ Add a test-owned registered fullscreen overlay that records normal keyboard
+✔ Add a test-owned registered fullscreen overlay that records normal keyboard
   and mouse input through its public lifecycle.
-☐ Give the overlay deterministic registration, enablement, rendering,
+✔ Give the overlay deterministic registration, enablement, rendering,
   consumption, dismissal, and independent cleanup.
-☐ Do not call its `onInput()` method directly from the test.
-☐ Show the overlay before `ds.mountNativeScreen()` and prove mounting succeeds.
-☐ Prove native root lookup still reads the borrowed base DF widgets.
-☐ Dispatch representative keyboard input and prove the current overlay
+✔ Do not call its `onInput()` method directly from the test.
+✔ Show the overlay before `ds.mountNativeScreen()` and prove mounting succeeds.
+✔ Prove native root lookup still reads the borrowed base DF widgets.
+✔ Dispatch representative keyboard input and prove the current overlay
   receives it.
-☐ Place the real pointer over a rendered target, dispatch representative mouse
+✔ Place the real pointer over a rendered target, dispatch representative mouse
   input, and prove the current overlay receives it.
-☐ Prove consumed input is not replayed by DwarfSpec.
-☐ Prove unconsumed input follows normal DFHack pass-through with an observable,
+✔ Prove consumed input is not replayed by DwarfSpec.
+✔ Prove unconsumed input follows normal DFHack pass-through with an observable,
   reversible backing-screen result.
-☐ Dismiss and reshow the overlay during the same native mount and prove
+✔ Dismiss and reshow the overlay during the same native mount and prove
   subsequent input follows each current screen without remounting.
-☐ Retain and use a native subject across those transitions.
-☐ Prove `ds.unmount()` leaves the overlay and base DF screen untouched.
-☐ Independently restore overlay registration and configuration, focus, screen
+✔ Retain and use a native subject across those transitions.
+✔ Prove `ds.unmount()` leaves the overlay and base DF screen untouched.
+✔ Independently restore overlay registration and configuration, focus, screen
   stack, pointer/button state, reversible backing state, and DwarfSpec cleanup.
 
 ### Phase 2 exit gate
 
-☐ Unit tests cover all input command families through the shared dispatch
+✔ Unit tests cover all input command families through the shared dispatch
   boundary without duplicating every command live.
-☐ Live keyboard and mouse input enter through the registered fullscreen
+✔ Live keyboard and mouse input enter through the registered fullscreen
   overlay.
-☐ Handled and pass-through behavior are separately proven.
-☐ Component targeting, retained native subjects, and exact cleanup are proven.
+✔ Handled and pass-through behavior are separately proven.
+✔ Component targeting, retained native subjects, and exact cleanup are proven.
 
 ## Phase 3: Verify and close
 
@@ -235,7 +237,36 @@ Excluded:
 
 ### Phase 2 evidence
 
-- Pending.
+- `tests/unit/ds_mount_commands_spec.lua` now asserts a non-nil target at the
+  fake `simulateInput` boundary and proves keyboard, multi-call text, click,
+  button, and wheel dispatches resolve the expected live input screen.
+- Owned-target coverage proves an owned descendant is accepted while unrelated
+  and unavailable current screens fall back to the owned host.
+- Existing removal, replacement, invalid-root, dependency-failure,
+  partial-construction, post-cleanup, component-targeting, pointer, and button
+  coverage remains green.
+- `tests/automation/support/native_input_fullscreen_probe.lua` provides a
+  production-registered trigger overlay whose fullscreen `gui.ZScreen` records
+  normal keyboard and mouse input and uses standard parent pass-through.
+- `tests/automation/native_input_routing_live_spec.lua` proves overlay-first
+  native mounting, borrowed-root lookup, current-screen keyboard and real
+  pointer input, consumed and pass-through behavior, dismiss/reshow routing,
+  retained native subjects, non-owning unmount, and independent restoration.
+- Full `.\tools\Run-UnitTests.ps1`: 442 successes, 0 failures, 0 errors,
+  0 pending.
+- `.\tools\Check-Lua.ps1`: Lua 5.4.6 syntax and formatting passed for
+  232 files.
+- Focused
+  `.\tools\Run-AutomationTests.ps1 --test-glob tests/automation/native_input_routing_live_spec.lua`:
+  2 successes, 0 failures, 0 errors, 0 pending; run passed with
+  `cleanup_confirmed=true`.
+- The initial fixture run proved the behavioral example but exposed an
+  incorrect instance-style overlay disable callback during cleanup. After
+  correcting it to DFHack's callback contract, executor recovery passed its
+  clean-state gate and the focused rerun passed with confirmed cleanup.
+- Source searches found no direct live-test `onInput()` call and exactly one
+  production `simulateInput` call, with an explicit target. `git diff --check`
+  passed.
 
 ### Phase 3 evidence
 
