@@ -230,44 +230,104 @@ cannot be selected by `ds.get()` merely because text or pixels are visible.
 It does not expose an unbounded map of native fields or invoke arbitrary widget
 callbacks.
 
-Native paths are strict direct-child paths. A string selects one named child.
-Use a segment array for nested traversal, a zero-based child index, or a widget
-name containing `/`:
+`ds.root()` always wraps the exact borrowed `viewscreen.widgets` container
+when called without options. Direct viewscreen-widget paths remain strict:
+a string selects one named child, and a segment array supports nested widget
+names, zero-based child indices, and widget names containing `/`:
 
 ```lua
 local native_root = ds.mountNativeScreen()
-local named = ds.get('menu')
-local nested = ds.get({'menu', 'confirm'})
-local indexed = ds.get({'menu', 0})
-local slash_name = ds.get({'stockpiles/animals'})
+local tooltip = ds.get('Tooltip')
 
 assert.equals(native_root:raw(), ds.root():raw())
-assert.is_userdata(named:raw())
-assert.is_table(named:inspect().body)
+assert.is_userdata(tooltip:raw())
 ```
 
-Some base-game interfaces expose their controls from a widget container under
-`df.global.game.main_interface` instead of the viewscreen's default `widgets`
-container. Select that exact DFHack-exposed container without changing the
-mounted interaction target:
+Many base-game controls are rooted under
+`df.global.game.main_interface` instead of `viewscreen.widgets`. Full game-UI
+paths are the common API for those controls; no source option is required:
 
 ```lua
-local creatures = df.global.game.main_interface.info.creatures
-local options = {native_root=creatures}
-local deceased = ds.get({'Tabs', 'Dead/Missing'}, options)
-local tree = ds.capture_view_tree('deceased-controls', options)
+ds.input('D_UNITLIST')
+
+local deceased = ds.get({
+    'info',
+    'creatures',
+    'Tabs',
+    'Dead/Missing',
+})
 ```
 
-The value passed as `native_root` must be a `df.widget_container`. DwarfSpec
-uses it only as a borrowed subject-tree root; `ds.input()`, `ds.mouseInput()`,
-and `ds.redraw()` continue to target the native viewscreen pinned by
-`ds.mountNativeScreen()`.
+The leading `info` and `creatures` segments name declared DF structure fields.
+At `creatures`, `Tabs` is not a declared field and the current value is a
+`df.widget_container`, so DwarfSpec switches permanently to exact native
+widget traversal. A later widget name is never reinterpreted as a DF field.
+
+The live acceptance suite uses the same rule to reach a real Residents
+list row:
+
+```lua
+local row_index = 0
+local resident = ds.get({
+    'info',
+    'creatures',
+    'Tabs',
+    'Residents',
+    0,
+    'Unit List',
+    1,
+    row_index,
+})
+
+assert.is_userdata(resident:raw())
+assert.is_table(resident:inspect().body)
+```
+
+Without `native_root`, a native `ds.get()` preserves compatibility by
+attempting the exact path from `viewscreen.widgets` and, when its leading
+segment is a declared field, from `df.global.game.main_interface`. One
+successful result is returned. Two results with the same native identity are
+deduplicated; two different identities produce an explicit ambiguity error
+instead of selecting one by visibility, activity, focus, or traversal order.
+
+`native_root` remains an advanced escape hatch for an actual ambiguity or a DF
+structure the automatic field traversal does not support. It bypasses both
+automatic roots and resolves only from the supplied `df.widget_container`:
+
+```lua
+local full_path = {
+    'info',
+    'creatures',
+    'Tabs',
+    'Dead/Missing',
+}
+
+-- If ds.get(full_path) reports different identities from the automatic roots,
+-- select the intended exact root and use its root-relative widget path.
+local creatures = df.global.game.main_interface.info.creatures
+local deceased = ds.get({'Tabs', 'Dead/Missing'}, {
+    native_root=creatures,
+})
+local tree = ds.capture_view_tree('deceased-controls', {
+    native_root=creatures,
+})
+```
+
+The explicit root changes only subject resolution. Input, mouse input, redraw,
+focus validation, and lifetime checks still target the native viewscreen
+pinned by `ds.mountNativeScreen()`.
 
 The path array itself uses ordinary one-based Lua array positions; integer
-segments inside it are zero-based native child indices. Empty names, negative
-or fractional indices, gaps in the array, ambiguous slash-containing string
-paths, and missing children fail explicitly with bounded path and child
-diagnostics.
+segments after widget traversal begins are zero-based native child indices.
+Integers before that transition, empty names, negative or fractional indices,
+gaps in the array, ambiguous slash-containing string paths, missing declared
+fields, missing widgets, unsupported intermediate field values, and dual-root
+ambiguity fail explicitly with bounded diagnostics.
+
+The current Hauling route rows are procedurally rendered from
+`df.global.plotinfo.hauling` on the supported DFHack host. They are not native
+widget userdata and therefore cannot be returned by `ds.get()`. Screen
+coordinates can drive that interface, but do not constitute widget identity.
 
 An attached native screen can also select an enabled widget from DFHack's live
 overlay registry. This source is externally owned and must be named exactly:

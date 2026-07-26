@@ -91,11 +91,12 @@ and screen diagnostics while preserving the original cause.
 current DF viewscreen and its native widget container without showing,
 dismissing, or owning a screen. Here, “mount” names the DwarfSpec test
 lifecycle; “native attachment” names its borrowed implementation resource.
-The viewscreen's `widgets` container is the default subject root. Base-game
-interfaces can expose additional widget-container roots through structures such
-as `df.global.game.main_interface`; callers select one of those exact containers
-with the `native_root` source option while input, redraw, focus, and lifetime
-validation remain pinned to the attached viewscreen.
+The viewscreen's `widgets` container remains the exact result of `ds.root()`.
+An ordinary native `ds.get(path)` can also resolve complete base-game paths
+rooted at `df.global.game.main_interface`; callers do not select that root.
+`native_root` is reserved for explicit ambiguity resolution and unsupported DF
+structures. Input, redraw, focus, and lifetime validation always remain pinned
+to the attached viewscreen.
 Native subjects traverse only widget objects exposed by DFHack; pixels and
 procedurally rendered controls do not become subjects. A separately selected
 overlay source borrows an enabled registry widget while dispatch remains owned
@@ -113,6 +114,57 @@ for wait-by-default redraw. A changed viewscreen makes the attachment and all
 of its subjects stale instead of retargeting them. Cleanup removes observers
 and retained references and restores pointer state while preserving the
 original focus, screen stack, viewscreen, and overlay registration.
+
+### Native subject resolution
+
+Without `native_root`, native `ds.get(path)` normalizes the path once and
+attempts exact lookup from `viewscreen.widgets`. When the first segment names a
+declared field on `df.global.game.main_interface`, it also attempts structural
+game-UI resolution. Structural traversal reads only declared DF data fields.
+At the first non-field segment on a `df.widget_container`, it switches
+permanently to exact `dfhack.gui.getWidget()` traversal. If the path ends on a
+declared field, that field's value must itself be a native widget.
+
+One successful result is returned. If both roots resolve the same native
+widget identity, DwarfSpec deduplicates them. If they resolve different
+identities, the request fails with bounded evidence from both roots. It never
+chooses by visibility, activity, focus, or traversal order. An explicit
+`native_root` bypasses both automatic attempts and resolves only from that
+exact widget container.
+
+```mermaid
+flowchart TD
+    Request["native ds.get(path)"] --> Explicit{"native_root supplied?"}
+    Explicit -->|yes| Exact["resolve exact widget path from native_root"]
+    Explicit -->|no| Normalize["normalize path once"]
+    Exact --> Subject["return retained native subject"]
+    Normalize --> View["attempt exact path from viewscreen.widgets"]
+    Normalize --> Eligible{"first segment is a declared main_interface field?"}
+    Eligible -->|no| Compare["compare successful results"]
+    Eligible -->|yes| Fields["traverse exact declared DF data fields"]
+    Fields --> Remaining{"path segments remain?"}
+    Remaining -->|no| FinalWidget{"current value is a native widget?"}
+    FinalWidget -->|yes| Compare
+    FinalWidget -->|no| GameFailure["record bounded structural failure"]
+    Remaining -->|yes| Transition{"next segment is a declared field?"}
+    Transition -->|yes| Fields
+    Transition -->|no, current value is widget container| Widgets["resolve remaining exact widget segments"]
+    Transition -->|no, not a widget container| GameFailure
+    Widgets --> Compare
+    GameFailure --> Compare
+    View --> Compare
+    Compare --> None{"number of successful identities"}
+    None -->|zero| Failure["fail with combined bounded diagnostics"]
+    None -->|one| Subject
+    None -->|two, same identity| Subject
+    None -->|two, different identities| Ambiguous["fail with ambiguity evidence"]
+```
+
+Retained game-UI subjects reacquire both their structural prefix and widget
+suffix before each operation and reject removal, replacement, or a pinned
+screen transition. Procedurally rendered interfaces such as the supported
+host's Hauling route rows have no widget identity and remain outside native
+subject resolution.
 
 Every mount resource is registered before it can escape. Example completion,
 assertion failure, command timeout, external timeout, lease expiry, explicit

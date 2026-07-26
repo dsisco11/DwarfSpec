@@ -28,9 +28,9 @@
 ---| 'native'
 ---| 'overlay'
 
----An exact nonempty native widget name or zero-based direct-child index.
+---A declared game-UI field, exact widget name, or zero-based widget index.
 ---@alias dwarfspec.NativePathSegment string|integer
----A nonempty sequence of exact native widget path segments.
+---A nonempty native path. Declared fields may precede exact widget segments.
 ---@alias dwarfspec.NativePath dwarfspec.NativePathSegment[]
 
 ---@class dwarfspec.EMouseButtonEnum
@@ -50,11 +50,11 @@
 ---@field NATIVE `native`
 ---@field OVERLAY `overlay`
 
----Selects the borrowed native widget hierarchy, which is the default source.
+---Selects the borrowed native hierarchy, which is the default source.
 ---@class dwarfspec.NativeSubjectSourceOptions
 ---@field source? `native`
 ---@field overlay? nil
----@field native_root? userdata Exact exposed `df.widget_container` root.
+---@field native_root? userdata Advanced exact-root bypass for ambiguity or unsupported DF structures.
 
 ---Selects one externally owned widget from DFHack's live overlay registry.
 ---@class dwarfspec.OverlaySubjectSourceOptions
@@ -226,7 +226,9 @@ function DS.mount(component, options) end
 function DS.mountNativeScreen() end
 
 ---Returns a subject for the selected current-mount root.
----Source options are accepted only by a borrowed native-screen mount.
+---With no options, a native mount returns the exact borrowed
+---`viewscreen.widgets` container. Source options are accepted only by a
+---borrowed native-screen mount.
 ---@param options? dwarfspec.RootSourceOptions
 ---@return dwarfspec.Subject
 function DS.root(options) end
@@ -234,10 +236,14 @@ function DS.root(options) end
 ---Releases the current native attachment or mounted component.
 function DS.unmount() end
 
----Selects one strict direct-child path from the implicit current mount.
----Native strings select one named child; arrays support nested names, zero-based
----indices, and names containing "/". Source options require a native-screen
----mount.
+---Selects one exact path from the implicit current mount.
+---On a borrowed native-screen mount without `native_root`, DwarfSpec checks
+---both `viewscreen.widgets` and `df.global.game.main_interface`. Declared
+---game-UI fields form a structural prefix; traversal switches permanently to
+---exact widget names or zero-based indices at the first non-field segment on a
+---widget container. Equal results are deduplicated and different results are
+---reported as ambiguous. `native_root` bypasses this dual-root resolution.
+---Component paths retain their strict direct-`subviews` behavior.
 ---@param control_path string|dwarfspec.NativePath
 ---@param options? dwarfspec.GetSourceOptions
 ---@return dwarfspec.Subject

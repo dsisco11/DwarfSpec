@@ -1,6 +1,6 @@
 # Native game-UI path resolution
 
-Status: in progress; Phases 0-6 complete
+Status: in progress; Phases 0-7 complete
 
 Related design:
 
@@ -269,7 +269,8 @@ Hauling finding:
 - `plotinfo.hauling` is a `hauling_infost`, not a widget or widget container;
 - the current native viewscreen's `widgets` container exposes only the
   `Tooltip` child while Hauling is open;
-- bounded traversal of inline compound fields under `game.main_interface`,
+- bounded traversal of inline compound fields under
+  `df.global.game.main_interface`,
   `plotinfo`, and `gview` found no Hauling widget hierarchy;
 - normal `LEAVESCREEN` input restored `dwarfmode/Default`.
 
@@ -629,31 +630,49 @@ Exit gate:
 
 ## Phase 7: Public contract and documentation
 
-☐ Update `src/ds.d.lua` to document full native game-UI paths.
-☐ Document the structural-field-to-widget transition rule.
-☐ Document the dual-root compatibility and ambiguity behavior.
-☐ Document that `ds.root()` remains the exact viewscreen widget root.
-☐ Present full game-UI paths as the common base-game testing API.
-☐ Present `native_root` only as an advanced ambiguity or compatibility escape
+☒ Update `src/ds.d.lua` to document full native game-UI paths.
+☒ Document the structural-field-to-widget transition rule.
+☒ Document the dual-root compatibility and ambiguity behavior.
+☒ Document that `ds.root()` remains the exact viewscreen widget root.
+☒ Present full game-UI paths as the common base-game testing API.
+☒ Present `native_root` only as an advanced ambiguity or compatibility escape
   hatch.
-☐ Add examples for:
+☒ Add examples for:
   - a direct viewscreen-widget path;
   - `info.creatures`;
   - the verified `info.creatures` list-row path;
   - an explicit-root ambiguity resolution.
-☐ Document that the current Hauling route rows are procedurally rendered and
+☒ Document that the current Hauling route rows are procedurally rendered and
   are not addressable through native widget paths on the supported host.
-☐ Update architecture documentation with a Mermaid resolution diagram.
-☐ Update the native-screen proposal to replace explicit-root common examples.
-☐ Add the capability and compatibility behavior to `CHANGELOG.md`.
-☐ Check all docs for claims that `viewscreen.widgets` contains every base-game
+☒ Update architecture documentation with a Mermaid resolution diagram.
+☒ Update the native-screen proposal to replace explicit-root common examples.
+☒ Add the capability and compatibility behavior to `CHANGELOG.md`.
+☒ Check all docs for claims that `viewscreen.widgets` contains every base-game
   control.
 
 Exit gate:
 
-☐ Public declarations, implementation, tests, examples, and architecture use
+☒ Public declarations, implementation, tests, examples, and architecture use
   the same path terminology.
-☐ Every graph in the updated documentation uses Mermaid.
+☒ Every graph in the updated documentation uses Mermaid.
+
+### Phase 7 evidence
+
+- `src/ds.d.lua`, `docs/writing-tests.md`, `docs/architecture.md`, and
+  `docs/non-owning-native-screen-mount-proposal.md` consistently describe the
+  automatic `viewscreen.widgets` and `df.global.game.main_interface` roots,
+  exact declared-field traversal, the permanent widget transition, identity
+  deduplication, ambiguity rejection, and advanced `native_root` bypass.
+- `docs/writing-tests.md` contains the direct `Tooltip`, `info.creatures`,
+  verified Residents list-row, and explicit-root examples, plus the supported
+  host's procedural Hauling-row limitation.
+- The architecture resolution flow and the revised proposal architecture graph
+  are Mermaid diagrams. Other fenced blocks in the updated documents are Lua
+  examples, signatures, field lists, or value mappings rather than graphs.
+- A repository documentation scan found no claim that `viewscreen.widgets`
+  contains every base-game control and no shortened game-UI root references.
+- `CHANGELOG.md` records both the new full-path capability and the compatibility
+  contract.
 
 ## Phase 8: Final verification and handoff
 
@@ -717,3 +736,7 @@ Exit gate:
 | 2026-07-25 | 6 | `tools/Run-UnitTests.ps1` | 426 successes; 0 failures, errors, or pending |
 | 2026-07-25 | 6 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 228 files |
 | 2026-07-25 | 6 | `git diff --check` | Passed |
+| 2026-07-25 | 7 | Public declaration, tutorial, architecture, proposal, changelog, and repository terminology audit | Full native game-UI paths, dual-root compatibility, exact `ds.root()`, advanced `native_root`, all required examples, Hauling limitation, and Mermaid-only graphs confirmed |
+| 2026-07-25 | 7 | `tools/Run-UnitTests.ps1` | 426 successes; 0 failures, errors, or pending |
+| 2026-07-25 | 7 | `tools/Check-Lua.ps1` | Lua 5.4.6 syntax and formatting passed for 228 files |
+| 2026-07-25 | 7 | `git diff --check` | Passed |

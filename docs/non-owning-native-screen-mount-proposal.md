@@ -8,18 +8,30 @@ current native DF viewscreen:
 ```lua
 local root = ds.mountNativeScreen()
 
-local list = ds.get({'Tabs', 0, 'Right panel', 'List'})
-list:move_pointer()
+ds.input('D_UNITLIST')
+local list = ds.get({
+    'info',
+    'creatures',
+    'Tabs',
+    'Residents',
+    0,
+    'Unit List',
+    1,
+    0,
+})
+list:move_pointer('center')
 ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
 
 ds.redraw()
 ds.unmount()
 ```
 
-The native viewscreen's `widgets` container becomes the mount's primary subject
-root. `ds.root()`, `ds.get()`, inspection, pointer placement, input, clicks,
-text access, redraw, and tree capture operate on the real base-game
-`df.widget` objects exposed by DFHack.
+The native viewscreen's `widgets` container remains the exact `ds.root()`.
+Ordinary `ds.get()` calls resolve either direct viewscreen-widget paths or
+complete paths rooted at `df.global.game.main_interface`, including a declared
+DF-field prefix followed by exact widget segments. Inspection, pointer
+placement, input, clicks, text access, redraw, and tree capture operate on the
+real base-game `df.widget` objects exposed by DFHack.
 
 Registered DFHack overlays remain queryable through the same commands with an
 explicit subject-source option. The native screen and every queried widget are
@@ -32,9 +44,11 @@ dismiss a screen, instantiate a native widget, or take ownership of an overlay.
 - Preserve the current viewscreen stack and DFHack focus.
 - Make the attached screen the target for `ds.input()`, `ds.mouseInput()`, and
   `ds.redraw()`.
-- Make `viewscreen.widgets` the default root for `ds.root()` and `ds.get()`,
-  while allowing an exact DFHack-exposed `df.widget_container` to be selected
-  with the existing subject-source options.
+- Keep `viewscreen.widgets` as the exact default root for `ds.root()`.
+- Resolve ordinary native `ds.get()` paths from both `viewscreen.widgets` and
+  the fixed `df.global.game.main_interface` structural root.
+- Keep exact `native_root` selection as an advanced ambiguity or compatibility
+  escape hatch.
 - Support native widget traversal by name and zero-based child index.
 - Preserve the existing fluent `dwarfspec.Subject` API for native and Lua
   widgets.
@@ -77,9 +91,10 @@ See:
 These are typed DF object references. Lua reports them as `userdata`, unlike
 DFHack Lua `gui.View` objects, which are tables.
 
-## Current DwarfSpec constraints
+## Original DwarfSpec constraints
 
-The current component-mount implementation assumes one Lua `gui.View` tree:
+Before native-screen mounting was introduced, the component-mount
+implementation assumed one Lua `gui.View` tree:
 
 - `subject.new()` requires the raw object to be a table.
 - Control paths walk `view.subviews` and compare `child.view_id`.
@@ -116,8 +131,7 @@ borrowed implementation resource.
 
 ### Native control paths
 
-`ds.get()` should accept either the existing string path or a path-segment
-array:
+`ds.get()` accepts either the existing string path or a path-segment array:
 
 ```lua
 ds.get('simple_child')
@@ -126,28 +140,41 @@ ds.get({'Tabs', 0, 'Right panel'})
 
 Each native segment is:
 
-- a nonempty string naming a child in `children_by_name`; or
-- a nonnegative integer selecting a zero-based child index.
+- a nonempty string naming a declared game-UI field or exact native widget;
+  or
+- after widget traversal begins, a nonnegative integer selecting a zero-based
+  child index.
 
 The segment-array form is authoritative for native widgets because native
 names can contain `/` and native lookup already supports numeric indices.
 Existing slash-delimited string paths remain unchanged for component mounts
 and work for simple native names that contain no slash.
 
-Lookup delegates to `dfhack.gui.getWidget()` one segment at a time. Failure
-diagnostics include:
+For paths that begin with a declared field on
+`df.global.game.main_interface`, lookup traverses exact declared data fields
+until the first non-field segment on a `df.widget_container`. It then switches
+permanently to `dfhack.gui.getWidget()` traversal. Direct
+`viewscreen.widgets` lookup remains available in parallel.
+
+If only one automatic root succeeds, DwarfSpec returns that widget. Results
+with the same native identity are deduplicated; different identities fail as
+ambiguous. An explicit `native_root` request bypasses automatic dual-root
+resolution.
+
+Failure diagnostics include:
 
 - the complete requested path;
+- the structural field prefix and widget suffix;
 - the segment that failed;
-- the resolved parent name and native type;
+- the current DF type or resolved widget parent;
 - bounded named and indexed child summaries.
 
 ### Subject sources
 
 Native mounts expose two subject sources:
 
-1. `ds.ESubjectSource.NATIVE`, backed by the attached viewscreen's native
-   `widgets` tree;
+1. `ds.ESubjectSource.NATIVE`, backed by native dual-root resolution while
+   keeping `viewscreen.widgets` as the exact root subject;
 2. `ds.ESubjectSource.OVERLAY`, backed by a selected live overlay-registry
    widget.
 
@@ -156,6 +183,27 @@ default:
 
 ```lua
 local native_list = ds.get({'Tabs', 0, 'List'})
+```
+
+Full base-game paths require no source options:
+
+```lua
+local deceased = ds.get({
+    'info',
+    'creatures',
+    'Tabs',
+    'Dead/Missing',
+})
+```
+
+Use `native_root` only to resolve a real ambiguity or bypass an unsupported
+structural field:
+
+```lua
+local creatures = df.global.game.main_interface.info.creatures
+local deceased = ds.get({'Tabs', 'Dead/Missing'}, {
+    native_root=creatures,
+})
 ```
 
 Overlay lookup uses the same command with explicit options:
@@ -256,16 +304,18 @@ flowchart LR
 
     Adapter --> Screen["pinned native DF viewscreen"]
     Screen --> NativeRoot["viewscreen.widgets"]
-    Adapter --> NativeSource["native subject source"]
-    NativeSource --> NativeRoot
+    Game["df.global.game.main_interface"] --> NativeResolver["dual-root native resolver"]
+    NativeRoot --> NativeResolver
+    Adapter --> NativeResolver
 
     Registry["DFHack overlay registry"] --> OverlaySource["overlay subject source"]
     Adapter --> OverlaySource
 
-    Get["ds.root() / ds.get()"] --> Selector["source selection"]
-    Selector --> NativeSource
+    Root["ds.root()"] --> NativeRoot
+    Get["ds.get()"] --> Selector["source selection"]
+    Selector --> NativeResolver
     Selector --> OverlaySource
-    NativeSource --> Subject["adapter-backed subject"]
+    NativeResolver --> Subject["adapter-backed subject"]
     OverlaySource --> Subject
 
     Input["input / mouse / click"] --> Screen
@@ -339,11 +389,15 @@ No public proxy object replaces the underlying widget.
 
 ### Native subject adapter
 
-The default native adapter is rooted at the exact
-`attached_screen.widgets` container. A caller can instead select another exact
-DFHack-exposed `df.widget_container`, including a container owned by
-`df.global.game.main_interface`, without changing the attached interaction
-target.
+The default native root adapter is rooted at the exact
+`attached_screen.widgets` container. Ordinary `ds.get()` also owns a game-UI
+locator rooted at `df.global.game.main_interface`. The locator reads only
+declared DF data fields, transitions once to widget traversal, and retains the
+structural prefix and widget suffix for reacquisition.
+
+A caller can select an exact DFHack-exposed `df.widget_container` with
+`native_root` to bypass automatic resolution. None of these subject roots
+changes the attached interaction target.
 
 Traversal uses:
 
@@ -587,6 +641,8 @@ No native screen or widget dismissal action is registered.
 - Add optional subject-source arguments to `ds.root()`, `ds.get()`, and
   `ds.capture_view_tree()`.
 - Accept string or segment-array control paths.
+- Resolve native `ds.get()` through compatible viewscreen and game-UI roots,
+  deduplicate equal identities, and reject ambiguity.
 - Resolve interaction commands through `mount.interaction_target`.
 - Extend `ds.move_pointer()` with the `(x, y)` overload.
 - Preserve existing component-mount behavior.
@@ -621,6 +677,7 @@ Add focused modules for:
 
 - native viewscreen attachment and current-screen validation;
 - native widget traversal and identity;
+- declared `main_interface` field traversal and dual-root resolution;
 - native bounds and state inspection;
 - native text extraction;
 - subject-source selection;
@@ -642,6 +699,8 @@ controller.
 - Define native path segment and path types.
 - Define immutable `ESubjectSource`.
 - Document source options for root, get, and tree capture.
+- Document full game-UI paths, structural-to-widget transition, dual-root
+  compatibility, and explicit-root ambiguity resolution.
 - Document that `Subject:raw()` can return a Lua table or typed DF userdata.
 - Add optional native inspection fields.
 - Document the absolute pointer overload.
@@ -654,6 +713,9 @@ The implementation should produce explicit errors for:
 - a DFHack Lua screen currently owning focus;
 - a native screen without a valid widget root;
 - a missing native name or index path segment;
+- a missing or unsupported declared game-UI field;
+- a structural path that does not reach a native widget;
+- automatic roots that resolve different native widget identities;
 - a string path containing an ambiguous native `/` name;
 - an invalid subject-source enum value;
 - a requested overlay that is missing or disabled;
@@ -681,6 +743,11 @@ Unit coverage should prove:
 - `ds.root():raw()` returns the exact native `widgets` container;
 - native paths resolve named and zero-based indexed children;
 - names containing `/` work through segment-array paths;
+- complete game-UI paths traverse exact declared fields and then exact widgets;
+- viewscreen-only and game-UI-only results remain compatible;
+- equal dual-root identities deduplicate and different identities fail as
+  ambiguous;
+- explicit `native_root` bypasses automatic dual-root resolution;
 - missing path diagnostics enumerate bounded native children;
 - invisible and inactive native widgets remain queryable;
 - native bounds, state, text, tooltip, scroll, and selection extraction are
@@ -707,18 +774,20 @@ A live DFHack test should:
    pointer state;
 2. attach with `ds.mountNativeScreen()`;
 3. prove `ds.root():raw()` is the exact native widget root;
-4. resolve named and indexed base-game controls through `ds.get()`;
-5. inspect native bounds, visibility/activity, and text;
-6. interact with a base-game control through subject pointer placement and
+4. resolve named and indexed direct viewscreen controls through `ds.get()`;
+5. resolve a real list row through a complete
+   `df.global.game.main_interface` structural and widget path;
+6. inspect native bounds, visibility/activity, and text;
+7. interact with a base-game control through subject pointer placement and
    normal input;
-7. resolve and interact with a registered overlay through explicit source
+8. resolve and interact with a registered overlay through explicit source
    selection;
-8. call subject and top-level redraws and observe completed native-plus-overlay
+9. call subject and top-level redraws and observe completed native-plus-overlay
    rendering;
-9. unmount;
-10. prove the original screen, focus, stack, and pointer state remain intact;
-11. prove render instrumentation is restored exactly;
-12. prove no native screen or widget was dismissed.
+10. unmount;
+11. prove the original screen, focus, stack, and pointer state remain intact;
+12. prove render instrumentation is restored exactly;
+13. prove no native screen or widget was dismissed.
 
 Test-owned overlay registration and configuration must be restored
 independently. Native attachment itself remains read-only with respect to the
@@ -756,7 +825,8 @@ already exposes the native widget tree, so DwarfSpec should use it.
 
 That omits the primary base-game UI under test. Overlay widgets are an
 additional source layered over the native screen, not a replacement for
-`viewscreen.widgets`.
+`viewscreen.widgets` or widget containers reached through
+`df.global.game.main_interface`.
 
 ### Call native widget callbacks directly
 
@@ -773,8 +843,11 @@ stale-subject errors preserve deterministic tests.
 ## Recommendation
 
 Implement `ds.mountNativeScreen()` as a non-owning native-screen mount whose
-default subject root is the native viewscreen's `widgets` container. Generalize
-`Subject` around explicit native-widget and Lua-view adapters, add
+exact root subject is the native viewscreen's `widgets` container. Resolve
+ordinary native `ds.get()` calls compatibly from that root and from declared
+paths under `df.global.game.main_interface`; reserve `native_root` for explicit
+bypass.
+Generalize `Subject` around explicit native-widget and Lua-view adapters, add
 segment-array native paths, and expose overlays through an immutable
 subject-source selector.
 

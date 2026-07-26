@@ -9,9 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Native-screen subject commands can select any DFHack-exposed
-  `df.widget_container` with the `native_root` source option while retaining
-  the mounted viewscreen as their input and render target.
+- Native-screen `ds.get()` accepts complete paths rooted at
+  `df.global.game.main_interface`. It traverses exact declared DF data fields,
+  switches once to exact native-widget traversal, and retains the structural
+  and widget path for subject reacquisition.
+- Native lookup remains compatible with direct `viewscreen.widgets` paths.
+  Equal results from both automatic roots are deduplicated, different
+  identities fail explicitly as ambiguous, and `ds.root()` remains the exact
+  borrowed viewscreen widget root.
+- Native-screen subject commands can use `native_root` as an advanced
+  single-root bypass for genuine ambiguity or unsupported DF structures while
+  retaining the mounted viewscreen as their input and render target.
 
 ## [0.2.0] - 2026-07-24
 
