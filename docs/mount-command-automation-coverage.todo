@@ -1,6 +1,6 @@
 # Mount command automation coverage
 
-Status: in progress; Phases 0-1 complete
+Status: in progress; Phases 0-2 complete
 
 Related live specifications:
 
@@ -254,34 +254,34 @@ Goal: close the remaining live command gaps for the ordinary-widget host.
 
 ### Tasks
 
-☐ Add a rendered ordinary-widget pointer target that records ordinary host
+✔ Add a rendered ordinary-widget pointer target that records ordinary host
   input dispatch.
-☐ Place the pointer inside that target before every physical mouse action.
-☐ Exercise `ds.mouseInput(EMouseButton.LEFT)` and prove the default click is
+✔ Place the pointer inside that target before every physical mouse action.
+✔ Exercise `ds.mouseInput(EMouseButton.LEFT)` and prove the default click is
   observed.
-☐ Exercise explicit `EInputState.DOWN` and `EInputState.UP` and prove temporary
+✔ Exercise explicit `EInputState.DOWN` and `EInputState.UP` and prove temporary
   button fields and final restoration.
-☐ Exercise wheel input and prove handled or normal fall-through behavior
+✔ Exercise wheel input and prove handled or normal fall-through behavior
   explicitly.
-☐ Exercise root-default `ds.inspect()` and validate the ordinary component
+✔ Exercise root-default `ds.inspect()` and validate the ordinary component
   root identity, visibility, activity, and bounds.
-☐ Exercise the applicable top-level `ds.click`, `ds.hover`, `ds.input`,
+✔ Exercise the applicable top-level `ds.click`, `ds.hover`, `ds.input`,
   `ds.type`, and `ds.move_pointer` routes and compare each observable result
   with its fluent-subject counterpart.
-☐ Exercise `Subject:getFocusList()` for the ordinary-widget host and validate
+✔ Exercise `Subject:getFocusList()` for the ordinary-widget host and validate
   the returned bounded focus strings.
-☐ Exercise top-level `ds.redraw()` with default waiting.
-☐ Exercise `ds.redraw(nil, {wait=false})`, prove it returns before the next
+✔ Exercise top-level `ds.redraw()` with default waiting.
+✔ Exercise `ds.redraw(nil, {wait=false})`, prove it returns before the next
   render generation, then separately await completion.
-☐ Verify pointer, button, viewport, pause, host-screen, and instrumentation
+✔ Verify pointer, button, viewport, pause, host-screen, and instrumentation
   restoration after unmount.
 
 ### Phase 2 exit gate
 
-☐ Every previously missing ordinary-widget command case has an observable live
+✔ Every previously missing ordinary-widget command case has an observable live
   assertion.
-☐ Physical mouse states and no-wait redraw do not leak state.
-☐ Existing ordinary-widget automation remains green.
+✔ Physical mouse states and no-wait redraw do not leak state.
+✔ Existing ordinary-widget automation remains green.
 
 ## Phase 3: Overlay-widget command gaps
 
@@ -597,7 +597,49 @@ observations, and relevant file paths here as work proceeds.
 
 ### Phase 2 evidence
 
-- Pending.
+- Extended `tests/automation/ordinary_widget_mount_live_spec.lua` with a
+  rendered `pointer_target` and test-owned ordinary-host observations for
+  keyboard input, physical click/down/up, wheel handling, pointer-over-render
+  checks, and completed renders. All observations are reached through public
+  DwarfSpec commands and the normal `gui.ZScreen`/widget input path.
+- Root-default `ds.inspect()` proves exact mounted-root identity, view ID,
+  visibility, activity, and live body bounds. Top-level and fluent forms of
+  click, hover, input, type, and pointer placement each produce matching
+  observable counter, text, render, or coordinate changes. The fluent focus
+  list is nonempty, bounded to eight entries, contains only nonempty strings,
+  and identifies the DwarfSpec component host.
+- Every physical action first calls `target:hover()` and asserts the pointer is
+  inside the rendered target. Default left click is observed. DOWN and UP
+  prove the temporary `mouse_lbut_down`/`mouse_lbut_lift`, `mouse_focus`, and
+  `tracking_on` fields during dispatch, their post-UP reset, and exact
+  pointer/button snapshot restoration after unmount. Scroll-down is explicitly
+  handled and counted by the ordinary host.
+- Shared redraw assertions prove top-level default redraw returns after a newer
+  render and `{wait=false}` returns at the current generation before a bounded
+  `ds.await()` observes the later render. The teardown case deliberately leaves
+  a DOWN claim active before unmount, then proves exact pointer/button, native
+  window, pause, backing screen, instance render/resize method, subject,
+  owned-screen, map-view, and render-observer restoration.
+- The focused command
+  `.\tools\Run-AutomationTests.ps1 --test-glob
+  tests/automation/ordinary_widget_mount_live_spec.lua` passed 7 successes,
+  0 failures, 0 errors, and 0 pending with
+  `FINISHED passed cleanup_confirmed=true`.
+- The first broad attempt coincided with a Dwarf Fortress restart and was
+  aborted after independently confirmed cleanup. A subsequent retry exposed an
+  existing pause-state timing assertion and also confirmed cleanup. After a
+  focused complete-screen rerun passed 2 successes, the final
+  `.\tools\Run-AutomationTests.ps1` passed 34 successes, 0 failures, 0 errors,
+  and 0 pending with `FINISHED passed cleanup_confirmed=true`.
+- `.\tools\Run-UnitTests.ps1` passed 450 successes, 0 failures, 0 errors, and
+  0 pending. `.\tools\Check-Lua.ps1` passed Lua 5.4.6 syntax and formatting
+  checks for 234 files. No production or packaged source changed, so a rock
+  build was not applicable.
+- Final process evidence found responsive Dwarf Fortress PID 41032 at
+  `G:\Steam\steamapps\common\Dwarf Fortress\Dwarf Fortress.exe`. The
+  core-context probe reported protocol 2, `core=true`, and timeout support.
+  `lua bin\dwarfspec status` reported the executor idle, queue depth 0, and no
+  quarantine.
 
 ### Phase 3 evidence
 
