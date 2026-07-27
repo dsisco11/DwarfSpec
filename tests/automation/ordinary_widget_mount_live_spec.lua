@@ -1,6 +1,22 @@
 -- Product-independent live proof for ordinary widget component mounting.
 
 local widgets = require('gui.widgets')
+local command_conformance = require(
+    'tests.automation.support.command_conformance')
+
+local ORDINARY_CAPABILITIES = command_conformance.new{
+    root_inspection=true,
+    tree_capture=true,
+    screen_capture=true,
+    subject_pointer_placement=true,
+    subject_hover=true,
+    keyboard_input=true,
+    text_input=true,
+    physical_mouse_states=true,
+    default_wait_redraw=true,
+    no_wait_redraw=true,
+    viewport='supported',
+}
 
 ---@class tests.OrdinaryWidgetHarness: widgets.Panel
 local OrdinaryWidgetHarness = defclass(nil, widgets.Panel)
@@ -73,8 +89,9 @@ describe('ordinary widget component host', function()
         end, ('DwarfSpec mount rejected because mount %d is still current; ' ..
         'call ds.unmount() before creating another mount')
                 :format(first.mount_id))
-        assert.equals(first_instance, first:raw())
-        assert.equals(first_instance, ds.root():raw())
+        command_conformance.assert_mounted_root(first, first_instance)
+        command_conformance.assert_mounted_root(ds.root(), first_instance)
+        ORDINARY_CAPABILITIES:assert_clean()
 
         ds.unmount()
         local second = ds.mount(OrdinaryWidgetHarness)
@@ -90,7 +107,7 @@ describe('ordinary widget component host', function()
         local original_pause = df.global.pause_state
         local root = ds.mount(instance, {initial_pause=false})
 
-        assert.equals(instance, root:raw())
+        command_conformance.assert_mounted_root(root, instance)
         assert.equals(original_pause, df.global.pause_state)
         assert.equals(original_on_render,
             rawget(OrdinaryWidgetHarness, 'onRender'))

@@ -1,6 +1,6 @@
 # Mount command automation coverage
 
-Status: in progress; Phase 0 complete
+Status: in progress; Phases 0-1 complete
 
 Related live specifications:
 
@@ -212,11 +212,11 @@ hiding mount-specific behavior.
 
 ### Tasks
 
-☐ Add a shared command-conformance helper only where it removes duplicated
+✔ Add a shared command-conformance helper only where it removes duplicated
   setup or assertions across at least two mount hosts.
-☐ Keep mount construction in each mount-specific specification so the actual
+✔ Keep mount construction in each mount-specific specification so the actual
   host category remains visible.
-☐ Define explicit capability fields for:
+✔ Define explicit capability fields for:
   - root inspection;
   - tree capture;
   - screen capture;
@@ -227,26 +227,26 @@ hiding mount-specific behavior.
   - default-wait redraw;
   - no-wait redraw;
   - viewport support or expected rejection.
-☐ Reject unknown or contradictory capability fields in the helper.
-☐ Provide reusable assertions for exact mounted-root identity.
-☐ Provide reusable assertions for default-wait and no-wait redraw generation
+✔ Reject unknown or contradictory capability fields in the helper.
+✔ Provide reusable assertions for exact mounted-root identity.
+✔ Provide reusable assertions for default-wait and no-wait redraw generation
   behavior.
-☐ Provide reusable pointer/button snapshot and exact-restoration assertions.
-☐ Provide reusable bounded capture assertions.
-☐ Provide reusable command-observation counters that are owned by the test
+✔ Provide reusable pointer/button snapshot and exact-restoration assertions.
+✔ Provide reusable bounded capture assertions.
+✔ Provide reusable command-observation counters that are owned by the test
   fixture and reached only through normal input/render dispatch.
-☐ Ensure helper cleanup runs after both successful assertions and injected
+✔ Ensure helper cleanup runs after both successful assertions and injected
   failures.
-☐ Add focused unit coverage for nontrivial helper validation or cleanup logic;
+✔ Add focused unit coverage for nontrivial helper validation or cleanup logic;
   do not add unit tests that merely restate static fixture tables.
 
 ### Phase 1 exit gate
 
-☐ The helper contains no mount implementation or production behavior.
-☐ Mount-specific tests still show which real host and interaction target are
+✔ The helper contains no mount implementation or production behavior.
+✔ Mount-specific tests still show which real host and interaction target are
   exercised.
-☐ Shared cleanup assertions fail when any owned state remains.
-☐ Focused helper tests and Lua syntax checks pass.
+✔ Shared cleanup assertions fail when any owned state remains.
+✔ Focused helper tests and Lua syntax checks pass.
 
 ## Phase 2: Ordinary-widget command gaps
 
@@ -558,7 +558,42 @@ observations, and relevant file paths here as work proceeds.
 
 ### Phase 1 evidence
 
-- Pending.
+- Added `tests/automation/support/command_conformance.lua` as test-only support.
+  It validates complete host capability declarations, rejects unknown fields
+  and pointer, input, redraw, or viewport contradictions, and supplies shared
+  exact-root, redraw-generation, pointer/button restoration, bounded tree and
+  screen capture, observation-counter, and failure-safe cleanup assertions.
+  It contains no mount construction, native callback invocation, or production
+  behavior.
+- Ordinary-widget, overlay-widget, and complete-screen specifications each
+  retain their own concrete DFHack class, backing-screen, and `ds.mount()`
+  setup. All three declare their capabilities locally and use the shared
+  exact-mounted-root assertion, removing repeated raw identity assertions
+  without obscuring the real host or interaction target.
+- `.\tools\Run-UnitTests.ps1 --filter "command conformance support"` passed
+  6 successes, 0 failures, 0 errors, and 0 pending. The focused cases prove
+  unknown, incomplete, and contradictory capability rejection; cleanup after
+  success; cleanup continuation after simultaneous injected body and cleanup
+  failures; retained-ownership detection; redraw timing; bounded captures;
+  counters; and exact pointer/button comparison.
+- Focused live specifications ran sequentially. Ordinary widget passed
+  4 successes, overlay widget passed 4 successes, and complete screen passed
+  2 successes. Every run reported 0 failures, 0 errors, 0 pending, and
+  `cleanup_confirmed=true`.
+- `.\tools\Run-AutomationTests.ps1` passed 31 successes, 0 failures, 0 errors,
+  and 0 pending with `FINISHED passed cleanup_confirmed=true`.
+  `.\tools\Run-UnitTests.ps1` passed 450 successes, 0 failures, 0 errors, and
+  0 pending. `.\tools\Check-Lua.ps1` passed Lua 5.4.6 syntax and formatting
+  checks for 234 files.
+- Final process evidence found responsive Dwarf Fortress PID 36940 at
+  `G:\Steam\steamapps\common\Dwarf Fortress\Dwarf Fortress.exe`.
+  The core-context probe reported protocol 2, `core=true`, and timeout support.
+  `lua bin\dwarfspec status` reported the executor idle, queue depth 0, and no
+  quarantine.
+- `git diff --check` and `git diff --cached --check` passed. Worktree changes
+  are limited to this checklist, the new test-only helper and focused unit
+  specification, and the three mount-host specifications that consume the
+  shared identity assertion.
 
 ### Phase 2 evidence
 

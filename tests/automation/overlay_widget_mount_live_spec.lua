@@ -3,6 +3,22 @@
 local gui = require('gui')
 local widgets = require('gui.widgets')
 local overlay = require('plugins.overlay')
+local command_conformance = require(
+    'tests.automation.support.command_conformance')
+
+local OVERLAY_CAPABILITIES = command_conformance.new{
+    root_inspection=true,
+    tree_capture=true,
+    screen_capture=true,
+    subject_pointer_placement=true,
+    subject_hover=true,
+    keyboard_input=true,
+    text_input=true,
+    physical_mouse_states=true,
+    default_wait_redraw=true,
+    no_wait_redraw=true,
+    viewport='supported',
+}
 
 ---@class tests.MouseInputBacking: gui.ZScreen
 local MouseInputBacking = defclass(nil, gui.ZScreen)
@@ -225,6 +241,9 @@ describe('overlay widget component host', function()
         })
         local instance = root:raw()
 
+        command_conformance.assert_mounted_root(root, instance)
+        command_conformance.assert_mounted_root(ds.root(), instance)
+        OVERLAY_CAPABILITIES:assert_clean()
         assert.matches('^dwarfspec%.', instance.name)
         assert.equals(5, instance.frame.l)
         assert.equals(6, instance.frame.t)

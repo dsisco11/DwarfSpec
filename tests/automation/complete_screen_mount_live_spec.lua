@@ -2,6 +2,22 @@
 
 local gui = require('gui')
 local widgets = require('gui.widgets')
+local command_conformance = require(
+    'tests.automation.support.command_conformance')
+
+local COMPLETE_SCREEN_CAPABILITIES = command_conformance.new{
+    root_inspection=true,
+    tree_capture=true,
+    screen_capture=true,
+    subject_pointer_placement=true,
+    subject_hover=true,
+    keyboard_input=true,
+    text_input=true,
+    physical_mouse_states=true,
+    default_wait_redraw=true,
+    no_wait_redraw=true,
+    viewport='supported',
+}
 
 ---@class tests.CompleteScreenBacking: gui.ZScreen
 local CompleteScreenBacking = defclass(nil, gui.ZScreen)
@@ -139,7 +155,9 @@ describe('complete screen component mount', function()
         local screen = root:raw()
 
         assert.equals(CompleteScreenHarness, getmetatable(screen))
-        assert.equals(screen, ds.root():raw())
+        command_conformance.assert_mounted_root(root, screen)
+        command_conformance.assert_mounted_root(ds.root(), screen)
+        COMPLETE_SCREEN_CAPABILITIES:assert_clean()
         assert.equals(screen._native,
             dfhack.gui.getCurViewscreen(true))
         assert.is_true(df.global.pause_state)
@@ -190,7 +208,7 @@ describe('complete screen component mount', function()
             backing_viewscreen=backing._native,
         })
 
-        assert.equals(screen, root:raw())
+        command_conformance.assert_mounted_root(root, screen)
         assert.is_false(df.global.pause_state)
         assert.equals(128, screen.frame_parent_rect.width)
         assert.equals(64, screen.frame_parent_rect.height)
