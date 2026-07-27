@@ -1,0 +1,227 @@
+# Base-Screen Focus Warning
+
+Status: proposed
+
+## Purpose
+
+Warn when a live example leaves Dwarf Fortress on a different base-game
+viewscreen or base-game focus than it had before the example began.
+
+The warning is test-hygiene evidence, not a test failure. DwarfSpec-owned
+components must be removed before the final observation, and their temporary
+DFHack screens must not count as base-game focus changes.
+
+## Behavioral contract
+
+- Capture the initial base-game screen after DwarfSpec's pre-example reset and
+  before any project `before_each` hook or example body runs.
+- Run project setup, the example body, and project teardown normally.
+- Drain example-scoped cleanup, including implicit cleanup for every current
+  `ds.mount()` or `ds.mountNativeScreen()` attachment.
+- Wait for the existing one-frame cleanup settlement before observing final
+  focus.
+- Resolve the base-game screen with
+  `dfhack.gui.getDFViewscreen(true)`. Do not use the temporary topmost DFHack
+  screen as the comparison identity.
+- Capture a detached diagnostic snapshot containing the exact base-screen
+  identity, a stable base-screen type label, and a copied focus-string list
+  from `dfhack.gui.getFocusStrings(base_screen)`.
+- Compare base-screen identity exactly and compare focus strings as a
+  canonicalized set so that incidental list ordering does not produce a
+  warning.
+- Emit exactly one warning when the base-screen identity or canonical focus
+  set changed.
+- Include the example name, before/after screen types, before/after focus
+  strings, and whether screen identity, focus, or both changed.
+- If either observation is unavailable, emit one nonfatal verification
+  warning instead of silently treating the state as unchanged.
+- Do not restore or navigate the base-game UI automatically.
+- Do not change Busted counts, terminal run state, process exit status,
+  cleanup confirmation, or mount-cleanup verification because of a warning.
+
+## Non-goals
+
+- Do not treat ordinary DwarfSpec-owned `gui.ZScreen` hosts as base-game
+  screens.
+- Do not warn merely because an explicitly mounted component existed during
+  the example.
+- Do not add an allowlist, suppression API, or configuration option until
+  observed usage demonstrates a need.
+- Do not broaden this work into restoration of arbitrary base-game UI state,
+  pointer state, map position, selection, pause state, or simulation state.
+- Do not change the thin `tools/Run-AutomationTests.ps1` command wrapper.
+
+## Phase 1: Isolate base-screen observation and comparison
+
+- [ ] Add
+  `src/dwarfspec/automation/base_screen_focus_guard.lua` with injected DFHack
+  GUI dependencies so the behavior is unit-testable without a live game.
+- [ ] Represent each observation as detached data plus a private live screen
+  identity used only for in-process comparison.
+- [ ] Produce stable screen labels without serializing userdata addresses.
+- [ ] Copy and canonicalize focus strings without mutating DFHack-owned
+  tables.
+- [ ] Distinguish `screen_identity_changed`, `focus_changed`, and
+  `verification_unavailable` results.
+- [ ] Format bounded warning details suitable for both terminal output and the
+  structured event journal.
+- [ ] Add LuaDoc comments for every new or changed function, class, and
+  class-like record.
+
+### Phase 1 tests
+
+- [ ] Add `tests/unit/base_screen_focus_guard_spec.lua`.
+- [ ] Prove identical identity and focus produce no change.
+- [ ] Prove a different screen instance with the same type and focus is a
+  screen change.
+- [ ] Prove a changed focus set on the same screen is a focus change.
+- [ ] Prove focus ordering alone is ignored.
+- [ ] Prove returned observations do not retain or expose mutable focus
+  tables.
+- [ ] Prove missing screens, failed GUI calls, and malformed focus values
+  produce bounded verification-unavailable results.
+
+### Phase 1 gate
+
+- [ ] Focused guard unit tests pass.
+- [ ] Full unit suite passes.
+- [ ] Lua syntax and formatting checks pass.
+
+## Phase 2: Place the guard around the complete example lifecycle
+
+- [ ] Split the current combined lifecycle-hook registration in
+  `src/dwarfspec/automation/host.lua` so ordering is explicit.
+- [ ] Register the internal pre-example hook before loading project specs.
+- [ ] In the pre-example hook, run `reset('before example')` first and then
+  capture the initial base-screen focus.
+- [ ] Register the internal post-example hook only after project specs have
+  been discovered and loaded.
+- [ ] Ensure nested and top-level project `after_each` hooks run before the
+  internal post-example hook.
+- [ ] In the post-example hook, run `reset('after example')`, including its
+  cleanup settlement wait, before capturing and comparing final focus.
+- [ ] Retain per-example state only until the post-example comparison
+  completes, including when the example or a project hook fails.
+- [ ] Ensure a failed DwarfSpec reset remains a cleanup error and is not
+  replaced or hidden by focus-warning logic.
+- [ ] Ensure emergency run cleanup and abort paths do not emit a misleading
+  per-example mismatch after the example lifecycle can no longer complete.
+
+### Phase 2 tests
+
+- [ ] Extend `tests/unit/automation_host_spec.lua` to prove pre-hook ordering:
+  DwarfSpec reset, initial capture, project setup, and example.
+- [ ] Prove post-hook ordering: example, project teardown, DwarfSpec reset and
+  mount cleanup, settlement wait, then final capture.
+- [ ] Include top-level and nested project hooks in the ordering proof.
+- [ ] Prove the comparison still runs after ordinary example failure and
+  project teardown failure when Busted continues lifecycle hooks.
+- [ ] Prove mount cleanup occurs before final capture.
+- [ ] Prove reset failure preserves the cleanup error as the authoritative
+  failure.
+
+### Phase 2 gate
+
+- [ ] Focused automation-host unit tests pass.
+- [ ] Existing mount lifecycle and combined example/cleanup failure fixtures
+  remain green.
+- [ ] Full unit suite passes.
+- [ ] Lua syntax and formatting checks pass.
+
+## Phase 3: Add structured nonfatal warning reporting
+
+- [ ] Add a generic immutable `warning.recorded` event identifier in
+  `src/dwarfspec/automation/event_types.lua`.
+- [ ] Define and validate a bounded warning payload in
+  `src/dwarfspec/automation/events.lua` with the example name, warning kind,
+  message, and detached detail content.
+- [ ] Append one stable `WARNING ...` line to retained run logs.
+- [ ] Publish the matching warning event exactly once through the active
+  generation-owned event publisher.
+- [ ] Format warning events in `src/dwarfspec/report.lua` so live CLI output
+  and retained logs clearly identify the affected example.
+- [ ] Keep warnings out of `failure_details` and all success, failure, error,
+  and pending counters.
+- [ ] Preserve `dwarfspec.event.v1`, `dwarfspec.run.v2`, and
+  `dwarfspec.result.v2` validation unless the existing schemas require an
+  explicit compatible extension.
+
+### Phase 3 tests
+
+- [ ] Extend `tests/unit/automation_events_spec.lua` for valid and invalid
+  warning payloads.
+- [ ] Extend `tests/unit/automation_host_spec.lua` for exactly-once warning
+  publication and retained log output.
+- [ ] Extend `tests/unit/process_report_spec.lua` for terminal warning
+  formatting and event ordering before the affected test finishes.
+- [ ] Extend result, schema, runner, and service fixtures wherever their
+  exhaustive event inventories require the new event type.
+- [ ] Prove a warning leaves test totals, terminal state, cleanup confirmation,
+  and process success unchanged.
+- [ ] Prove observation failure emits a verification warning without masking
+  an existing example or cleanup failure.
+
+### Phase 3 gate
+
+- [ ] Focused event, host, report, runner, and schema unit tests pass.
+- [ ] Full unit suite passes.
+- [ ] Lua syntax and formatting checks pass.
+
+## Phase 4: Prove behavior in live DFHack
+
+- [ ] Add a focused live spec named
+  `tests/automation/base_screen_focus_warning_live_spec.lua`.
+- [ ] Capture the test-owned suite baseline and arrange suite-level
+  restoration so warning scenarios cannot pollute DFHack after the focused
+  run.
+- [ ] Prove an example that preserves its base screen and focus emits no
+  warning.
+- [ ] Prove an ordinary mounted widget is automatically unmounted before the
+  final observation and emits no warning.
+- [ ] Prove a mounted overlay widget or complete `gui.ZScreen` does not count
+  as a base-game focus change.
+- [ ] Prove `ds.mountNativeScreen()` attachment cleanup does not dismiss or
+  alter the borrowed base screen and emits no warning by itself.
+- [ ] Navigate through normal public DwarfSpec input to a different base-game
+  window or focus and deliberately leave it there until post-example
+  observation.
+- [ ] Prove that scenario passes, emits exactly one warning with correct
+  before/after details, and still reports `cleanup_confirmed=true`.
+- [ ] Prove restoration performed in a project `after_each` hook suppresses
+  the warning.
+- [ ] Prove the original suite-level base screen and focus are restored after
+  the live fixture completes.
+
+### Phase 4 gate
+
+- [ ] Focused live spec passes with expected warnings and
+  `cleanup_confirmed=true`.
+- [ ] Full live automation suite passes with no unexpected warnings.
+- [ ] Full unit suite passes.
+- [ ] Lua syntax and formatting checks pass.
+- [ ] `git diff --check` passes.
+
+## Phase 5: Document and close the feature
+
+- [ ] Document automatic base-screen focus warnings in
+  `docs/writing-tests.md`, including teardown restoration guidance and mounted
+  component exclusions.
+- [ ] Document warning output and nonfatal exit semantics in
+  `docs/command-line.md`.
+- [ ] Add the feature under `Unreleased` in `CHANGELOG.md`.
+- [ ] Mark the linked Testing Features item in `docs/project.todo` complete
+  only after every implementation and verification gate above is satisfied.
+- [ ] Record focused unit, full unit, focused live, full live, syntax,
+  formatting, process-result, and cleanup evidence below.
+
+## Evidence
+
+- Focused guard unit:
+- Focused host/report unit:
+- Full unit:
+- Focused live:
+- Full live:
+- Lua syntax and formatting:
+- Process result and exit status:
+- Cleanup confirmation:
+- Diff check:
