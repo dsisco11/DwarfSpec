@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `ds.mountNativeScreen()` explicitly creates a non-owning native-screen mount;
+  `ds.mount(component, options)` remains component-only.
+- `ds.redraw(subject, options)` and `Subject:redraw(options)` invalidate the
+  mounted screen and wait for a completed render by default.
+- `Subject:getFocusList()` returns a defensive copy of the mounted screen's
+  DFHack focus strings.
+- `ds.getTick()` returns the current in-year simulation tick, while
+  `ds.getTime()` returns DFHack's millisecond clock.
 - `ds.hasFocus(path)` reports whether the current DFHack focus matches a focus
   path without requiring a mount.
 - `ds.getViewPos()` returns a copy of the current zero-based map-view origin.
@@ -28,7 +36,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   borrowed viewscreen widget root.
 - Native-screen subject commands can use `native_root` as an advanced
   single-root bypass for genuine ambiguity or unsupported DF structures while
-  retaining the mounted viewscreen as their input and render target.
+  retaining the borrowed base viewscreen as their subject and redraw context.
+- Native-screen mounts can select enabled registered overlays through
+  `ds.ESubjectSource`, without taking ownership of the overlay.
+- Live failure output supports `msbuild`, `gcc`, and `eslint` problem formats
+  through `settings.error_format`.
+
+### Changed
+
+- Native subject lookup stays rooted in the borrowed base viewscreen, while
+  keyboard, text, click, physical-button, and wheel input resolves the current
+  top viewscreen immediately before each dispatch.
+- Top-screen transitions no longer stale a native mount or retained subjects
+  by themselves. Widget replacement, structural-root invalidation, and source
+  removal or replacement remain explicit stale-subject failures.
 
 ### Fixed
 

@@ -88,15 +88,17 @@ render, and command failures receive bounded mount, selection, component-tree,
 and screen diagnostics while preserving the original cause.
 
 `ds.mountNativeScreen()` creates a non-owning native-screen mount. It pins the
-current DF viewscreen and its native widget container without showing,
+base native DF viewscreen and its widget container without showing,
 dismissing, or owning a screen. Here, “mount” names the DwarfSpec test
 lifecycle; “native attachment” names its borrowed implementation resource.
 The viewscreen's `widgets` container remains the exact result of `ds.root()`.
 An ordinary native `ds.get(path)` can also resolve complete base-game paths
 rooted at `df.global.game.main_interface`; callers do not select that root.
 `native_root` is reserved for explicit ambiguity resolution and unsupported DF
-structures. Input, redraw, focus, and lifetime validation always remain pinned
-to the attached viewscreen.
+structures. Subject lookup, redraw observation, focus-list access, and lifetime
+validation remain associated with the borrowed base viewscreen. Simulated
+keyboard, text, click, button, and wheel input instead resolves and targets the
+current top viewscreen immediately before each dispatch.
 Native subjects traverse only widget objects exposed by DFHack; pixels and
 procedurally rendered controls do not become subjects. A separately selected
 overlay source borrows an enabled registry widget while dispatch remains owned
@@ -110,10 +112,12 @@ and `ds.unmount()` cleanup operation. `ESubjectSource.NATIVE` and
 hierarchy only within a native-screen mount; they do not select a mount kind.
 
 The native render observer records the post-native-overlay completion boundary
-for wait-by-default redraw. A changed viewscreen makes the attachment and all
-of its subjects stale instead of retargeting them. Cleanup removes observers
-and retained references and restores pointer state while preserving the
-original focus, screen stack, viewscreen, and overlay registration.
+for wait-by-default redraw. A top-screen transition alone does not stale or
+retarget the borrowed subject hierarchy. Retained subjects fail only when
+their widget identity is removed or replaced, their structural root becomes
+invalid, or their selected source is disabled, removed, or replaced. Cleanup
+removes observers and retained references and restores pointer state without
+dismissing, replacing, resizing, or navigating borrowed screens.
 
 ### Native subject resolution
 

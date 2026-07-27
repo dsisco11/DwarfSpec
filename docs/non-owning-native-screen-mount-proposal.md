@@ -3,7 +3,7 @@
 ## Summary
 
 DwarfSpec exposes `ds.mountNativeScreen()` to attach the current run to the
-current native DF viewscreen:
+base native DF viewscreen:
 
 ```lua
 local root = ds.mountNativeScreen()
@@ -40,10 +40,10 @@ dismiss a screen, instantiate a native widget, or take ownership of an overlay.
 
 ## Goals
 
-- Attach to the current native DF viewscreen without creating another screen.
+- Attach to the base native DF viewscreen without creating another screen.
 - Preserve the current viewscreen stack and DFHack focus.
-- Make the attached screen the target for `ds.input()`, `ds.mouseInput()`, and
-  `ds.redraw()`.
+- Keep redraw observation associated with the attached base screen.
+- Resolve the current top viewscreen immediately before each input dispatch.
 - Keep `viewscreen.widgets` as the exact default root for `ds.root()`.
 - Resolve ordinary native `ds.get()` paths from both `viewscreen.widgets` and
   the fixed `df.global.game.main_interface` structural root.
@@ -65,8 +65,6 @@ dismiss a screen, instantiate a native widget, or take ownership of an overlay.
 - Calling native widget callbacks directly instead of using normal screen input.
 - Enabling, disabling, positioning, or otherwise managing registered overlays.
 - Navigating back if test input changes the current native viewscreen.
-- Supporting a DFHack Lua screen that currently owns focus above the native
-  screen.
 - Retaining a no-argument `ds.mount()` overload or compatibility alias.
 
 ## DFHack capabilities
@@ -112,7 +110,7 @@ and liveness need adapter-specific implementations.
 
 ### Native attachment
 
-`ds.mountNativeScreen()` attaches the current native DF viewscreen and returns
+`ds.mountNativeScreen()` attaches the base native DF viewscreen and returns
 a subject for its `widgets` container:
 
 ```lua
@@ -254,7 +252,8 @@ current window bounds.
 
 ### Input and redraw
 
-All input is dispatched through the pinned native viewscreen:
+All input is dispatched through the current top viewscreen at the time of each
+call:
 
 ```lua
 ds.input('SELECT')
@@ -285,7 +284,8 @@ host_screen
     A screen owned by DwarfSpec. Nil for a native mount.
 
 interaction_target
-    The pinned native viewscreen used for input and redraw.
+    The borrowed base viewscreen for non-input operations plus current-screen
+    resolution for input dispatch.
 
 subject_sources
     Query roots and adapters for native and overlay subjects.
@@ -318,8 +318,8 @@ flowchart LR
     NativeResolver --> Subject["adapter-backed subject"]
     OverlaySource --> Subject
 
-    Input["input / mouse / click"] --> Screen
-    Screen --> OverlayFeed["normal overlay feed interpose"]
+    Current["current top viewscreen"] --> Input["input / mouse / click"]
+    Input --> OverlayFeed["normal overlay feed interpose"]
     OverlayFeed --> NativeFeed["native viewscreen feed"]
 
     Redraw["ds.redraw()"] --> Invalidate["dfhack.screen.invalidate()"]
@@ -334,7 +334,8 @@ The internal interaction target should provide:
 
 ```text
 native_screen() -> pinned viewscreen
-assert_current() -> nil or explicit stale-screen error
+input_screen() -> current top viewscreen
+assert_current() -> pinned viewscreen or explicit lifecycle error
 invalidate() -> result
 ```
 
@@ -417,17 +418,18 @@ reacquire the widget from the pinned root before each operation.
 
 Liveness validation follows this order:
 
-1. verify the attached native viewscreen is still current;
+1. verify the native mount and borrowed subject source are still live;
 2. reacquire the widget through the recorded path;
 3. require the resolved widget to equal the captured typed-reference identity;
 4. only then inspect or interact with it.
 
-If a screen transition or UI rebuild replaces a widget at the same path, the
-old subject is stale. DwarfSpec must not silently bind it to the replacement.
-A new `ds.get()` returns a new subject.
+Changing the current top viewscreen does not affect this identity check. If a
+UI rebuild replaces a widget at the same path, the old subject is stale.
+DwarfSpec must not silently bind it to the replacement. A new `ds.get()`
+returns a new subject.
 
 This ordering minimizes the risk of dereferencing a native object after its
-owning screen has changed.
+borrowed source or widget identity has changed.
 
 ### Native bounds
 
@@ -529,45 +531,42 @@ name to the pinned widget. An overlay rescan makes existing subjects stale;
 DwarfSpec must not silently rebind them.
 
 Selecting an overlay subject does not change normal dispatch. Click, input,
-mouse input, and redraw still go through the pinned native screen.
+and mouse input resolve the current top viewscreen, while redraw remains
+associated with the borrowed base screen.
 
 ### Acquiring the native screen
 
 At attachment:
 
-1. read `dfhack.gui.getCurViewscreen(true)`;
-2. read `dfhack.gui.getDFViewscreen(true)`;
-3. require both calls to identify the same viewscreen;
-4. require a valid `widgets` container;
-5. capture the exact viewscreen identity and widget root;
-6. install render observation;
-7. invalidate once and wait for one completed render.
+1. read `dfhack.gui.getDFViewscreen(true)`;
+2. require a valid `widgets` container;
+3. capture the exact base viewscreen identity and widget root;
+4. install render observation;
+5. invalidate once and wait for one completed render.
 
-Requiring current-screen identity prevents DwarfSpec from bypassing a DFHack
-Lua screen that currently owns focus.
-
-The viewscreen remains pinned for the mount lifetime. If normal input changes
-screens, subsequent operations fail and ask the test to unmount and attach
-again. Cleanup must not navigate back.
+The base viewscreen remains pinned for subject lookup throughout the mount.
+A different current top screen is allowed and becomes the next input target.
+Cleanup must not dismiss or navigate either screen.
 
 ### Normal input dispatch
 
 Input is sent through:
 
 ```lua
-gui.simulateInput(attached_native_screen, keys)
+gui.simulateInput(dfhack.gui.getCurViewscreen(true), keys)
 ```
 
-DFHack's overlay plugin receives input through its normal viewscreen
-interposition before unhandled input reaches the base game. DwarfSpec must not
-call a native widget callback or overlay `onInput()` directly.
+The current target is resolved again immediately before every simulated input
+call. DFHack's normal screen and overlay handling controls consumption and
+pass-through. DwarfSpec must not call a native widget callback or overlay
+`onInput()` directly.
 
 Subject clicks:
 
 1. resolve and validate the subject;
 2. calculate the selected point from normalized bounds;
 3. set the virtual pointer through the existing pointer adapter;
-4. dispatch the mouse key through the attached native viewscreen;
+4. dispatch the mouse key through the current top viewscreen;
 5. wait for completed rendering by default.
 
 This produces the same routing order as real player input.
@@ -675,7 +674,7 @@ No native screen or widget dismissal action is registered.
 
 Add focused modules for:
 
-- native viewscreen attachment and current-screen validation;
+- base native viewscreen attachment and dynamic input-screen resolution;
 - native widget traversal and identity;
 - declared `main_interface` field traversal and dual-root resolution;
 - native bounds and state inspection;
@@ -709,8 +708,8 @@ controller.
 
 The implementation should produce explicit errors for:
 
-- no current native DF viewscreen;
-- a DFHack Lua screen currently owning focus;
+- no base native DF viewscreen;
+- an unavailable current input viewscreen at dispatch time;
 - a native screen without a valid widget root;
 - a missing native name or index path segment;
 - a missing or unsupported declared game-UI field;
@@ -721,7 +720,6 @@ The implementation should produce explicit errors for:
 - a requested overlay that is missing or disabled;
 - a native or overlay widget replaced at the same path;
 - a retained widget removed from its pinned root;
-- the attached viewscreen no longer being current;
 - a subject without usable on-screen bounds for pointer interaction;
 - coordinates outside the current window;
 - unavailable native render observation;
@@ -738,8 +736,9 @@ Unit coverage should prove:
 - `ds.mountNativeScreen()` selects native attachment without component
   classification;
 - no `ZScreen` is constructed, shown, resized, or dismissed;
-- the current native viewscreen and focus remain unchanged;
-- a DFHack Lua screen above the native screen causes explicit rejection;
+- the base native viewscreen and focus remain unchanged;
+- a DFHack Lua screen above the native screen is allowed and receives input
+  while it remains current;
 - `ds.root():raw()` returns the exact native `widgets` container;
 - native paths resolve named and zero-based indexed children;
 - names containing `/` work through segment-array paths;
@@ -758,20 +757,20 @@ Unit coverage should prove:
 - replacement and removal make retained subjects stale;
 - overlay lookup returns the exact registry widget through the Lua adapter;
 - source selection uses only immutable enum values;
-- native and overlay subject clicks route through the pinned native screen;
+- native and overlay subject clicks route through the current top viewscreen;
 - arbitrary coordinate pointer placement reaches pointer and GPS state;
 - click, down, up, and wheel inputs use the selected pointer position;
 - redraw waits only for completed rendering of the pinned screen;
 - `{wait=false}` invalidates without waiting;
-- a screen transition rejects further operations without navigation;
+- top-screen transitions preserve retained subjects and retarget later input;
 - pointer, button, subject, and render state restore on unmount and injected
   failure;
 - cleanup evidence reports zero DwarfSpec-owned screens for a native mount.
 
 A live DFHack test should:
 
-1. capture the current viewscreen, widget root, focus strings, screen stack, and
-   pointer state;
+1. capture the base native viewscreen, current top viewscreen, widget root,
+   focus strings, screen stack, and pointer state;
 2. attach with `ds.mountNativeScreen()`;
 3. prove `ds.root():raw()` is the exact native widget root;
 4. resolve named and indexed direct viewscreen controls through `ds.get()`;
@@ -831,7 +830,7 @@ additional source layered over the native screen, not a replacement for
 ### Call native widget callbacks directly
 
 Direct callbacks bypass normal focus, overlay priority, mouse state, and native
-input fall-through. Subjects must drive the pinned viewscreen through
+input fall-through. Subjects must drive the current top viewscreen through
 `gui.simulateInput()`.
 
 ### Silently rebind replaced widgets

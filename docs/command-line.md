@@ -105,12 +105,18 @@ can identify the complete executable path instead of its containing directory.
 ## Live component commands
 
 Every supported component category uses `ds.mount(component, options)` inside
-the live Busted coroutine. `ds.get(control_path)` walks the one implicit current
-mount through direct child IDs and returns a fluent subject; `ds.unmount()`
-removes that mount early when a test needs explicit teardown. Normal interaction
-commands do not take a fixture root, screen, or raw view.
+the live Busted coroutine. Borrowed base-game UI uses the separate
+`ds.mountNativeScreen()` entry point. `ds.get(control_path)` selects an exact
+source-specific path from the one implicit current mount and returns a fluent
+subject; `ds.unmount()` removes that mount early when a test needs explicit
+teardown. Normal interaction commands do not take a fixture root, screen, or
+raw view.
 
 `ds.mount` supports ordinary widgets, overlay widgets, and complete screens.
+It requires a component and does not have a no-argument native-screen
+overload. `ds.mountNativeScreen()` borrows native widgets for lookup while
+input is dispatched through the current top viewscreen at the time of each
+input call.
 `ds.stage_overlay_registration` is reserved for distinctly named and
 explicitly selected tests of real DFHack overlay discovery and persisted
 configuration. See [Writing live tests](writing-tests.md) for the complete

@@ -234,11 +234,11 @@ callers do not pass a root or screen.
 
 ## Borrowed native game screens
 
-Call `ds.mountNativeScreen()` to create a native-screen mount for the current
+Call `ds.mountNativeScreen()` to create a native-screen mount for the base
 native DF viewscreen. Its implementation uses a non-owning native attachment:
 DwarfSpec does not create or show a `ZScreen`, change DFHack focus, alter the
 screen stack, or dismiss the borrowed screen. The returned root subject wraps
-the exact native widget container exposed by the current viewscreen.
+the exact native widget container exposed by that base viewscreen.
 
 By contrast, `ds.mount(component, options)` creates an owned component mount.
 Both commands share one current mount and are released with `ds.unmount()`.
@@ -344,9 +344,10 @@ local tree = ds.capture_view_tree('deceased-controls', {
 })
 ```
 
-The explicit root changes only subject resolution. Input, mouse input, redraw,
-focus validation, and lifetime checks still target the native viewscreen
-pinned by `ds.mountNativeScreen()`.
+The explicit root changes only subject resolution. Redraw observation,
+focus-list access, and lifetime checks remain associated with the base
+viewscreen borrowed by `ds.mountNativeScreen()`. Input and mouse input resolve
+the current top viewscreen immediately before each dispatch.
 
 The path array itself uses ordinary one-based Lua array positions; integer
 segments after widget traversal begins are zero-based native child indices.
@@ -383,9 +384,11 @@ An overlay subject becomes stale if its registered instance is disabled,
 removed, or replaced. Overlay subjects expose their Lua view tables through
 `subject:raw()`; they do not become native DF userdata.
 
-Native and overlay subjects use the same interaction API. Subject input is
-sent through the pinned native viewscreen, while overlay rendering and input
-continue through DFHack's normal overlay registry:
+Native and overlay subjects use the same interaction API. Subject lookup stays
+rooted in the borrowed base hierarchy, while keyboard, text, click, physical
+button, and wheel input is sent through the current top viewscreen. DFHack's
+normal overlay routing decides whether that input is consumed or passed
+through:
 
 ```lua
 ds.get('menu'):input('SELECT')
@@ -408,14 +411,16 @@ button state captured at attachment during cleanup. `ds.viewport()` is
 intentionally unavailable because DwarfSpec does not own or resize the native
 game window.
 
-The attached viewscreen and native widget hierarchy are pinned. If game input,
-a script, or another system changes the current viewscreen, subsequent subject
-inspection, input, pointer movement, capture, or redraw fails with an explicit
-stale-screen error. DwarfSpec never follows the transition or navigates back.
-Call `ds.unmount()`, establish the desired game screen, and call
-`ds.mountNativeScreen()` again to create a new native attachment.
+The base native viewscreen and widget hierarchy remain pinned for subject
+lookup. Showing or dismissing another screen does not by itself stale the
+mount or its subjects, and later input follows the new current top viewscreen
+without remounting. DwarfSpec does not replay unhandled input or navigate the
+screen stack; normal DFHack handling controls consumption and pass-through.
+A retained subject becomes stale only when its widget is removed or replaced,
+its structural root becomes invalid, or its selected source is disabled,
+removed, or replaced.
 
-Attachment also fails explicitly when there is no current native viewscreen,
+Attachment also fails explicitly when there is no base native viewscreen,
 the viewscreen has no usable widget container, or render observation cannot be
 installed. Invalid source options, unresolved paths, unusable subject bounds,
 and out-of-window pointer coordinates likewise report the rejected operation
