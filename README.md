@@ -219,8 +219,8 @@ frames is itself part of the behavior being tested.
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
 | `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
-| `ds.getViewPos()` | Return a copy of the current zero-based map-view origin. |
-| `ds.setViewPos({x=..., y=..., z=...})` | Set the zero-based map-view origin for the example; cleanup restores the original position. |
+| `ds.getViewPos(origin)` | Return the map tile aligned with an `EScreenOrigin`; defaults to `CENTER`. |
+| `ds.setViewPos({x=..., y=..., z=...}, origin)` | Align a map tile with an `EScreenOrigin`; defaults to `CENTER`, and cleanup restores the original view. |
 | `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject. |
 | `ds.mountNativeScreen()` | Attach non-owningly to the base native DF viewscreen and return its widget-root subject. |
 | `ds.root(options)` | Return the selected native, registered-overlay, or component root subject. |
@@ -276,6 +276,21 @@ cleanup.
 
 See [Writing live tests](docs/writing-tests.md) for owned-component, borrowed
 native-screen, and external-overlay contracts.
+
+### Map-view screen origins
+
+`ds.getViewPos()` and `ds.setViewPos()` default to `CENTER`. Pass a
+`ds.EScreenOrigin` value to address another point in the visible map viewport:
+
+```lua
+local center = ds.getViewPos()
+ds.setViewPos({x=120, y=85, z=14})
+ds.setViewPos({x=0, y=0, z=14}, ds.EScreenOrigin.TOP_LEFT)
+```
+
+The enum exposes `TOP_LEFT`, `TOP`, `TOP_RIGHT`, `LEFT`, `CENTER`, `RIGHT`,
+`BOTTOM_LEFT`, `BOTTOM`, and `BOTTOM_RIGHT`. Center offsets match DFHack's
+viewport convention: `floor(width/2)` and `floor(height/2)`.
 
 ## Project configuration and custom commands
 

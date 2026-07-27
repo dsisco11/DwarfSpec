@@ -168,6 +168,13 @@ describe('DwarfSpec consumer extensions', function()
             'ds.EPointerSpace')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={EScreenOrigin=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.EScreenOrigin')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={redraw=function() end},
         }
         assert.has_error(function() extensions.load(descriptor, loader) end,

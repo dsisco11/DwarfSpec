@@ -121,6 +121,8 @@ local EInputState = load_automation_module(package_root,
     'dwarfspec.input_states', '/src/dwarfspec/input_states.lua')
 local EPointerSpace = load_automation_module(package_root,
     'dwarfspec.pointer_spaces', '/src/dwarfspec/pointer_spaces.lua')
+local EScreenOrigin = load_automation_module(package_root,
+    'dwarfspec.screen_origins', '/src/dwarfspec/screen_origins.lua')
 local ESubjectSource = load_automation_module(package_root,
     'dwarfspec.subject_sources', '/src/dwarfspec/subject_sources.lua')
 local EventType = load_automation_module(package_root,
@@ -187,6 +189,14 @@ local TestStatus = load_automation_module(package_root,
                 global.window_y = y
                 global.window_z = z
                 return true
+            end,
+        get_map_view_dimensions=
+            mount_dependencies.get_map_view_dimensions or function()
+                local gui = assert(dfhack and dfhack.gui,
+                    'DwarfSpec requires dfhack.gui for map-view dimensions')
+                assert(type(gui.getDwarfmodeViewDims) == 'function',
+                    'DwarfSpec requires dfhack.gui.getDwarfmodeViewDims')
+                return gui.getDwarfmodeViewDims()
             end,
         map_view_cleanup_entry=nil,
     }
@@ -498,6 +508,7 @@ local TestStatus = load_automation_module(package_root,
         EMouseButton=EMouseButton,
         EInputState=EInputState,
         EPointerSpace=EPointerSpace,
+        EScreenOrigin=EScreenOrigin,
         ESubjectSource=ESubjectSource,
     }
 
@@ -847,25 +858,80 @@ local TestStatus = load_automation_module(package_root,
         return focused
     end
 
-    ---Returns a copy of the current map-view origin.
+    local screen_origin_axes = {
+        [EScreenOrigin.TOP_LEFT]={'start', 'start'},
+        [EScreenOrigin.TOP]={'center', 'start'},
+        [EScreenOrigin.TOP_RIGHT]={'finish', 'start'},
+        [EScreenOrigin.LEFT]={'start', 'center'},
+        [EScreenOrigin.CENTER]={'center', 'center'},
+        [EScreenOrigin.RIGHT]={'finish', 'center'},
+        [EScreenOrigin.BOTTOM_LEFT]={'start', 'finish'},
+        [EScreenOrigin.BOTTOM]={'center', 'finish'},
+        [EScreenOrigin.BOTTOM_RIGHT]={'finish', 'finish'},
+    }
+
+    ---Returns one axis offset for a viewport anchor.
+    ---@param anchor string
+    ---@param size integer
+    ---@return integer
+    local function screen_origin_axis_offset(anchor, size)
+        if anchor == 'start' then return 0 end
+        if anchor == 'center' then return math.floor(size / 2) end
+        return size - 1
+    end
+
+    ---Returns the map-tile offset for one screen origin.
+    ---@param origin DwarfSpecEScreenOrigin|nil
+    ---@return integer, integer
+    local function screen_origin_offset(origin)
+        origin = origin or EScreenOrigin.CENTER
+        local axes = screen_origin_axes[origin]
+        assert(axes,
+            'screen origin must be a ds.EScreenOrigin value')
+        if origin == EScreenOrigin.TOP_LEFT then return 0, 0 end
+        local ok, dimensions = pcall(context.get_map_view_dimensions)
+        assert(ok,
+            'DwarfSpec could not query the current map-view dimensions: ' ..
+                tostring(dimensions))
+        assert(type(dimensions) == 'table',
+            'DFHack returned invalid map-view dimensions')
+        for _, field in ipairs({'map_x1', 'map_x2', 'map_y1', 'map_y2'}) do
+            local value = dimensions[field]
+            assert(type(value) == 'number' and value % 1 == 0,
+                'DFHack returned invalid map-view dimensions')
+        end
+        local width = dimensions.map_x2 - dimensions.map_x1 + 1
+        local height = dimensions.map_y2 - dimensions.map_y1 + 1
+        assert(width > 0 and height > 0,
+            'DFHack returned invalid map-view dimensions')
+        return screen_origin_axis_offset(axes[1], width),
+            screen_origin_axis_offset(axes[2], height)
+    end
+
+    ---Returns the map tile aligned with one origin in the current view.
+    ---@param origin DwarfSpecEScreenOrigin|nil
     ---@return dwarfspec.MapViewPosition
-    function ds.getViewPos()
+    function ds.getViewPos(origin)
+        local offset_x, offset_y = screen_origin_offset(origin)
         local ok, x, y, z = pcall(context.get_map_view_position)
         assert(ok, 'DwarfSpec could not query the current map-view position: ' ..
             tostring(x))
-        for axis, value in pairs({x=x, y=y, z=z}) do
-            assert(type(value) == 'number' and value % 1 == 0 and
-                    value >= 0,
+        for axis, value in pairs({x=x, y=y}) do
+            assert(type(value) == 'number' and value % 1 == 0,
                 ('DFHack returned an invalid map-view %s coordinate: %s')
                     :format(axis, tostring(value)))
         end
-        return {x=x, y=y, z=z}
+        assert(type(z) == 'number' and z % 1 == 0 and z >= 0,
+            ('DFHack returned an invalid map-view z coordinate: %s')
+                :format(tostring(z)))
+        return {x=x + offset_x, y=y + offset_y, z=z}
     end
 
-    ---Sets the map-view origin and restores its original position after the example.
+    ---Aligns one map tile with a screen origin for the current example.
     ---@param position table
+    ---@param origin DwarfSpecEScreenOrigin|nil
     ---@return table
-    function ds.setViewPos(position)
+    function ds.setViewPos(position, origin)
         assert(type(position) == 'table',
             'map-view position must be a table with x, y, and z coordinates')
         for _, axis in ipairs({'x', 'y', 'z'}) do
@@ -874,8 +940,9 @@ local TestStatus = load_automation_module(package_root,
                 ('map-view %s coordinate must be a nonnegative integer')
                     :format(axis))
         end
+        local offset_x, offset_y = screen_origin_offset(origin)
         if context.map_view_cleanup_entry == nil then
-            local original = ds.getViewPos()
+            local original = ds.getViewPos(EScreenOrigin.TOP_LEFT)
             context.map_view_cleanup_entry = cleanup_module.push(
                 cleanup_registry, 'restore map-view position', function()
                     local restored = context.set_map_view_position(
@@ -886,7 +953,7 @@ local TestStatus = load_automation_module(package_root,
                 end)
         end
         local ok, accepted = pcall(context.set_map_view_position,
-            position.x, position.y, position.z)
+            position.x - offset_x, position.y - offset_y, position.z)
         assert(ok, 'DwarfSpec could not set the map-view position: ' ..
             tostring(accepted))
         assert(accepted ~= false,

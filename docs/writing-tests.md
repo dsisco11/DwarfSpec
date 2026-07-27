@@ -214,6 +214,17 @@ location. A map tile is not a UI-grid cell or a screen pixel; map-view
 coordinates such as `ds.getViewPos()` describe map tiles and are not accepted
 as pointer coordinates.
 
+Map-view coordinates can be read or positioned at any viewport anchor:
+
+```lua
+local center = ds.getViewPos(ds.EScreenOrigin.CENTER)
+ds.setViewPos(center, ds.EScreenOrigin.BOTTOM_RIGHT)
+```
+
+Omitting the origin selects `CENTER`. Available origins are
+`TOP_LEFT`, `TOP`, `TOP_RIGHT`, `LEFT`, `CENTER`, `RIGHT`, `BOTTOM_LEFT`,
+`BOTTOM`, and `BOTTOM_RIGHT`.
+
 DwarfSpec reads the effective renderer geometry for every pointer move. This
 tracks runtime UI-scale, resolution, and window changes; a configured scaling
 preference is not treated as the current conversion geometry. Grid input is

@@ -15,6 +15,7 @@ local EventType = require('dwarfspec.automation.event_types')
 local EMouseButton = require('dwarfspec.mouse_buttons')
 local EInputState = require('dwarfspec.input_states')
 local EPointerSpace = require('dwarfspec.pointer_spaces')
+local EScreenOrigin = require('dwarfspec.screen_origins')
 local EFieldMode =
     require('dwarfspec.native_game_ui_path').EFieldMode
 local TestStatus = require('dwarfspec.automation.test_statuses')
@@ -84,6 +85,8 @@ describe('DwarfSpec public mount commands', function()
     local focus_match_queries
     local dfhack_time
     local map_view_position
+    local map_view_dimensions
+    local map_view_dimensions_failure
     local map_view_get_failure
     local map_view_set_failure
     local original_native_render_dispatcher
@@ -172,6 +175,13 @@ describe('DwarfSpec public mount commands', function()
         focus_match_queries = {}
         dfhack_time = 67890
         map_view_position = {x=12, y=34, z=5}
+        map_view_dimensions = {
+            map_x1=3,
+            map_x2=12,
+            map_y1=4,
+            map_y2=10,
+        }
+        map_view_dimensions_failure = nil
         map_view_get_failure = nil
         map_view_set_failure = nil
         native_render_failure = nil
@@ -365,6 +375,12 @@ describe('DwarfSpec public mount commands', function()
                     end
                     map_view_position = {x=x, y=y, z=z}
                     return true
+                end,
+                get_map_view_dimensions=function()
+                    if map_view_dimensions_failure then
+                        error(map_view_dimensions_failure, 0)
+                    end
+                    return map_view_dimensions
                 end,
                 native_viewscreen=function() return native_df_screen end,
                 is_native_widget_root=function(root)
@@ -1913,15 +1929,19 @@ describe('DwarfSpec public mount commands', function()
             'DwarfSpec type' .. suffix)
     end)
 
-    it('sets and restores the current map-view position without a mount',
+    it('sets and restores screen-anchored map-view positions without a mount',
             function()
         assert.same({x=40, y=50, z=6},
             ds.setViewPos({x=40, y=50, z=6}))
-        assert.same({x=40, y=50, z=6}, map_view_position)
+        assert.same({x=35, y=47, z=6}, map_view_position)
+        assert.same({x=40, y=50, z=6}, ds.getViewPos())
         assert.is_true(run.mount_cleanup_probe().map_view_position_active)
 
-        ds.setViewPos({x=41, y=52, z=7})
+        assert.same({x=41, y=52, z=7},
+            ds.setViewPos({x=41, y=52, z=7}, EScreenOrigin.TOP_LEFT))
         assert.same({x=41, y=52, z=7}, map_view_position)
+        assert.same({x=41, y=52, z=7},
+            ds.getViewPos(EScreenOrigin.TOP_LEFT))
         assert.equals(1, cleanup.pending_count(registry))
 
         reset('map-view position example cleanup')
@@ -1931,13 +1951,49 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('gets every map-view screen origin with DFHack-compatible offsets',
+            function()
+        local expected = {
+            [EScreenOrigin.TOP_LEFT]={x=12, y=34, z=5},
+            [EScreenOrigin.TOP]={x=17, y=34, z=5},
+            [EScreenOrigin.TOP_RIGHT]={x=21, y=34, z=5},
+            [EScreenOrigin.LEFT]={x=12, y=37, z=5},
+            [EScreenOrigin.CENTER]={x=17, y=37, z=5},
+            [EScreenOrigin.RIGHT]={x=21, y=37, z=5},
+            [EScreenOrigin.BOTTOM_LEFT]={x=12, y=40, z=5},
+            [EScreenOrigin.BOTTOM]={x=17, y=40, z=5},
+            [EScreenOrigin.BOTTOM_RIGHT]={x=21, y=40, z=5},
+        }
+
+        for origin, position in pairs(expected) do
+            assert.same(position, ds.getViewPos(origin))
+        end
+        assert.same(expected[EScreenOrigin.CENTER], ds.getViewPos())
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('preserves negative raw origins when anchoring an edge map tile',
+            function()
+        local target = {x=1, y=2, z=3}
+
+        assert.same(target, ds.setViewPos(target, EScreenOrigin.CENTER))
+        assert.same({x=-4, y=-1, z=3}, map_view_position)
+        assert.same(target, ds.getViewPos(EScreenOrigin.CENTER))
+        assert.same(target, ds.getViewPos())
+        assert.same({x=-4, y=-1, z=3},
+            ds.getViewPos(EScreenOrigin.TOP_LEFT))
+
+        reset('edge map-view position example cleanup')
+        assert.same({x=12, y=34, z=5}, map_view_position)
+    end)
+
     it('gets a copied current map-view position without scheduling cleanup',
             function()
         local position = ds.getViewPos()
 
-        assert.same({x=12, y=34, z=5}, position)
+        assert.same({x=17, y=37, z=5}, position)
         position.x = 99
-        assert.same({x=12, y=34, z=5}, ds.getViewPos())
+        assert.same({x=17, y=37, z=5}, ds.getViewPos())
         assert.equals(0, cleanup.pending_count(registry))
         assert.is_false(run.mount_cleanup_probe().map_view_position_active)
 
@@ -1976,6 +2032,21 @@ describe('DwarfSpec public mount commands', function()
             end, case.expected)
         end
         assert.equals(0, cleanup.pending_count(registry))
+
+        assert.has_error(function()
+            ds.getViewPos('middle')
+        end, 'screen origin must be a ds.EScreenOrigin value')
+        assert.has_error(function()
+            ds.setViewPos({x=1, y=2, z=3}, 'middle')
+        end, 'screen origin must be a ds.EScreenOrigin value')
+
+        map_view_dimensions_failure =
+            'injected map-view dimensions failure'
+        assert.has_error(function()
+            ds.getViewPos(EScreenOrigin.CENTER)
+        end, 'DwarfSpec could not query the current map-view dimensions: ' ..
+            'injected map-view dimensions failure')
+        map_view_dimensions_failure = nil
 
         map_view_set_failure = 'injected map-view setter failure'
         local ok, failure = pcall(ds.setViewPos,
@@ -2061,6 +2132,10 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(EInputState.CLICK, ds.EInputState.CLICK)
         assert.equals(EPointerSpace.GRID, ds.EPointerSpace.GRID)
         assert.equals(EPointerSpace.PIXELS, ds.EPointerSpace.PIXELS)
+        assert.equals(EScreenOrigin.TOP_LEFT, ds.EScreenOrigin.TOP_LEFT)
+        assert.equals(EScreenOrigin.CENTER, ds.EScreenOrigin.CENTER)
+        assert.equals(EScreenOrigin.BOTTOM_RIGHT,
+            ds.EScreenOrigin.BOTTOM_RIGHT)
         assert.is_nil(ds.EMouseInput)
         assert.has_error(function()
             ds.mouseInput(EMouseButton.LEFT)

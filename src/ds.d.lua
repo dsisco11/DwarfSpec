@@ -33,6 +33,17 @@
 ---A pointer coordinate space obtained from `ds.EPointerSpace`.
 ---@alias dwarfspec.EPointerSpace dwarfspec.GridPointerSpace|dwarfspec.PixelPointerSpace
 
+---@alias dwarfspec.EScreenOrigin
+---| 'top_left'
+---| 'top'
+---| 'top_right'
+---| 'left'
+---| 'center'
+---| 'right'
+---| 'bottom_left'
+---| 'bottom'
+---| 'bottom_right'
+
 ---@alias dwarfspec.ESubjectSource
 ---| 'native'
 ---| 'overlay'
@@ -59,6 +70,18 @@
 ---@class dwarfspec.EPointerSpaceEnum
 ---@field GRID dwarfspec.GridPointerSpace Zero-based UI-grid cells; the default.
 ---@field PIXELS dwarfspec.PixelPointerSpace Exact zero-based screen pixels.
+
+---Immutable map viewport anchors used by `getViewPos()` and `setViewPos()`.
+---@class dwarfspec.EScreenOriginEnum
+---@field TOP_LEFT `top_left`
+---@field TOP `top`
+---@field TOP_RIGHT `top_right`
+---@field LEFT `left`
+---@field CENTER `center`
+---@field RIGHT `right`
+---@field BOTTOM_LEFT `bottom_left`
+---@field BOTTOM `bottom`
+---@field BOTTOM_RIGHT `bottom_right`
 
 ---Immutable identifiers for inspectable native and registered-overlay sources.
 ---@class dwarfspec.ESubjectSourceEnum
@@ -95,8 +118,8 @@
 ---@field height integer
 
 ---@class dwarfspec.MapViewPosition
----@field x integer Zero-based map tile at the left edge of the view.
----@field y integer Zero-based map tile at the top edge of the view.
+---@field x integer Map-tile x coordinate at the selected screen origin.
+---@field y integer Map-tile y coordinate at the selected screen origin.
 ---@field z integer Zero-based map z-level.
 
 ---@class dwarfspec.OverlayPosition
@@ -210,6 +233,7 @@ function Subject:raw() end
 ---@field EMouseButton dwarfspec.EMouseButtonEnum
 ---@field EInputState dwarfspec.EInputStateEnum
 ---@field EPointerSpace dwarfspec.EPointerSpaceEnum
+---@field EScreenOrigin dwarfspec.EScreenOriginEnum
 ---@field ESubjectSource dwarfspec.ESubjectSourceEnum
 local DS = {}
 
@@ -240,15 +264,19 @@ function DS.getTime() end
 ---@return boolean
 function DS.hasFocus(path) end
 
----Returns a copy of the current zero-based map-view origin.
+---Returns the map tile aligned with the selected screen origin.
+---The origin defaults to `EScreenOrigin.CENTER`.
+---@param origin? dwarfspec.EScreenOrigin
 ---@return dwarfspec.MapViewPosition
-function DS.getViewPos() end
+function DS.getViewPos(origin) end
 
----Sets the map-view origin for the current example.
+---Aligns one map tile with the selected screen origin for the current example.
+---The origin defaults to `EScreenOrigin.CENTER`.
 ---The original position is restored automatically during example cleanup.
 ---@param position dwarfspec.MapViewPosition
+---@param origin? dwarfspec.EScreenOrigin
 ---@return dwarfspec.MapViewPosition
-function DS.setViewPos(position) end
+function DS.setViewPos(position, origin) end
 
 ---Mounts one owned component or complete screen.
 ---@param component any

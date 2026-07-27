@@ -19,10 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ds.getTime()` returns DFHack's millisecond clock.
 - `ds.hasFocus(path)` reports whether the current DFHack focus matches a focus
   path without requiring a mount.
-- `ds.getViewPos()` returns a copy of the current zero-based map-view origin.
-- `ds.setViewPos({x=..., y=..., z=...})` controls the zero-based map-view
-  origin and automatically restores the example's original position during
-  cleanup.
+- `ds.EScreenOrigin` lets `ds.getViewPos(origin)` and
+  `ds.setViewPos(position, origin)` address the top, center, bottom, left,
+  right, and corner anchors of the visible map viewport. Omitting the origin
+  selects `CENTER`, and cleanup restores the exact original raw view.
 - `ds.EPointerSpace` and the optional `ds.move_pointer(x, y, space)` and
   `ds.hover(x, y, space)` overloads support exact screen-pixel positioning
   while preserving existing UI-grid calls.

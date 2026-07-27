@@ -1,6 +1,6 @@
 -- Live acceptance for map-view positioning through the public ds command.
 
----Returns the current zero-based map-view origin from DFHack global state.
+---Returns the raw zero-based top-left map-view origin from DFHack state.
 ---@return dwarfspec.MapViewPosition
 local function current_view_position()
     return {
@@ -10,7 +10,7 @@ local function current_view_position()
     }
 end
 
----Returns a valid map-view origin distinct from the supplied position.
+---Returns a valid map tile distinct from the supplied position.
 ---@param position dwarfspec.MapViewPosition
 ---@return dwarfspec.MapViewPosition
 local function alternate_view_position(position)
@@ -30,22 +30,48 @@ local function alternate_view_position(position)
 end
 
 describe('map-view position command', function()
-    it('moves the live map view and preserves automatic restoration ownership',
+    it('aligns live map tiles to screen origins and owns exact restoration',
             function()
         assert.is_true(dfhack.isMapLoaded(),
             'map-view acceptance requires a loaded map')
-        local original = ds.getViewPos()
+        local original = ds.getViewPos(ds.EScreenOrigin.TOP_LEFT)
         assert.same(original, current_view_position())
-        local target = alternate_view_position(original)
+        local dimensions = dfhack.gui.getDwarfmodeViewDims()
+        local width = dimensions.map_x2 - dimensions.map_x1 + 1
+        local height = dimensions.map_y2 - dimensions.map_y1 + 1
+        assert.is_true(width > 0 and height > 0,
+            'map-view acceptance requires positive map viewport dimensions')
+        local center_offset = {
+            x=math.floor(width / 2),
+            y=math.floor(height / 2),
+        }
+        local current_center = {
+            x=original.x + center_offset.x,
+            y=original.y + center_offset.y,
+            z=original.z,
+        }
+        assert.same(current_center,
+            ds.getViewPos(ds.EScreenOrigin.CENTER))
+        assert.same(current_center, ds.getViewPos())
+        local target = alternate_view_position(current_center)
+        local expected_raw = {
+            x=target.x - center_offset.x,
+            y=target.y - center_offset.y,
+            z=target.z,
+        }
 
         assert.same(target, ds.setViewPos(target))
+        assert.same(target, ds.getViewPos(ds.EScreenOrigin.CENTER))
         assert.same(target, ds.getViewPos())
-        assert.same(target, current_view_position())
+        assert.same(expected_raw,
+            ds.getViewPos(ds.EScreenOrigin.TOP_LEFT))
+        assert.same(expected_raw, current_view_position())
+        assert.same({
+            x=expected_raw.x + width - 1,
+            y=expected_raw.y + height - 1,
+            z=expected_raw.z,
+        }, ds.getViewPos(ds.EScreenOrigin.BOTTOM_RIGHT))
         assert.is_true(ds.current_run().mount_cleanup_probe()
             .map_view_position_active)
-
-        assert.same(original, ds.setViewPos(original))
-        assert.same(original, ds.getViewPos())
-        assert.same(original, current_view_position())
     end)
 end)
