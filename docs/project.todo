@@ -12,6 +12,9 @@ Frontend:
     ☐ test-runner UI should have the ability to click through command log items and see the snapshots of the component tree at that point in time.
 
 Testing Features:
+    ☐ DwarfSpec should detect what the initial screen focus is and at the end of a test it should automatically detect if the test is leaving the screen focus on a different base-game widnow than it started, and if so, it should log a warning.
+        Things which are explicitly MOUNTED by a test dont count, this detection and warning must occur after the normal test teardown and unmounting of any mounted components.
+    ☐ Explore possible ways to prevent user keyboard/mouse input from interfering with the test runner, such as a "lock" mode that prevents user input while tests are running.
     ☐ Refactor `ds.get()` so it is more like a Cypress get assertion, returning a `DSQuery` object that can be chained with `.should(...)` and `.find(...)` methods.
         - get method will become more of an async query with a timeout.
         - get method acts as an implicit assertion.
