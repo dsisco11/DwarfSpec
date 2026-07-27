@@ -233,12 +233,22 @@ The following old tasks are no longer required:
 Extend `tests/automation/overlay_widget_mount_live_spec.lua` only at behavior
 boundaries not already covered by the ordinary Lua adapter proof.
 
-- [ ] Use a real editable/focusable overlay control to prove the overlay input
+- [x] Use a real editable/focusable overlay control to prove the overlay input
   ingress with one top-level keyboard route and one fluent text-entry route.
-- [ ] Prove physical left click, down, and up through `ds.mouseInput()`; retain
+- [x] Prove physical left click, down, and up through `ds.mouseInput()`; retain
   the existing wheel handled/fallthrough proof.
-- [ ] Assert exact focus restoration, overlay cleanup, and unaffected backing
+- [x] Assert exact focus restoration, overlay cleanup, and unaffected backing
   input after the added cases.
+
+Evidence (2026-07-27):
+
+- `.\tools\Run-AutomationTests.ps1 --test-glob
+  tests/automation/overlay_widget_mount_live_spec.lua` passed 5/5 with
+  `cleanup_confirmed=true`.
+- `.\tools\Run-AutomationTests.ps1` passed 35/35 with
+  `cleanup_confirmed=true`.
+- `.\tools\Run-UnitTests.ps1` passed 452/452.
+- `.\tools\Check-Lua.ps1` passed syntax and formatting for 235 Lua files.
 
 ### Phase 4: complete screen
 

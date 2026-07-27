@@ -53,6 +53,44 @@ function MouseInputBacking:onInput(keys)
     return MouseInputBacking.super.onInput(self, keys)
 end
 
+---@class tests.OverlayInputBacking: gui.ZScreen
+local OverlayInputBacking = defclass(nil, gui.ZScreen)
+OverlayInputBacking.ATTRS{
+    focus_path='dwarfspec/overlay-input-backing',
+    initial_pause=false,
+}
+
+---Initializes backing-screen input observations without interactive controls.
+function OverlayInputBacking:init()
+    self.input_count = 0
+    self.custom_input_count = 0
+    self.unexpected_command_count = 0
+end
+
+---Records sentinel fallthrough and commands that should remain overlay-owned.
+---@param keys table
+---@return boolean
+function OverlayInputBacking:onInput(keys)
+    self.input_count = self.input_count + 1
+    if keys.CUSTOM_B then
+        self.custom_input_count = self.custom_input_count + 1
+        return true
+    end
+    local has_text = keys._STRING and keys._STRING ~= 0
+    if not has_text then
+        for key in pairs(keys) do
+            if type(key) == 'string' and key:match('^STRING_A%d%d%d$') then
+                has_text = true
+                break
+            end
+        end
+    end
+    if keys.CUSTOM_A or keys._MOUSE_L or has_text then
+        self.unexpected_command_count = self.unexpected_command_count + 1
+    end
+    return OverlayInputBacking.super.onInput(self, keys)
+end
+
 ---@class tests.MouseInputOverlay: overlay.OverlayWidget
 local MouseInputOverlay = defclass(nil, overlay.OverlayWidget)
 MouseInputOverlay.ATTRS{
@@ -89,7 +127,7 @@ end
 local OverlayWidgetHarness = defclass(nil, overlay.OverlayWidget)
 OverlayWidgetHarness.ATTRS{
     default_pos={x=3, y=4},
-    frame={w=28, h=5},
+    frame={w=28, h=10},
     full_interface=true,
     overlay_onupdate_max_freq_seconds=0,
 }
@@ -100,6 +138,11 @@ function OverlayWidgetHarness:init()
     self.update_count = 0
     self.input_count = 0
     self.render_count = 0
+    self.custom_input_count = 0
+    self.pointer_click_count = 0
+    self.pointer_down_count = 0
+    self.pointer_up_count = 0
+    self.physical_events = {}
     self.overlay_onenable = function()
         table.insert(self.events, 'enable')
     end
@@ -107,18 +150,52 @@ function OverlayWidgetHarness:init()
         table.insert(self.events, 'disable')
     end
     self:addviews{
+        widgets.EditField{
+            view_id='editor',
+            frame={l=0, t=0, w=24},
+            text='',
+        },
         widgets.HotkeyLabel{
             view_id='submit',
-            frame={l=0, t=0, w=12},
+            frame={l=0, t=2, w=12},
             label='Submit',
             on_activate=self:callback('submit'),
         },
         widgets.Label{
             view_id='status',
-            frame={l=0, t=2, w=24},
+            frame={l=0, t=4, w=24},
             text='pending',
         },
+        widgets.Label{
+            view_id='pointer_target',
+            frame={l=0, t=6, w=24, h=2},
+            text='Rendered pointer target',
+        },
     }
+end
+
+---Returns whether the live pointer lies inside the rendered target.
+---@return boolean
+function OverlayWidgetHarness:isPointerOverTarget()
+    local x, y = dfhack.screen.getMousePos()
+    local body = self.subviews.pointer_target.frame_body
+    return x ~= nil and y ~= nil and body ~= nil and
+        body:inClipGlobalXY(x, y)
+end
+
+---Records one physical dispatch with its temporary DF input state.
+---@param kind string
+function OverlayWidgetHarness:recordPhysicalEvent(kind)
+    local x, y = dfhack.screen.getMousePos()
+    table.insert(self.physical_events, {
+        kind=kind,
+        x=x,
+        y=y,
+        mouse_focus=df.global.enabler.mouse_focus,
+        tracking_on=df.global.enabler.tracking_on,
+        mouse_lbut_down=df.global.enabler.mouse_lbut_down,
+        mouse_lbut_lift=df.global.enabler.mouse_lbut_lift,
+    })
 end
 
 ---Records the backing viewscreen supplied by the isolated lifecycle.
@@ -135,6 +212,25 @@ end
 function OverlayWidgetHarness:onInput(keys)
     self.input_count = self.input_count + 1
     table.insert(self.events, 'input')
+    if keys.CUSTOM_A then
+        self.custom_input_count = self.custom_input_count + 1
+        return true
+    end
+    if keys._MOUSE_L and self:isPointerOverTarget() then
+        self.pointer_click_count = self.pointer_click_count + 1
+        self:recordPhysicalEvent('click')
+        return true
+    end
+    if keys._MOUSE_L_DOWN then
+        self.pointer_down_count = self.pointer_down_count + 1
+        self:recordPhysicalEvent('down')
+        return true
+    end
+    if df.global.enabler.mouse_lbut_lift == 1 then
+        self.pointer_up_count = self.pointer_up_count + 1
+        self:recordPhysicalEvent('up')
+        return true
+    end
     return OverlayWidgetHarness.super.onInput(self, keys)
 end
 
@@ -229,6 +325,112 @@ describe('overlay widget component host', function()
             'unmount must reveal the native backing screen')
         assert.is_false(backing:isActive(),
             'native backing screen must be dismissed during cleanup')
+        assert.is_true(ok, failure)
+    end)
+
+    it('routes keyboard, text, and physical mouse input overlay-first',
+            function()
+        local original_screen = dfhack.gui.getCurViewscreen(true)
+        local original_focus = dfhack.gui.getFocusStrings(original_screen)
+        local initial_pointer = command_conformance.pointer_snapshot()
+        local backing = OverlayInputBacking{}
+        backing:show()
+        local mounted = false
+        local instance
+        local ok, failure = xpcall(function()
+            local root = ds.mount(OverlayWidgetHarness, {
+                backing_viewscreen=backing._native,
+            })
+            mounted = true
+            instance = root:raw()
+            local editor = ds.get('editor')
+            local target = ds.get('pointer_target')
+
+            editor:click()
+            assert.is_true(editor:inspect().focused)
+            ds.input('CUSTOM_A')
+            assert.equals(1, instance.custom_input_count)
+            assert.equals(0, backing.unexpected_command_count)
+
+            editor:type('overlay')
+            assert.equals('overlay', editor:text())
+            assert.equals(0, backing.unexpected_command_count)
+
+            target:hover()
+            assert.is_true(instance:isPointerOverTarget())
+            ds.mouseInput(ds.EMouseButton.LEFT)
+            assert.equals(1, instance.pointer_click_count)
+            assert.equals('click', instance.physical_events[1].kind)
+            assert.is_true(instance.physical_events[1].mouse_focus)
+            assert.equals(1, instance.physical_events[1].tracking_on)
+
+            target:hover()
+            local down_event_start = #instance.physical_events + 1
+            ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.DOWN)
+            local down
+            for index=down_event_start,#instance.physical_events do
+                local candidate = instance.physical_events[index]
+                if candidate.mouse_lbut_down == 1 and
+                        candidate.mouse_focus and candidate.tracking_on == 1 then
+                    down = candidate
+                    break
+                end
+            end
+            assert.is_truthy(down,
+                'DOWN dispatch must expose temporary button ownership')
+            assert.equals('down', down.kind)
+            assert.equals(0, down.mouse_lbut_lift)
+            assert.is_true(target:raw().frame_body:
+                inClipGlobalXY(down.x, down.y))
+            assert.equals(1, df.global.enabler.mouse_lbut_down)
+
+            assert.is_true(instance:isPointerOverTarget())
+            local up_event_start = #instance.physical_events + 1
+            ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.UP)
+            local up
+            for index=up_event_start,#instance.physical_events do
+                local candidate = instance.physical_events[index]
+                if candidate.mouse_lbut_lift == 1 and
+                        candidate.mouse_focus and candidate.tracking_on == 1 then
+                    up = candidate
+                    break
+                end
+            end
+            assert.is_truthy(up,
+                'UP dispatch must expose temporary lift ownership')
+            assert.equals('up', up.kind)
+            assert.equals(0, up.mouse_lbut_down)
+            assert.is_true(target:raw().frame_body:
+                inClipGlobalXY(up.x, up.y))
+            assert.equals(0, df.global.enabler.mouse_lbut_down)
+            assert.equals(0, df.global.enabler.mouse_lbut_lift)
+            assert.equals(0, backing.unexpected_command_count)
+
+            local backing_input_count = backing.input_count
+            ds.input('CUSTOM_B')
+            assert.equals(backing_input_count + 1, backing.input_count)
+            assert.equals(1, backing.custom_input_count,
+                'declined overlay input must reach the backing screen once')
+        end, debug.traceback)
+
+        local unmounted, unmount_failure = true, nil
+        if mounted then
+            unmounted, unmount_failure = pcall(ds.unmount)
+        end
+        local overlay_cleaned = instance == nil or instance.name == nil
+        local backing_revealed = backing:isActive()
+        if backing_revealed then backing:dismiss() end
+        assert.is_true(unmounted, unmount_failure)
+        assert.is_true(overlay_cleaned,
+            'unmount must remove the isolated overlay registration')
+        assert.is_true(backing_revealed,
+            'unmount must reveal the native backing screen')
+        assert.is_false(backing:isActive(),
+            'native backing screen must be dismissed during cleanup')
+        assert.equals(original_screen, dfhack.gui.getCurViewscreen(true))
+        assert.same(original_focus, dfhack.gui.getFocusStrings(original_screen))
+        command_conformance.assert_pointer_restored(
+            initial_pointer, command_conformance.pointer_snapshot())
         assert.is_true(ok, failure)
     end)
 
