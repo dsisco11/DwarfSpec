@@ -447,19 +447,15 @@ function M.discover_tests(project_root, loader, specs)
     })
 end
 
----Installs run-scoped cleanup around every discovered Busted example.
+---Delegates run-scoped example cleanup to the pinned lifecycle adapter.
+---@param lifecycle_adapter table
 ---@param busted table
 ---@param reset function
-function M.install_ds_lifecycle(busted, reset)
-    assert(type(busted) == 'table' and type(busted.api) == 'table',
-        'Busted root API is required for automation lifecycle hooks')
-    assert(type(busted.api.before_each) == 'function' and
-        type(busted.api.after_each) == 'function',
-        'Busted before_each and after_each APIs are required')
-    assert(type(reset) == 'function',
-        'automation reset callback is required for lifecycle hooks')
-    busted.api.before_each(function() reset('before example') end)
-    busted.api.after_each(function() reset('after example') end)
+function M.install_ds_lifecycle(lifecycle_adapter, busted, reset)
+    assert(type(lifecycle_adapter) == 'table' and
+        type(lifecycle_adapter.install_example_reset) == 'function',
+        'Busted lifecycle adapter is required')
+    lifecycle_adapter.install_example_reset(busted, reset)
 end
 
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
@@ -499,7 +495,10 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local ds, reset = ds_factory.new(package_root, project, scheduler_module,
         scheduler, run.cleanup_module, run.cleanup_registry, extensions)
     busted.export('ds', ds)
-    M.install_ds_lifecycle(busted, reset)
+    local lifecycle_adapter = load_automation_module(package_root,
+        'dwarfspec.automation.busted_lifecycle_adapter',
+        'src/dwarfspec/automation/busted_lifecycle_adapter.lua')
+    M.install_ds_lifecycle(lifecycle_adapter, busted, reset)
 
     local output_factory = load_automation_module(package_root,
         'dwarfspec.automation.output_handler',

@@ -343,50 +343,50 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Phase 2: Add a pinned Busted file-lifecycle adapter
 
-- [ ] Add
+- [x] Add
   `src/dwarfspec/automation/busted_lifecycle_adapter.lua` as the only module
   permitted to depend on Busted 2.3.0 file-event and hook-registration
   details.
-- [ ] Treat each executed spec file in each repeat as one suite instance.
-- [ ] Invoke a suite-entry callback from Busted file start before the file body
+- [x] Treat each executed spec file in each repeat as one suite instance.
+- [x] Invoke a suite-entry callback from Busted file start before the file body
   executes.
-- [ ] Invoke a suite-exit callback from Busted file end only after file and
+- [x] Invoke a suite-exit callback from Busted file end only after file and
   nested lazy teardown and strict teardown have completed.
-- [ ] Do not install suite guards for nested contexts or the outer repeat
+- [x] Do not install suite guards for nested contexts or the outer repeat
   context.
-- [ ] Preserve project file, setup, teardown, and nested context order.
-- [ ] Provide a normalized project-relative suite name and source identity
+- [x] Preserve project file, setup, teardown, and nested context order.
+- [x] Provide a normalized project-relative suite name and source identity
   without retaining the complete Busted file context after exit.
-- [ ] Create independent file-suite identities for `repeat_count > 1`.
-- [ ] Ensure files with no runnable examples still receive entry and exit
+- [x] Create independent file-suite identities for `repeat_count > 1`.
+- [x] Ensure files with no runnable examples still receive entry and exit
   callbacks when Busted executes the file.
-- [ ] Release file-suite state after failure paths and before the next file.
+- [x] Release file-suite state after failure paths and before the next file.
 
 ### Phase 2 tests
 
-- [ ] Add `tests/unit/busted_lifecycle_adapter_spec.lua` using the pinned real
+- [x] Add `tests/unit/busted_lifecycle_adapter_spec.lua` using the pinned real
   Busted runtime.
-- [ ] Prove the complete file boundary: file start precedes the file body and
+- [x] Prove the complete file boundary: file start precedes the file body and
   all file or nested setup, while the file exit callback follows all examples
   and every applicable nested or file lazy and strict teardown.
-- [ ] Prove the entry callback runs before arbitrary file-body state changes.
-- [ ] Prove the exit callback runs after arbitrary strict-teardown state
+- [x] Prove the entry callback runs before arbitrary file-body state changes.
+- [x] Prove the exit callback runs after arbitrary strict-teardown state
   changes.
-- [ ] Prove nested contexts create no independent suite records.
-- [ ] Prove two files execute as sequential, nonoverlapping suite instances.
-- [ ] Prove files containing only pending or filtered examples do not create
+- [x] Prove nested contexts create no independent suite records.
+- [x] Prove two files execute as sequential, nonoverlapping suite instances.
+- [x] Prove files containing only pending or filtered examples do not create
   example records but still safely release any executed file-suite record.
-- [ ] Prove setup and teardown failures cannot leave an active file-suite
+- [x] Prove setup and teardown failures cannot leave an active file-suite
   identity attached to the following file.
-- [ ] Prove two or more Busted repeats receive independent file-suite records
+- [x] Prove two or more Busted repeats receive independent file-suite records
   with correct repeat indices and no stale observations.
 
 ### Phase 2 gate
 
-- [ ] Focused lifecycle-adapter unit tests pass.
-- [ ] Existing Busted discovery, filtering, and repeat-count tests pass.
-- [ ] Full unit suite passes.
-- [ ] Lua syntax and formatting checks pass.
+- [x] Focused lifecycle-adapter unit tests pass.
+- [x] Existing Busted discovery, filtering, and repeat-count tests pass.
+- [x] Full unit suite passes.
+- [x] Lua syntax and formatting checks pass.
 
 ## Phase 3: Integrate per-example pollution detection
 
@@ -603,17 +603,22 @@ Warnings and incomplete-verification diagnostics must not change:
 - Focused observation/comparison unit: 2026-07-27,
   `.\Tools\Run-UnitTests.ps1 --filter "focus guard"`:
   12 successes, 0 failures, 0 errors, 0 pending.
-- Focused Busted file-lifecycle adapter unit:
+- Focused Busted file-lifecycle adapter unit: 2026-07-27,
+  `.\Tools\Run-UnitTests.ps1 --filter "Busted file lifecycle adapter"`:
+  8 successes, 0 failures, 0 errors, 0 pending.
+- Focused Busted discovery, filtering, and repeat-count regressions:
+  2026-07-27, filters `"discovers"`, `"normalizes filters"`, and `"repeat"`:
+  3, 1, and 5 successes respectively; 0 failures, 0 errors, 0 pending.
 - Focused example lifecycle unit:
 - Focused file-suite lifecycle unit:
 - Focused diagnostic/report unit:
 - Full unit: 2026-07-27, `.\Tools\Run-UnitTests.ps1`:
-  464 successes, 0 failures, 0 errors, 0 pending.
+  472 successes, 0 failures, 0 errors, 0 pending.
 - Focused live:
 - Full live:
 - Event-journal warning audit:
 - Lua syntax and formatting: 2026-07-27, `.\Tools\Check-Lua.ps1`:
-  Lua 5.4.6 checks passed for 237 files.
+  Lua 5.4.6 checks passed for 239 files.
 - Process result and exit status:
 - Cleanup confirmation:
 - Final base-screen restoration:

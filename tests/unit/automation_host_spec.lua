@@ -371,6 +371,7 @@ describe('automation host ownership', function()
         local hooks = {}
         local reset_reasons = {}
         local busted = {
+            version='2.3.0',
             api={
                 before_each=function(callback)
                     hooks.before_each = callback
@@ -380,8 +381,10 @@ describe('automation host ownership', function()
                 end,
             },
         }
+        local lifecycle_adapter = assert(loadfile(
+            'src/dwarfspec/automation/busted_lifecycle_adapter.lua'))()
 
-        host.install_ds_lifecycle(busted, function(reason)
+        host.install_ds_lifecycle(lifecycle_adapter, busted, function(reason)
             table.insert(reset_reasons, reason)
         end)
         hooks.before_each()
