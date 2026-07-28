@@ -453,51 +453,51 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Phase 4: Integrate file-suite pollution detection
 
-- [ ] Create one active file-suite record at file start and capture `S0`
+- [x] Create one active file-suite record at file start and capture `S0`
   before the file body executes.
-- [ ] Keep nested contexts attached only to example naming and hook execution;
+- [x] Keep nested contexts attached only to example naming and hook execution;
   do not push nested suite records.
-- [ ] At file end, after all lazy and strict teardown, run
+- [x] At file end, after all lazy and strict teardown, run
   `reset('after suite')` and its settlement wait.
-- [ ] Capture `S2` only after suite cleanup succeeds.
-- [ ] Compare `S2` with `S0` and publish any suite diagnostic.
-- [ ] Release the complete file-suite record before the next file starts.
-- [ ] Allow both an example warning and one file-suite warning when pollution
+- [x] Capture `S2` only after suite cleanup succeeds.
+- [x] Compare `S2` with `S0` and publish any suite diagnostic.
+- [x] Release the complete file-suite record before the next file starts.
+- [x] Allow both an example warning and one file-suite warning when pollution
   crosses both boundaries.
-- [ ] Keep file baselines independent so the next file records the state it
+- [x] Keep file baselines independent so the next file records the state it
   actually inherited.
-- [ ] Handle files whose body, setup, teardown, or examples fail, and files
+- [x] Handle files whose body, setup, teardown, or examples fail, and files
   with no runnable examples, without leaking guard records.
-- [ ] Clear active file-suite state during emergency abort and generation
+- [x] Clear active file-suite state during emergency abort and generation
   loss.
 
 ### Phase 4 tests
 
-- [ ] Prove suite setup may change state without an immediate warning when
+- [x] Prove suite setup may change state without an immediate warning when
   suite teardown restores `S0` before `S2`.
-- [ ] Prove state left by file-body code, strict setup, lazy setup, an example,
+- [x] Prove state left by file-body code, strict setup, lazy setup, an example,
   lazy teardown, or strict teardown is visible in the final `S2 != S0`
   comparison.
-- [ ] Prove a clean nested context creates no suite warning or suite record.
-- [ ] Prove one file's leak is attributed to that file and becomes the next
+- [x] Prove a clean nested context creates no suite warning or suite record.
+- [x] Prove one file's leak is attributed to that file and becomes the next
   file's actual `S0`.
-- [ ] Prove a persistent example leak can generate one example warning and one
+- [x] Prove a persistent example leak can generate one example warning and one
   file-suite warning, without ancestor-warning duplication.
-- [ ] Prove a later example or file teardown that restores `S0` suppresses the
+- [x] Prove a later example or file teardown that restores `S0` suppresses the
   file-suite warning without erasing an earlier example warning.
-- [ ] Prove mounts created during suite setup or teardown do not count as
+- [x] Prove mounts created during suite setup or teardown do not count as
   base-game screen changes and are gone before `S2`.
-- [ ] Prove repeat boundaries compare and release independent `S0/S2`
+- [x] Prove repeat boundaries compare and release independent `S0/S2`
   records.
-- [ ] Prove suite reset or settlement failure skips `S2`, preserves the
+- [x] Prove suite reset or settlement failure skips `S2`, preserves the
   cleanup error, and releases private identity tokens.
 
 ### Phase 4 gate
 
-- [ ] Focused file-suite lifecycle tests pass.
-- [ ] Existing run completion and cleanup verification tests pass.
-- [ ] Full unit suite passes.
-- [ ] Lua syntax and formatting checks pass.
+- [x] Focused file-suite lifecycle tests pass.
+- [x] Existing run completion and cleanup verification tests pass.
+- [x] Full unit suite passes.
+- [x] Lua syntax and formatting checks pass.
 
 ## Phase 5: Publish and render detached diagnostics
 
@@ -627,10 +627,16 @@ Warnings and incomplete-verification diagnostics must not change:
 - Focused example lifecycle unit: 2026-07-28,
   `.\Tools\Run-UnitTests.ps1 --filter "automation host ownership"`:
   22 successes, 0 failures, 0 errors, 0 pending.
-- Focused file-suite lifecycle unit:
+- Focused file-suite lifecycle unit: 2026-07-28,
+  `.\Tools\Run-UnitTests.ps1 --filter "suite focus lifecycle"`:
+  11 successes, 0 failures, 0 errors, 0 pending. The cases cover restored
+  suite setup, every mutation source, nested scopes, cross-file inheritance,
+  dual example/suite warnings, later restoration, suite mounts, repeats,
+  Busted failure and empty-file paths, suite-reset failure, and emergency
+  state clearing.
 - Focused diagnostic/report unit:
 - Full unit: 2026-07-28, `.\Tools\Run-UnitTests.ps1`:
-  486 successes, 0 failures, 0 errors, 0 pending.
+  497 successes, 0 failures, 0 errors, 0 pending.
 - Focused live: 2026-07-28,
   `.\Tools\Run-AutomationTests.ps1 --filter "loads ordinary support modules"`:
   1 success, passed, exit 0, no pollution diagnostic,
@@ -646,10 +652,17 @@ Warnings and incomplete-verification diagnostics must not change:
   overlay recovery fixtures produced their expected classified failures,
   passed every clean observer, emitted no pollution diagnostics, and each
   reported `cleanup_confirmed=true` with mount cleanup verified.
+- Phase 4 live package audit: 2026-07-28, rebuilt and installed
+  `dwarfspec-0.2.0-1.all.rock`, verified the installed host contains
+  `new_focus_lifecycle` and `reset('after suite')`, then reran the clean
+  support-module fixture and all three recovery fixtures. The clean fixture
+  passed with `cleanup_confirmed=true`; recovery results retained exit 6,
+  passed every clean observer, emitted no pollution diagnostics, and reported
+  both cleanup confirmation and mount-cleanup verification.
 - Full live:
 - Event-journal warning audit:
 - Lua syntax and formatting: 2026-07-28, `.\Tools\Check-Lua.ps1`:
-  Lua 5.4.6 checks passed for 242 files.
+  Lua 5.4.6 checks passed for 243 files.
 - Process result and exit status:
 - Cleanup confirmation:
 - Final base-screen restoration:

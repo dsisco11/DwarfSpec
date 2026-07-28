@@ -447,41 +447,91 @@ function M.discover_tests(project_root, loader, specs)
     })
 end
 
----Creates per-example focus observations and detached diagnostics.
+---Creates per-example and file-suite focus observations and diagnostics.
 ---@param run table
 ---@param reset function
 ---@param guard BaseScreenFocusGuard
 ---@return table
-function M.new_example_focus_lifecycle(run, reset, guard)
+function M.new_focus_lifecycle(run, reset, guard)
     assert(type(run) == 'table',
-        'example focus lifecycle run is required')
+        'focus lifecycle run is required')
     assert(type(reset) == 'function',
-        'example focus lifecycle reset callback is required')
+        'focus lifecycle reset callback is required')
     assert(type(guard) == 'table' and type(guard.capture) == 'function' and
         type(guard.compare) == 'function',
-        'example focus lifecycle guard is required')
+        'focus lifecycle guard is required')
     assert(type(run.event_publisher) == 'table' and
         type(run.event_publisher.publish) == 'function',
-        'example focus lifecycle event publisher is required')
+        'focus lifecycle event publisher is required')
 
     local lifecycle = {}
     local active_suite
     local active_example
 
-    ---Begins attribution for one executed file-suite instance.
+    ---Publishes one comparison with its detached lifecycle attribution.
+    ---@param diagnostic BaseScreenFocusDiagnostic|nil
+    ---@param scope 'example'|'suite'
+    ---@param attribution 'test'|'before_each'|'file'
+    ---@param suite DwarfSpecFileSuiteIdentity
+    ---@param example table|nil
+    local function publish_diagnostic(
+            diagnostic, scope, attribution, suite, example)
+        if diagnostic == nil then return end
+        local content = diagnostic.content
+        content.scope = scope
+        content.attribution = attribution
+        content.suite_name = suite.suite_name
+        content.repeat_index = suite.repeat_index
+        if example ~= nil and example.example_name ~= nil then
+            content.example_name = example.example_name
+        end
+        local source_identity
+        if example ~= nil then
+            source_identity = example.source_identity
+        else
+            source_identity = suite.source_identity
+        end
+        if source_identity ~= nil then
+            content.source_identity = source_identity
+        end
+        run.event_publisher.publish(
+            EventType.DIAGNOSTIC_RECORDED, diagnostic)
+    end
+
+    ---Captures S0 for one executed file-suite instance.
     ---@param identity DwarfSpecFileSuiteIdentity
+    ---@return string
     function lifecycle.suite_entry(identity)
         assert(type(identity) == 'table' and
             type(identity.copy) == 'function',
-            'example focus lifecycle requires a file-suite identity')
+            'focus lifecycle requires a file-suite identity')
+        assert(active_suite == nil,
+            'focus lifecycle already has an active file suite')
         active_example = nil
-        active_suite = identity:copy()
+        active_suite = {
+            identity=identity:copy(),
+            before=guard:capture(),
+        }
+        return active_suite.identity.suite_id
     end
 
-    ---Releases attribution after one executed file-suite instance.
-    function lifecycle.suite_exit()
+    ---Cleans suite resources, captures S2, and publishes one diagnostic.
+    ---@param identity DwarfSpecFileSuiteIdentity
+    ---@param state any
+    function lifecycle.suite_exit(identity, state)
+        local completed = active_suite
         active_example = nil
         active_suite = nil
+        if completed == nil then return end
+        assert(type(identity) == 'table' and
+            identity.suite_id == completed.identity.suite_id,
+            'focus lifecycle file-suite exit identity did not match entry')
+        assert(state == nil or state == completed.identity.suite_id,
+            'focus lifecycle file-suite state did not match entry')
+        reset('after suite')
+        publish_diagnostic(guard:compare(
+            completed.before, guard:capture()),
+            'suite', 'file', completed.identity)
     end
 
     ---Resets inherited resources and captures the example's T0 state.
@@ -489,10 +539,10 @@ function M.new_example_focus_lifecycle(run, reset, guard)
         active_example = nil
         reset('before example')
         assert(active_suite ~= nil,
-            'example focus lifecycle has no active file suite')
+            'focus lifecycle has no active file suite')
         active_example = {
             attribution='before_each',
-            suite=active_suite:copy(),
+            suite=active_suite.identity:copy(),
             before=guard:capture(),
         }
     end
@@ -514,20 +564,8 @@ function M.new_example_focus_lifecycle(run, reset, guard)
         if completed == nil then return end
         local diagnostic = guard:compare(
             completed.before, guard:capture())
-        if diagnostic == nil then return end
-        local content = diagnostic.content
-        content.scope = 'example'
-        content.attribution = completed.attribution
-        content.suite_name = completed.suite.suite_name
-        content.repeat_index = completed.suite.repeat_index
-        if completed.example_name ~= nil then
-            content.example_name = completed.example_name
-        end
-        if completed.source_identity ~= nil then
-            content.source_identity = completed.source_identity
-        end
-        run.event_publisher.publish(
-            EventType.DIAGNOSTIC_RECORDED, diagnostic)
+        publish_diagnostic(diagnostic, 'example',
+            completed.attribution, completed.suite, completed)
     end
 
     ---Clears every unconsumed private observation and attribution token.
@@ -612,19 +650,19 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local guard_factory = load_automation_module(package_root,
         'dwarfspec.automation.base_screen_focus_guard',
         'src/dwarfspec/automation/base_screen_focus_guard.lua')
-    local example_lifecycle = M.new_example_focus_lifecycle(
+    local focus_lifecycle = M.new_focus_lifecycle(
         run, reset, guard_factory.new(dfhack.gui))
-    run.example_focus_lifecycle = example_lifecycle
+    run.focus_lifecycle = focus_lifecycle
     lifecycle_adapter.install(busted, {
         project_root=project_root,
-        on_suite_entry=example_lifecycle.suite_entry,
-        on_suite_exit=example_lifecycle.suite_exit,
-        on_test_start=example_lifecycle.test_start,
+        on_suite_entry=focus_lifecycle.suite_entry,
+        on_suite_exit=focus_lifecycle.suite_exit,
+        on_test_start=focus_lifecycle.test_start,
     })
     M.install_ds_example_entry(
-        lifecycle_adapter, busted, example_lifecycle)
+        lifecycle_adapter, busted, focus_lifecycle)
     M.install_ds_example_exit(
-        lifecycle_adapter, busted, example_lifecycle)
+        lifecycle_adapter, busted, focus_lifecycle)
 
     local output_factory = load_automation_module(package_root,
         'dwarfspec.automation.output_handler',
@@ -700,9 +738,9 @@ end
 ---@param reason string
 ---@return boolean
 local function clean_run(run, reason)
-    if run.example_focus_lifecycle ~= nil then
-        run.example_focus_lifecycle.clear()
-        run.example_focus_lifecycle = nil
+    if run.focus_lifecycle ~= nil then
+        run.focus_lifecycle.clear()
+        run.focus_lifecycle = nil
     end
     if run.scheduler then
         run.scheduler_module.cancel(run.scheduler, reason)

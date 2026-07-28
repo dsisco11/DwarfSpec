@@ -128,12 +128,22 @@ describe('automation host ownership', function()
         return {
             capture=function()
                 capture_count = capture_count + 1
-                local label = capture_count % 2 == 1 and 'T0' or 'T1'
+                local previous = journal[#journal]
+                local label
+                if capture_count == 1 then
+                    label = 'S0'
+                elseif type(previous) == 'string' and
+                        previous:match('after suite$') then
+                    label = 'S2'
+                else
+                    label = capture_count % 2 == 0 and 'T0' or 'T1'
+                end
                 table.insert(journal, label)
                 return {capture=capture_count}
             end,
             compare=function(_, before, after)
                 assert.is_true(before.capture < after.capture)
+                if after.capture - before.capture ~= 1 then return nil end
                 return {
                     kind='base_screen_focus_changed',
                     content={
@@ -155,7 +165,7 @@ describe('automation host ownership', function()
     ---@param reset function
     ---@param guard table
     ---@return table, table
-    local function install_example_lifecycle(
+    local function install_focus_lifecycle(
             busted, journal, reset, guard)
         local published = {}
         local run = {
@@ -173,7 +183,7 @@ describe('automation host ownership', function()
         }
         local adapter = assert(loadfile(
             'src/dwarfspec/automation/busted_lifecycle_adapter.lua'))()
-        local lifecycle = host.new_example_focus_lifecycle(
+        local lifecycle = host.new_focus_lifecycle(
             run, reset, guard)
         adapter.install(busted, {
             project_root='.',
@@ -248,10 +258,10 @@ describe('automation host ownership', function()
                 pointer_active=not cleaned,
             }
         end
-        local example_focus_cleared = false
-        run.example_focus_lifecycle = {
+        local focus_lifecycle_cleared = false
+        run.focus_lifecycle = {
             clear=function()
-                example_focus_cleared = true
+                focus_lifecycle_cleared = true
             end,
         }
         local aborted = host.abort('owner', run.owner_capability)
@@ -259,8 +269,8 @@ describe('automation host ownership', function()
         assert.is_nil(active_callbacks[1])
         assert.is_nil(active_callbacks[2])
         assert.is_true(cleaned)
-        assert.is_true(example_focus_cleared)
-        assert.is_nil(aborted.example_focus_lifecycle)
+        assert.is_true(focus_lifecycle_cleared)
+        assert.is_nil(aborted.focus_lifecycle)
         assert.is_true(aborted.cleanup_confirmed)
         assert.is_true(aborted.mount_cleanup_state.verified)
         assert.equals(0, aborted.mount_cleanup_state.active_screen_count)
@@ -315,12 +325,20 @@ describe('automation host ownership', function()
                 pointer_active=not cleaned,
             }
         end
+        local focus_lifecycle_cleared = false
+        run.focus_lifecycle = {
+            clear=function()
+                focus_lifecycle_cleared = true
+            end,
+        }
 
         tick = 100
         callbacks[2]()
 
         assert.equals('aborted', run.state)
         assert.is_true(cleaned)
+        assert.is_true(focus_lifecycle_cleared)
+        assert.is_nil(run.focus_lifecycle)
         assert.is_true(run.cleanup_confirmed)
         assert.is_true(run.mount_cleanup_state.verified)
         assert.matches('execution lease expired', run.output_lines[1],
@@ -528,7 +546,7 @@ describe('automation host ownership', function()
             table.insert(journal, 'reset ' .. reason)
             table.insert(journal, 'settlement ' .. reason)
         end
-        install_example_lifecycle(
+        install_focus_lifecycle(
             busted, journal, reset, changing_guard(journal))
         register_file(busted, 'tests/ordered_spec.lua', [[
             setup(function() table.insert(journal, 'suite setup') end)
@@ -547,6 +565,7 @@ describe('automation host ownership', function()
         execute_busted(busted)
 
         assert.same({
+            'S0',
             'suite setup',
             'reset before example',
             'settlement before example',
@@ -560,6 +579,9 @@ describe('automation host ownership', function()
             'settlement after example',
             'T1',
             'diagnostic',
+            'reset after suite',
+            'settlement after suite',
+            'S2',
         }, journal)
     end)
 
@@ -568,7 +590,7 @@ describe('automation host ownership', function()
         local busted = new_busted()
         local journal = {}
         busted.export('journal', journal)
-        install_example_lifecycle(busted, journal, function(reason)
+        install_focus_lifecycle(busted, journal, function(reason)
             table.insert(journal, 'reset ' .. reason)
         end, changing_guard(journal))
         register_file(busted, 'tests/nested_after_spec.lua', [[
@@ -600,7 +622,7 @@ describe('automation host ownership', function()
         local busted = new_busted()
         local journal = {}
         busted.export('journal', journal)
-        local _, published = install_example_lifecycle(
+        local _, published = install_focus_lifecycle(
             busted, journal, function(reason)
                 table.insert(journal, 'reset ' .. reason)
             end, changing_guard(journal))
@@ -633,7 +655,7 @@ describe('automation host ownership', function()
         local busted = new_busted()
         local journal = {}
         busted.export('journal', journal)
-        local _, published = install_example_lifecycle(
+        local _, published = install_focus_lifecycle(
             busted, journal, function(reason)
                 table.insert(journal, 'reset ' .. reason)
             end, changing_guard(journal))
@@ -689,7 +711,7 @@ describe('automation host ownership', function()
         local guard = {
             capture=function()
                 capture_count = capture_count + 1
-                if capture_count == 2 then
+                if capture_count == 3 then
                     assert.same({
                         widget=0,
                         overlay=0,
@@ -706,7 +728,7 @@ describe('automation host ownership', function()
         local run = {
             event_publisher={publish=function() end},
         }
-        local lifecycle = host.new_example_focus_lifecycle(
+        local lifecycle = host.new_focus_lifecycle(
             run, function(reason)
                 if reason == 'after example' then
                     for category in pairs(mount_state) do
@@ -726,7 +748,7 @@ describe('automation host ownership', function()
         lifecycle.test_start({example_name='mount categories'})
         lifecycle.example_exit()
 
-        assert.equals(2, capture_count)
+        assert.equals(3, capture_count)
     end)
 
     it('keeps reset failure authoritative and skips final comparison',
@@ -734,7 +756,7 @@ describe('automation host ownership', function()
         local capture_count = 0
         local compare_count = 0
         local reset_failed = false
-        local lifecycle = host.new_example_focus_lifecycle({
+        local lifecycle = host.new_focus_lifecycle({
             event_publisher={publish=function() end},
         }, function(reason)
             if reason == 'after example' and not reset_failed then
@@ -761,7 +783,7 @@ describe('automation host ownership', function()
 
         assert.has_error(
             lifecycle.example_exit, 'authoritative reset failure')
-        assert.equals(1, capture_count)
+        assert.equals(2, capture_count)
         assert.equals(0, compare_count)
         lifecycle.example_exit()
         assert.equals(0, compare_count)
@@ -771,7 +793,7 @@ describe('automation host ownership', function()
         local capture_count = 0
         local compare_count = 0
         local reset_failed = false
-        local lifecycle = host.new_example_focus_lifecycle({
+        local lifecycle = host.new_focus_lifecycle({
             event_publisher={publish=function() end},
         }, function(reason)
             if reason == 'before example' and not reset_failed then
@@ -799,15 +821,15 @@ describe('automation host ownership', function()
             lifecycle.example_entry, 'pre-example settlement failure')
         lifecycle.example_exit()
 
-        assert.equals(0, capture_count)
+        assert.equals(1, capture_count)
         assert.equals(0, compare_count)
     end)
 
-    it('does not observe pending examples that execute no hooks', function()
+    it('observes only suite boundaries for pending examples', function()
         local busted = new_busted()
         local journal = {}
         local capture_count = 0
-        install_example_lifecycle(busted, journal, function() end, {
+        install_focus_lifecycle(busted, journal, function() end, {
             capture=function()
                 capture_count = capture_count + 1
                 return {}
@@ -822,7 +844,7 @@ describe('automation host ownership', function()
 
         execute_busted(busted)
 
-        assert.equals(0, capture_count)
+        assert.equals(2, capture_count)
         assert.same({'PENDING'}, journal)
     end)
 
@@ -852,7 +874,7 @@ describe('automation host ownership', function()
             cleanup_confirmed=run.cleanup_confirmed,
             mount_cleanup_verified=run.mount_cleanup_verified,
         }
-        local lifecycle = host.new_example_focus_lifecycle(
+        local lifecycle = host.new_focus_lifecycle(
             run, function() end, changing_guard({}))
         lifecycle.suite_entry(FileSuiteIdentity.new({
             suite_id='suite#1',
