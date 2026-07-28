@@ -123,9 +123,15 @@ duplicate copies of equivalent focus strings do not count as changes.
 
 Comparison produces independent statuses:
 
-- `screen_comparison`: `same`, `changed`, or `unavailable`;
-- `focus_comparison`: `same`, `changed`, or `unavailable`;
+- `screen_comparison`: `EBaseScreenFocusComparison.SAME`,
+  `.CHANGED`, or `.UNAVAILABLE`;
+- `focus_comparison`: `EBaseScreenFocusComparison.SAME`,
+  `.CHANGED`, or `.UNAVAILABLE`;
 - `details_complete`: whether both dimensions were comparable.
+
+`EBaseScreenFocusComparison` is an immutable numeric enum with `SAME=1`,
+`CHANGED=2`, and `UNAVAILABLE=3`; persisted diagnostic records therefore carry
+these numeric values instead of repeated status strings.
 
 A change is affirmatively known when:
 
@@ -229,8 +235,12 @@ A change diagnostic has:
         example_name='full example name', -- ordinary example scope only
         source_identity='project-relative source', -- when available
         repeat_index=1,
-        screen_comparison='same' or 'changed' or 'unavailable',
-        focus_comparison='same' or 'changed' or 'unavailable',
+        screen_comparison=EBaseScreenFocusComparison.SAME or
+            EBaseScreenFocusComparison.CHANGED or
+            EBaseScreenFocusComparison.UNAVAILABLE,
+        focus_comparison=EBaseScreenFocusComparison.SAME or
+            EBaseScreenFocusComparison.CHANGED or
+            EBaseScreenFocusComparison.UNAVAILABLE,
         details_complete=true or false,
         before={...},
         after={...},
@@ -252,8 +262,10 @@ comparison fields:
         example_name='full example name', -- when available
         source_identity='project-relative source', -- when available
         repeat_index=1,
-        screen_comparison='same' or 'unavailable',
-        focus_comparison='same' or 'unavailable',
+        screen_comparison=EBaseScreenFocusComparison.SAME or
+            EBaseScreenFocusComparison.UNAVAILABLE,
+        focus_comparison=EBaseScreenFocusComparison.SAME or
+            EBaseScreenFocusComparison.UNAVAILABLE,
         details_complete=false,
         before={...},
         after={...},
@@ -390,52 +402,54 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Phase 3: Integrate per-example pollution detection
 
-- [ ] Split the current combined lifecycle installation in
+- [x] Split the current combined lifecycle installation in
   `src/dwarfspec/automation/host.lua`.
-- [ ] Register the internal pre-example callback before project specs execute
+- [x] Register the internal pre-example callback before project specs execute
   so it precedes every project `before_each`.
-- [ ] Run `reset('before example')` and settlement before capturing `T0`.
-- [ ] Register the internal post-example callback after project hooks so every
-  applicable project `after_each` runs first.
-- [ ] Run `reset('after example')` and settlement before capturing `T1`.
-- [ ] Compare `T1` with the same example's `T0`.
-- [ ] Publish ordinary diagnostics after Busted's `test.finished` event.
-- [ ] Retain example attribution independently from `run.current_test` until
+- [x] Run `reset('before example')` and settlement before capturing `T0`.
+- [x] Register the internal post-example callback at root scope before project
+  specs execute. Busted traverses `after_each` from nested and file contexts
+  outward, so every applicable project `after_each` executes before the
+  internal root callback.
+- [x] Run `reset('after example')` and settlement before capturing `T1`.
+- [x] Compare `T1` with the same example's `T0`.
+- [x] Publish ordinary diagnostics after Busted's `test.finished` event.
+- [x] Retain example attribution independently from `run.current_test` until
   post-example comparison completes.
-- [ ] Clear attribution before the next example and on every failure or abort
+- [x] Clear attribution before the next example and on every failure or abort
   path.
-- [ ] Attribute pre-`test.started` setup failures with
+- [x] Attribute pre-`test.started` setup failures with
   `attribution='before_each'` and no invented example name.
-- [ ] Preserve existing cleanup errors without adding a comparison after
+- [x] Preserve existing cleanup errors without adding a comparison after
   failed reset or settlement.
-- [ ] Do not create observations for pending examples that do not execute
+- [x] Do not create observations for pending examples that do not execute
   per-example hooks.
 
 ### Phase 3 tests
 
-- [ ] Extend `tests/unit/automation_host_spec.lua` for the ordinary order:
+- [x] Extend `tests/unit/automation_host_spec.lua` for the ordinary order:
   suite setup, reset, settlement, `T0`, project `before_each`, example,
   `finally`, test result, project `after_each`, reset, settlement, `T1`,
   diagnostic.
-- [ ] Prove warning output follows `SUCCESS`, `FAILURE`, or `ERROR`.
-- [ ] Prove top-level and nested project `after_each` hooks run before `T1`.
-- [ ] Prove example failure does not prevent cleanup and comparison.
-- [ ] Prove project `after_each` failure does not prevent the final internal
+- [x] Prove warning output follows `SUCCESS`, `FAILURE`, or `ERROR`.
+- [x] Prove top-level and nested project `after_each` hooks run before `T1`.
+- [x] Prove example failure does not prevent cleanup and comparison.
+- [x] Prove project `after_each` failure does not prevent the final internal
   hook when Busted continues hook execution.
-- [ ] Prove `before_each` failure publishes after hook problem output, uses
+- [x] Prove `before_each` failure publishes after hook problem output, uses
   setup attribution, and cannot inherit the preceding example name.
-- [ ] Prove automatic cleanup for every mount category completes before `T1`.
-- [ ] Prove reset failure remains authoritative and skips comparison.
-- [ ] Prove an example warning leaves counts, terminal state, exit status, and
+- [x] Prove automatic cleanup for every mount category completes before `T1`.
+- [x] Prove reset failure remains authoritative and skips comparison.
+- [x] Prove an example warning leaves counts, terminal state, exit status, and
   cleanup confirmation unchanged.
 
 ### Phase 3 gate
 
-- [ ] Focused host lifecycle tests pass.
-- [ ] Existing combined assertion/cleanup, timeout, abort, and mount-recovery
+- [x] Focused host lifecycle tests pass.
+- [x] Existing combined assertion/cleanup, timeout, abort, and mount-recovery
   fixtures remain green.
-- [ ] Full unit suite passes.
-- [ ] Lua syntax and formatting checks pass.
+- [x] Full unit suite passes.
+- [x] Lua syntax and formatting checks pass.
 
 ## Phase 4: Integrate file-suite pollution detection
 
@@ -600,26 +614,43 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Evidence
 
-- Focused observation/comparison unit: 2026-07-27,
+- Focused observation/comparison unit: 2026-07-28,
   `.\Tools\Run-UnitTests.ps1 --filter "focus guard"`:
-  12 successes, 0 failures, 0 errors, 0 pending.
-- Focused Busted file-lifecycle adapter unit: 2026-07-27,
+  13 successes, 0 failures, 0 errors, 0 pending. The added case covers
+  equivalent DF userdata wrappers for one native viewscreen.
+- Focused Busted file-lifecycle adapter unit: 2026-07-28,
   `.\Tools\Run-UnitTests.ps1 --filter "Busted file lifecycle adapter"`:
-  8 successes, 0 failures, 0 errors, 0 pending.
+  9 successes, 0 failures, 0 errors, 0 pending.
 - Focused Busted discovery, filtering, and repeat-count regressions:
   2026-07-27, filters `"discovers"`, `"normalizes filters"`, and `"repeat"`:
   3, 1, and 5 successes respectively; 0 failures, 0 errors, 0 pending.
-- Focused example lifecycle unit:
+- Focused example lifecycle unit: 2026-07-28,
+  `.\Tools\Run-UnitTests.ps1 --filter "automation host ownership"`:
+  22 successes, 0 failures, 0 errors, 0 pending.
 - Focused file-suite lifecycle unit:
 - Focused diagnostic/report unit:
-- Full unit: 2026-07-27, `.\Tools\Run-UnitTests.ps1`:
-  472 successes, 0 failures, 0 errors, 0 pending.
-- Focused live:
+- Full unit: 2026-07-28, `.\Tools\Run-UnitTests.ps1`:
+  486 successes, 0 failures, 0 errors, 0 pending.
+- Focused live: 2026-07-28,
+  `.\Tools\Run-AutomationTests.ps1 --filter "loads ordinary support modules"`:
+  1 success, passed, exit 0, no pollution diagnostic,
+  `cleanup_confirmed=true`, and mount cleanup verified.
+- Phase 3 hardening regressions: 2026-07-28,
+  `.\Tools\Run-MultiProjectIntegration.ps1 -Iterations 1` reached a passing
+  `failure-classifications-1` ledger entry for timeout, interruption,
+  explicit abort, assertion, and combined assertion/cleanup retention.
+  The later unrelated module-isolation scenario failed at
+  `interaction_live_spec.lua:207` because text input returned `""` instead of
+  `"Hi"`; that failed run still reported `cleanup_confirmed=true`.
+- Focused mount recovery: 2026-07-28, the failed-example, command-error, and
+  overlay recovery fixtures produced their expected classified failures,
+  passed every clean observer, emitted no pollution diagnostics, and each
+  reported `cleanup_confirmed=true` with mount cleanup verified.
 - Full live:
 - Event-journal warning audit:
-- Lua syntax and formatting: 2026-07-27, `.\Tools\Check-Lua.ps1`:
-  Lua 5.4.6 checks passed for 239 files.
+- Lua syntax and formatting: 2026-07-28, `.\Tools\Check-Lua.ps1`:
+  Lua 5.4.6 checks passed for 242 files.
 - Process result and exit status:
 - Cleanup confirmation:
 - Final base-screen restoration:
-- Diff check: 2026-07-27, `git diff --check`: passed.
+- Diff check: 2026-07-28, `git diff --check`: passed.

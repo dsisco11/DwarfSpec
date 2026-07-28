@@ -1,6 +1,10 @@
 -- Unit contracts for live automation ownership and generation guards.
 
 local host_path = 'src/dwarfspec/automation/host.lua'
+local EComparison =
+    require('dwarfspec.automation.base_screen_focus_comparisons')
+local FileSuiteIdentity =
+    require('dwarfspec.automation.file_suite_identity')
 local EventType = require('dwarfspec.automation.event_types')
 local RunState = require('dwarfspec.automation.run_states')
 local SchedulerFailureKind =
@@ -80,6 +84,116 @@ describe('automation host ownership', function()
         }
     end
 
+    ---Creates one isolated real Busted 2.3.0 runtime.
+    ---@return table
+    local function new_busted()
+        local busted = require('busted.core')()
+        local init_path = assert(package.searchpath('busted', package.path))
+        assert(loadfile(init_path))()(busted)
+        busted.randomize = false
+        busted.sort = false
+        busted.randomseed = 1
+        return busted
+    end
+
+    ---Registers one compiled in-memory spec file.
+    ---@param busted table
+    ---@param file_name string
+    ---@param source string
+    local function register_file(busted, file_name, source)
+        local body = assert(load(source, '@' .. file_name))
+        local callable = setmetatable({
+            getTrace=function(_, trace) return trace end,
+            rewriteMessage=function(_, message) return message end,
+        }, {__call=body})
+        busted.executors.file(file_name, callable)
+    end
+
+    ---Executes one isolated Busted runtime.
+    ---@param busted table
+    local function execute_busted(busted)
+        assert(loadfile(
+            '.luarocks/share/lua/5.4/busted/execute.lua'))()(busted)(1, {
+                seed=1,
+                shuffle=false,
+                sort=false,
+            })
+    end
+
+    ---Creates a deterministic guard that reports every comparison as changed.
+    ---@param journal table[]
+    ---@return table
+    local function changing_guard(journal)
+        local capture_count = 0
+        return {
+            capture=function()
+                capture_count = capture_count + 1
+                local label = capture_count % 2 == 1 and 'T0' or 'T1'
+                table.insert(journal, label)
+                return {capture=capture_count}
+            end,
+            compare=function(_, before, after)
+                assert.is_true(before.capture < after.capture)
+                return {
+                    kind='base_screen_focus_changed',
+                    content={
+                        severity='warning',
+                        screen_comparison=EComparison.CHANGED,
+                        focus_comparison=EComparison.SAME,
+                        details_complete=true,
+                        before={screen={}, focus={}},
+                        after={screen={}, focus={}},
+                    },
+                }
+            end,
+        }
+    end
+
+    ---Installs production example lifecycle callbacks on a real Busted runtime.
+    ---@param busted table
+    ---@param journal table[]
+    ---@param reset function
+    ---@param guard table
+    ---@return table, table
+    local function install_example_lifecycle(
+            busted, journal, reset, guard)
+        local published = {}
+        local run = {
+            event_publisher={
+                publish=function(event_type, payload)
+                    table.insert(published, {
+                        type=event_type,
+                        payload=payload,
+                    })
+                    if event_type == EventType.DIAGNOSTIC_RECORDED then
+                        table.insert(journal, 'diagnostic')
+                    end
+                end,
+            },
+        }
+        local adapter = assert(loadfile(
+            'src/dwarfspec/automation/busted_lifecycle_adapter.lua'))()
+        local lifecycle = host.new_example_focus_lifecycle(
+            run, reset, guard)
+        adapter.install(busted, {
+            project_root='.',
+            on_suite_entry=lifecycle.suite_entry,
+            on_suite_exit=lifecycle.suite_exit,
+            on_test_start=lifecycle.test_start,
+        })
+        host.install_ds_example_entry(adapter, busted, lifecycle)
+        host.install_ds_example_exit(adapter, busted, lifecycle)
+        busted.subscribe({'test', 'end'}, function(_, _, status)
+            table.insert(journal, status:upper())
+            return nil, true
+        end)
+        busted.subscribe({'error'}, function(element)
+            table.insert(journal, 'ERROR ' .. element.descriptor)
+            return nil, true
+        end)
+        return run, published
+    end
+
     it('initializes and retains the version 2 service registry shape',
             function()
         assert.is_nil(dfhack.dwarfspec)
@@ -134,11 +248,19 @@ describe('automation host ownership', function()
                 pointer_active=not cleaned,
             }
         end
+        local example_focus_cleared = false
+        run.example_focus_lifecycle = {
+            clear=function()
+                example_focus_cleared = true
+            end,
+        }
         local aborted = host.abort('owner', run.owner_capability)
         assert.equals('aborted', aborted.state)
         assert.is_nil(active_callbacks[1])
         assert.is_nil(active_callbacks[2])
         assert.is_true(cleaned)
+        assert.is_true(example_focus_cleared)
+        assert.is_nil(aborted.example_focus_lifecycle)
         assert.is_true(aborted.cleanup_confirmed)
         assert.is_true(aborted.mount_cleanup_state.verified)
         assert.equals(0, aborted.mount_cleanup_state.active_screen_count)
@@ -367,9 +489,13 @@ describe('automation host ownership', function()
         assert.equals(0, #callbacks)
     end)
 
-    it('installs internal reset hooks around every Busted example', function()
+    it('splits internal entry and exit hooks around every Busted example',
+            function()
         local hooks = {}
-        local reset_reasons = {}
+        local lifecycle = {
+            example_entry=function() end,
+            example_exit=function() end,
+        }
         local busted = {
             version='2.3.0',
             api={
@@ -384,13 +510,370 @@ describe('automation host ownership', function()
         local lifecycle_adapter = assert(loadfile(
             'src/dwarfspec/automation/busted_lifecycle_adapter.lua'))()
 
-        host.install_ds_lifecycle(lifecycle_adapter, busted, function(reason)
-            table.insert(reset_reasons, reason)
-        end)
-        hooks.before_each()
-        hooks.after_each()
+        host.install_ds_example_entry(
+            lifecycle_adapter, busted, lifecycle)
+        host.install_ds_example_exit(
+            lifecycle_adapter, busted, lifecycle)
 
-        assert.same({'before example', 'after example'}, reset_reasons)
+        assert.equals(lifecycle.example_entry, hooks.before_each)
+        assert.equals(lifecycle.example_exit, hooks.after_each)
+    end)
+
+    it('orders cleanup observations around the complete ordinary example',
+            function()
+        local busted = new_busted()
+        local journal = {}
+        busted.export('journal', journal)
+        local reset = function(reason)
+            table.insert(journal, 'reset ' .. reason)
+            table.insert(journal, 'settlement ' .. reason)
+        end
+        install_example_lifecycle(
+            busted, journal, reset, changing_guard(journal))
+        register_file(busted, 'tests/ordered_spec.lua', [[
+            setup(function() table.insert(journal, 'suite setup') end)
+            before_each(function()
+                table.insert(journal, 'project before_each')
+            end)
+            after_each(function()
+                table.insert(journal, 'project after_each')
+            end)
+            it('ordinary example', function()
+                finally(function() table.insert(journal, 'finally') end)
+                table.insert(journal, 'example')
+            end)
+        ]])
+
+        execute_busted(busted)
+
+        assert.same({
+            'suite setup',
+            'reset before example',
+            'settlement before example',
+            'T0',
+            'project before_each',
+            'example',
+            'finally',
+            'SUCCESS',
+            'project after_each',
+            'reset after example',
+            'settlement after example',
+            'T1',
+            'diagnostic',
+        }, journal)
+    end)
+
+    it('captures T1 after nested and top-level project after_each hooks',
+            function()
+        local busted = new_busted()
+        local journal = {}
+        busted.export('journal', journal)
+        install_example_lifecycle(busted, journal, function(reason)
+            table.insert(journal, 'reset ' .. reason)
+        end, changing_guard(journal))
+        register_file(busted, 'tests/nested_after_spec.lua', [[
+            after_each(function() table.insert(journal, 'file after') end)
+            describe('nested', function()
+                after_each(function()
+                    table.insert(journal, 'nested after')
+                end)
+                it('runs', function() end)
+            end)
+        ]])
+
+        execute_busted(busted)
+
+        local nested_after
+        local file_after
+        local final_capture
+        for index, event in ipairs(journal) do
+            if event == 'nested after' then nested_after = index end
+            if event == 'file after' then file_after = index end
+            if event == 'T1' then final_capture = index end
+        end
+        assert.is_true(nested_after < file_after)
+        assert.is_true(file_after < final_capture)
+    end)
+
+    it('compares after example failure and continuing after_each failures',
+            function()
+        local busted = new_busted()
+        local journal = {}
+        busted.export('journal', journal)
+        local _, published = install_example_lifecycle(
+            busted, journal, function(reason)
+                table.insert(journal, 'reset ' .. reason)
+            end, changing_guard(journal))
+        register_file(busted, 'tests/failure_spec.lua', [[
+            after_each(function()
+                table.insert(journal, 'project after failure')
+                error('after_each failure')
+            end)
+            it('fails', function() assert.is_true(false) end)
+        ]])
+
+        execute_busted(busted)
+
+        assert.equals(1, #published)
+        assert.equals(EventType.DIAGNOSTIC_RECORDED, published[1].type)
+        local result_index
+        local hook_index
+        local capture_index
+        for index, event in ipairs(journal) do
+            if event == 'FAILURE' then result_index = index end
+            if event == 'project after failure' then hook_index = index end
+            if event == 'T1' then capture_index = index end
+        end
+        assert.is_true(result_index < hook_index)
+        assert.is_true(hook_index < capture_index)
+    end)
+
+    it('attributes before_each failure without reusing an example name',
+            function()
+        local busted = new_busted()
+        local journal = {}
+        busted.export('journal', journal)
+        local _, published = install_example_lifecycle(
+            busted, journal, function(reason)
+                table.insert(journal, 'reset ' .. reason)
+            end, changing_guard(journal))
+        register_file(busted, 'tests/before_failure_spec.lua', [[
+            local count = 0
+            before_each(function()
+                count = count + 1
+                if count == 2 then error('before_each failure') end
+            end)
+            it('first name', function() end)
+            it('second name', function() end)
+        ]])
+
+        execute_busted(busted)
+
+        assert.equals(2, #published)
+        local first = published[1].payload.content
+        local second = published[2].payload.content
+        assert.equals('example', first.scope)
+        assert.equals('test', first.attribution)
+        assert.equals('tests/before_failure_spec.lua', first.suite_name)
+        assert.equals('tests/before_failure_spec.lua',
+            first.source_identity)
+        assert.equals(1, first.repeat_index)
+        assert.matches('first name$', first.example_name)
+        assert.equals('example', second.scope)
+        assert.equals('before_each', second.attribution)
+        assert.equals('tests/before_failure_spec.lua', second.suite_name)
+        assert.equals(1, second.repeat_index)
+        assert.is_nil(second.example_name)
+        assert.is_nil(second.source_identity)
+        local problem_index
+        local diagnostic_index
+        local diagnostics_seen = 0
+        for index, event in ipairs(journal) do
+            if event == 'ERROR before_each' then problem_index = index end
+            if event == 'diagnostic' then
+                diagnostics_seen = diagnostics_seen + 1
+                if diagnostics_seen == 2 then diagnostic_index = index end
+            end
+        end
+        assert.is_true(problem_index < diagnostic_index)
+    end)
+
+    it('cleans every mount category before T1 capture', function()
+        local mount_state = {
+            widget=1,
+            overlay=1,
+            screen=1,
+            native_attachment=1,
+        }
+        local capture_count = 0
+        local guard = {
+            capture=function()
+                capture_count = capture_count + 1
+                if capture_count == 2 then
+                    assert.same({
+                        widget=0,
+                        overlay=0,
+                        screen=0,
+                        native_attachment=0,
+                    }, mount_state)
+                end
+                return {capture=capture_count}
+            end,
+            compare=function()
+                return nil
+            end,
+        }
+        local run = {
+            event_publisher={publish=function() end},
+        }
+        local lifecycle = host.new_example_focus_lifecycle(
+            run, function(reason)
+                if reason == 'after example' then
+                    for category in pairs(mount_state) do
+                        mount_state[category] = 0
+                    end
+                end
+            end, guard)
+        lifecycle.suite_entry(FileSuiteIdentity.new({
+            suite_id='suite#1',
+            suite_name='tests/mounts_spec.lua',
+            source_identity='tests/mounts_spec.lua',
+            repeat_index=1,
+            repeat_count=1,
+        }))
+
+        lifecycle.example_entry()
+        lifecycle.test_start({example_name='mount categories'})
+        lifecycle.example_exit()
+
+        assert.equals(2, capture_count)
+    end)
+
+    it('keeps reset failure authoritative and skips final comparison',
+            function()
+        local capture_count = 0
+        local compare_count = 0
+        local reset_failed = false
+        local lifecycle = host.new_example_focus_lifecycle({
+            event_publisher={publish=function() end},
+        }, function(reason)
+            if reason == 'after example' and not reset_failed then
+                reset_failed = true
+                error('authoritative reset failure')
+            end
+        end, {
+            capture=function()
+                capture_count = capture_count + 1
+                return {}
+            end,
+            compare=function()
+                compare_count = compare_count + 1
+            end,
+        })
+        lifecycle.suite_entry(FileSuiteIdentity.new({
+            suite_id='suite#1',
+            suite_name='tests/reset_spec.lua',
+            source_identity='tests/reset_spec.lua',
+            repeat_index=1,
+            repeat_count=1,
+        }))
+        lifecycle.example_entry()
+
+        assert.has_error(
+            lifecycle.example_exit, 'authoritative reset failure')
+        assert.equals(1, capture_count)
+        assert.equals(0, compare_count)
+        lifecycle.example_exit()
+        assert.equals(0, compare_count)
+    end)
+
+    it('does not capture T0 after pre-example reset failure', function()
+        local capture_count = 0
+        local compare_count = 0
+        local reset_failed = false
+        local lifecycle = host.new_example_focus_lifecycle({
+            event_publisher={publish=function() end},
+        }, function(reason)
+            if reason == 'before example' and not reset_failed then
+                reset_failed = true
+                error('pre-example settlement failure')
+            end
+        end, {
+            capture=function()
+                capture_count = capture_count + 1
+                return {}
+            end,
+            compare=function()
+                compare_count = compare_count + 1
+            end,
+        })
+        lifecycle.suite_entry(FileSuiteIdentity.new({
+            suite_id='suite#1',
+            suite_name='tests/reset_spec.lua',
+            source_identity='tests/reset_spec.lua',
+            repeat_index=1,
+            repeat_count=1,
+        }))
+
+        assert.has_error(
+            lifecycle.example_entry, 'pre-example settlement failure')
+        lifecycle.example_exit()
+
+        assert.equals(0, capture_count)
+        assert.equals(0, compare_count)
+    end)
+
+    it('does not observe pending examples that execute no hooks', function()
+        local busted = new_busted()
+        local journal = {}
+        local capture_count = 0
+        install_example_lifecycle(busted, journal, function() end, {
+            capture=function()
+                capture_count = capture_count + 1
+                return {}
+            end,
+            compare=function()
+                return nil
+            end,
+        })
+        register_file(busted, 'tests/pending_lifecycle_spec.lua', [[
+            pending('not executed')
+        ]])
+
+        execute_busted(busted)
+
+        assert.equals(0, capture_count)
+        assert.same({'PENDING'}, journal)
+    end)
+
+    it('publishes warnings without changing run outcomes', function()
+        local published = {}
+        local run = {
+            counts={successes=1, failures=0, errors=0, pending=0},
+            totals={successes=1, failures=0, errors=0, pending=0},
+            state=RunState.PASSED,
+            exit_status=0,
+            cleanup_confirmed=true,
+            mount_cleanup_verified=true,
+            event_publisher={
+                publish=function(event_type, payload)
+                    table.insert(published, {
+                        type=event_type,
+                        payload=payload,
+                    })
+                end,
+            },
+        }
+        local outcome = {
+            counts=run.counts,
+            totals=run.totals,
+            state=run.state,
+            exit_status=run.exit_status,
+            cleanup_confirmed=run.cleanup_confirmed,
+            mount_cleanup_verified=run.mount_cleanup_verified,
+        }
+        local lifecycle = host.new_example_focus_lifecycle(
+            run, function() end, changing_guard({}))
+        lifecycle.suite_entry(FileSuiteIdentity.new({
+            suite_id='suite#1',
+            suite_name='tests/nonfatal_spec.lua',
+            source_identity='tests/nonfatal_spec.lua',
+            repeat_index=1,
+            repeat_count=1,
+        }))
+        lifecycle.example_entry()
+        lifecycle.test_start({example_name='nonfatal warning'})
+        lifecycle.example_exit()
+
+        assert.equals(1, #published)
+        assert.equals(EventType.DIAGNOSTIC_RECORDED, published[1].type)
+        assert.equals(outcome.counts, run.counts)
+        assert.equals(outcome.totals, run.totals)
+        assert.equals(outcome.state, run.state)
+        assert.equals(outcome.exit_status, run.exit_status)
+        assert.equals(outcome.cleanup_confirmed, run.cleanup_confirmed)
+        assert.equals(outcome.mount_cleanup_verified,
+            run.mount_cleanup_verified)
     end)
 
     it('clears cached test dependencies without touching unrelated modules',

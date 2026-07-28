@@ -1,5 +1,8 @@
 -- Detached base-game screen and focus observations for pollution detection.
 
+local EComparison =
+    require('dwarfspec.automation.base_screen_focus_comparisons')
+
 local M = {}
 
 local DEFAULT_MAX_ERROR_BYTES = 512
@@ -43,8 +46,8 @@ local DEFAULT_MAX_SCREEN_LABEL_BYTES = 128
 
 ---@class BaseScreenFocusComparison
 ---@field severity 'warning'|'info'
----@field screen_comparison 'same'|'changed'|'unavailable'
----@field focus_comparison 'same'|'changed'|'unavailable'
+---@field screen_comparison DwarfSpecEBaseScreenFocusComparison
+---@field focus_comparison DwarfSpecEBaseScreenFocusComparison
 ---@field details_complete boolean
 ---@field before BaseScreenFocusDetails
 ---@field after BaseScreenFocusDetails
@@ -244,14 +247,18 @@ end
 ---Compares exact private base-screen states.
 ---@param before BaseScreenFocusPrivateScreen
 ---@param after BaseScreenFocusPrivateScreen
----@return 'same'|'changed'|'unavailable'
+---@return DwarfSpecEBaseScreenFocusComparison
 local function compare_screen(before, after)
     if before.status == 'unavailable' or after.status == 'unavailable' then
-        return 'unavailable'
+        return EComparison.UNAVAILABLE
     end
-    if before.status ~= after.status then return 'changed' end
-    if before.status == 'none' then return 'same' end
-    return rawequal(before.identity, after.identity) and 'same' or 'changed'
+    if before.status ~= after.status then return EComparison.CHANGED end
+    if before.status == 'none' then return EComparison.SAME end
+    local ok, same = pcall(function()
+        return before.identity == after.identity
+    end)
+    if not ok then return EComparison.UNAVAILABLE end
+    return same and EComparison.SAME or EComparison.CHANGED
 end
 
 ---Returns whether two canonical string sets have identical membership.
@@ -271,12 +278,13 @@ end
 ---Compares private canonical focus states.
 ---@param before BaseScreenFocusPrivateFocus
 ---@param after BaseScreenFocusPrivateFocus
----@return 'same'|'changed'|'unavailable'
+---@return DwarfSpecEBaseScreenFocusComparison
 local function compare_focus(before, after)
     if before.status == 'unavailable' or after.status == 'unavailable' then
-        return 'unavailable'
+        return EComparison.UNAVAILABLE
     end
-    return same_set(before.set, after.set) and 'same' or 'changed'
+    return same_set(before.set, after.set) and
+        EComparison.SAME or EComparison.CHANGED
 end
 
 ---Creates an isolated base-screen focus guard over injected DFHack GUI APIs.
@@ -373,18 +381,19 @@ function M.new(gui, options)
             before.private.screen, after.private.screen)
         local focus_comparison = compare_focus(
             before.private.focus, after.private.focus)
-        if screen_comparison == 'same' and focus_comparison == 'same' then
+        if screen_comparison == EComparison.SAME and
+                focus_comparison == EComparison.SAME then
             return nil
         end
 
-        local changed = screen_comparison == 'changed' or
-            focus_comparison == 'changed'
+        local changed = screen_comparison == EComparison.CHANGED or
+            focus_comparison == EComparison.CHANGED
         local content = {
             severity=changed and 'warning' or 'info',
             screen_comparison=screen_comparison,
             focus_comparison=focus_comparison,
-            details_complete=screen_comparison ~= 'unavailable' and
-                focus_comparison ~= 'unavailable',
+            details_complete=screen_comparison ~= EComparison.UNAVAILABLE and
+                focus_comparison ~= EComparison.UNAVAILABLE,
             before=copy_details(before.details),
             after=copy_details(after.details),
         }

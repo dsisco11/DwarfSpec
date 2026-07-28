@@ -1,22 +1,22 @@
 -- Pinned Busted 2.3.0 file-suite lifecycle adapter.
 
 local path = require('pl.path')
+local FileSuiteIdentity =
+    require('dwarfspec.automation.file_suite_identity')
 
 local M = {}
 
 local SUPPORTED_BUSTED_VERSION = '2.3.0'
 
----@class BustedFileSuiteIdentity
----@field suite_id string
----@field suite_name string
----@field source_identity string
----@field repeat_index integer
----@field repeat_count integer
-
 ---@class BustedLifecycleAdapterOptions
 ---@field project_root string
----@field on_suite_entry fun(identity: BustedFileSuiteIdentity): any
----@field on_suite_exit fun(identity: BustedFileSuiteIdentity, state: any)
+---@field on_suite_entry fun(identity: DwarfSpecFileSuiteIdentity): any
+---@field on_suite_exit fun(identity: DwarfSpecFileSuiteIdentity, state: any)
+---@field on_test_start fun(identity: BustedExampleIdentity)|nil
+
+---@class BustedExampleIdentity
+---@field example_name string
+---@field source_identity string|nil
 
 ---Returns a slash-normalized absolute path.
 ---@param value string
@@ -60,17 +60,35 @@ local function project_relative_file(project_root, file_name)
     return relative
 end
 
----Returns a detached copy of one file-suite identity.
----@param identity BustedFileSuiteIdentity
----@return BustedFileSuiteIdentity
-local function copy_identity(identity)
-    return {
-        suite_id=identity.suite_id,
-        suite_name=identity.suite_name,
-        source_identity=identity.source_identity,
-        repeat_index=identity.repeat_index,
-        repeat_count=identity.repeat_count,
-    }
+---Returns one Busted context's complete example name.
+---@param busted table
+---@param element table
+---@return string
+local function full_example_name(busted, element)
+    local names = {element.name or element.descriptor}
+    local parent = busted.context.parent(element)
+    while parent and (parent.name or parent.descriptor) and
+            parent.descriptor ~= 'file' do
+        table.insert(names, 1, parent.name or parent.descriptor)
+        parent = busted.context.parent(parent)
+    end
+    return table.concat(names, ' ')
+end
+
+---Returns a project-relative source identity when Busted provides one.
+---@param project_root string
+---@param element table
+---@return string|nil
+local function example_source_identity(project_root, element)
+    local trace = type(element.trace) == 'table' and element.trace or {}
+    local source = element.source or element.short_src or trace.source or
+        trace.short_src
+    if type(source) ~= 'string' or source == '' then return nil end
+    source = source:gsub('^@', '')
+    local ok, relative = pcall(
+        project_relative_file, project_root, source)
+    if not ok then return nil end
+    return relative
 end
 
 ---Installs file-suite callbacks on one fresh Busted 2.3.0 runtime.
@@ -118,7 +136,7 @@ function M.install(busted, options)
         instance_index = instance_index + 1
         local source_identity = project_relative_file(
             options.project_root, file.name)
-        local identity = {
+        local identity = FileSuiteIdentity.new({
             suite_id=source_identity .. '#repeat=' ..
                 tostring(repeat_index) .. '#instance=' ..
                 tostring(instance_index),
@@ -126,12 +144,12 @@ function M.install(busted, options)
             source_identity=source_identity,
             repeat_index=repeat_index,
             repeat_count=repeat_count,
-        }
+        })
         active = {
             file=file,
             identity=identity,
         }
-        active.state = options.on_suite_entry(copy_identity(identity))
+        active.state = options.on_suite_entry(identity:copy())
         return nil, true
     end
 
@@ -143,7 +161,20 @@ function M.install(busted, options)
         local completed = active
         active = nil
         options.on_suite_exit(
-            copy_identity(completed.identity), completed.state)
+            completed.identity:copy(), completed.state)
+        return nil, true
+    end
+
+    ---Retains detached attribution for an example whose hooks succeeded.
+    ---@param element table
+    local function on_test_start(element)
+        if options.on_test_start ~= nil then
+            options.on_test_start({
+                example_name=full_example_name(busted, element),
+                source_identity=example_source_identity(
+                    options.project_root, element),
+            })
+        end
         return nil, true
     end
 
@@ -153,12 +184,17 @@ function M.install(busted, options)
         {'file', 'start'}, on_file_start, {priority=1})
     busted.subscribe(
         {'file', 'end'}, on_file_end, {priority=1})
+    if options.on_test_start ~= nil then
+        assert(type(options.on_test_start) == 'function',
+            'Busted lifecycle adapter test-start callback must be a function')
+        busted.subscribe(
+            {'test', 'start'}, on_test_start, {priority=1})
+    end
 end
 
----Installs project reset callbacks around every discovered Busted example.
+---Validates the pinned Busted example-hook surface.
 ---@param busted table
----@param reset fun(reason: string)
-function M.install_example_reset(busted, reset)
+local function validate_example_hooks(busted)
     assert(type(busted) == 'table' and
         busted.version == SUPPORTED_BUSTED_VERSION and
         type(busted.api) == 'table',
@@ -167,10 +203,26 @@ function M.install_example_reset(busted, reset)
     assert(type(busted.api.before_each) == 'function' and
         type(busted.api.after_each) == 'function',
         'Busted lifecycle adapter requires example hook APIs')
-    assert(type(reset) == 'function',
-        'Busted lifecycle adapter reset callback is required')
-    busted.api.before_each(function() reset('before example') end)
-    busted.api.after_each(function() reset('after example') end)
+end
+
+---Installs one root-scoped callback before project example setup.
+---@param busted table
+---@param callback function
+function M.install_example_entry(busted, callback)
+    validate_example_hooks(busted)
+    assert(type(callback) == 'function',
+        'Busted lifecycle adapter example-entry callback is required')
+    busted.api.before_each(callback)
+end
+
+---Installs one root-scoped callback after all project example teardown.
+---@param busted table
+---@param callback function
+function M.install_example_exit(busted, callback)
+    validate_example_hooks(busted)
+    assert(type(callback) == 'function',
+        'Busted lifecycle adapter example-exit callback is required')
+    busted.api.after_each(callback)
 end
 
 return M

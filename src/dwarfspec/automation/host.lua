@@ -447,15 +447,126 @@ function M.discover_tests(project_root, loader, specs)
     })
 end
 
----Delegates run-scoped example cleanup to the pinned lifecycle adapter.
+---Creates per-example focus observations and detached diagnostics.
+---@param run table
+---@param reset function
+---@param guard BaseScreenFocusGuard
+---@return table
+function M.new_example_focus_lifecycle(run, reset, guard)
+    assert(type(run) == 'table',
+        'example focus lifecycle run is required')
+    assert(type(reset) == 'function',
+        'example focus lifecycle reset callback is required')
+    assert(type(guard) == 'table' and type(guard.capture) == 'function' and
+        type(guard.compare) == 'function',
+        'example focus lifecycle guard is required')
+    assert(type(run.event_publisher) == 'table' and
+        type(run.event_publisher.publish) == 'function',
+        'example focus lifecycle event publisher is required')
+
+    local lifecycle = {}
+    local active_suite
+    local active_example
+
+    ---Begins attribution for one executed file-suite instance.
+    ---@param identity DwarfSpecFileSuiteIdentity
+    function lifecycle.suite_entry(identity)
+        assert(type(identity) == 'table' and
+            type(identity.copy) == 'function',
+            'example focus lifecycle requires a file-suite identity')
+        active_example = nil
+        active_suite = identity:copy()
+    end
+
+    ---Releases attribution after one executed file-suite instance.
+    function lifecycle.suite_exit()
+        active_example = nil
+        active_suite = nil
+    end
+
+    ---Resets inherited resources and captures the example's T0 state.
+    function lifecycle.example_entry()
+        active_example = nil
+        reset('before example')
+        assert(active_suite ~= nil,
+            'example focus lifecycle has no active file suite')
+        active_example = {
+            attribution='before_each',
+            suite=active_suite:copy(),
+            before=guard:capture(),
+        }
+    end
+
+    ---Retains identity after project setup reaches Busted test start.
+    ---@param identity BustedExampleIdentity
+    function lifecycle.test_start(identity)
+        if active_example == nil then return end
+        active_example.attribution = 'test'
+        active_example.example_name = identity.example_name
+        active_example.source_identity = identity.source_identity
+    end
+
+    ---Resets resources, captures T1, and publishes one detached diagnostic.
+    function lifecycle.example_exit()
+        local completed = active_example
+        active_example = nil
+        reset('after example')
+        if completed == nil then return end
+        local diagnostic = guard:compare(
+            completed.before, guard:capture())
+        if diagnostic == nil then return end
+        local content = diagnostic.content
+        content.scope = 'example'
+        content.attribution = completed.attribution
+        content.suite_name = completed.suite.suite_name
+        content.repeat_index = completed.suite.repeat_index
+        if completed.example_name ~= nil then
+            content.example_name = completed.example_name
+        end
+        if completed.source_identity ~= nil then
+            content.source_identity = completed.source_identity
+        end
+        run.event_publisher.publish(
+            EventType.DIAGNOSTIC_RECORDED, diagnostic)
+    end
+
+    ---Clears every unconsumed private observation and attribution token.
+    function lifecycle.clear()
+        active_example = nil
+        active_suite = nil
+    end
+
+    return lifecycle
+end
+
+---Installs internal entry handling before project example setup.
 ---@param lifecycle_adapter table
 ---@param busted table
----@param reset function
-function M.install_ds_lifecycle(lifecycle_adapter, busted, reset)
+---@param lifecycle table
+function M.install_ds_example_entry(lifecycle_adapter, busted, lifecycle)
     assert(type(lifecycle_adapter) == 'table' and
-        type(lifecycle_adapter.install_example_reset) == 'function',
+        type(lifecycle_adapter.install_example_entry) == 'function',
         'Busted lifecycle adapter is required')
-    lifecycle_adapter.install_example_reset(busted, reset)
+    assert(type(lifecycle) == 'table' and
+        type(lifecycle.example_entry) == 'function',
+        'example focus lifecycle entry callback is required')
+    lifecycle_adapter.install_example_entry(
+        busted, lifecycle.example_entry)
+end
+
+---Installs internal exit handling after all project example teardown.
+---@param lifecycle_adapter table
+---@param busted table
+---@param lifecycle table
+function M.install_ds_example_exit(lifecycle_adapter, busted, lifecycle)
+    assert(type(lifecycle_adapter) == 'table' and
+        type(lifecycle_adapter.install_example_exit) == 'function',
+        'Busted lifecycle adapter is required')
+    assert(type(lifecycle) == 'table' and
+        type(lifecycle.example_exit) == 'function',
+        'example focus lifecycle exit callback is required')
+    lifecycle_adapter.install_example_exit(
+        busted, lifecycle.example_exit)
 end
 
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
@@ -498,7 +609,22 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local lifecycle_adapter = load_automation_module(package_root,
         'dwarfspec.automation.busted_lifecycle_adapter',
         'src/dwarfspec/automation/busted_lifecycle_adapter.lua')
-    M.install_ds_lifecycle(lifecycle_adapter, busted, reset)
+    local guard_factory = load_automation_module(package_root,
+        'dwarfspec.automation.base_screen_focus_guard',
+        'src/dwarfspec/automation/base_screen_focus_guard.lua')
+    local example_lifecycle = M.new_example_focus_lifecycle(
+        run, reset, guard_factory.new(dfhack.gui))
+    run.example_focus_lifecycle = example_lifecycle
+    lifecycle_adapter.install(busted, {
+        project_root=project_root,
+        on_suite_entry=example_lifecycle.suite_entry,
+        on_suite_exit=example_lifecycle.suite_exit,
+        on_test_start=example_lifecycle.test_start,
+    })
+    M.install_ds_example_entry(
+        lifecycle_adapter, busted, example_lifecycle)
+    M.install_ds_example_exit(
+        lifecycle_adapter, busted, example_lifecycle)
 
     local output_factory = load_automation_module(package_root,
         'dwarfspec.automation.output_handler',
@@ -574,6 +700,10 @@ end
 ---@param reason string
 ---@return boolean
 local function clean_run(run, reason)
+    if run.example_focus_lifecycle ~= nil then
+        run.example_focus_lifecycle.clear()
+        run.example_focus_lifecycle = nil
+    end
     if run.scheduler then
         run.scheduler_module.cancel(run.scheduler, reason)
         run.scheduler.owner = nil

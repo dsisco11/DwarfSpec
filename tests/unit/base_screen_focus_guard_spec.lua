@@ -2,6 +2,8 @@
 
 local guard_module =
     require('dwarfspec.automation.base_screen_focus_guard')
+local EComparison =
+    require('dwarfspec.automation.base_screen_focus_comparisons')
 local events = require('dwarfspec.automation.events')
 
 ---Returns one fake screen with a stable diagnostic class name.
@@ -61,6 +63,31 @@ describe('base-screen focus guard', function()
         assert.is_nil(guard:compare(before, after))
     end)
 
+    it('treats equivalent userdata-style wrappers as one screen identity',
+            function()
+        local wrapper = {
+            __eq=function(left, right)
+                return left.identity == right.identity
+            end,
+        }
+        local state = {
+            screen=setmetatable({
+                identity='same native screen',
+                _type={_name='df.viewscreen_dwarfmodest'},
+            }, wrapper),
+            focus={'dwarfmode/Default'},
+        }
+        local guard = guard_module.new(gui(state))
+        local before = guard:capture()
+        state.screen = setmetatable({
+            identity='same native screen',
+            _type={_name='df.viewscreen_dwarfmodest'},
+        }, wrapper)
+        local after = guard:capture()
+
+        assert.is_nil(guard:compare(before, after))
+    end)
+
     it('detects a different screen instance with identical details',
             function()
         local state = {
@@ -75,8 +102,9 @@ describe('base-screen focus guard', function()
         local diagnostic = assert(guard:compare(before, after))
         assert.equals('base_screen_focus_changed', diagnostic.kind)
         assert.equals('warning', diagnostic.content.severity)
-        assert.equals('changed', diagnostic.content.screen_comparison)
-        assert.equals('same', diagnostic.content.focus_comparison)
+        assert.equals(
+            EComparison.CHANGED, diagnostic.content.screen_comparison)
+        assert.equals(EComparison.SAME, diagnostic.content.focus_comparison)
         assert.is_true(diagnostic.content.details_complete)
     end)
 
@@ -105,9 +133,10 @@ describe('base-screen focus guard', function()
             local after = guard:capture()
 
             local diagnostic = assert(guard:compare(before, after))
-            assert.equals('changed',
+            assert.equals(EComparison.CHANGED,
                 diagnostic.content.screen_comparison)
-            assert.equals('same', diagnostic.content.focus_comparison)
+            assert.equals(
+                EComparison.SAME, diagnostic.content.focus_comparison)
             assert.is_true(diagnostic.content.details_complete)
         end
     end)
@@ -127,9 +156,9 @@ describe('base-screen focus guard', function()
         assert.equals('base_screen_focus_verification_incomplete',
             diagnostic.kind)
         assert.equals('info', diagnostic.content.severity)
-        assert.equals('unavailable',
+        assert.equals(EComparison.UNAVAILABLE,
             diagnostic.content.screen_comparison)
-        assert.equals('unavailable',
+        assert.equals(EComparison.UNAVAILABLE,
             diagnostic.content.focus_comparison)
         assert.is_false(diagnostic.content.details_complete)
         assert.equals('unavailable', before.details.screen.status)
@@ -145,8 +174,10 @@ describe('base-screen focus guard', function()
         local after = guard:capture()
 
         local diagnostic = assert(guard:compare(before, after))
-        assert.equals('same', diagnostic.content.screen_comparison)
-        assert.equals('changed', diagnostic.content.focus_comparison)
+        assert.equals(
+            EComparison.SAME, diagnostic.content.screen_comparison)
+        assert.equals(
+            EComparison.CHANGED, diagnostic.content.focus_comparison)
     end)
 
     it('ignores focus ordering and duplicate strings', function()
@@ -178,8 +209,9 @@ describe('base-screen focus guard', function()
 
         local diagnostic = assert(guard:compare(before, after))
         assert.equals('base_screen_focus_changed', diagnostic.kind)
-        assert.equals('changed', diagnostic.content.screen_comparison)
-        assert.equals('unavailable',
+        assert.equals(
+            EComparison.CHANGED, diagnostic.content.screen_comparison)
+        assert.equals(EComparison.UNAVAILABLE,
             diagnostic.content.focus_comparison)
         assert.is_false(diagnostic.content.details_complete)
         assert.equals('focus failed',
@@ -202,9 +234,10 @@ describe('base-screen focus guard', function()
 
         local diagnostic = assert(guard:compare(before, after))
         assert.equals('base_screen_focus_changed', diagnostic.kind)
-        assert.equals('unavailable',
+        assert.equals(EComparison.UNAVAILABLE,
             diagnostic.content.screen_comparison)
-        assert.equals('changed', diagnostic.content.focus_comparison)
+        assert.equals(
+            EComparison.CHANGED, diagnostic.content.focus_comparison)
         assert.is_false(diagnostic.content.details_complete)
         assert.equals('unavailable',
             diagnostic.content.before.screen.status)
@@ -226,9 +259,9 @@ describe('base-screen focus guard', function()
         assert.equals('base_screen_focus_verification_incomplete',
             diagnostic.kind)
         assert.equals('info', diagnostic.content.severity)
-        assert.equals('unavailable',
+        assert.equals(EComparison.UNAVAILABLE,
             diagnostic.content.screen_comparison)
-        assert.equals('unavailable',
+        assert.equals(EComparison.UNAVAILABLE,
             diagnostic.content.focus_comparison)
         assert.is_false(diagnostic.content.details_complete)
     end)

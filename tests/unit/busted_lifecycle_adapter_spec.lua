@@ -190,6 +190,29 @@ describe('Busted file lifecycle adapter', function()
             journal[2].identity.suite_id)
     end)
 
+    it('provides independent identity objects to lifecycle callbacks',
+            function()
+        local busted = new_busted()
+        local journal = {}
+        local entry_copy
+        install(busted, journal,
+            function(identity)
+                entry_copy = identity:copy()
+                identity.suite_name = 'mutated by entry callback'
+            end)
+        register_file(busted, 'tests/identity_spec.lua', [[
+            it('runs', function() end)
+        ]])
+
+        execute(busted)
+
+        assert.equals('tests/identity_spec.lua', entry_copy.suite_name)
+        assert.equals(
+            'tests/identity_spec.lua', journal[2].identity.suite_name)
+        assert.not_equals(journal[1].identity, journal[2].identity)
+        assert.is_function(journal[2].identity.copy)
+    end)
+
     it('executes two files as sequential nonoverlapping suites', function()
         local busted = new_busted()
         local journal = {}
