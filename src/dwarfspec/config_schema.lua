@@ -19,6 +19,7 @@ local RESERVED_COMMANDS = {
     hover=true,
     input=true,
     inspect=true,
+    isGamePaused=true,
     mount=true,
     mouseInput=true,
     move_pointer=true,

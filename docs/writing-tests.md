@@ -524,6 +524,15 @@ pollution while preserving the test result that produced them.
 
 ## World time
 
+`ds.isGamePaused()` returns the current Dwarf Fortress simulation pause state.
+It is a read-only top-level command and does not require a mount:
+
+```lua
+if ds.isGamePaused() then
+    error('this test requires the simulation to be running')
+end
+```
+
 `ds.getTick()` returns the current in-year Dwarf Fortress simulation tick from
 `df.global.cur_year_tick`. It is a read-only top-level command and does not
 require a mount:

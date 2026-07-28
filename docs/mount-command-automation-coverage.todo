@@ -62,7 +62,7 @@ recovery scenarios.
 - `ds.capture_screen()` is run-level screen capture. It does not require a
   current mount and must not be repeated per host.
 - `ds.await()`, `ds.wait_frames()`, `ds.wait_ticks()`, `ds.getTick()`,
-  `ds.getTime()`,
+  `ds.getTime()`, `ds.isGamePaused()`,
   `ds.hasFocus()`, `ds.getViewPos()`, `ds.setViewPos()`, and
   `ds.stage_overlay_registration()` are not mount-host matrix entries.
 - Grid and pixel pointer spaces are interaction-layer behavior. Their shared
@@ -114,6 +114,7 @@ Legend:
 | `ds.await()` | covered by shared scheduler/automation specs | none |
 | `ds.getTick()` | covered in `native_screen_mount_live_spec.lua` | none |
 | `ds.getTime()` | covered in `native_screen_mount_live_spec.lua` | none |
+| `ds.isGamePaused()` | implemented in `native_screen_mount_live_spec.lua` | execute the focused live proof |
 | `ds.hasFocus()` | covered in `native_screen_mount_live_spec.lua` | none |
 | `ds.getViewPos()` | covered in `view_pos_live_spec.lua` | none |
 | `ds.setViewPos()` | covered in `view_pos_live_spec.lua` | none |

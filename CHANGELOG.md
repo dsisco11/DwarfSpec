@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   DFHack focus strings.
 - `ds.getTick()` returns the current in-year simulation tick, while
   `ds.getTime()` returns DFHack's millisecond clock.
+- `ds.isGamePaused()` reports whether the Dwarf Fortress simulation is
+  currently paused without requiring a mount.
 - `ds.wait_ticks(count, options)` waits asynchronously for an exact number of
   unpaused Dwarf Fortress simulation ticks, with a raw-frame wall-timeout
   watchdog for paused games.

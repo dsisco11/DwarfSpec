@@ -260,6 +260,7 @@ describe('non-owning native-screen attachment', function()
             'native acceptance requires a scrollable Hauling route list')
         assert.equals(df.global.cur_year_tick, ds.getTick())
         assert.is_true(ds.getTime() >= 0)
+        assert.equals(df.global.pause_state, ds.isGamePaused())
 
         local run = ds.current_run()
         run.native_overlay_events = {}

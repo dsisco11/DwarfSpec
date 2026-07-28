@@ -219,6 +219,7 @@ simulation ticks stop while the game is paused.
 | `ds.await(description, query, options)` | Poll a condition between live frames. |
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
 | `ds.wait_ticks(count, options)` | Wait for unpaused simulation ticks; options are `timeout_ms` and diagnostic `description`. |
+| `ds.isGamePaused()` | Return whether the Dwarf Fortress simulation is paused. |
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
 | `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |

@@ -261,6 +261,10 @@ function DS.wait_ticks(count, options) end
 ---@return T
 function DS.await(description, query, options) end
 
+---Returns whether the Dwarf Fortress simulation is currently paused.
+---@return boolean
+function DS.isGamePaused() end
+
 ---Returns the current in-year simulation tick for the loaded DF world.
 ---@return integer
 function DS.getTick() end

@@ -828,6 +828,16 @@ local TestStatus = load_automation_module(package_root,
             scheduler, description, query, wait_options(options, true))
     end
 
+    ---Returns whether the Dwarf Fortress simulation is currently paused.
+    ---@return boolean
+    function ds.isGamePaused()
+        local global = df and df.global
+        local pause_state = global and global.pause_state
+        assert(type(pause_state) == 'boolean',
+            'DwarfSpec isGamePaused requires a valid df.global.pause_state')
+        return pause_state
+    end
+
     ---Returns the current in-year simulation tick for the loaded DF world.
     ---@return integer
     function ds.getTick()

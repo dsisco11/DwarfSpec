@@ -232,6 +232,7 @@ describe('DwarfSpec public mount commands', function()
         rawset(_G, 'df', {
             global={
                 cur_year_tick=12345,
+                pause_state=false,
                 gps={
                     mouse_x=4,
                     mouse_y=5,
@@ -521,6 +522,18 @@ describe('DwarfSpec public mount commands', function()
 
     it('waits for simulation ticks without requiring a mount', function()
         assert.equals(2, ds.wait_ticks(2))
+    end)
+
+    it('returns whether the game is paused without requiring a mount',
+            function()
+        assert.is_false(ds.isGamePaused())
+        df.global.pause_state = true
+        assert.is_true(ds.isGamePaused())
+
+        df.global.pause_state = nil
+        assert.has_error(function() ds.isGamePaused() end,
+            'DwarfSpec isGamePaused requires a valid ' ..
+                'df.global.pause_state')
     end)
 
     it('returns the current DFHack time without requiring a mount', function()
