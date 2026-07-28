@@ -194,6 +194,13 @@ describe('DwarfSpec consumer extensions', function()
         assert.has_error(function() extensions.load(descriptor, loader) end,
             'tests/dwarfspec/config.lua: custom command conflicts with ' ..
             'ds.isGamePaused')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={setGamePaused=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.setGamePaused')
     end)
 
     it('matches external error-format and unknown-setting validation',

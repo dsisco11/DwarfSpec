@@ -190,6 +190,7 @@ local function verify_executor_clean_state(proof)
             mount.subject_count ~= 0 or
             mount.pointer_active == true or
             mount.button_state_active == true or
+            mount.game_pause_state_active == true or
             mount.render_observer_active == true or
             mount.verified ~= true) then
         return false, 'quarantined mount state is not clean'
@@ -779,6 +780,7 @@ local function clean_run(run, reason)
                 result.subject_count == 0 and
                 result.pointer_active ~= true and
                 result.button_state_active ~= true and
+                result.game_pause_state_active ~= true and
                 result.render_observer_active ~= true
         else
             mount_ok = false

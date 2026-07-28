@@ -265,6 +265,11 @@ function DS.await(description, query, options) end
 ---@return boolean
 function DS.isGamePaused() end
 
+---Sets the game pause state and restores its original value after the example.
+---@param paused boolean
+---@return boolean
+function DS.setGamePaused(paused) end
+
 ---Returns the current in-year simulation tick for the loaded DF world.
 ---@return integer
 function DS.getTick() end

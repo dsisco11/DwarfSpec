@@ -536,6 +536,38 @@ describe('DwarfSpec public mount commands', function()
                 'df.global.pause_state')
     end)
 
+    it('sets and restores the game pause state without requiring a mount',
+            function()
+        assert.is_true(ds.setGamePaused(true))
+        assert.is_true(ds.isGamePaused())
+        assert.is_true(
+            run.mount_cleanup_probe().game_pause_state_active)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        assert.is_false(ds.setGamePaused(false))
+        assert.is_false(ds.isGamePaused())
+        assert.equals(1, cleanup.pending_count(registry))
+
+        assert.is_true(ds.setGamePaused(true))
+        reset('game pause state example cleanup')
+
+        assert.is_false(ds.isGamePaused())
+        assert.is_false(
+            run.mount_cleanup_probe().game_pause_state_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('validates the requested game pause state before scheduling cleanup',
+            function()
+        for _, value in ipairs({0, 'true', {}}) do
+            assert.has_error(function()
+                ds.setGamePaused(value)
+            end, 'game pause state must be a boolean')
+        end
+        assert.is_false(ds.isGamePaused())
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
     it('returns the current DFHack time without requiring a mount', function()
         assert.equals(67890, ds.getTime())
         dfhack_time = 67891
@@ -671,6 +703,7 @@ describe('DwarfSpec public mount commands', function()
             pointer_active=false,
             button_state_active=false,
             map_view_position_active=false,
+            game_pause_state_active=false,
             render_observer_active=true,
         }, run.mount_cleanup_probe())
         assert.has_error(function()

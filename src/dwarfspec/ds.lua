@@ -197,8 +197,9 @@ local TestStatus = load_automation_module(package_root,
                 assert(type(gui.getDwarfmodeViewDims) == 'function',
                     'DwarfSpec requires dfhack.gui.getDwarfmodeViewDims')
                 return gui.getDwarfmodeViewDims()
-            end,
+        end,
         map_view_cleanup_entry=nil,
+        game_pause_cleanup_entry=nil,
     }
     local publisher = context.run.event_publisher
 
@@ -487,6 +488,8 @@ local TestStatus = load_automation_module(package_root,
             context.pointer.button_cleanup_entry ~= nil
         state.map_view_position_active =
             context.map_view_cleanup_entry ~= nil
+        state.game_pause_state_active =
+            context.game_pause_cleanup_entry ~= nil
         state.render_observer_active =
             context.mount_context.current ~= nil and
             context.mount_context.current.render_observer ~= nil
@@ -836,6 +839,36 @@ local TestStatus = load_automation_module(package_root,
         assert(type(pause_state) == 'boolean',
             'DwarfSpec isGamePaused requires a valid df.global.pause_state')
         return pause_state
+    end
+
+    ---Sets the game pause state for the current example.
+    ---@param paused boolean
+    ---@return boolean
+    function ds.setGamePaused(paused)
+        assert(type(paused) == 'boolean',
+            'game pause state must be a boolean')
+        if context.game_pause_cleanup_entry == nil then
+            local original = ds.isGamePaused()
+            context.game_pause_cleanup_entry = cleanup_module.push(
+                cleanup_registry, 'restore game pause state', function()
+                    local global = df and df.global
+                    assert(global ~= nil,
+                        'DwarfSpec could not restore game pause state: ' ..
+                            'df.global is unavailable')
+                    global.pause_state = original
+                    assert(global.pause_state == original,
+                        'DFHack rejected the original game pause state')
+                    context.game_pause_cleanup_entry = nil
+                end)
+        end
+        local global = df and df.global
+        assert(global ~= nil,
+            'DwarfSpec could not set game pause state: ' ..
+                'df.global is unavailable')
+        global.pause_state = paused
+        assert(global.pause_state == paused,
+            'DFHack rejected the requested game pause state')
+        return paused
     end
 
     ---Returns the current in-year simulation tick for the loaded DF world.

@@ -533,6 +533,19 @@ if ds.isGamePaused() then
 end
 ```
 
+`ds.setGamePaused(paused)` accepts a boolean and immediately returns the
+requested state. The first call in each example captures the inherited pause
+state. DwarfSpec restores that exact state after project teardown, even when
+the example fails:
+
+```lua
+ds.setGamePaused(false)
+assert.is_false(ds.isGamePaused())
+```
+
+Repeated calls within the same example retain the original cleanup baseline;
+they do not replace it with an intermediate state.
+
 `ds.getTick()` returns the current in-year Dwarf Fortress simulation tick from
 `df.global.cur_year_tick`. It is a read-only top-level command and does not
 require a mount:
