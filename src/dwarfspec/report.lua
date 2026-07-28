@@ -4,6 +4,8 @@ local M = {}
 local events = require('dwarfspec.automation.events')
 local EventType = require('dwarfspec.automation.event_types')
 local diagnostic_formatter = require('dwarfspec.diagnostic_formatter')
+local focus_diagnostics =
+    require('dwarfspec.automation.focus_diagnostics')
 local schemas = require('dwarfspec.automation.schemas')
 local SchedulerFailureKind =
     require('dwarfspec.automation.scheduler_failure_kinds')
@@ -346,6 +348,9 @@ local function format_event(event, options)
         end
         return ('%s %s: %s'):format(payload.kind:upper(),
             payload.name, payload.message)
+    elseif event.type == EventType.DIAGNOSTIC_RECORDED and
+            payload.kind == focus_diagnostics.CHANGE_KIND then
+        return focus_diagnostics.format_warning(payload)
     elseif event.type == EventType.CLEANUP_STARTED then
         return ('CLEANUP started (%d pending)'):format(
             payload.pending_action_count)

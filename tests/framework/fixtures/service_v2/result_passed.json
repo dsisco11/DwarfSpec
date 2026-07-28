@@ -20,5 +20,51 @@
     "state": "passed",
     "cleanup_confirmed": true
   },
-  "events": []
+  "events": [
+    {
+      "schema": "dwarfspec.event.v1",
+      "service_instance_id": "service-fixture-1",
+      "project_id": "project-alpha",
+      "run_id": "run-passed",
+      "generation": 3,
+      "sequence": 1,
+      "type": "diagnostic.recorded",
+      "elapsed_ms": 1500,
+      "payload": {
+        "kind": "base_screen_focus_changed",
+        "content": {
+          "severity": "warning",
+          "scope": "example",
+          "attribution": "test",
+          "suite_name": "tests/live/shared_spec.ds.lua",
+          "example_name": "shared spec changes focus",
+          "source_identity": "tests/live/shared_spec.ds.lua",
+          "repeat_index": 1,
+          "screen_comparison": 2,
+          "focus_comparison": 1,
+          "details_complete": true,
+          "before": {
+            "screen": {
+              "status": "present",
+              "type": "viewscreen_dwarfmodest"
+            },
+            "focus": {
+              "status": "available",
+              "values": ["dwarfmode/Default"]
+            }
+          },
+          "after": {
+            "screen": {
+              "status": "present",
+              "type": "viewscreen_unitst"
+            },
+            "focus": {
+              "status": "available",
+              "values": ["dwarfmode/Default"]
+            }
+          }
+        }
+      }
+    }
+  ]
 }

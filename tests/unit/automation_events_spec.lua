@@ -1,6 +1,8 @@
 -- Unit contracts for bounded structured automation event journals.
 
 local events = require('dwarfspec.automation.events')
+local EComparison =
+    require('dwarfspec.automation.base_screen_focus_comparisons')
 local EventType = require('dwarfspec.automation.event_types')
 local RunState = require('dwarfspec.automation.run_states')
 local SchedulerFailureKind =
@@ -98,6 +100,56 @@ local function payloads()
             blocking_generation=6,
         },
     }
+end
+
+---Returns one detached focus observation fixture.
+---@param focus_available boolean
+---@param screen_type string|nil
+---@return table
+local function focus_details(focus_available, screen_type)
+    return {
+        screen={
+            status='present',
+            type=screen_type or 'viewscreen_dwarfmodest',
+        },
+        focus=focus_available and {
+            status='available',
+            values={'dwarfmode/Default'},
+        } or {
+            status='unavailable',
+            values={},
+            error='focus capture failed',
+        },
+    }
+end
+
+---Returns one valid focus diagnostic fixture.
+---@param kind string
+---@param scope 'example'|'suite'
+---@param incomplete boolean
+---@return table
+local function focus_diagnostic(kind, scope, incomplete)
+    local changed = kind == 'base_screen_focus_changed'
+    local content = {
+        severity=changed and 'warning' or 'info',
+        scope=scope,
+        attribution=scope == 'suite' and 'file' or 'test',
+        suite_name='tests/focus_spec.lua',
+        source_identity='tests/focus_spec.lua',
+        repeat_index=2,
+        screen_comparison=changed and EComparison.CHANGED or
+            EComparison.SAME,
+        focus_comparison=incomplete and EComparison.UNAVAILABLE or
+            EComparison.SAME,
+        details_complete=not incomplete,
+        before=focus_details(not incomplete, 'viewscreen_before'),
+        after=focus_details(not incomplete,
+            changed and 'viewscreen_after' or 'viewscreen_before'),
+    }
+    if scope == 'example' then
+        content.example_name='focus suite changes focus'
+    end
+    return {kind=kind, content=content}
 end
 
 describe('automation structured events', function()
@@ -249,6 +301,115 @@ describe('automation structured events', function()
             assert.has_error(function()
                 events.validate_payload(
                     EventType.PROBLEM_RECORDED, payload)
+            end)
+        end
+    end)
+
+    it('validates example and suite focus change diagnostics', function()
+        for _, fixture in ipairs({
+                focus_diagnostic(
+                    'base_screen_focus_changed', 'example', false),
+                focus_diagnostic(
+                    'base_screen_focus_changed', 'suite', false),
+                focus_diagnostic(
+                    'base_screen_focus_changed', 'example', true),
+                focus_diagnostic(
+                    'base_screen_focus_changed', 'suite', true),
+            }) do
+            local journal = events.new_journal(identity())
+            local event = events.publish(journal,
+                EventType.DIAGNOSTIC_RECORDED, fixture, 101)
+            assert.equals('warning', event.payload.content.severity)
+            assert.equals(fixture.content.scope,
+                event.payload.content.scope)
+            fixture.content.before.screen.type = 'mutated after publish'
+            assert.equals('viewscreen_before',
+                journal.events[1].payload.content.before.screen.type)
+        end
+    end)
+
+    it('validates example and suite incomplete-verification diagnostics',
+            function()
+        for _, scope in ipairs({'example', 'suite'}) do
+            local fixture = focus_diagnostic(
+                'base_screen_focus_verification_incomplete', scope, true)
+            local journal = events.new_journal(identity())
+            local event = events.publish(journal,
+                EventType.DIAGNOSTIC_RECORDED, fixture, 101)
+            assert.equals('info', event.payload.content.severity)
+            assert.is_false(event.payload.content.details_complete)
+        end
+    end)
+
+    it('rejects malformed focus diagnostic contracts', function()
+        local mutations = {
+            function(value) value.content.severity = 'info' end,
+            function(value) value.content.scope = 'nested' end,
+            function(value) value.content.attribution = 'file' end,
+            function(value) value.content.suite_name = '' end,
+            function(value) value.content.example_name = nil end,
+            function(value) value.content.repeat_index = 0 end,
+            function(value)
+                value.content.screen_comparison = 999
+            end,
+            function(value) value.content.details_complete = false end,
+            function(value)
+                value.content.before.screen.status = 'unknown'
+            end,
+            function(value)
+                value.content.before.focus.values[1] = io.stdout
+            end,
+            function(value)
+                value.content.before.screen.type =
+                    'viewscreen_dwarfmodestst: 0x1234ABCD'
+            end,
+            function(value)
+                value.content.before.private = {identity='forbidden'}
+            end,
+        }
+        for _, mutate in ipairs(mutations) do
+            local fixture = focus_diagnostic(
+                'base_screen_focus_changed', 'example', false)
+            mutate(fixture)
+            assert.has_error(function()
+                events.validate_payload(
+                    EventType.DIAGNOSTIC_RECORDED, fixture)
+            end)
+        end
+
+        local incomplete = focus_diagnostic(
+            'base_screen_focus_verification_incomplete', 'suite', true)
+        incomplete.content.focus_comparison = EComparison.CHANGED
+        assert.has_error(function()
+            events.validate_payload(
+                EventType.DIAGNOSTIC_RECORDED, incomplete)
+        end)
+        incomplete = focus_diagnostic(
+            'base_screen_focus_verification_incomplete', 'suite', true)
+        incomplete.content.severity = 'warning'
+        assert.has_error(function()
+            events.validate_payload(
+                EventType.DIAGNOSTIC_RECORDED, incomplete)
+        end)
+    end)
+
+    it('preserves existing command and operator diagnostic kinds',
+            function()
+        for _, fixture in ipairs({
+                {kind='command_failure', content={
+                    name='click', message='target disappeared'}},
+                {kind='component_tree', content={
+                    name='root', children={}}},
+                {kind='operator_cancel', content={
+                    reason='requested', authority='operator'}},
+                {kind='operator_abort', content={
+                    reason='requested', authority='operator'}},
+                {kind='operator_discard', content={
+                    reason='requested', authority='operator'}},
+            }) do
+            assert.has_no.errors(function()
+                events.validate_payload(
+                    EventType.DIAGNOSTIC_RECORDED, fixture)
             end)
         end
     end)

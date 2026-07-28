@@ -2,6 +2,8 @@
 
 local json = require('dkjson')
 local runner = require('dwarfspec.runner')
+local EComparison =
+    require('dwarfspec.automation.base_screen_focus_comparisons')
 local EventType = require('dwarfspec.automation.event_types')
 local ErrorFormat = require('dwarfspec.error_formats')
 local ResultState = require('dwarfspec.automation.result_states')
@@ -204,6 +206,35 @@ local function diagnostic_events(message)
     }
 end
 
+---Returns one valid example focus-warning event value.
+---@return table
+local function focus_warning_event()
+    local details = {
+        screen={status='present', type='viewscreen_dwarfmodest'},
+        focus={status='available', values={'dwarfmode/Default'}},
+    }
+    return {
+        type=EventType.DIAGNOSTIC_RECORDED,
+        payload={
+            kind='base_screen_focus_changed',
+            content={
+                severity='warning',
+                scope='example',
+                attribution='test',
+                suite_name='tests/focus_spec.lua',
+                example_name='focus suite changes focus',
+                source_identity='tests/focus_spec.lua',
+                repeat_index=1,
+                screen_comparison=EComparison.CHANGED,
+                focus_comparison=EComparison.SAME,
+                details_complete=true,
+                before=details,
+                after=details,
+            },
+        },
+    }
+end
+
 ---Builds one queued bootstrap transport response.
 ---@param run_id string
 ---@return string[]
@@ -292,6 +323,50 @@ describe('DwarfSpec external runner', function()
         assert.is_true(lua_module_root_found)
         assert.is_true(no_results_policy_found)
         assert.is_false(result_path_found)
+    end)
+
+    it('streams and persists a warning without changing a passing result',
+            function()
+        local emitted = {}
+        local persisted
+        local run_options = options('warning-pass-run')
+        run_options.emit = function(line) table.insert(emitted, line) end
+        run_options.result_store = {
+            write=function(_, value) persisted = value end,
+        }
+        run_options.result_path = 'tests/.test-results/warning.json'
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    'warning-pass-run', RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                return {exit_code=0, lines=transport_with_events(arguments,
+                    'warning-pass-run', RunState.PASSED, true,
+                    {focus_warning_event()})}
+            end
+            assert.matches('acknowledge%.lua$', arguments[3])
+            return {exit_code=0, lines=transport_lines(arguments,
+                'warning-pass-run', RunState.PASSED, true)}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(0, outcome.exit_code)
+        assert.equals(RunState.PASSED, outcome.report.state)
+        assert.is_true(outcome.report.cleanup_confirmed)
+        assert.equals(ResultState.PASSED, outcome.result.state)
+        assert.equals(ResultState.PASSED, persisted.state)
+        assert.equals(1, #persisted.events)
+        assert.equals('base_screen_focus_changed',
+            persisted.events[1].payload.kind)
+        assert.same({
+            'WARNING base-screen focus changed after example focus suite ' ..
+                'changes focus in tests/focus_spec.lua (repeat=1 ' ..
+                'attribution=test screen=changed focus=same complete=true)',
+        }, emitted)
     end)
 
     it('streams each configured diagnostic format in event order and ' ..

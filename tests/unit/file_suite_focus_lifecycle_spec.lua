@@ -74,8 +74,14 @@ local function change_diagnostic(before, after)
             screen_comparison=EComparison.CHANGED,
             focus_comparison=EComparison.SAME,
             details_complete=true,
-            before={screen={type=before.value}, focus={values={}}},
-            after={screen={type=after.value}, focus={values={}}},
+            before={
+                screen={status='present', type=before.value},
+                focus={status='available', values={}},
+            },
+            after={
+                screen={status='present', type=after.value},
+                focus={status='available', values={}},
+            },
         },
     }
 end

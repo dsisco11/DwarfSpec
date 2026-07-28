@@ -501,45 +501,45 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Phase 5: Publish and render detached diagnostics
 
-- [ ] Continue using `EventType.DIAGNOSTIC_RECORDED`; do not add a separate
+- [x] Continue using `EventType.DIAGNOSTIC_RECORDED`; do not add a separate
   warning event type.
-- [ ] Add kind-specific validation for change and incomplete-verification
+- [x] Add kind-specific validation for change and incomplete-verification
   content while preserving every existing diagnostic producer.
-- [ ] Validate severity, scope, attribution, suite and example identity,
+- [x] Validate severity, scope, attribution, suite and example identity,
   comparison statuses, completeness, and detached observations.
-- [ ] Append exactly one retained `WARNING ...` line for each change
+- [x] Append exactly one retained `WARNING ...` line for each change
   diagnostic.
-- [ ] Format warning-severity diagnostics in `src/dwarfspec/report.lua`.
-- [ ] Keep incomplete-verification diagnostics structured and nonfatal without
+- [x] Format warning-severity diagnostics in `src/dwarfspec/report.lua`.
+- [x] Keep incomplete-verification diagnostics structured and nonfatal without
   formatting them as warnings.
-- [ ] Ensure only detached records reach the event journal and result files.
-- [ ] Keep diagnostics out of `failure_details` and all test counters.
+- [x] Ensure only detached records reach the event journal and result files.
+- [x] Keep diagnostics out of `failure_details` and all test counters.
 
 ### Phase 5 tests
 
-- [ ] Extend `tests/unit/automation_events_spec.lua` for valid and invalid
+- [x] Extend `tests/unit/automation_events_spec.lua` for valid and invalid
   example and file-suite change diagnostics.
-- [ ] Add valid and invalid incomplete-verification records.
-- [ ] Prove existing command and operator diagnostic kinds remain valid.
-- [ ] Extend `tests/unit/automation_host_spec.lua` for exactly-once event and
+- [x] Add valid and invalid incomplete-verification records.
+- [x] Prove existing command and operator diagnostic kinds remain valid.
+- [x] Extend `tests/unit/automation_host_spec.lua` for exactly-once event and
   retained-warning publication.
-- [ ] Extend `tests/unit/process_report_spec.lua` for post-result example
+- [x] Extend `tests/unit/process_report_spec.lua` for post-result example
   warning formatting and post-file suite warning formatting.
-- [ ] Extend result, schema, runner, service, and immutable-enum fixtures only
+- [x] Extend result, schema, runner, service, and immutable-enum fixtures only
   where their exhaustive inventories require the new data.
-- [ ] Prove no event or JSON result contains userdata or an address-bearing
+- [x] Prove no event or JSON result contains userdata or an address-bearing
   screen label.
-- [ ] Prove incomplete focus details remain attached to an affirmative screen
+- [x] Prove incomplete focus details remain attached to an affirmative screen
   change warning.
-- [ ] Prove incomplete verification does not produce a `WARNING` line.
-- [ ] Prove diagnostics do not affect terminal state, exit status, cleanup
+- [x] Prove incomplete verification does not produce a `WARNING` line.
+- [x] Prove diagnostics do not affect terminal state, exit status, cleanup
   confirmation, or scheduler recovery.
 
 ### Phase 5 gate
 
-- [ ] Focused event, report, host, result, and schema tests pass.
-- [ ] Full unit suite passes.
-- [ ] Lua syntax and formatting checks pass.
+- [x] Focused event, report, host, result, and schema tests pass.
+- [x] Full unit suite passes.
+- [x] Lua syntax and formatting checks pass.
 
 ## Phase 6: Prove behavior in live DFHack
 
@@ -634,9 +634,19 @@ Warnings and incomplete-verification diagnostics must not change:
   dual example/suite warnings, later restoration, suite mounts, repeats,
   Busted failure and empty-file paths, suite-reset failure, and emergency
   state clearing.
-- Focused diagnostic/report unit:
+- Focused diagnostic publication and rendering: 2026-07-28:
+  `.\Tools\Run-UnitTests.ps1 --filter "automation structured events"`:
+  12 successes; `--filter "DwarfSpec native reports"`: 12 successes;
+  `--filter "automation host ownership"`: 24 successes; and
+  `--filter "DwarfSpec external runner"`: 31 successes. All reported
+  0 failures, 0 errors, and 0 pending.
+- Focused result, schema, service, and enum contracts: 2026-07-28:
+  `--filter "automation version 2 schemas and snapshots"`: 8 successes;
+  the result-contract and scheduler-recovery cases: 1 success each; and
+  `--filter "immutable DwarfSpec contract enums"`: 5 successes. All reported
+  0 failures, 0 errors, and 0 pending.
 - Full unit: 2026-07-28, `.\Tools\Run-UnitTests.ps1`:
-  497 successes, 0 failures, 0 errors, 0 pending.
+  507 successes, 0 failures, 0 errors, 0 pending.
 - Focused live: 2026-07-28,
   `.\Tools\Run-AutomationTests.ps1 --filter "loads ordinary support modules"`:
   1 success, passed, exit 0, no pollution diagnostic,
@@ -660,10 +670,20 @@ Warnings and incomplete-verification diagnostics must not change:
   passed every clean observer, emitted no pollution diagnostics, and reported
   both cleanup confirmation and mount-cleanup verification.
 - Full live:
-- Event-journal warning audit:
+- Event-journal warning audit: 2026-07-28, change diagnostics were validated
+  as detached numeric-comparison records, retained exactly one warning line,
+  survived result persistence, and rendered after example/file activity.
+  Incomplete verification remained an info diagnostic with no warning line;
+  command and operator diagnostic kinds remained accepted.
 - Lua syntax and formatting: 2026-07-28, `.\Tools\Check-Lua.ps1`:
-  Lua 5.4.6 checks passed for 243 files.
-- Process result and exit status:
-- Cleanup confirmation:
+  Lua 5.4.6 checks passed for 244 files.
+- Package build: 2026-07-28, `.\Tools\Publish.ps1` created
+  `dist\dwarfspec-0.2.0-1.all.rock`; the archive contains
+  `dwarfspec/automation/focus_diagnostics.lua`.
+- Process result and exit status: the focused external-runner warning fixture
+  remained `passed` with exit 0 and persisted the diagnostic event.
+- Cleanup confirmation: the focused host and external-runner fixtures kept
+  cleanup and mount-cleanup confirmation unchanged; the scheduler quarantine
+  fixture recovered normally after retaining a focus warning.
 - Final base-screen restoration:
 - Diff check: 2026-07-28, `git diff --check`: passed.

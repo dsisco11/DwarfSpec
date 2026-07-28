@@ -151,8 +151,14 @@ describe('automation host ownership', function()
                         screen_comparison=EComparison.CHANGED,
                         focus_comparison=EComparison.SAME,
                         details_complete=true,
-                        before={screen={}, focus={}},
-                        after={screen={}, focus={}},
+                        before={
+                            screen={status='present', type='viewscreen_a'},
+                            focus={status='available', values={'a'}},
+                        },
+                        after={
+                            screen={status='present', type='viewscreen_b'},
+                            focus={status='available', values={'a'}},
+                        },
                     },
                 }
             end,
@@ -853,6 +859,8 @@ describe('automation host ownership', function()
         local run = {
             counts={successes=1, failures=0, errors=0, pending=0},
             totals={successes=1, failures=0, errors=0, pending=0},
+            output_lines={},
+            failure_details={},
             state=RunState.PASSED,
             exit_status=0,
             cleanup_confirmed=true,
@@ -889,6 +897,12 @@ describe('automation host ownership', function()
 
         assert.equals(1, #published)
         assert.equals(EventType.DIAGNOSTIC_RECORDED, published[1].type)
+        assert.same({
+            'WARNING base-screen focus changed after example nonfatal ' ..
+                'warning in tests/nonfatal_spec.lua (repeat=1 ' ..
+                'attribution=test screen=changed focus=same complete=true)',
+        }, run.output_lines)
+        assert.same({}, run.failure_details)
         assert.equals(outcome.counts, run.counts)
         assert.equals(outcome.totals, run.totals)
         assert.equals(outcome.state, run.state)
@@ -896,6 +910,114 @@ describe('automation host ownership', function()
         assert.equals(outcome.cleanup_confirmed, run.cleanup_confirmed)
         assert.equals(outcome.mount_cleanup_verified,
             run.mount_cleanup_verified)
+    end)
+
+    it('publishes incomplete verification without a retained warning',
+            function()
+        local published = {}
+        local run = {
+            output_lines={},
+            failure_details={},
+            event_publisher={
+                publish=function(event_type, payload)
+                    table.insert(published, {
+                        type=event_type,
+                        payload=payload,
+                    })
+                end,
+            },
+        }
+        local lifecycle = host.new_focus_lifecycle(
+            run, function() end, {
+                capture=function() return {} end,
+                compare=function()
+                    return {
+                        kind='base_screen_focus_verification_incomplete',
+                        content={
+                            severity='info',
+                            screen_comparison=EComparison.SAME,
+                            focus_comparison=EComparison.UNAVAILABLE,
+                            details_complete=false,
+                            before={
+                                screen={
+                                    status='present',
+                                    type='viewscreen_dwarfmodest',
+                                },
+                                focus={
+                                    status='unavailable',
+                                    values={},
+                                    error='focus capture failed',
+                                },
+                            },
+                            after={
+                                screen={
+                                    status='present',
+                                    type='viewscreen_dwarfmodest',
+                                },
+                                focus={
+                                    status='unavailable',
+                                    values={},
+                                    error='focus capture failed',
+                                },
+                            },
+                        },
+                    }
+                end,
+            })
+        lifecycle.suite_entry(FileSuiteIdentity.new({
+            suite_id='suite#1',
+            suite_name='tests/incomplete_spec.lua',
+            source_identity='tests/incomplete_spec.lua',
+            repeat_index=1,
+            repeat_count=1,
+        }))
+        lifecycle.example_entry()
+        lifecycle.test_start({example_name='incomplete observation'})
+        lifecycle.example_exit()
+
+        assert.equals(1, #published)
+        assert.equals('base_screen_focus_verification_incomplete',
+            published[1].payload.kind)
+        assert.same({}, run.output_lines)
+        assert.same({}, run.failure_details)
+    end)
+
+    it('publishes exactly one event and retained line for a suite warning',
+            function()
+        local published = {}
+        local run = {
+            output_lines={},
+            failure_details={},
+            event_publisher={
+                publish=function(event_type, payload)
+                    table.insert(published, {
+                        type=event_type,
+                        payload=payload,
+                    })
+                end,
+            },
+        }
+        local lifecycle = host.new_focus_lifecycle(
+            run, function() end, changing_guard({}))
+        local suite = FileSuiteIdentity.new({
+            suite_id='suite#1',
+            suite_name='tests/suite_warning_spec.lua',
+            source_identity='tests/suite_warning_spec.lua',
+            repeat_index=1,
+            repeat_count=1,
+        })
+        local state = lifecycle.suite_entry(suite)
+        lifecycle.suite_exit(suite, state)
+
+        assert.equals(1, #published)
+        assert.equals(EventType.DIAGNOSTIC_RECORDED, published[1].type)
+        assert.equals('suite', published[1].payload.content.scope)
+        assert.same({
+            'WARNING base-screen focus changed after suite ' ..
+                'tests/suite_warning_spec.lua (repeat=1 attribution=file ' ..
+                'screen=changed focus=same complete=true)',
+        }, run.output_lines)
+        assert.same({}, run.failure_details)
     end)
 
     it('clears cached test dependencies without touching unrelated modules',

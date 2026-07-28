@@ -2,6 +2,9 @@
 
 local RunState = require('dwarfspec.automation.run_states')
 local EventType = require('dwarfspec.automation.event_types')
+local events = require('dwarfspec.automation.events')
+local focus_diagnostics =
+    require('dwarfspec.automation.focus_diagnostics')
 local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
 local SchedulerFailureKind =
@@ -463,6 +466,9 @@ function M.new_focus_lifecycle(run, reset, guard)
     assert(type(run.event_publisher) == 'table' and
         type(run.event_publisher.publish) == 'function',
         'focus lifecycle event publisher is required')
+    run.output_lines = run.output_lines or {}
+    assert(type(run.output_lines) == 'table',
+        'focus lifecycle output lines must be a table')
 
     local lifecycle = {}
     local active_suite
@@ -477,6 +483,8 @@ function M.new_focus_lifecycle(run, reset, guard)
     local function publish_diagnostic(
             diagnostic, scope, attribution, suite, example)
         if diagnostic == nil then return end
+        diagnostic = events.copy_json(
+            diagnostic, 'base-screen focus diagnostic')
         local content = diagnostic.content
         content.scope = scope
         content.attribution = attribution
@@ -496,6 +504,10 @@ function M.new_focus_lifecycle(run, reset, guard)
         end
         run.event_publisher.publish(
             EventType.DIAGNOSTIC_RECORDED, diagnostic)
+        if diagnostic.kind == focus_diagnostics.CHANGE_KIND then
+            table.insert(run.output_lines,
+                focus_diagnostics.format_warning(diagnostic))
+        end
     end
 
     ---Captures S0 for one executed file-suite instance.
