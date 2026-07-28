@@ -543,55 +543,55 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Phase 6: Prove behavior in live DFHack
 
-- [ ] Add an ordered fixture set under
+- [x] Add an ordered fixture set under
   `tests/automation/base_screen_focus_pollution/` that can be selected with
   one focused glob:
   - `01_example_live_spec.lua`;
   - `02_suite_producer_live_spec.lua`; and
   - `03_suite_observer_restore_live_spec.lua`.
-- [ ] Use only reversible base-screen transitions that preserve the original
+- [x] Use only reversible base-screen transitions that preserve the original
   parent viewscreen identity.
-- [ ] In the example fixture, capture a reversible baseline, deliberately
+- [x] In the example fixture, capture a reversible baseline, deliberately
   leave a child base screen open in one example, inspect the resulting example
   warning from a following observer example, and restore the file's `S0` state
   in file teardown.
-- [ ] Prove the example warning follows the producer's success result.
-- [ ] Prove an unchanged example emits no warning.
-- [ ] Prove restoration in project `after_each` suppresses an example warning.
-- [ ] Prove all explicit mount categories are cleaned before comparison and do
+- [x] Prove the example warning follows the producer's success result.
+- [x] Prove an unchanged example emits no warning.
+- [x] Prove restoration in project `after_each` suppresses an example warning.
+- [x] Prove all explicit mount categories are cleaned before comparison and do
   not warn merely because they existed.
-- [ ] Prove input through a native attachment warns when it leaves the
+- [x] Prove input through a native attachment warns when it leaves the
   underlying base-game focus changed.
-- [ ] In a later suite-producer file, deliberately leave a reversible child
+- [x] In a later suite-producer file, deliberately leave a reversible child
   base screen open through file teardown and verify that file emits one suite
   warning after teardown.
-- [ ] In the following observer/restorer file, inspect the producer's suite
+- [x] In the following observer/restorer file, inspect the producer's suite
   diagnostic, then restore the original parent during file teardown.
-- [ ] Expect and audit the observer/restorer file's own suite warning for its
+- [x] Expect and audit the observer/restorer file's own suite warning for its
   deliberate inherited-state change; do not suppress or misclassify it merely
   because it restores the outer fixture.
-- [ ] Prove nested contexts create no independent suite warnings.
-- [ ] Prove deliberate example and suite warnings leave the run passed with
+- [x] Prove nested contexts create no independent suite warnings.
+- [x] Prove deliberate example and suite warnings leave the run passed with
   `cleanup_confirmed=true`.
-- [ ] Prove the final base screen has the exact original identity and focus
+- [x] Prove the final base screen has the exact original identity and focus
   after the complete ordered fixture set.
-- [ ] Keep unavailable-focus change behavior in injected unit and host
+- [x] Keep unavailable-focus change behavior in injected unit and host
   integration tests; do not fake DFHack focus failure in the live suite.
 
 ### Phase 6 gate
 
-- [ ] Focused live run passes with the exact expected diagnostic kinds, scopes,
+- [x] Focused live run passes with the exact expected diagnostic kinds, scopes,
   owners, counts, and ordering, including the deliberate restoration warning.
-- [ ] Focused live run reports `cleanup_confirmed=true`.
-- [ ] Focused live cleanup proves the original base-screen identity and focus
+- [x] Focused live run reports `cleanup_confirmed=true`.
+- [x] Focused live cleanup proves the original base-screen identity and focus
   were restored.
-- [ ] Full live automation suite passes.
-- [ ] Audit the full run's event journal against the exact deliberate-warning
+- [x] Full live automation suite passes.
+- [x] Audit the full run's event journal against the exact deliberate-warning
   inventory and investigate every additional pollution warning; a zero exit
   status alone is insufficient.
-- [ ] Full unit suite passes.
-- [ ] Lua syntax and formatting checks pass.
-- [ ] `git diff --check` passes.
+- [x] Full unit suite passes.
+- [x] Lua syntax and formatting checks pass.
+- [x] `git diff --check` passes.
 
 ## Phase 7: Document and close the feature
 
@@ -669,14 +669,32 @@ Warnings and incomplete-verification diagnostics must not change:
   passed with `cleanup_confirmed=true`; recovery results retained exit 6,
   passed every clean observer, emitted no pollution diagnostics, and reported
   both cleanup confirmation and mount-cleanup verification.
-- Full live:
+- Phase 6 focused live: 2026-07-28,
+  `.\Tools\Run-AutomationTests.ps1 --test-glob
+  "tests/automation/base_screen_focus_pollution/*.lua"`:
+  16 successes, 0 failures, 0 errors, 0 pending, passed with exit 0 and
+  `cleanup_confirmed=true`. The fixture proved exact original base-screen
+  identity and focus restoration.
+- Full live: 2026-07-28,
+  `.\Tools\Run-AutomationTests.ps1 --test-glob
+  "tests/automation/**/*_live_spec.lua" --poll-interval-ms 15000
+  --lease-timeout-ms 30000 --timeout 60`:
+  51 successes, 0 failures, 0 errors, 0 pending, passed with exit 0 and
+  `cleanup_confirmed=true`.
 - Event-journal warning audit: 2026-07-28, change diagnostics were validated
   as detached numeric-comparison records, retained exactly one warning line,
   survived result persistence, and rendered after example/file activity.
   Incomplete verification remained an info diagnostic with no warning line;
   command and operator diagnostic kinds remained accepted.
+  The Phase 6 full-live result retained exactly three focus-change records in
+  sequence order 27, 36, and 41: the successful native-attachment example
+  (`scope='example'`, `attribution='test'`), the suite producer
+  (`scope='suite'`, `attribution='file'`), and the observer/restorer suite
+  (`scope='suite'`, `attribution='file'`). All used `screen_comparison=1`,
+  `focus_comparison=2`, and complete detached details; no additional focus
+  diagnostic was present.
 - Lua syntax and formatting: 2026-07-28, `.\Tools\Check-Lua.ps1`:
-  Lua 5.4.6 checks passed for 244 files.
+  Lua 5.4.6 checks passed for 248 files.
 - Package build: 2026-07-28, `.\Tools\Publish.ps1` created
   `dist\dwarfspec-0.2.0-1.all.rock`; the archive contains
   `dwarfspec/automation/focus_diagnostics.lua`.
@@ -685,5 +703,7 @@ Warnings and incomplete-verification diagnostics must not change:
 - Cleanup confirmation: the focused host and external-runner fixtures kept
   cleanup and mount-cleanup confirmation unchanged; the scheduler quarantine
   fixture recovered normally after retaining a focus warning.
-- Final base-screen restoration:
+- Final base-screen restoration: the ordered live fixture retained the exact
+  original `viewscreen_dwarfmodest` userdata across all three files and
+  asserted the exact original focus array after the final file teardown.
 - Diff check: 2026-07-28, `git diff --check`: passed.

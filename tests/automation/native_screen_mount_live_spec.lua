@@ -208,6 +208,32 @@ local function named_native_child(root)
 end
 
 describe('non-owning native-screen attachment', function()
+    local file_base_screen
+
+    setup(function()
+        file_base_screen = dfhack.gui.getDFViewscreen(true)
+        assert.equals(
+            file_base_screen, dfhack.gui.getCurViewscreen(true),
+            'native attachment file requires the base screen to be current')
+    end)
+
+    teardown(function()
+        local base = assert(file_base_screen)
+        assert.equals(base, dfhack.gui.getDFViewscreen(true),
+            'native attachment file changed the base-screen identity')
+        local current = dfhack.gui.getCurViewscreen(true)
+        while current and current ~= base do
+            assert.is_true(df.viewscreen:is_instance(current))
+            assert.matches('^<viewscreen:', tostring(current))
+            current.breakdown_level =
+                df.interface_breakdown_types.STOPSCREEN
+            current = current.parent
+        end
+        assert.equals(base, current,
+            'native attachment cleanup lost the base-screen ancestor')
+        ds.wait_frames(2)
+    end)
+
     after_each(function()
         if fixture_unit_list and fixture_unit_cursor ~= nil then
             fixture_unit_list.cursor_idx = fixture_unit_cursor

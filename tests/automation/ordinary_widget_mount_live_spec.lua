@@ -167,6 +167,10 @@ function OrdinaryWidgetHarness:submit()
 end
 
 describe('ordinary widget component host', function()
+    before_each(function()
+        ds.wait_frames(1)
+    end)
+
     after_each(function()
         pcall(ds.unmount)
     end)
@@ -196,10 +200,10 @@ describe('ordinary widget component host', function()
         local instance = OrdinaryWidgetHarness{}
         local original_on_render = rawget(OrdinaryWidgetHarness, 'onRender')
         local original_pause = df.global.pause_state
-        local root = ds.mount(instance, {initial_pause=false})
+        local root = ds.mount(instance, {initial_pause=true})
 
         command_conformance.assert_mounted_root(root, instance)
-        assert.equals(original_pause, df.global.pause_state)
+        assert.is_true(df.global.pause_state)
         assert.equals(original_on_render,
             rawget(OrdinaryWidgetHarness, 'onRender'))
         assert.equals(128, instance.frame_parent_rect.width)

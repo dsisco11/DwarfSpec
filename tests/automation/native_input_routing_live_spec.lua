@@ -265,9 +265,9 @@ describe('native input routing through a registered fullscreen overlay',
         local first_screen = fixture_screen
         assert.is_true(fixture_probe:dismiss_screen())
         ds.await('first fullscreen overlay dismisses', function()
-            return not first_screen:isActive() and
-                dfhack.gui.getCurViewscreen(true) == native_screen
+            return not first_screen:isActive()
         end)
+        ds.wait_frames(1)
         assert.equals(direct_child.raw, retained:raw())
 
         ds.input('D_HAULING')

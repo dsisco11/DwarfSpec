@@ -182,8 +182,8 @@ describe('complete screen component mount', function()
         assert.is_false(selected)
         assert.matches('selected_control_path="modal_only"', selection_error,
             1, true)
-        assert.matches('control_path="modal_only" mount=1 missing ' ..
-            'segment="modal_only" after="<root>"',
+        assert.matches(('control_path="modal_only" mount=%d missing ' ..
+            'segment="modal_only" after="<root>"'):format(root.mount_id),
             selection_error, 1, true)
         root:input('CUSTOM_A')
         assert.equals('handled', screen.modal_result)
