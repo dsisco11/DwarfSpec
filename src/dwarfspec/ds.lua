@@ -809,6 +809,15 @@ local TestStatus = load_automation_module(package_root,
             wait_options(options, false))
     end
 
+    ---Waits for unpaused Dwarf Fortress simulation ticks without blocking.
+    ---@param count integer
+    ---@param options table|nil Supports `timeout_ms` and `description`.
+    ---@return integer
+    function ds.wait_ticks(count, options)
+        return scheduler_module.wait_ticks(scheduler, count,
+            wait_options(options, false))
+    end
+
     ---Polls a read-only condition once per frame until it becomes ready.
     ---@param description string
     ---@param query function

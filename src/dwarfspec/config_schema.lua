@@ -31,6 +31,7 @@ local RESERVED_COMMANDS = {
     unmount=true,
     viewport=true,
     wait_frames=true,
+    wait_ticks=true,
 }
 
 ---Validates one project command map without executing callbacks.

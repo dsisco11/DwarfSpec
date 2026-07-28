@@ -920,6 +920,9 @@ local function begin_queued_run(package_root, project_root, registry, run)
         schedule_timeout=function(delay, callback)
             return dfhack.timeout(delay, 'frames', callback)
         end,
+        schedule_tick_timeout=function(delay, callback)
+            return dfhack.timeout(delay, 'ticks', callback)
+        end,
         cancel_timeout=cancel_timeout,
         now_ms=dfhack.getTickCount,
         diagnostics=current_diagnostics,

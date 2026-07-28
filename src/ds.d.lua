@@ -110,6 +110,10 @@
 ---@field frame_budget? integer
 ---@field description? string
 
+---@class dwarfspec.TickWaitOptions
+---@field timeout_ms? integer Maximum wall-clock time in milliseconds before the wait fails; defaults to settings.wait.timeout_ms or 10000.
+---@field description? string Operation name included in timeout diagnostics; defaults to `wait_ticks(count)`.
+
 ---@class dwarfspec.RedrawOptions
 ---@field wait? boolean Wait for the resulting completed render; defaults to true.
 
@@ -242,6 +246,12 @@ local DS = {}
 ---@param options? dwarfspec.WaitOptions
 ---@return integer
 function DS.wait_frames(count, options) end
+
+---Waits for unpaused Dwarf Fortress simulation ticks without blocking.
+---@param count integer
+---@param options? dwarfspec.TickWaitOptions
+---@return integer
+function DS.wait_ticks(count, options) end
 
 ---Polls a read-only condition once per frame until it becomes ready.
 ---@generic T

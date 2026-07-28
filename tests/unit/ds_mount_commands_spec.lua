@@ -316,6 +316,7 @@ describe('DwarfSpec public mount commands', function()
         local scheduler = {run=run}
         local scheduler_module = {
             wait_frames=function() return 1 end,
+            wait_ticks=function() return 2 end,
             wait_until=function(_, _, query)
                 wait_until_calls = wait_until_calls + 1
                 if wait_until_failure then
@@ -516,6 +517,10 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function() ds.getTick() end,
             'DwarfSpec getTick requires a loaded world with a valid ' ..
                 'df.global.cur_year_tick')
+    end)
+
+    it('waits for simulation ticks without requiring a mount', function()
+        assert.equals(2, ds.wait_ticks(2))
     end)
 
     it('returns the current DFHack time without requiring a mount', function()

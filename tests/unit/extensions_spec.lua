@@ -180,6 +180,13 @@ describe('DwarfSpec consumer extensions', function()
         assert.has_error(function() extensions.load(descriptor, loader) end,
             'tests/dwarfspec/config.lua: custom command conflicts with ' ..
             'ds.redraw')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={wait_ticks=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.wait_ticks')
     end)
 
     it('matches external error-format and unknown-setting validation',

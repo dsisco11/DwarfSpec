@@ -543,6 +543,38 @@ local milliseconds = ds.getTime()
 assert.is_true(milliseconds >= 0)
 ```
 
+`ds.wait_ticks(count, options)` suspends the test until exactly `count`
+unpaused Dwarf Fortress simulation ticks have passed:
+
+```lua
+local elapsed_ticks = ds.wait_ticks(10)
+assert.equals(10, elapsed_ticks)
+```
+
+This uses DFHack's simulation-tick timer rather than the in-year calendar
+counter returned by `ds.getTick()`. Simulation ticks stop while the game is
+paused. Scheduling requires a loaded world.
+
+The optional table accepts:
+
+| Field | Meaning |
+| --- | --- |
+| `timeout_ms` | Maximum wall-clock wait in milliseconds. It defaults to `settings.wait.timeout_ms`, or 10,000 when that setting is absent. |
+| `description` | Operation name shown in timeout diagnostics. It defaults to `wait_ticks(count)`. |
+
+For example:
+
+```lua
+ds.wait_ticks(10, {
+    timeout_ms=20000,
+    description='citizen completes scheduled work',
+})
+```
+
+The raw-frame watchdog uses `timeout_ms` to expire the operation if the game
+remains paused or stops advancing. `frame_budget` is not a `wait_ticks` option:
+raw frames do not determine when the requested simulation-tick wait completes.
+
 ## Condition waits
 
 `ds.await(description, query, options)` polls a read-only query between live
@@ -559,7 +591,8 @@ end)
 The truthy query result is returned to the test. Optional `frame_budget` and
 `timeout_ms` values override the project-wide wait settings for one operation.
 Use `ds.wait_frames(count)` only when the number of raw DFHack frames is itself
-part of the contract.
+part of the contract. Use `ds.wait_ticks(count)` when the test requires the
+unpaused simulation itself to advance.
 
 ## Isolated overlay components
 
@@ -668,7 +701,7 @@ and must be selected explicitly when validating the DFHack overlay boundary.
 
 The first-release surface is intentionally small:
 
-- synchronization: `await`, `wait_frames`;
+- synchronization: `await`, `wait_frames`, `wait_ticks`;
 - components: `mount`, `root`, `get`, `unmount`, `viewport`;
 - subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
   `text`, and the exceptional `raw` escape hatch;

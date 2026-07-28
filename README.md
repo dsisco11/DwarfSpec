@@ -208,7 +208,9 @@ end, {frame_budget=600, timeout_ms=20000})
 
 Input commands perform their required render or frame synchronization
 automatically. Use `ds.wait_frames(count)` only when the number of elapsed game
-frames is itself part of the behavior being tested.
+frames is itself part of the behavior being tested. Use
+`ds.wait_ticks(count)` when the test instead requires the simulation to advance;
+simulation ticks stop while the game is paused.
 
 ## The `ds` commands
 
@@ -216,6 +218,7 @@ frames is itself part of the behavior being tested.
 |---|---|
 | `ds.await(description, query, options)` | Poll a condition between live frames. |
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
+| `ds.wait_ticks(count, options)` | Wait for unpaused simulation ticks; options are `timeout_ms` and diagnostic `description`. |
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
 | `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
