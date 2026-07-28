@@ -294,52 +294,52 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Phase 1: Isolate base-screen observation and comparison
 
-- [ ] Add
+- [x] Add
   `src/dwarfspec/automation/base_screen_focus_guard.lua` with injected GUI
   dependencies.
-- [ ] Capture the base screen with `dfhack.gui.getDFViewscreen(true)`.
-- [ ] Distinguish successful `present`, successful `none`, and failed
+- [x] Capture the base screen with `dfhack.gui.getDFViewscreen(true)`.
+- [x] Distinguish successful `present`, successful `none`, and failed
   `unavailable` screen capture.
-- [ ] Store exact screen identity only in the private comparison token.
-- [ ] Produce bounded detached screen and focus diagnostics.
-- [ ] Copy and canonicalize focus strings without retaining or modifying
+- [x] Store exact screen identity only in the private comparison token.
+- [x] Produce bounded detached screen and focus diagnostics.
+- [x] Copy and canonicalize focus strings without retaining or modifying
   DFHack-owned tables.
-- [ ] Return explicit screen, focus, and completeness comparison statuses.
-- [ ] Produce a change record when either comparable dimension changed.
-- [ ] Preserve affirmative screen-change evidence when focus details are
+- [x] Return explicit screen, focus, and completeness comparison statuses.
+- [x] Produce a change record when either comparable dimension changed.
+- [x] Preserve affirmative screen-change evidence when focus details are
   incomplete.
-- [ ] Produce a non-warning incomplete-verification record only when no change
+- [x] Produce a non-warning incomplete-verification record only when no change
   is affirmatively known.
-- [ ] Add LuaDoc comments to every new or changed function, class, and
+- [x] Add LuaDoc comments to every new or changed function, class, and
   class-like record.
 
 ### Phase 1 tests
 
-- [ ] Add `tests/unit/base_screen_focus_guard_spec.lua`.
-- [ ] Prove identical present identity and focus produce no diagnostic.
-- [ ] Prove a different screen instance with the same type and focus is a
+- [x] Add `tests/unit/base_screen_focus_guard_spec.lua`.
+- [x] Prove identical present identity and focus produce no diagnostic.
+- [x] Prove a different screen instance with the same type and focus is a
   screen change.
-- [ ] Prove `none` compared with `none` is unchanged.
-- [ ] Prove `none` compared with `present`, in either direction, is a known
+- [x] Prove `none` compared with `none` is unchanged.
+- [x] Prove `none` compared with `present`, in either direction, is a known
   screen change.
-- [ ] Prove capture failure is unavailable rather than equivalent to `none`.
-- [ ] Prove a changed focus set on the same screen is a focus change.
-- [ ] Prove focus ordering and duplicate strings are ignored.
-- [ ] Prove a known screen change plus unavailable focus produces one change
+- [x] Prove capture failure is unavailable rather than equivalent to `none`.
+- [x] Prove a changed focus set on the same screen is a focus change.
+- [x] Prove focus ordering and duplicate strings are ignored.
+- [x] Prove a known screen change plus unavailable focus produces one change
   warning with incomplete focus details.
-- [ ] Prove a known focus change plus unavailable screen evidence produces one
+- [x] Prove a known focus change plus unavailable screen evidence produces one
   change warning with incomplete screen details.
-- [ ] Prove entirely unavailable comparison produces an incomplete-
+- [x] Prove entirely unavailable comparison produces an incomplete-
   verification diagnostic instead of a false change warning.
-- [ ] Prove diagnostic records contain no userdata, mutable source tables, or
+- [x] Prove diagnostic records contain no userdata, mutable source tables, or
   address-bearing labels.
-- [ ] Prove error strings, focus counts, and focus-string lengths are bounded.
+- [x] Prove error strings, focus counts, and focus-string lengths are bounded.
 
 ### Phase 1 gate
 
-- [ ] Focused guard unit tests pass.
-- [ ] Full unit suite passes.
-- [ ] Lua syntax and formatting checks pass.
+- [x] Focused guard unit tests pass.
+- [x] Full unit suite passes.
+- [x] Lua syntax and formatting checks pass.
 
 ## Phase 2: Add a pinned Busted file-lifecycle adapter
 
@@ -600,17 +600,21 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Evidence
 
-- Focused observation/comparison unit:
+- Focused observation/comparison unit: 2026-07-27,
+  `.\Tools\Run-UnitTests.ps1 --filter "focus guard"`:
+  12 successes, 0 failures, 0 errors, 0 pending.
 - Focused Busted file-lifecycle adapter unit:
 - Focused example lifecycle unit:
 - Focused file-suite lifecycle unit:
 - Focused diagnostic/report unit:
-- Full unit:
+- Full unit: 2026-07-27, `.\Tools\Run-UnitTests.ps1`:
+  464 successes, 0 failures, 0 errors, 0 pending.
 - Focused live:
 - Full live:
 - Event-journal warning audit:
-- Lua syntax and formatting:
+- Lua syntax and formatting: 2026-07-27, `.\Tools\Check-Lua.ps1`:
+  Lua 5.4.6 checks passed for 237 files.
 - Process result and exit status:
 - Cleanup confirmation:
 - Final base-screen restoration:
-- Diff check:
+- Diff check: 2026-07-27, `git diff --check`: passed.
