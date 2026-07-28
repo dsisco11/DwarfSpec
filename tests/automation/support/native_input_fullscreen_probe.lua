@@ -27,6 +27,40 @@ local function active_run()
     return run_id and registry.runs[run_id] or nil
 end
 
+---Marks one exact fixture-owned screen for dismissal.
+---@param screen tests.NativeInputFullscreenScreen
+---@return boolean
+local function dismiss_owned_screen(screen)
+    local native = screen._native
+    if not native then return true end
+    if screen:isActive() then screen:dismiss() end
+    if screen:isActive() and screen._native == native then
+        native.breakdown_level = df.interface_breakdown_types.STOPSCREEN
+    end
+    return not screen:isActive()
+end
+
+---Registers cleanup for one exact fixture-owned screen.
+---@param screen tests.NativeInputFullscreenScreen
+local function register_screen_cleanup(screen)
+    local run = assert(active_run(),
+        'native input fullscreen cleanup requires an active DwarfSpec run')
+    local cleanup_module = assert(run.cleanup_module,
+        'native input fullscreen cleanup module is unavailable')
+    local cleanup_registry = assert(run.cleanup_registry,
+        'native input fullscreen cleanup registry is unavailable')
+    local native = assert(screen._native,
+        'native input fullscreen screen has no native backing')
+    screen.cleanup_module = cleanup_module
+    screen.cleanup_registry = cleanup_registry
+    screen.cleanup_entry = cleanup_module.push(cleanup_registry,
+        'dismiss native input fullscreen probe', function()
+            if screen._native ~= native then return end
+            assert(dismiss_owned_screen(screen),
+                'native input fullscreen probe resisted dismissal')
+        end)
+end
+
 ---Records one scalar fixture event without retaining a UI object.
 ---@param name string
 local function record(name)
@@ -67,6 +101,9 @@ end
 ---@field mouse_count integer
 ---@field render_count integer
 ---@field last_keys string[]
+---@field cleanup_module table|nil
+---@field cleanup_registry table|nil
+---@field cleanup_entry table|nil
 local NativeInputFullscreenScreen = defclass(nil, gui.ZScreen)
 NativeInputFullscreenScreen.ATTRS{
     focus_path='dwarfspec/native-input-fullscreen',
@@ -134,6 +171,20 @@ function NativeInputFullscreenScreen:onDismiss()
     record('dismissed')
 end
 
+---Releases cleanup ownership after DFHack destroys the native backing screen.
+function NativeInputFullscreenScreen:onDestroy()
+    if self.probe.active_screen == self then
+        self.probe.active_screen = nil
+    end
+    if self.cleanup_entry then
+        self.cleanup_module.release(
+            self.cleanup_registry, self.cleanup_entry)
+    end
+    self.cleanup_module = nil
+    self.cleanup_registry = nil
+    self.cleanup_entry = nil
+end
+
 ---@class tests.NativeInputFullscreenOverlay: plugins.overlay.OverlayWidget
 ---@field consume_input boolean
 ---@field active_screen tests.NativeInputFullscreenScreen|nil
@@ -168,6 +219,12 @@ function NativeInputFullscreenOverlay:overlay_trigger()
     assert(not self.active_screen or not self.active_screen:isActive(),
         'native input fullscreen probe is already active')
     local screen = NativeInputFullscreenScreen{probe=self}:show()
+    local cleanup_ok, cleanup_error =
+        xpcall(register_screen_cleanup, debug.traceback, screen)
+    if not cleanup_ok then
+        dismiss_owned_screen(screen)
+        error(cleanup_error, 0)
+    end
     self.active_screen = screen
     self.last_screen = screen
     record('triggered')
@@ -187,8 +244,7 @@ end
 function NativeInputFullscreenOverlay:dismiss_screen()
     local screen = self.active_screen
     if not screen or not screen:isActive() then return false end
-    screen:dismiss()
-    return true
+    return dismiss_owned_screen(screen)
 end
 
 OVERLAY_WIDGETS = {

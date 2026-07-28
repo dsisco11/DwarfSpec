@@ -595,21 +595,21 @@ Warnings and incomplete-verification diagnostics must not change:
 
 ## Phase 7: Document and close the feature
 
-- [ ] Document example and file-suite pollution warnings in
+- [x] Document example and file-suite pollution warnings in
   `docs/writing-tests.md`.
-- [ ] Document the `S0/S2` and `T0/T1` lifecycle boundaries.
-- [ ] Explain that one suite is one spec file in one repeat and nested contexts
+- [x] Document the `S0/S2` and `T0/T1` lifecycle boundaries.
+- [x] Explain that one suite is one spec file in one repeat and nested contexts
   do not own suite guards.
-- [ ] Explain that suite setup may establish working state but all file
+- [x] Explain that suite setup may establish working state but all file
   teardown is expected to restore the inherited `S0`.
-- [ ] Explain mounted-component exclusions, warning timing, incomplete
+- [x] Explain mounted-component exclusions, warning timing, incomplete
   details, and nonfatal behavior.
-- [ ] Document retained warning output and unchanged process-exit semantics in
+- [x] Document retained warning output and unchanged process-exit semantics in
   `docs/command-line.md`.
-- [ ] Add the feature under `Unreleased` in `CHANGELOG.md`.
-- [ ] Mark the linked Testing Features item in `docs/project.todo` complete
+- [x] Add the feature under `Unreleased` in `CHANGELOG.md`.
+- [x] Mark the linked Testing Features item in `docs/project.todo` complete
   only after every implementation and verification gate above is satisfied.
-- [ ] Record focused unit, full unit, focused live, full live, event-journal,
+- [x] Record focused unit, full unit, focused live, full live, event-journal,
   syntax, formatting, process-result, and cleanup evidence below.
 
 ## Evidence
@@ -707,3 +707,40 @@ Warnings and incomplete-verification diagnostics must not change:
   original `viewscreen_dwarfmodest` userdata across all three files and
   asserted the exact original focus array after the final file teardown.
 - Diff check: 2026-07-28, `git diff --check`: passed.
+- Phase 7 focused unit: 2026-07-28,
+  `.\Tools\Run-UnitTests.ps1 --filter "automation host ownership"`:
+  24 successes; `--filter "automation structured events"`: 12 successes; and
+  `--filter "DwarfSpec native reports"`: 12 successes. All reported
+  0 failures, 0 errors, and 0 pending.
+- Phase 7 full unit: 2026-07-28, `.\Tools\Run-UnitTests.ps1`:
+  507 successes, 0 failures, 0 errors, 0 pending.
+- Phase 7 focused live: 2026-07-28,
+  `.\Tools\Run-AutomationTests.ps1 --test-glob
+  "tests/automation/base_screen_focus_pollution/*.lua"`:
+  16 successes, 0 failures, 0 errors, 0 pending, passed with exit 0,
+  `cleanup_confirmed=true`, and `mount_cleanup_verified=true`.
+- Phase 7 full live: 2026-07-28,
+  `.\Tools\Run-AutomationTests.ps1 --test-glob
+  "tests/automation/**/*_live_spec.lua" --poll-interval-ms 15000
+  --lease-timeout-ms 30000 --timeout 60`:
+  51 successes, 0 failures, 0 errors, 0 pending, passed with exit 0,
+  `cleanup_confirmed=true`, and `mount_cleanup_verified=true`.
+- Phase 7 event-journal audit: the focused and full live results each retained
+  exactly three `base_screen_focus_changed` diagnostics at sequences 27, 36,
+  and 41. They were the expected example/test, suite/file, and suite/file
+  records, all with `screen_comparison=1`, `focus_comparison=2`, and complete
+  detached details. No unexpected focus diagnostic was present.
+- Phase 7 syntax and formatting: 2026-07-28, `.\Tools\Check-Lua.ps1`:
+  Lua 5.4.6 checks passed for 248 files.
+- Phase 7 package: 2026-07-28, `.\Tools\Publish.ps1` rebuilt
+  `dist\dwarfspec-0.2.0-1.all.rock`; archive inspection found the focus guard,
+  lifecycle adapter, and focus diagnostic modules. The exact artifact was
+  installed before live verification.
+- Phase 7 process result and cleanup: the focused and full warning runs
+  remained `passed` with exit 0. After verification the automation service had
+  no active run, an empty queue, and no quarantine; no `lua`, `luarocks`, or
+  `dfhack-run` helper process remained.
+- Phase 7 final base state: `getCurViewscreen(true)` exactly matched
+  `getDFViewscreen(true)` at the original `viewscreen_dwarfmodest`, with focus
+  `dwarfmode/Default`.
+- Phase 7 diff check: 2026-07-28, `git diff --check`: passed.

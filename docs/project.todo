@@ -12,7 +12,7 @@ Frontend:
     ☐ test-runner UI should have the ability to click through command log items and see the snapshots of the component tree at that point in time.
 
 Testing Features:
-    ☐ Warn when a test or file-level suite leaves a different base-game screen or focus than it inherited.
+    ☑ Warn when a test or file-level suite leaves a different base-game screen or focus than it inherited.
         - Detailed implementation and verification plan: `docs/base-screen-focus-warning.todo`.
         - One suite is one spec file in one repeat; nested contexts do not own independent suite guards.
         - Explicitly mounted components do not count; comparisons occur after the applicable example or file teardown, automatic unmounting, and cleanup settlement.

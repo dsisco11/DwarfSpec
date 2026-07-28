@@ -137,6 +137,10 @@ describe('complete screen component mount', function()
         df.global.pause_state = false
         backing = CompleteScreenBacking{}
         backing:show()
+        ds.await('complete-screen backing becomes current', function()
+            return backing:isActive() and
+                dfhack.gui.getCurViewscreen(true) == backing._native
+        end)
     end)
 
     after_each(function()

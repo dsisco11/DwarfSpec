@@ -36,15 +36,6 @@ local function read_file(path)
     return contents
 end
 
----Copies one array without retaining the caller's mutable table.
----@param values any[]
----@return any[]
-local function copy_array(values)
-    local copy = {}
-    for index, value in ipairs(values) do copy[index] = value end
-    return copy
-end
-
 ---Captures the exact native viewscreen child chain.
 ---@return userdata[]
 local function screen_stack()
@@ -290,7 +281,7 @@ describe('non-owning native-screen attachment', function()
         local native_screen = dfhack.gui.getDFViewscreen(true)
         local native_root = native_screen.widgets
         local original_current = dfhack.gui.getCurViewscreen(true)
-        local original_focus = copy_array(dfhack.gui.getCurFocus(true))
+        local original_focus = dfhack.gui.getCurFocus(true)
         local original_stack = screen_stack()
         local original_pointer = pointer_state()
         local original_dispatcher = overlay.render_viewscreen_widgets
@@ -389,7 +380,7 @@ describe('non-owning native-screen attachment', function()
             'resident row must expose nonempty live job text')
 
         local query_current = dfhack.gui.getCurViewscreen(true)
-        local query_focus = copy_array(dfhack.gui.getCurFocus(true))
+        local query_focus = dfhack.gui.getCurFocus(true)
         local query_stack = screen_stack()
         local row = ds.get({
             'info',
@@ -554,7 +545,7 @@ describe('non-owning native-screen attachment', function()
         local run = ds.current_run()
         local native_screen = dfhack.gui.getDFViewscreen(true)
         local original_current = dfhack.gui.getCurViewscreen(true)
-        local original_focus = copy_array(dfhack.gui.getCurFocus(true))
+        local original_focus = dfhack.gui.getCurFocus(true)
         local original_stack = screen_stack()
         local original_pointer = pointer_state()
         local original_dispatcher = overlay.render_viewscreen_widgets

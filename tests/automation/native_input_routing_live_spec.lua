@@ -33,15 +33,6 @@ local function read_file(path)
     return contents
 end
 
----Copies one array without retaining the caller's mutable table.
----@param values any[]
----@return any[]
-local function copy_array(values)
-    local copy = {}
-    for index, value in ipairs(values) do copy[index] = value end
-    return copy
-end
-
 ---Captures the exact native viewscreen child chain.
 ---@return userdata[]
 local function screen_stack()
@@ -182,7 +173,7 @@ describe('native input routing through a registered fullscreen overlay',
 
         local native_root = native_screen.widgets
         local original_current = dfhack.gui.getCurViewscreen(true)
-        local original_focus = copy_array(dfhack.gui.getCurFocus(true))
+        local original_focus = dfhack.gui.getCurFocus(true)
         local original_stack = screen_stack()
         local original_pointer = pointer_state()
         local original_pause = df.global.pause_state
@@ -265,9 +256,9 @@ describe('native input routing through a registered fullscreen overlay',
         local first_screen = fixture_screen
         assert.is_true(fixture_probe:dismiss_screen())
         ds.await('first fullscreen overlay dismisses', function()
-            return not first_screen:isActive()
+            return not first_screen:isActive() and
+                first_screen._native == nil
         end)
-        ds.wait_frames(1)
         assert.equals(direct_child.raw, retained:raw())
 
         ds.input('D_HAULING')
@@ -319,6 +310,7 @@ describe('native input routing through a registered fullscreen overlay',
         assert.is_true(fixture_probe:dismiss_screen())
         ds.await('independent fullscreen cleanup restores the stack', function()
             return not active_screen:isActive() and
+                active_screen._native == nil and
                 dfhack.gui.getCurViewscreen(true) == original_current
         end)
         fixture_screen = nil

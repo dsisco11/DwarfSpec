@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Automatic example and file-suite guards warn when a test leaves a different
+  base-game viewscreen or DFHack focus than it inherited. Comparisons occur
+  after project teardown and DwarfSpec cleanup, exclude explicitly mounted
+  components, retain detached diagnostics and stable warning lines, and do not
+  change test results or exit status.
 - `ds.mountNativeScreen()` explicitly creates a non-owning native-screen mount;
   `ds.mount(component, options)` remains component-only.
 - `ds.redraw(subject, options)` and `Subject:redraw(options)` invalidate the

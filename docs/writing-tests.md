@@ -463,6 +463,65 @@ assert.is_true(ds.hasFocus('dwarfmode/Default'))
 assert.is_false(ds.hasFocus('dwarfmode/Info'))
 ```
 
+## Base-screen focus pollution warnings
+
+DwarfSpec observes the current base-game viewscreen and its DFHack focus
+strings at example and file-suite boundaries. If a test leaves either one
+different from the state it inherited, DwarfSpec records a nonfatal diagnostic
+and prints a `WARNING base-screen focus changed ...` line. DwarfSpec does not
+restore arbitrary base-game navigation automatically; tests remain responsible
+for returning the game to the state they inherited.
+
+The example boundary uses two observations:
+
+- `T0` is captured after DwarfSpec's pre-example reset, automatic unmounting,
+  and cleanup settlement, but before project `before_each` hooks.
+- `T1` is captured after the example result, all applicable project
+  `after_each` hooks, DwarfSpec's post-example reset, automatic unmounting, and
+  cleanup settlement.
+
+The `T0/T1` comparison therefore detects pollution attributable to one example,
+including state left by its setup or teardown. Its warning is emitted after the
+example's `SUCCESS`, `FAILURE`, or `ERROR` result. A setup failure that occurs
+before the example starts is attributed to `before_each` without inventing an
+example name.
+
+The file-suite boundary uses two wider observations:
+
+- `S0` is captured at spec-file entry, before the file body and any file or
+  nested setup execute.
+- `S2` is captured after the file body has finished, all file and nested lazy
+  and strict teardown has run, and DwarfSpec's suite cleanup has unmounted and
+  settled its resources.
+
+One suite means one executed spec file in one repeat. Nested `describe`
+contexts affect names and hook order, but do not own independent suite guards.
+Suite setup may intentionally establish a working state for its examples; the
+complete file teardown is still expected to restore the inherited `S0` state.
+The `S0/S2` warning is emitted after that teardown and before the next spec
+file begins. The next file always records the state it actually inherits, so a
+file leak can produce both an example warning and a file-suite warning without
+being hidden from later files.
+
+Explicitly mounted ordinary widgets, overlay widgets, complete screens, and
+native attachments do not count as pollution merely because they existed.
+DwarfSpec removes or releases them before `T1` and `S2`. A mount or native
+attachment that changes the underlying base-game screen or focus can still
+produce a warning when that change remains after cleanup.
+
+Screen and focus capture are independent. If DwarfSpec proves a change in one
+while the other is unavailable, it still emits a change warning with
+`complete=false` and retains the incomplete before/after details in the
+diagnostic record. If no change can be proved because verification is
+incomplete, it records an informational
+`base_screen_focus_verification_incomplete` diagnostic without a warning line.
+An observed absence of a base-game screen is a valid state and is distinct from
+an unavailable observation.
+
+Focus diagnostics never alter assertions, test counts, run state, cleanup, or
+process exit status. They are intended to expose inter-test and inter-suite
+pollution while preserving the test result that produced them.
+
 ## World time
 
 `ds.getTick()` returns the current in-year Dwarf Fortress simulation tick from

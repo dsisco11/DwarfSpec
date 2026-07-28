@@ -137,11 +137,33 @@ structured event journal, and cleanup confirmation. Dependency, connection,
 registration, executor-quarantine, timeout, interruption, transport, and host
 failures are written even when no native report is available.
 
+Base-screen focus changes are retained as `diagnostic.recorded` events in the
+event journal and as stable warning lines in retained run output. Example and
+file-suite warnings have this form:
+
+```text
+WARNING base-screen focus changed after example <name> in <suite> (repeat=1 attribution=test screen=same focus=changed complete=true)
+WARNING base-screen focus changed after suite <suite> (repeat=1 attribution=file screen=same focus=changed complete=true)
+```
+
+The warning follows the affected example result or completed file teardown.
+`screen`, `focus`, and `complete` summarize the detached before/after
+observations retained in the diagnostic event. A proven change with incomplete
+screen or focus details remains a warning and reports `complete=false`.
+Incomplete verification without a proven change is retained as an
+informational `base_screen_focus_verification_incomplete` event and does not
+print a `WARNING` line.
+
 `--results PATH` names an exact file. Relative paths resolve beneath the
 project root; absolute paths remain explicit. `--no-results` validates the
 complete terminal result without writing a file. A terminal service generation
 is acknowledged only after its file replacement succeeds, or after successful
 no-results validation.
+
+Focus diagnostics are nonfatal. They do not change test counts, terminal state,
+cleanup confirmation, or the process result. A run whose tests pass and whose
+cleanup is confirmed therefore exits with code 0 even when it retains focus
+warnings.
 
 Exit codes are stable:
 
