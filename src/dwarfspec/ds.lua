@@ -135,6 +135,7 @@ local TestStatus = load_automation_module(package_root,
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
     local pointer_screen = mount_dependencies.pointer_screen or dfhack.screen
+    local pointer_gui = mount_dependencies.pointer_gui or dfhack.gui
     local pointer_gps = mount_dependencies.pointer_gps or df.global.gps
     local pointer_enabler =
         mount_dependencies.pointer_enabler or df.global.enabler
@@ -167,6 +168,7 @@ local TestStatus = load_automation_module(package_root,
         pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry, {
             get_geometry=get_pointer_geometry,
             screen=pointer_screen,
+            gui=pointer_gui,
             gps=pointer_gps,
             enabler=pointer_enabler,
         }),

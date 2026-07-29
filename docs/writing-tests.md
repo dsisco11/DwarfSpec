@@ -154,8 +154,10 @@ subject stale.
 
 `move_pointer`, `hover`, and `click` use DwarfSpec-owned virtual pointer state.
 DwarfSpec automatically restores the inherited pointer coordinates and
-accessors during example cleanup. This restores automation instrumentation,
-not the game or UI effects caused by a click.
+accessors during example cleanup. Supported `dfhack.screen` and `dfhack.gui`
+pointer reads continue to observe the virtual position across later frames,
+even after DF refreshes its raw pointer fields. This restores automation
+instrumentation, not the game or UI effects caused by a click.
 
 `subject:redraw()` requests a repaint of the mount's interaction screen. It
 waits for render instrumentation to confirm a later completed render before

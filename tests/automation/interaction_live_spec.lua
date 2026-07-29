@@ -19,6 +19,7 @@ local function pointer_state()
     local state = {
         get_mouse_pos=dfhack.screen.getMousePos,
         get_mouse_pixels=dfhack.screen.getMousePixels,
+        gui_get_mouse_pos=dfhack.gui.getMousePos,
         mouse_x=df.global.gps.mouse_x,
         mouse_y=df.global.gps.mouse_y,
         precise_mouse_x=df.global.gps.precise_mouse_x,
@@ -270,6 +271,16 @@ describe('automation live interactions', function()
         assert_pointer_position(derived_grid_x, derived_grid_y,
             pixel_x, pixel_y)
         assert.equals(1, pointer_cleanup_claim_count(run))
+        ds.wait_frames(2)
+        df.global.gps.mouse_x = -1
+        df.global.gps.mouse_y = -1
+        df.global.gps.precise_mouse_x = -1
+        df.global.gps.precise_mouse_y = -1
+        dfhack.gui.getMousePos(true)
+        assert.equals(derived_grid_x, df.global.gps.mouse_x)
+        assert.equals(derived_grid_y, df.global.gps.mouse_y)
+        assert.equals(pixel_x, df.global.gps.precise_mouse_x)
+        assert.equals(pixel_y, df.global.gps.precise_mouse_y)
 
         local body = assert(target:inspect().body)
         assert.equals(target, target:move_pointer('center'))

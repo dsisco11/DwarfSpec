@@ -80,6 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Keep DwarfSpec's UI-grid and screen-pixel pointer positions synchronized for
   moves and native mouse input, and restore both representations during
   cleanup.
+- Keep supported screen and map pointer reads at DwarfSpec's virtual position
+  across later frames by repairing raw pointer state before each accessor read.
 
 ## [0.2.0] - 2026-07-24
 

@@ -204,6 +204,13 @@ describe('DwarfSpec public mount commands', function()
                 getWindowSize=function() return 80, 25 end,
             },
             gui={
+                getMousePos=function(allow_out_of_bounds)
+                    return {
+                        x=df.global.gps.precise_mouse_x,
+                        y=df.global.gps.precise_mouse_y,
+                        z=allow_out_of_bounds and 1 or 0,
+                    }, 'native-map-result'
+                end,
                 getWidget=function(parent, segment)
                     native_widget_lookup_calls =
                         native_widget_lookup_calls + 1
@@ -1846,6 +1853,32 @@ describe('DwarfSpec public mount commands', function()
             simulated_inputs[1].pixel_y,
         })
         assert.same({2, 3, 25, 28}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
+    end)
+
+    it('repairs paired raw coordinates before a later map-pointer read',
+            function()
+        ds.mountNativeScreen()
+        local sampled_position
+        local sampled_result
+        wait_until_dispatch = function()
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
+            sampled_position, sampled_result =
+                dfhack.gui.getMousePos(true)
+        end
+
+        ds.move_pointer(482, 102, EPointerSpace.PIXELS)
+
+        assert.same({x=482, y=102, z=1}, sampled_position)
+        assert.equals('native-map-result', sampled_result)
+        assert.same({48, 12, 482, 102}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
             df.global.gps.precise_mouse_x,

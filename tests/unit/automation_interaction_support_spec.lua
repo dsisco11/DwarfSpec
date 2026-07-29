@@ -38,6 +38,18 @@ local function pointer_fixture(original_raw)
         precise_mouse_x=original_raw.precise_mouse_x or 40,
         precise_mouse_y=original_raw.precise_mouse_y or 50,
     }
+    local gui_calls = {}
+    local original_gui_get_mouse_pos = function(allow_out_of_bounds)
+        table.insert(gui_calls, allow_out_of_bounds)
+        return {
+            x=gps.precise_mouse_x,
+            y=gps.precise_mouse_y,
+            z=allow_out_of_bounds and 1 or 0,
+        }, 'map-result'
+    end
+    local gui = {
+        getMousePos=original_gui_get_mouse_pos,
+    }
     local enabler = {
         mouse_focus=false,
         tracking_on=0,
@@ -51,13 +63,17 @@ local function pointer_fixture(original_raw)
     local registry = cleanup.new({})
     return {
         screen=screen,
+        gui=gui,
+        gui_calls=gui_calls,
         gps=gps,
         enabler=enabler,
         registry=registry,
         original_get_mouse_pos=original_get_mouse_pos,
         original_get_mouse_pixels=original_get_mouse_pixels,
+        original_gui_get_mouse_pos=original_gui_get_mouse_pos,
         adapter=pointer_adapter.new(cleanup, registry, {
             screen=screen,
+            gui=gui,
             gps=gps,
             enabler=enabler,
         }),
@@ -368,7 +384,37 @@ describe('automation interaction support', function()
         fixture.gps.precise_mouse_x = 3
         fixture.gps.precise_mouse_y = 4
         assert.same({12, 13}, {fixture.screen.getMousePos()})
+        assert.same({12, 13, 125, 108}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        fixture.gps.mouse_x = 1
+        fixture.gps.mouse_y = 2
+        fixture.gps.precise_mouse_x = 3
+        fixture.gps.precise_mouse_y = 4
         assert.same({125, 108}, {fixture.screen.getMousePixels()})
+        assert.same({12, 13, 125, 108}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        fixture.gps.mouse_x = 1
+        fixture.gps.mouse_y = 2
+        fixture.gps.precise_mouse_x = 3
+        fixture.gps.precise_mouse_y = 4
+        local map_position, map_result = fixture.gui.getMousePos(true)
+        assert.same({x=125, y=108, z=1}, map_position)
+        assert.equals('map-result', map_result)
+        assert.same({true}, fixture.gui_calls)
+        assert.same({12, 13, 125, 108}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
         pointer_adapter.sync(adapter)
         assert.same({12, 13, 125, 108}, {
             fixture.gps.mouse_x,
@@ -388,6 +434,8 @@ describe('automation interaction support', function()
             fixture.screen.getMousePos)
         assert.equals(fixture.original_get_mouse_pixels,
             fixture.screen.getMousePixels)
+        assert.equals(fixture.original_gui_get_mouse_pos,
+            fixture.gui.getMousePos)
         assert.is_false(pointer_adapter.is_active(adapter))
         assert.is_nil(adapter.current_position)
         assert.is_nil(adapter.original_raw_position)
@@ -418,6 +466,8 @@ describe('automation interaction support', function()
             fixture.screen.getMousePos)
         assert.equals(fixture.original_get_mouse_pixels,
             fixture.screen.getMousePixels)
+        assert.equals(fixture.original_gui_get_mouse_pos,
+            fixture.gui.getMousePos)
         assert.is_false(pointer_adapter.is_active(fixture.adapter))
     end)
 
@@ -584,6 +634,38 @@ describe('automation interaction support', function()
             fixture.gps.precise_mouse_y,
         })
         assert.is_false(pointer_adapter.is_active(fixture.adapter))
+        assert.equals(0, cleanup.pending_count(fixture.registry))
+    end)
+
+    it('preserves an external native map accessor during cleanup conflict',
+            function()
+        local fixture = pointer_fixture()
+        local external_map = function() return {x=1, y=2, z=3} end
+        pointer_adapter.set(fixture.adapter,
+            paired_position(10, 11, 105, 92))
+        fixture.gui.getMousePos = external_map
+
+        local ok, failures = cleanup.run(
+            fixture.registry, 'native map accessor conflict')
+
+        assert.is_false(ok)
+        assert.equals(1, #failures)
+        assert.matches('dfhack.gui.getMousePos changed externally',
+            failures[1].message, 1, true)
+        assert.equals(external_map, fixture.gui.getMousePos)
+        assert.equals(fixture.original_get_mouse_pos,
+            fixture.screen.getMousePos)
+        assert.equals(fixture.original_get_mouse_pixels,
+            fixture.screen.getMousePixels)
+        assert.same({4, 5, 40, 50}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        assert.is_false(pointer_adapter.is_active(fixture.adapter))
+        assert.is_nil(fixture.adapter.original_gui_get_mouse_pos)
+        assert.is_nil(fixture.adapter.patched_gui_get_mouse_pos)
         assert.equals(0, cleanup.pending_count(fixture.registry))
     end)
 end)

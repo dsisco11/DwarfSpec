@@ -27,6 +27,7 @@ local M = {}
 ---@class DwarfSpecPointerAdapterDependencies
 ---@field get_geometry? fun():DwarfSpecPointerGeometry
 ---@field screen? table
+---@field gui? table
 ---@field gps? table
 ---@field enabler? table
 
@@ -51,14 +52,17 @@ function M.new(cleanup_module, cleanup_registry, dependencies)
         cleanup_registry=cleanup_registry,
         get_geometry=dependencies.get_geometry,
         screen=dependencies.screen,
+        gui=dependencies.gui,
         gps=dependencies.gps,
         enabler=dependencies.enabler,
         current_position=nil,
         original_raw_position=nil,
         original_get_mouse_pos=nil,
         original_get_mouse_pixels=nil,
+        original_gui_get_mouse_pos=nil,
         patched_get_mouse_pos=nil,
         patched_get_mouse_pixels=nil,
+        patched_gui_get_mouse_pos=nil,
         cleanup_entry=nil,
         original_button_state=nil,
         button_cleanup_entry=nil,
@@ -189,19 +193,20 @@ local function attempt_restoration(failures, label, operation)
 end
 
 ---Restores one accessor only when the adapter still owns its patch.
----@param adapter table
+---@param container table
 ---@param field string
 ---@param patched function|nil
 ---@param original function|nil
 ---@param failures string[]
-local function restore_accessor(adapter, field, patched, original, failures)
-    local screen = adapter.screen
-    if screen[field] ~= patched then
-        table.insert(failures, field .. ' changed externally')
+---@param label string
+local function restore_accessor(container, field, patched, original, failures,
+        label)
+    if container[field] ~= patched then
+        table.insert(failures, label .. ' changed externally')
         return
     end
-    attempt_restoration(failures, field, function()
-        screen[field] = original
+    attempt_restoration(failures, label, function()
+        container[field] = original
     end)
 end
 
@@ -221,21 +226,27 @@ local function restore(adapter)
             gps[field] = original[field]
         end)
     end
-    restore_accessor(adapter, 'getMousePos',
+    restore_accessor(adapter.screen, 'getMousePos',
         adapter.patched_get_mouse_pos,
         adapter.original_get_mouse_pos,
-        failures)
-    restore_accessor(adapter, 'getMousePixels',
+        failures, 'getMousePos')
+    restore_accessor(adapter.screen, 'getMousePixels',
         adapter.patched_get_mouse_pixels,
         adapter.original_get_mouse_pixels,
-        failures)
+        failures, 'getMousePixels')
+    restore_accessor(adapter.gui, 'getMousePos',
+        adapter.patched_gui_get_mouse_pos,
+        adapter.original_gui_get_mouse_pos,
+        failures, 'dfhack.gui.getMousePos')
 
     adapter.current_position = nil
     adapter.original_raw_position = nil
     adapter.original_get_mouse_pos = nil
     adapter.original_get_mouse_pixels = nil
+    adapter.original_gui_get_mouse_pos = nil
     adapter.patched_get_mouse_pos = nil
     adapter.patched_get_mouse_pixels = nil
+    adapter.patched_gui_get_mouse_pos = nil
     adapter.cleanup_entry = nil
     if #failures > 0 then
         error('automation pointer restoration conflicts: ' ..
@@ -249,6 +260,8 @@ end
 function M.set(adapter, position)
     local screen = assert(adapter.screen,
         'pointer adapter requires an injected screen boundary')
+    local gui = assert(adapter.gui,
+        'pointer adapter requires an injected gui boundary')
     local gps = assert(adapter.gps,
         'pointer adapter requires an injected gps boundary')
     position = copy_position(position)
@@ -261,21 +274,34 @@ function M.set(adapter, position)
         }
         adapter.original_get_mouse_pos = screen.getMousePos
         adapter.original_get_mouse_pixels = screen.getMousePixels
+        adapter.original_gui_get_mouse_pos = gui.getMousePos
+        assert(type(adapter.original_gui_get_mouse_pos) == 'function',
+            'pointer adapter requires gui.getMousePos')
         ---Returns the active logical UI-grid coordinate.
         ---@return integer, integer
         adapter.patched_get_mouse_pos = function()
+            apply_position(adapter)
             local current = adapter.current_position.grid
             return current.x, current.y
         end
         ---Returns the active logical screen-pixel coordinate.
         ---@return integer, integer
         adapter.patched_get_mouse_pixels = function()
+            apply_position(adapter)
             local current = adapter.current_position.pixels
             return current.x, current.y
+        end
+        ---Returns the native map coordinate after repairing paired raw state.
+        ---@param ... any
+        ---@return ...
+        adapter.patched_gui_get_mouse_pos = function(...)
+            apply_position(adapter)
+            return adapter.original_gui_get_mouse_pos(...)
         end
         adapter.current_position = position
         screen.getMousePos = adapter.patched_get_mouse_pos
         screen.getMousePixels = adapter.patched_get_mouse_pixels
+        gui.getMousePos = adapter.patched_gui_get_mouse_pos
         adapter.cleanup_entry = adapter.cleanup_module.push(
             adapter.cleanup_registry, 'virtual pointer', function()
                 restore(adapter)
