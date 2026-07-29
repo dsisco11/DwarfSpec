@@ -41,15 +41,20 @@ function NativeScreenOverlayProbe:init()
     self.input_count = 0
     self.render_count = 0
     self:addviews{
+        widgets.EditField{
+            view_id='editor',
+            frame={l=1, t=0, w=18, h=1},
+            text='',
+        },
         widgets.HotkeyLabel{
             view_id='accept',
-            frame={l=1, t=1, w=18, h=1},
+            frame={l=1, t=2, w=18, h=1},
             label='Accept',
             on_activate=self:callback('accept'),
         },
         widgets.Label{
             view_id='status',
-            frame={l=1, t=3, w=18, h=1},
+            frame={l=1, t=4, w=18, h=1},
             text='clicks: 0',
         },
     }

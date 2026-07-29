@@ -292,27 +292,38 @@ already complete fullscreen transition routing contract.
 
 #### Native widget adapter
 
-- [ ] Prove explicit `source=ds.ESubjectSource.NATIVE` root, lookup, and raw
+- [x] Prove explicit `source=ds.ESubjectSource.NATIVE` root, lookup, and raw
   identity match the default native source.
-- [ ] Prove `native_root` root identity, lookup, inspection, and cleanup without
+- [x] Prove `native_root` root identity, lookup, inspection, and cleanup without
   relying on ordinary root discovery.
-- [ ] Capture a bounded native widget tree and assert stable semantic fields.
-- [ ] Inspect a real native scroll control and assert the current normalized
+- [x] Capture a bounded native widget tree and assert stable semantic fields.
+- [x] Inspect a real native scroll control and assert the current normalized
   `scroll_position` and `visible_row_count` fields.
-- [ ] Close the native bounds/dispatch routes with hover and logical click
+- [x] Close the native bounds/dispatch routes with hover and logical click
   against a safely reversible target.
-- [ ] Reject `ds.viewport()` without mutating native screen dimensions.
+- [x] Reject `ds.viewport()` without mutating native screen dimensions.
 
 #### Registered overlay adapter
 
-- [ ] Capture a bounded registered-overlay tree.
-- [ ] Directly inspect a registered-overlay subject and prove hover and logical
+- [x] Capture a bounded registered-overlay tree.
+- [x] Directly inspect a registered-overlay subject and prove hover and logical
   click. Pointer movement is already covered by the current staged overlay.
-- [ ] Use a test-owned registered-overlay editable control to prove text entry
+- [x] Use a test-owned registered-overlay editable control to prove text entry
   through the borrowed-native input target. This single case covers the native
   mount's remaining type boundary; the source itself does not change dispatch.
-- [ ] Assert the exact pre-test registry entry, visibility, focus, pointer, and
+- [x] Assert the exact pre-test registry entry, visibility, focus, pointer, and
   screen state after cleanup.
+
+Evidence (2026-07-28):
+
+- `.\tools\Run-AutomationTests.ps1 --test-glob
+  tests/automation/native_screen_mount_live_spec.lua` passed 3/3 with
+  `cleanup_confirmed=true`.
+- `.\tools\Run-UnitTests.ps1` passed 523/523.
+- `.\tools\Check-Lua.ps1` passed syntax and formatting for 250 Lua files.
+- The full live wrapper reached 37 successes with `cleanup_confirmed=true`, but
+  did not pass: `game_pause_live_spec.lua` calls unsupported `before_all`, and
+  `native_input_routing_live_spec.lua` failed its fullscreen-unmount assertion.
 
 ### Phase 6: invalidation and failure cleanup
 

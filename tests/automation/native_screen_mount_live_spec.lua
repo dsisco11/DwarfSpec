@@ -3,6 +3,8 @@
 local gui = require('gui')
 local guidm = require('gui.dwarfmode')
 local overlay = require('plugins.overlay')
+local command_conformance = require(
+    'tests.automation.support.command_conformance')
 
 local BUTTON_FIELDS = {
     'mouse_focus',
@@ -305,6 +307,27 @@ describe('non-owning native-screen attachment', function()
         assert.same(dfhack.gui.getFocusStrings(native_screen),
             root:getFocusList())
 
+        local explicit_native = {source=ds.ESubjectSource.NATIVE}
+        local explicit_root = ds.root(explicit_native)
+        assert.equals(native_root, explicit_root:raw())
+
+        local native_tree = ds.capture_view_tree('native-widget-tree',
+            explicit_native)
+        assert.is_table(native_tree)
+        assert.is_table(native_tree.children)
+        assert.is_true(#native_tree.children > 0)
+        assert.is_string(native_tree.native_type)
+        command_conformance.assert_bounded_tree(native_tree,
+            native_tree.class, 128, 8)
+
+        local window_width, window_height = dfhack.screen.getWindowSize()
+        local viewport_ok, viewport_failure = pcall(ds.viewport, 61, 29)
+        assert.is_false(viewport_ok)
+        assert.matches('viewport is unavailable for a non%-owning ' ..
+            'native%-screen mount', viewport_failure)
+        assert.same({window_width, window_height},
+            {dfhack.screen.getWindowSize()})
+
         local target = assert(named_native_child(native_root),
             'native root has no named direct child for lookup acceptance')
         local named = ds.get(target.name)
@@ -313,8 +336,19 @@ describe('non-owning native-screen attachment', function()
         assert.equals(target.raw, named:raw())
         assert.equals(dfhack.gui.getWidget(native_root, target.name),
             named:raw())
+        assert.equals(target.raw, ds.get(target.name, explicit_native):raw())
         assert.same(dfhack.gui.getFocusStrings(native_screen),
             named:getFocusList())
+
+        local explicit_root_options = {
+            source=ds.ESubjectSource.NATIVE,
+            native_root=native_root,
+        }
+        local bypass_root = ds.root(explicit_root_options)
+        local bypass_target = ds.get({target.index}, explicit_root_options)
+        assert.equals(native_root, bypass_root:raw())
+        assert.equals(target.raw, bypass_target:raw())
+        assert.is_string(bypass_root:inspect().native_type)
 
         local named_state = named:inspect()
         assert.is_table(named_state.body)
@@ -331,10 +365,22 @@ describe('non-owning native-screen attachment', function()
         }
         local overlay_root = ds.root(source)
         local overlay_button = ds.get('accept', source)
+        local overlay_editor = ds.get('editor', source)
         local probe = overlay_root:raw()
         assert.equals(
             overlay.get_state().db[overlay_name].widget, probe)
         assert.is_true(probe.render_count > 0)
+        local overlay_tree = ds.capture_view_tree('native-overlay-tree', source)
+        assert.is_table(overlay_tree)
+        assert.is_table(overlay_tree.children)
+        assert.is_true(#overlay_tree.children >= 3)
+        command_conformance.assert_bounded_tree(overlay_tree,
+            overlay_tree.class, 32, 4)
+        local overlay_state = overlay_button:inspect()
+        assert.equals('accept', overlay_state.view_id)
+        assert.is_true(overlay_state.visible)
+        assert.is_true(overlay_state.active)
+        assert.is_truthy(overlay_state.body)
 
         local renders = probe.render_count
         ds.redraw()
@@ -364,6 +410,13 @@ describe('non-owning native-screen attachment', function()
             creatures, 'Tabs', 'Residents', 0))
         local scroll_rows = assert(dfhack.gui.getWidget(
             unit_list, 'Unit List', 1))
+        local scroll_subject = ds.get({
+            'info', 'creatures', 'Tabs', 'Residents', 0, 'Unit List', 1,
+        })
+        local scroll_state = scroll_subject:inspect()
+        assert.equals(scroll_rows.scroll, scroll_state.scroll_position)
+        assert.equals(scroll_rows.num_visible,
+            scroll_state.visible_row_count)
         local rows = dfhack.gui.getWidgetChildren(scroll_rows)
         assert.is_true(#rows > 1,
             'native acceptance requires multiple resident rows')
@@ -419,6 +472,15 @@ describe('non-owning native-screen attachment', function()
             'pointer must be within the resolved native row bounds')
         assert.same({row_x, row_y}, {dfhack.screen.getMousePos()})
 
+        row:hover('center')
+        assert.same({row_x, row_y}, {dfhack.screen.getMousePos()})
+
+        scroll_subject:click()
+        assert.is_true(unit_list.cursor_idx >= 0 and
+            unit_list.cursor_idx < #rows,
+            'native logical click must retain a valid resident-list selection')
+        unit_list.cursor_idx = original_cursor
+
         local input_key
         local expected_cursor
         if original_cursor < #rows - 1 then
@@ -450,19 +512,24 @@ describe('non-owning native-screen attachment', function()
                 'dwarfmode/Default', native_screen)
         end)
 
-        overlay_button:move_pointer('center')
+        overlay_button:hover('center')
         local button_x, button_y = dfhack.screen.getMousePos()
         local button_body = assert(overlay_button:inspect().body)
         assert.is_true(button_x >= button_body.x1 and
             button_x <= button_body.x2 and button_y >= button_body.y1 and
             button_y <= button_body.y2,
             'pointer must be over the rendered overlay button')
-        ds.mouseInput(ds.EMouseButton.LEFT)
+        overlay_button:click()
         assert.equals(1, probe.click_count)
         assert.equals('clicks: 1', ds.get('status', source):text())
+        ds.mouseInput(ds.EMouseButton.LEFT)
+        assert.equals(2, probe.click_count)
+        assert.equals('clicks: 2', ds.get('status', source):text())
         assert.is_true(probe.input_count > 0)
         ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.DOWN)
         ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.UP)
+        overlay_editor:click():type('native')
+        assert.equals('native', overlay_editor:text())
 
         ds.input('D_HAULING')
         ds.await('native Hauling screen opens', function()
