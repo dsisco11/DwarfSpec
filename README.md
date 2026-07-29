@@ -220,41 +220,41 @@ simulation ticks stop while the game is paused.
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
 | `ds.wait_ticks(count, options)` | Wait for unpaused simulation ticks; options are `timeout_ms` and diagnostic `description`. |
 | `ds.isGamePaused()` | Return whether the Dwarf Fortress simulation is paused. |
-| `ds.setGamePaused(paused)` | Set the simulation pause state for an example; cleanup restores the original state. |
+| `ds.setGamePaused(paused)` | Set the simulation pause state; DwarfSpec automatically restores the inherited state during example cleanup. |
 | `ds.getGameSpeed()` | Return the current game-speed target in ticks per second. |
-| `ds.setGameSpeed(tps)` | Set the target game speed in ticks per second; cleanup restores the original native speed state. |
+| `ds.setGameSpeed(tps)` | Set the target game speed in ticks per second; DwarfSpec automatically restores the inherited state during example cleanup. |
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
 | `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
 | `ds.getViewPos(origin)` | Return the map tile aligned with an `EScreenOrigin`; defaults to `CENTER`. |
-| `ds.setViewPos({x=..., y=..., z=...}, origin)` | Align a map tile with an `EScreenOrigin`; defaults to `CENTER`, and cleanup restores the original view. |
-| `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject. |
-| `ds.mountNativeScreen()` | Attach non-owningly to the base native DF viewscreen and return its widget-root subject. |
+| `ds.setViewPos({x=..., y=..., z=...}, origin)` | Align a map tile with an `EScreenOrigin`, defaulting to `CENTER`; DwarfSpec automatically restores the inherited view during example cleanup. |
+| `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject; DwarfSpec automatically unmounts it during example cleanup. |
+| `ds.mountNativeScreen()` | Attach non-owningly to the base native DF viewscreen and return its widget-root subject; DwarfSpec automatically detaches without dismissing it during example cleanup. |
 | `ds.root(options)` | Return the selected native, registered-overlay, or component root subject. |
 | `ds.get(control_path, options)` | Select one exact source-specific path from the current mount. |
 | `ds.unmount()` | Cleanly remove and settle the implicit current mount. |
-| `ds.viewport(width, height)` | Change the mounted viewport in DF cells and wait for its render. |
+| `ds.viewport(width, height)` | Change the mount-scoped viewport in DF cells; automatic unmount cleanup ends the override. |
 | `ds.inspect(subject)` | Return stable, read-only information about a subject or the selected root. |
 | `subject:inspect()` | Return stable, read-only information about the selected view. |
 | `subject:getFocusList()` | Return a copied focus-string list for the subject's mounted screen. |
 | `subject:text()` | Return the selected view's inspected text value. |
 | `subject:raw()` | Access the borrowed Lua view or native DF widget as an exceptional escape hatch. |
-| `ds.move_pointer(x, y, space)` | Move by zero-based UI-grid cell by default, or by exact screen pixel with `EPointerSpace.PIXELS`. |
-| `ds.hover(x, y, space)` | Move to a numeric pointer coordinate and wait for the mounted screen to settle. |
-| `subject:move_pointer(anchor)` | Move the pointer into the selected view. |
-| `subject:hover(anchor)` | Hover the selected view and preserve the subject. |
-| `ds.click(subject, button)` | Move to and click a subject with a supported physical mouse button. |
-| `subject:click(button)` | Click the selected view and preserve the subject. |
+| `ds.move_pointer(x, y, space)` | Move by zero-based grid cell by default or exact pixel with `PIXELS`; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `ds.hover(x, y, space)` | Move to a numeric pointer coordinate and wait for render; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `subject:move_pointer(anchor)` | Move into the selected view; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `subject:hover(anchor)` | Hover the selected view and preserve the subject; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `ds.click(subject, button)` | Move to and click a subject; DwarfSpec automatically restores pointer state, but not the click's UI effects. |
+| `subject:click(button)` | Click the selected view; DwarfSpec automatically restores pointer state, but not the click's UI effects. |
 | `ds.input(keys, subject)` | Send native DFHack input through the subject's mount. |
 | `subject:input(keys)` | Send native DFHack input through the mounted screen. |
 | `ds.type(text, subject)` | Type ASCII text through the subject's mount. |
 | `subject:type(text)` | Type ASCII text through the mounted screen. |
-| `ds.mouseInput(button, action)` | Send an `EMouseButton` action at the current pointer position; physical buttons default to `EInputState.CLICK`. |
+| `ds.mouseInput(button, action)` | Send an `EMouseButton` action, defaulting physical buttons to `CLICK`; DwarfSpec automatically restores persistent button state during cleanup. |
 | `ds.redraw(subject, options)` | Invalidate the mounted screen and wait by default; use `{wait=false}` to skip the wait. |
 | `subject:redraw(options)` | Redraw the subject's mounted screen, preserve the subject, and wait by default. |
 | `ds.capture_view_tree(name, options)` | Retain the selected source's structured view tree. |
 | `ds.capture_screen(name, options)` | Retain a bounded screen-cell capture. |
-| `ds.stage_overlay_registration(source, name)` | Stage a run-owned script only for separately selected real-registration integration coverage. |
+| `ds.stage_overlay_registration(source, name)` | Stage a run-owned script for selected registration integration coverage; DwarfSpec automatically restores its owned external artifacts during cleanup. |
 
 ### Pointer coordinate spaces
 

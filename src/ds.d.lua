@@ -186,16 +186,20 @@
 local Subject = {}
 
 ---Clicks this subject and preserves it for fluent chaining.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---It does not reverse game or UI effects caused by the click.
 ---@param button? dwarfspec.MouseButton
 ---@return dwarfspec.Subject
 function Subject:click(button) end
 
 ---Moves the pointer over this subject in UI-grid cells and preserves it.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return dwarfspec.Subject
 function Subject:hover(anchor) end
 
 ---Moves the pointer to this subject in UI-grid cells and preserves it.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return dwarfspec.Subject
 function Subject:move_pointer(anchor) end
@@ -265,7 +269,8 @@ function DS.await(description, query, options) end
 ---@return boolean
 function DS.isGamePaused() end
 
----Sets the game pause state and restores its original value after the example.
+---Sets the game pause state for the current example.
+---DwarfSpec automatically restores the inherited state during cleanup.
 ---@param paused boolean
 ---@return boolean
 function DS.setGamePaused(paused) end
@@ -274,7 +279,8 @@ function DS.setGamePaused(paused) end
 ---@return integer
 function DS.getGameSpeed() end
 
----Sets the game ticks-per-second target and restores it after the example.
+---Sets the game ticks-per-second target for the current example.
+---DwarfSpec automatically restores the inherited state during cleanup.
 ---@param tps integer
 ---@return integer
 function DS.setGameSpeed(tps) end
@@ -300,13 +306,14 @@ function DS.getViewPos(origin) end
 
 ---Aligns one map tile with the selected screen origin for the current example.
 ---The origin defaults to `EScreenOrigin.CENTER`.
----The original position is restored automatically during example cleanup.
+---DwarfSpec automatically restores the inherited position during cleanup.
 ---@param position dwarfspec.MapViewPosition
 ---@param origin? dwarfspec.EScreenOrigin
 ---@return dwarfspec.MapViewPosition
 function DS.setViewPos(position, origin) end
 
 ---Mounts one owned component or complete screen.
+---DwarfSpec automatically unmounts it during example cleanup.
 ---@param component any
 ---@param options? dwarfspec.MountOptions
 ---@return dwarfspec.Subject
@@ -314,6 +321,7 @@ function DS.mount(component, options) end
 
 ---Mounts the current native DF screen without taking ownership of it.
 ---The mount creates, shows, resizes, and dismisses no screen.
+---DwarfSpec automatically detaches the mount during example cleanup.
 ---@return dwarfspec.Subject
 function DS.mountNativeScreen() end
 
@@ -377,6 +385,7 @@ function DS.move_pointer(view, anchor) end
 ---Moves the pointer over a subject or numeric coordinate and waits for render.
 ---Subject anchors use UI-grid cells. Numeric calls use the same coordinate
 ---space and return rules as `move_pointer`.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---@overload fun(x: integer, y: integer): integer, integer
 ---@overload fun(x: integer, y: integer, space: dwarfspec.GridPointerSpace): integer, integer
 ---@overload fun(x: integer, y: integer, space: dwarfspec.PixelPointerSpace): integer, integer
@@ -394,12 +403,16 @@ function DS.input(keys, subject) end
 
 ---Sends one mouse action at the current virtual pointer position.
 ---Physical mouse buttons default to the click input state.
+---DwarfSpec automatically restores state owned by persistent `DOWN` or `UP`
+---actions during cleanup.
 ---@param button dwarfspec.EMouseButton
 ---@param action? dwarfspec.EInputState
 ---@return integer
 function DS.mouseInput(button, action) end
 
 ---Clicks a view with a supported native mouse button and waits for render.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---It does not reverse game or UI effects caused by the click.
 ---@param view dwarfspec.Subject
 ---@param button? dwarfspec.MouseButton
 ---@return integer
@@ -412,6 +425,8 @@ function DS.click(view, button) end
 function DS.type(text, subject) end
 
 ---Changes the current mounted component viewport and waits for its render.
+---The viewport remains mount-scoped and ends with DwarfSpec's automatic
+---unmount cleanup.
 ---@param width integer
 ---@param height integer
 ---@return any
@@ -424,6 +439,8 @@ function DS.viewport(width, height) end
 function DS.capture_screen(name, options) end
 
 ---Stages a real overlay source for a registration integration test.
+---DwarfSpec automatically disables its overlays, restores configuration, and
+---removes its unchanged staged script during lifecycle cleanup.
 ---@param source_path string
 ---@param logical_name string
 ---@return table

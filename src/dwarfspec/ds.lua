@@ -854,6 +854,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Sets the game pause state for the current example.
+    ---DwarfSpec automatically restores the inherited state during cleanup.
     ---@param paused boolean
     ---@return boolean
     function ds.setGamePaused(paused)
@@ -940,6 +941,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Sets the game ticks-per-second target for the current example.
+    ---DwarfSpec automatically restores the inherited state during cleanup.
     ---@param tps integer
     ---@return integer
     function ds.setGameSpeed(tps)
@@ -1089,6 +1091,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Aligns one map tile with a screen origin for the current example.
+    ---DwarfSpec automatically restores the inherited position during cleanup.
     ---@param position table
     ---@param origin DwarfSpecEScreenOrigin|nil
     ---@return table
@@ -1123,6 +1126,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Mounts one owned component or complete screen.
+    ---DwarfSpec automatically unmounts it during example cleanup.
     ---@param component any
     ---@param options table|nil
     ---@return table
@@ -1134,6 +1138,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Mounts the current native DF screen without taking ownership of it.
+    ---DwarfSpec automatically detaches the mount during example cleanup.
     ---@param ... any
     ---@return table
     function ds.mountNativeScreen(...)
@@ -1399,6 +1404,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Moves the virtual pointer to coordinates or an anchor inside a subject.
+    ---DwarfSpec automatically restores inherited pointer state during cleanup.
     ---@overload fun(x: integer, y: integer, space: DwarfSpecEPointerSpace|nil): integer, integer
     ---@param view table|integer|nil
     ---@param anchor string|integer|nil
@@ -1485,6 +1491,7 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Moves the virtual pointer over a subject and waits for its render.
+    ---DwarfSpec automatically restores inherited pointer state during cleanup.
     ---@param view table|integer|nil
     ---@param anchor string|integer|nil
     ---@param space DwarfSpecEPointerSpace|nil
@@ -1531,6 +1538,7 @@ local TestStatus = load_automation_module(package_root,
     }
 
     ---Sends one mouse action at the current virtual pointer position.
+    ---DwarfSpec automatically restores persistent button state during cleanup.
     ---@param button DwarfSpecEMouseButton
     ---@param action DwarfSpecEInputState|nil
     ---@return integer
@@ -1577,6 +1585,8 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Clicks a view with a supported native mouse button and waits for render.
+    ---DwarfSpec automatically restores inherited pointer state during cleanup.
+    ---It does not reverse game or UI effects caused by the click.
     ---@param view table
     ---@param button string|nil
     ---@return integer
@@ -1616,6 +1626,8 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Changes the current mounted component viewport and waits for its render.
+    ---The viewport remains mount-scoped and ends with DwarfSpec's automatic
+    ---unmount cleanup.
     ---@param width integer
     ---@param height integer
     function ds.viewport(width, height)
@@ -1636,6 +1648,8 @@ local TestStatus = load_automation_module(package_root,
     end
 
     ---Stages a real overlay source for a registration integration test.
+    ---DwarfSpec automatically restores all owned registration artifacts
+    ---during lifecycle cleanup.
     ---@param source_path string
     ---@param logical_name string
     ---@return table

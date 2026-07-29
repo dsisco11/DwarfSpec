@@ -125,6 +125,8 @@ subject by walking direct children from that root. A path such as
 global descendant-ID search. Calling either public mount entry point again
 while the mount remains current is an error; call `ds.unmount()` before
 mounting another component or attaching to the current native screen.
+DwarfSpec automatically unmounts an owned component during example cleanup,
+including when the example fails.
 
 Every path segment is an exact `view_id`. `/` is reserved as the separator;
 paths cannot start or end with `/`, contain empty segments, `.` or `..`, or
@@ -149,6 +151,11 @@ subject for chaining. `inspect` returns a stable diagnostic table, while
 the selection; call `ds.get` to obtain a different subject. A subject is valid
 only while its original mount remains current; unmounting that mount makes the
 subject stale.
+
+`move_pointer`, `hover`, and `click` use DwarfSpec-owned virtual pointer state.
+DwarfSpec automatically restores the inherited pointer coordinates and
+accessors during example cleanup. This restores automation instrumentation,
+not the game or UI effects caused by a click.
 
 `subject:redraw()` requests a repaint of the mount's interaction screen. It
 waits for render instrumentation to confirm a later completed render before
@@ -179,8 +186,9 @@ ds.mouseInput(ds.EMouseButton.RIGHT)
 Each left, right, and middle button exposes explicit `CLICK`, `DOWN`, and `UP`
 actions through the immutable `ds.EInputState` enum. The state defaults to
 `CLICK` when omitted for a physical button. A `DOWN` state remains held across
-pointer movement and later commands until the matching `UP` input or run
-cleanup:
+pointer movement and later commands until the matching `UP` input. DwarfSpec
+automatically restores the exact inherited persistent button state during
+example cleanup:
 
 ```lua
 ds.get('slider'):move_pointer('top_left')
@@ -225,6 +233,10 @@ Omitting the origin selects `CENTER`. Available origins are
 `TOP_LEFT`, `TOP`, `TOP_RIGHT`, `LEFT`, `CENTER`, `RIGHT`, `BOTTOM_LEFT`,
 `BOTTOM`, and `BOTTOM_RIGHT`.
 
+The first `ds.setViewPos()` call in an example captures the inherited map-view
+position. DwarfSpec automatically restores that position during example
+cleanup, including when the example fails.
+
 DwarfSpec reads the effective renderer geometry for every pointer move. This
 tracks runtime UI-scale, resolution, and window changes; a configured scaling
 preference is not treated as the current conversion geometry. Grid input is
@@ -255,6 +267,9 @@ By contrast, `ds.mount(component, options)` creates an owned component mount.
 Both commands share one current mount and are released with `ds.unmount()`.
 `ESubjectSource` chooses native or registered-overlay subject hierarchies only
 after a native-screen mount exists; it does not choose how to mount.
+DwarfSpec automatically performs the corresponding unmount or non-owning
+detach during example cleanup. Detaching a native mount never dismisses the
+borrowed game screen.
 
 DFHack exposes many base-game controls as typed native widget objects. For
 those objects, DwarfSpec can traverse direct children, inspect names, types,
@@ -535,8 +550,8 @@ end
 
 `ds.setGamePaused(paused)` accepts a boolean and immediately returns the
 requested state. The first call in each example captures the inherited pause
-state. DwarfSpec restores that exact state after project teardown, even when
-the example fails:
+state. After project teardown, DwarfSpec automatically restores that exact
+state during example cleanup, even when the example fails:
 
 ```lua
 ds.setGamePaused(false)
@@ -564,8 +579,8 @@ assert.equals(100, ds.setGameSpeed(100))
 ```
 
 The first call in an example captures the exact inherited speed state. Repeated
-calls retain that baseline, and DwarfSpec restores it during cleanup. The
-command does not change the pause state.
+calls retain that baseline, and DwarfSpec automatically restores it during
+example cleanup. The command does not change the pause state.
 
 The value is a target, not a guarantee that the computer can achieve the
 requested tick rate. A low target can cause a `ds.wait_ticks()` wall-clock
@@ -739,11 +754,12 @@ overlay script, not a component mount or fixture-definition protocol.
 
 The integration support refuses to replace an existing destination or remove
 a staged script whose contents changed. It snapshots `dfhack-config/overlay.json`
-before registration, disables the staged widgets during cleanup, restores the
-configuration artifact byte for byte, removes only its unchanged run-owned
-script, performs a final rescan, and verifies that no staged registration
-remains. The integration spec is excluded from the normal component-test glob
-and must be selected explicitly when validating the DFHack overlay boundary.
+before registration. During lifecycle cleanup, DwarfSpec automatically
+disables the staged widgets, restores the configuration artifact byte for
+byte, removes only its unchanged run-owned script, performs a final rescan,
+and verifies that no staged registration remains. The integration spec is
+excluded from the normal component-test glob and must be selected explicitly
+when validating the DFHack overlay boundary.
 
 ## Public commands
 
@@ -757,6 +773,15 @@ The first-release surface is intentionally small:
   `EInputState`;
 - evidence: `capture_view_tree`, `capture_screen`; and
 - real registration integration: `stage_overlay_registration`.
+
+Automatic cleanup applies explicitly to `mount`, `mountNativeScreen`,
+`setGamePaused`, `setGameSpeed`, `setViewPos`, `move_pointer`, `hover`,
+`click`, persistent `mouseInput` button state, and
+`stage_overlay_registration`. The fluent subject forms of `move_pointer`,
+`hover`, and `click` have the same pointer-restoration guarantee. `viewport`
+is mount-scoped and ends with automatic unmount cleanup. DwarfSpec restores
+only the state it owns; it does not reverse gameplay or UI effects caused by
+input or clicks.
 
 Input commands perform their own required render or frame synchronization.
 Cleanup and render-generation waiting are internal lifecycle details rather

@@ -33,6 +33,8 @@ local function invoke(subject, name, ...)
 end
 
 ---Clicks this subject and preserves it for fluent chaining.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---It does not reverse game or UI effects caused by the click.
 ---@param button string|nil
 ---@return dwarfspec.Subject
 function Subject:click(button)
@@ -41,6 +43,7 @@ function Subject:click(button)
 end
 
 ---Moves the pointer over this subject and preserves it for fluent chaining.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---@param anchor string|nil
 ---@param space any
 ---@return dwarfspec.Subject
@@ -53,6 +56,7 @@ function Subject:hover(anchor, space)
 end
 
 ---Moves the pointer to this subject and preserves it for fluent chaining.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---@param anchor string|nil
 ---@param space any
 ---@return dwarfspec.Subject
