@@ -3,28 +3,48 @@ DwarfSpec Test Runner UI Proposal
 
 Purpose:
     ☐ Design a Cypress-like viewer for running, observing, and triaging DwarfSpec tests.
+    ☐ Optimize the primary workflow for: select scope -> run -> select test -> inspect attempt and step -> inspect evidence -> rerun or open source.
     ☐ Keep source editing, general breakpoints, variables, watches, and call-stack debugging in VS Code.
-    ☐ Optimize the primary workflow for: select scope -> run -> select test -> inspect step and evidence -> rerun or open source.
     ☐ Do not imply runtime capabilities, such as host-screen capture or replay, until their feasibility and data contracts are confirmed.
 
 Completion contract:
-    ☐ Complete every applicable Penpot component, mockup-state, prototype, organization, and audit item below.
-    ☐ Record any rejected or deferred item with its rationale and the runtime or product dependency that blocks it.
-    ☐ Preserve all established DFHack visual constraints throughout the proposal.
-    ☐ Reuse every applicable existing DFHack widget component before creating a new component subtype.
+    ☐ Complete every applicable component, mockup-state, prototype, organization, and audit item below.
+    ☐ Treat this checklist as the source of truth for the UI proposal.
+    ☐ Record every rejected or deferred item with its rationale and blocking product or runtime dependency.
+    ☐ Reuse every applicable existing DFHack widget component before creating a new component or subtype.
+    ☐ Keep generic DFHack components free of DwarfSpec-specific semantics.
     ☐ Keep every complex component specimen and its variants on a dedicated, clearly named Penpot page.
+    ☐ Verify component instances and dependent mockups after every master-component change.
 
-Product and information architecture:
+Component architecture rules:
+    ☐ Organize the proposal into generic DFHack components, DwarfSpec domain components, reusable screen panels, and workspace mockups.
+    ☐ Give every component one clearly documented responsibility.
+    ☐ Document what each complex component owns and explicitly does not own.
+    ☐ Extract repeated structures instead of duplicating their shapes across components or mockup states.
+    ☐ Compose existing primitives inside domain components instead of copying their borders, labels, scrollbars, or interaction states.
+    ☐ Keep cross-panel selection and synchronization in the workspace/controller layer rather than individual panels.
+    ☐ Keep status calculation, aggregation, flake detection, sorting, capture, and editor launching outside presentation-only components.
+    ☐ Avoid one component with a Cartesian product of unrelated variant dimensions.
+    ☐ Prefer nested state components and content overrides over separate copies of an entire complex component.
+    ☐ Do not create components for one-off headings, dividers, explanatory text, individual footer counts, stack separators, or complete workspace mockups.
+    ☐ Create a component when an element is reused, has independent state or interaction, contains repeated children, owns scrolling or clipping, or appears across multiple mockup states.
+
+Product and data ownership:
     ☐ Document the four selection levels: run, file or suite, test attempt, and command or event step.
     ☐ Define which selection level owns each action, status, summary, log, and evidence view.
     ☐ Define the minimum information required to answer: what failed, why, at which step, in which attempt, and what should be rerun.
-    ☐ Define the boundary between structured runner evidence and raw DFHack output.
-    ☐ Define the boundary between the runner's Debug action and external VS Code debugging.
-    ☐ Keep the TEST RESULTS pane title; use the breadcrumb to identify its current scope.
-    ☐ Extend the selected-test context to include the test name and active attempt without overloading the breadcrumb.
+    ☐ Define the boundary between the structured command trace and raw DFHack output.
+    ☐ Define the boundary between DwarfSpec's Debug action and external VS Code debugging.
+    ☐ Define a view-model contract for run state, progress, counts, scope, elapsed time, and reproduce command.
+    ☐ Define a view-model contract for explorer nodes and their supplied aggregate statuses.
+    ☐ Define a view-model contract for test results, attempts, failure category, behavior outcome, cleanup outcome, and infrastructure outcome.
+    ☐ Define a view-model contract for trace steps, groups, durations, retry or wait data, source locations, evidence references, and raw-log anchors.
+    ☐ Define a view-model contract for captured or textual host evidence and its availability state.
+    ☐ Keep TEST RESULTS as the pane title; use the breadcrumb to identify its current scope.
+    ☐ Show the selected test name and active attempt without overloading the breadcrumb.
 
 Current proposal cleanup:
-    ☐ Remove the TEST, RESULT, and R headers from tree-view-with-columns.
+    ☐ Remove the TEST, RESULT, and R headers from Tree View With Columns.
     ☐ Remove the duplicate Result Column Indicator list from the test explorer.
     ☐ Keep exactly one status indicator inside each tree row and inside the tree's shared scroll panel.
     ☐ Replace every typed visual symbol with the corresponding existing CP437 tile asset.
@@ -36,167 +56,310 @@ Current proposal cleanup:
     ☐ Remove or archive other hidden, superseded presentation layers after verifying that no live component instance depends on them.
     ☐ Remove the decorative RUN / INSPECT / REPRODUCE / RESTORE title-bar copy.
     ☐ Remove any protocol-version or DFHack-version badges.
-
-Revised workspace layout:
-    ☐ Retain a compact title and run bar.
-    ☐ Show current scope, run state, progress, elapsed time, and active test in the title or run bar.
-    ☐ Retain the left test explorer as the scope-navigation pane.
-    ☐ Retain the results table as the selected scope's result index.
-    ☐ Add a first-class ordered command and event trace for the selected test attempt.
-    ☐ Replace most permanent Debug Context content with selected-step evidence and failure context.
-    ☐ Move breakpoint and pause configuration into a compact Debug Options control.
-    ☐ Keep raw DFHack output and diagnostic logs in a resizable or collapsible bottom drawer.
-    ☐ Keep the host-responsive indicator badge at the bottom-right of the window.
-    ☐ Evaluate which panes can be collapsed or resized without violating the DFHack widget model.
-    ☐ Ensure the initial layout prioritizes the selected test's execution trace over runner configuration.
-
-Run bar and actions:
-    ☐ Provide compact actions for Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop.
-    ☐ Define enabled, disabled, focused, running, and stopping states for each action.
-    ☐ Replace static Mode and Repeat labels with existing dropdown components when the values are configurable.
-    ☐ Define mode choices without inventing unsupported runner modes.
-    ☐ Define repeat choices and show the selected repeat count.
     ☐ Consolidate the duplicate top command preview and bottom rerun command.
-    ☐ Present one contextual, copyable REPRODUCE COMMAND near the selected result or failure.
-    ☐ Do not present the reproduce command as a replacement shell or source editor.
 
-Test explorer:
-    ☐ Show file, suite, and test hierarchy using tree-view-with-columns.
-    ☐ Keep every tree column within the tree's single normal scroll panel.
-    ☐ Keep tree-view-with-columns free of column headers.
-    ☐ Show one right-aligned aggregate status per visible tree item.
-    ☐ Define parent-node aggregation for running, passed, failed, errored, skipped, flaky, cleanup-failed, and disconnected descendants.
-    ☐ Add search or text filtering.
-    ☐ Add status filtering for failed, errored, flaky, cleanup-failed, and not-run tests.
-    ☐ Evaluate tag and category filters against the runner's actual discovery metadata.
-    ☐ Keep the active run scope visible below or adjacent to the explorer.
-    ☐ Define empty, loading, no-match, discovery-error, and disconnected explorer states.
+Existing DFHack component reuse:
+    ☐ Reuse TextButton for clickable actions.
+    ☐ Reuse Dropdown Control for configurable choices.
+    ☐ Reuse EditField only for actual editable or copyable field interactions.
+    ☐ Reuse Breadcrumb in the Test Results title bar.
+    ☐ Reuse Tree View With Columns as the test-explorer container.
+    ☐ Reuse Generic Table View as the test-result index.
+    ☐ Reuse the normal Scrollbar wherever scrolling is required.
+    ☐ Reuse List Box and List Item for chronological or selectable lists when their semantics match.
+    ☐ Reuse Command Menu only for transient action menus.
+    ☐ Reuse issue for concise failure or unavailable-state messaging when its semantics match.
+    ☐ Reuse targeting_prompt only for an active targeting or armed-debug prompt.
+    ☐ Reuse HotkeyLabel only for genuine hotkey labels, not configurable dropdown values or stateful toggles.
+    ☐ Record why any new component cannot be represented by an existing component or a new variant of one.
 
-Test results table:
-    ☐ Continue using Generic Table View.
-    ☐ Preserve original runner ordering as the default no-sort mode.
-    ☐ Keep none, ascending, and descending sort modes for applicable columns.
-    ☐ Use existing CP437 up and down arrow assets beside sorted column labels.
-    ☐ Use the normal DFHack scrollbar component.
-    ☐ Retain the black, white, and brown header palette.
-    ☐ Reevaluate whether KIND provides more triage value than attempt outcome or failure category.
-    ☐ Show status, duration, and concise anomaly detail without forcing users to parse padded text.
-    ☐ Make source locations actionable without embedding a source editor.
-    ☐ Define selected, focused, running, passed, failed, errored, skipped, flaky, and cleanup-failed row variants.
-    ☐ Avoid sorting any command or lifecycle trace where chronological order is semantically required.
+Generic component: Status Indicator:
+    ☐ Create a Status Indicator component that owns only a CP437 status asset and palette-linked color.
+    ☐ Define queued, running, passed, failed, errored, skipped, cancelled, not-run, flaky, cleanup-failed, and host-disconnected statuses.
+    ☐ Assign every status an existing CP437 asset.
+    ☐ Assign every status an established DF palette preset.
+    ☐ Do not make Status Indicator calculate aggregate status or cleanup precedence.
+    ☐ Create a dedicated component page for Status Indicator and its variants.
 
-Attempt and flake inspection:
-    ☐ Define an Attempt Selector component for repeated test runs.
-    ☐ Show the active attempt as current attempt over total attempts.
-    ☐ Show a compact status for every attempt.
-    ☐ Synchronize attempt selection with the trace, failure inspector, timings, host evidence, and raw-log anchor.
-    ☐ Define FLAKY as inconsistent outcomes within the current repeated run unless historical data is explicitly available.
-    ☐ Distinguish a failed assertion from an attempt that failed only during cleanup or infrastructure handling.
+Generic component: Status Badge:
+    ☐ Create a Status Badge component that composes Status Indicator with a short text label and optional border.
+    ☐ Define compact, bordered, and unbordered presentations only where each has a demonstrated reuse.
+    ☐ Pair symbol, color, and text so status meaning never depends on color alone.
+    ☐ Use Status Badge for connection, host responsiveness, dirty-host, and similarly compact status summaries.
+    ☐ Do not encode DwarfSpec aggregation rules inside Status Badge.
+    ☐ Create a dedicated component page for Status Badge and its variants.
+
+Generic component: Tree Row With Columns:
+    ☐ Extract Tree Row With Columns from the existing Tree View With Columns master.
+    ☐ Make the row own its expander slot, label slot, arbitrary column slots, selection state, and integrated right-side status slot.
+    ☐ Keep all row content inside the tree's shared scroll viewport.
+    ☐ Define leaf, collapsed-parent, expanded-parent, selected, focused, and disabled row presentations.
+    ☐ Use existing CP437 expander assets.
+    ☐ Do not add column headers to Tree Row With Columns or Tree View With Columns.
+    ☐ Refactor Tree View With Columns to repeat component-linked Tree Row With Columns instances.
+    ☐ Verify that refactoring the master preserves all existing linked instances.
+    ☐ Create a dedicated component page for Tree Row With Columns and its variants.
+
+Generic components: Table Cell, Table Row, and Sortable Header Cell:
+    ☐ Extract Table Cell from the existing Generic Table View master.
+    ☐ Make Table Cell own standard padding, clipping, alignment, and text overflow.
+    ☐ Extract Table Row as an arbitrary collection of Table Cell instances.
+    ☐ Define normal, selected, focused, disabled, and alternate-row presentations only if the table uses them.
+    ☐ Extract Sortable Header Cell from the existing Generic Table View master.
+    ☐ Define none, ascending, and descending sort presentations.
+    ☐ Use existing CP437 up and down arrow assets for sort indicators.
+    ☐ Keep header styling within the black, white, and brown palette.
+    ☐ Keep default none sorting equivalent to the original order supplied by the view-model.
+    ☐ Refactor Generic Table View to compose Sortable Header Cell, Table Row, Table Cell, and the normal Scrollbar.
+    ☐ Keep Generic Table View configurable for arbitrary columns and rows.
+    ☐ Do not encode DwarfSpec column names, statuses, or ordering rules in Generic Table View.
+    ☐ Verify that refactoring the master preserves all existing linked instances.
+    ☐ Create dedicated component pages for Table Cell, Table Row, and Sortable Header Cell.
+
+Generic components: Dropdown Field, Menu Panel, and Menu Item:
+    ☐ Retain the existing closed and open Dropdown Control components.
+    ☐ Extract or formalize the shared Dropdown Field used by both closed and open states.
+    ☐ Keep the static label, selected value, and CP437 downward-triangle button inside Dropdown Field.
+    ☐ Keep the triangle button free of surrounding brackets.
+    ☐ Show the triangle in the established normal color when closed and orange when open.
+    ☐ Extract Dropdown Menu Panel with the same border treatment as Dropdown Field.
+    ☐ Extract Dropdown Menu Item for normal, focused, selected, and disabled states.
+    ☐ Show a selected menu item with cyan text on a black background.
+    ☐ Refactor Dropdown Control Open to compose Dropdown Field, Dropdown Menu Panel, and repeated Dropdown Menu Item instances.
+    ☐ Verify that refactoring the masters preserves all existing linked instances.
+    ☐ Create dedicated component pages for Dropdown Field, Dropdown Menu Panel, and Dropdown Menu Item.
+
+Generic components: Tab and Tab Bar:
+    ☐ Create a Tab component for active, inactive, focused, and disabled states.
+    ☐ Create a Tab Bar component that composes an arbitrary collection of Tab instances.
+    ☐ Make Tab Bar own spacing, clipping, and the single active-tab presentation.
+    ☐ Keep tab content and tab-selection state supplied by the parent view-model.
+    ☐ Reuse Tab Bar for raw-output and diagnostic views.
+    ☐ Do not use Tab Bar for chronological trace-step selection.
+    ☐ Create dedicated component pages for Tab and Tab Bar.
+
+Generic component: Toggle:
+    ☐ Create a Toggle component for on, off, focused, and disabled states.
+    ☐ Use existing CP437 assets and established palette presets.
+    ☐ Pair the state asset with a static label.
+    ☐ Reuse Toggle for Follow Output, Wrap, and supported debug options.
+    ☐ Do not use HotkeyLabel or Dropdown as a visual substitute for binary state.
+    ☐ Create a dedicated component page for Toggle and its variants.
+
+Generic component: Source Reference:
+    ☐ Create a Source Reference component for file, line, and optional column.
+    ☐ Define compact-inline and full-path presentations only if both are used.
+    ☐ Compose an existing TextButton or equivalent existing action treatment for Open Source.
+    ☐ Keep source display separate from editor-launch behavior.
+    ☐ Reuse Source Reference in result details, trace steps, code frames, and stack entries.
+    ☐ Create a dedicated component page for Source Reference and its variants.
+
+Generic components: Property Row and Property List:
+    ☐ Create Property Row for one label and value pair.
+    ☐ Define value states for normal, warning, failure, unavailable, and actionable only where required.
+    ☐ Create Property List as repeated Property Row instances with consistent label alignment.
+    ☐ Reuse Property List for host metadata, selected-step details, and evidence metadata.
+    ☐ Keep Property List free of host-specific field names.
+    ☐ Create dedicated component pages for Property Row and Property List.
+
+Generic component: Log Row:
+    ☐ Create Log Row with timestamp, source, severity or status, and message slots.
+    ☐ Define normal, selected, correlated, warning, failure, and wrapped presentations.
+    ☐ Compose Status Indicator where severity needs a visual indicator.
+    ☐ Keep raw-log filtering, buffering, and truncation outside Log Row.
+    ☐ Reuse Log Row for DFHack output and supported host-event streams.
+    ☐ Create a dedicated component page for Log Row and its variants.
+
+DwarfSpec component: Attempt Indicator:
+    ☐ Create Attempt Indicator from an attempt number or label plus Status Indicator.
+    ☐ Define normal, selected, focused, and disabled states without duplicating every possible status as parent-level artwork.
+    ☐ Keep flake calculation outside Attempt Indicator.
+    ☐ Create a dedicated component page for Attempt Indicator and its variants.
+
+DwarfSpec component: Attempt Selector:
+    ☐ Create Attempt Selector as a collection of Attempt Indicator instances plus current-attempt and total-attempt context.
+    ☐ Show a compact status for every supplied attempt.
     ☐ Define the no-repeat and single-attempt presentation without reserving dead space.
+    ☐ Define overflow behavior for many attempts.
+    ☐ Keep attempt selection outside the component's presentation contract.
+    ☐ Keep FLAKY defined by supplied inconsistent attempt outcomes unless historical data is explicitly available.
+    ☐ Create a dedicated component page for Attempt Selector and its states.
 
-Command and event trace:
+DwarfSpec components: Trace Step Row and Trace Group Row:
     ☐ Define the ordered step taxonomy for setup, test commands, inputs, waits, assertions, cleanup, host events, and runner events.
-    ☐ Design a reusable Trace Row component.
-    ☐ Show step status, sequence, command or event name, important target or argument, and duration.
-    ☐ Show retry, poll, or wait information only when the runner reports it.
-    ☐ Show a source location only when one exists.
-    ☐ Define queued, running, passed, failed, errored, skipped, cancelled, and not-run trace-row states.
-    ☐ Group setup, behavior, and cleanup steps without hiding their chronological ordering.
-    ☐ Allow groups to expand and collapse using existing CP437 assets.
-    ☐ Keep the selected failing step visible when changing attempts or log tabs.
-    ☐ Synchronize trace selection with failure details, host evidence, and the matching raw-log position.
-    ☐ Define behavior when a step has no host evidence or raw-log entry.
+    ☐ Create Trace Step Row from Status Indicator, optional Source Reference, and supplied step content.
+    ☐ Show sequence, category, command or event, important target or argument, duration, and optional retry or wait information.
+    ☐ Define queued, running, passed, failed, errored, skipped, cancelled, and not-run step states.
+    ☐ Define selected, focused, expanded, and collapsed structural states without duplicating status artwork.
+    ☐ Show retry, poll, or wait information only when supplied by the runner.
+    ☐ Show a source reference only when one exists.
+    ☐ Create Trace Group Row for setup, behavior, and cleanup grouping.
+    ☐ Compose Status Indicator and existing CP437 expander assets in Trace Group Row.
+    ☐ Show aggregate group status, duration, and child count.
+    ☐ Keep group expansion from changing chronological ordering.
+    ☐ Keep status aggregation outside Trace Group Row.
+    ☐ Create dedicated component pages for Trace Step Row and Trace Group Row.
+
+DwarfSpec component: Command Trace:
+    ☐ Create Command Trace from List Box, Trace Group Row, Trace Step Row, and the normal Scrollbar.
+    ☐ Keep the chronological trace as the primary selected-attempt debugging view.
+    ☐ Define empty, loading, streaming, complete, failed, filtered-empty, and unavailable states.
     ☐ Define long-command, long-argument, nested-command, and large-trace scrolling behavior.
+    ☐ Keep the selected failing step visible when changing attempts or related log views.
+    ☐ Define behavior when a step has no host evidence or raw-log anchor.
+    ☐ Keep failure formatting, host capture, and raw-output rendering outside Command Trace.
+    ☐ Create a dedicated component page for Command Trace and its states.
 
-Host evidence:
-    ☐ Determine whether the runner can provide live host rendering, captured frames, component-tree snapshots, or only textual state.
-    ☐ Document the chosen evidence modes and their availability conditions.
-    ☐ Design a reusable Host Evidence component that can represent each supported mode.
-    ☐ Show the evidence captured for the selected trace step.
-    ☐ When available, expose focus path, active viewscreen, pointer position, input target, and mounted-screen ownership.
-    ☐ When available, expose selected widget bounds without obscuring the underlying render.
-    ☐ Define unavailable, pending, stale, capture-failed, and host-disconnected evidence states.
+DwarfSpec components: Evidence Value Block and Failure Comparison:
+    ☐ Create Evidence Value Block for one labeled, multiline evidence value.
+    ☐ Define normal, expected, actual, warning, failure, and unavailable presentations only where required.
+    ☐ Create Failure Comparison from two Evidence Value Block instances.
+    ☐ Support expected versus actual, requested versus observed, and previous versus current labels without new component copies.
+    ☐ Keep comparison calculation and diff generation outside Failure Comparison.
+    ☐ Define empty-side, long-value, and multiline overflow behavior.
+    ☐ Create dedicated component pages for Evidence Value Block and Failure Comparison.
+
+DwarfSpec component: Host Evidence:
+    ☐ Determine whether the runner can supply live rendering, captured frames, component-tree snapshots, or only textual state.
+    ☐ Document supported evidence modes and their availability conditions.
+    ☐ Create Host Evidence from an evidence viewport, Property List, Status Badge, and supported overlay treatments.
+    ☐ Show the evidence supplied for the selected trace step.
+    ☐ When supplied, show focus path, active viewscreen, pointer position, input target, mounted-screen ownership, and selected widget bounds.
+    ☐ Define unavailable, pending, stale, capture-failed, and host-disconnected states.
     ☐ Never label inferred state as captured or visually verified evidence.
-    ☐ Avoid implying full time travel unless the runner retains the required per-step state.
+    ☐ Do not make Host Evidence capture, infer, or retain runtime state.
+    ☐ Do not imply full time travel unless the runner retains the required per-step state.
+    ☐ Create a dedicated component page for Host Evidence and its states.
 
-Failure inspector:
-    ☐ Keep behavior failure, infrastructure error, cleanup failure, and host-health evidence visually distinct.
+DwarfSpec component: Failure Inspector:
+    ☐ Create Failure Inspector from issue, Status Badge, Source Reference, Failure Comparison, code-frame, stack, and action components.
     ☐ Show failure category, concise message, source location, expected value, and actual value when available.
-    ☐ Add a short code-frame treatment when source context is available.
-    ☐ Keep the stack collapsed by default when the concise failure context is sufficient.
-    ☐ Make file and stack locations open the external configured editor at the appropriate line and column.
-    ☐ Provide Copy Failure and Copy Reproduce Command actions.
+    ☐ Add a short code-frame treatment when source context is supplied.
+    ☐ Keep the stack collapsed by default when concise failure context is sufficient.
+    ☐ Provide Copy Failure, Copy Reproduce Command, and Open Source actions.
     ☐ Keep Open Source as the primary transition to VS Code.
+    ☐ Keep behavior failure, infrastructure error, cleanup failure, and host-health evidence visually distinct.
     ☐ Show cleanup status only when cleanup failed, was interrupted, or could not be confirmed.
     ☐ Show quarantine or dirty-host state as a separate critical condition.
-    ☐ Define assertion, Lua error, timeout, discovery error, cleanup failure, host loss, and cancellation examples.
+    ☐ Define assertion, Lua error, timeout, discovery error, cleanup failure, host loss, and cancellation states.
+    ☐ Keep failure classification and editor integration outside Failure Inspector.
+    ☐ Create a dedicated component page for Failure Inspector and its states.
 
-Debug options:
-    ☐ Design a compact Debug Options dropdown, menu, or popover using existing DFHack components.
+DwarfSpec component: Run Summary:
+    ☐ Create Run Summary from supplied run state, progress, result counts, and elapsed time.
+    ☐ Define compact and full presentations for title-bar and footer use.
+    ☐ Compose Status Indicator or Status Badge instead of duplicating status artwork.
+    ☐ Define idle, discovering, running, stopping, complete, cancelled, failed, and disconnected states.
+    ☐ Keep result aggregation and progress calculation outside Run Summary.
+    ☐ Create a dedicated component page for Run Summary and its states.
+
+DwarfSpec component: Reproduce Command:
+    ☐ Create Reproduce Command from EditField or an appropriate read-only field presentation plus existing action components.
+    ☐ Show one contextual command for the selected result or failure.
+    ☐ Provide a Copy action.
+    ☐ Add Open in Terminal only if the product supports it.
+    ☐ Keep command generation, clipboard behavior, and terminal launching outside the component.
+    ☐ Do not present Reproduce Command as a replacement shell or source editor.
+    ☐ Create a dedicated component page for Reproduce Command and its states.
+
+DwarfSpec component: Debug Options:
+    ☐ Create Debug Options from Dropdown Control, Command Menu, Toggle, Status Indicator, and targeting_prompt where applicable.
     ☐ Include Break on Assertion only if supported by the runner.
     ☐ Include Break on Lua Error only if supported by the runner.
     ☐ Include Break on Cleanup Failure only if supported by the runner.
     ☐ Include Pause Before Input only if supported by the runner.
     ☐ Clearly indicate armed debug behavior without occupying the normal evidence pane.
-    ☐ Define how Debug Selected changes the reproduce command and run state.
-    ☐ Do not add variables, watches, breakpoint management, or embedded source editing.
+    ☐ Keep variables, watches, general breakpoint management, and embedded source editing out of Debug Options.
+    ☐ Keep debug execution and breakpoint behavior outside the component.
+    ☐ Create a dedicated component page for Debug Options and its states.
 
-Logs and reports:
-    ☐ Define TRACE as the structured selected-attempt view rather than another raw-output tab.
+Reusable screen panel: Runner Header:
+    ☐ Create Runner Header from product title, Run Summary, compact TextButton actions, configuration Dropdown Controls, and connection Status Badge.
+    ☐ Provide Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop actions.
+    ☐ Define enabled, disabled, focused, running, and stopping action states.
+    ☐ Show current scope, run state, progress, elapsed time, and active test without decorative workflow copy.
+    ☐ Use Dropdown Control for configurable Mode and Repeat values.
+    ☐ Do not include reproduce-command editing or permanent debug configuration.
+    ☐ Create a dedicated component page for Runner Header and its states.
+
+Reusable screen panel: Test Explorer Panel:
+    ☐ Create Test Explorer Panel from Tree View With Columns, EditField, Dropdown Control, Status Indicator, and active-scope text.
+    ☐ Show file, suite, and test hierarchy.
+    ☐ Show one supplied, right-aligned aggregate status per visible tree item.
+    ☐ Add search or text filtering.
+    ☐ Add status filtering for failed, errored, flaky, cleanup-failed, and not-run tests.
+    ☐ Evaluate tag and category filters against actual discovery metadata.
+    ☐ Define empty, loading, no-match, discovery-error, and disconnected states.
+    ☐ Keep discovery, filtering, selection, and status aggregation outside the panel.
+    ☐ Create a dedicated component page for Test Explorer Panel and its states.
+
+Reusable screen panel: Test Results Panel:
+    ☐ Create Test Results Panel from its pane title, Breadcrumb, selection context, Run Summary, Generic Table View, and Attempt Selector.
+    ☐ Keep TEST RESULTS visible as the pane title.
+    ☐ Show the selected scope in Breadcrumb.
+    ☐ Show the selected test name and active attempt in a separate context region.
+    ☐ Preserve original runner ordering as the table's default no-sort mode.
+    ☐ Keep none, ascending, and descending sorting for applicable columns.
+    ☐ Reevaluate whether KIND provides more triage value than attempt outcome or failure category.
+    ☐ Show status, duration, and concise anomaly detail without padded text.
+    ☐ Make source locations actionable with Source Reference.
+    ☐ Define empty, loading, running, complete, failed, filtered-empty, and disconnected states.
+    ☐ Keep result discovery, sorting, selection, and attempt synchronization outside the panel.
+    ☐ Create a dedicated component page for Test Results Panel and its states.
+
+Reusable screen panel: Command Trace Panel:
+    ☐ Create Command Trace Panel from a pane title, selected-test and attempt context, Command Trace, and optional trace controls.
+    ☐ Make Command Trace more prominent than debug configuration.
+    ☐ Keep chronological traces unsortable.
+    ☐ Keep the selected step unambiguous.
+    ☐ Define empty, loading, streaming, complete, failed, and unavailable states.
+    ☐ Keep cross-panel synchronization outside the panel.
+    ☐ Create a dedicated component page for Command Trace Panel and its states.
+
+Reusable screen panel: Evidence Inspector:
+    ☐ Create Evidence Inspector from Failure Inspector, Host Evidence, Property List, and a minimal view selector if required.
+    ☐ Prioritize selected-step evidence and concise failure context.
+    ☐ Keep permanent breakpoint controls out of the panel.
+    ☐ Define no-selection, normal-step, failed-step, cleanup-failure, unavailable-evidence, and disconnected states.
+    ☐ Keep attempt selection, trace selection, capture, and failure classification outside the panel.
+    ☐ Create a dedicated component page for Evidence Inspector and its states.
+
+Reusable screen panel: Output Drawer:
+    ☐ Create Output Drawer from Tab Bar, List Box, Log Row, Toggle, Dropdown Control, and the normal Scrollbar.
     ☐ Retain DFHACK OUTPUT for raw console output.
     ☐ Add HOST EVENTS only if connection, focus, executor, queue, and quarantine events can be separated reliably.
     ☐ Retain REPORT only when exposing the raw structured report helps diagnose runner behavior.
-    ☐ Define timestamp, source, severity, and message columns for raw logs.
-    ☐ Add follow-output, wrap, and filter controls using existing components.
-    ☐ Use an existing status indicator asset for follow-output state.
-    ☐ Define selection and highlighting for the raw-log entry correlated with the selected trace step.
-    ☐ Define log buffering, truncation, and large-output presentation.
-    ☐ Define empty, streaming, paused-follow, filtered-empty, and disconnected log states.
+    ☐ Do not duplicate the structured Command Trace as another raw-output tab.
+    ☐ Add Follow Output, Wrap, and Filter controls.
+    ☐ Define selection and highlighting for a raw-log entry correlated with the selected trace step.
+    ☐ Define buffering, truncation, long-line, wrapping, and large-output behavior.
+    ☐ Define collapsed, expanded, empty, streaming, paused-follow, filtered-empty, and disconnected states.
+    ☐ Keep filtering, buffering, correlation, and stream ownership outside the drawer.
+    ☐ Create a dedicated component page for Output Drawer and its states.
 
-Status system:
-    ☐ Define a reusable status-indicator component or extend the established DFHack indicator component.
-    ☐ Cover queued, running, passed, failed, errored, skipped, cancelled, not-run, flaky, cleanup-failed, and host-disconnected states.
-    ☐ Assign every status an established DF palette preset.
-    ☐ Assign every status an existing CP437 asset.
-    ☐ Pair symbols and colors with text wherever ambiguity would remain.
-    ☐ Keep behavior status independent from cleanup, infrastructure, and host-health status.
-    ☐ Define aggregate precedence for parent tree nodes and run summaries.
-    ☐ Verify that no success state relies solely on green and no failure state relies solely on red.
+Reusable screen panel: Runner Status Bar:
+    ☐ Create Runner Status Bar from Run Summary and supplied host-health Status Badges.
+    ☐ Keep the host-responsive Status Badge at the bottom-right of the window.
+    ☐ Show cleanup status only when cleanup failed, was interrupted, or could not be confirmed.
+    ☐ Keep protocol-version and DFHack-version badges absent.
+    ☐ Define idle, running, complete, cleanup-failed, dirty-host, and disconnected states.
+    ☐ Keep run aggregation and host-health monitoring outside the status bar.
+    ☐ Create a dedicated component page for Runner Status Bar and its states.
 
-New reusable components:
-    ☐ Create a dedicated page for Trace Row and its variants.
-    ☐ Create a dedicated page for Command and Event Trace.
-    ☐ Create a dedicated page for Attempt Selector.
-    ☐ Create a dedicated page for Host Evidence.
-    ☐ Create a dedicated page for Failure Inspector.
-    ☐ Create a dedicated page for Run Progress or Run Summary.
-    ☐ Create a dedicated page for any new Status Indicator subtype.
-    ☐ Create a dedicated page for Debug Options if it becomes a complex composition.
-    ☐ Wrap every specimen and variant set in an appropriately named top-level group or board.
-    ☐ Use the established dark Canvas Background on every new page.
-    ☐ Move all dedicated-page variants off the Foundations page.
-    ☐ Hide unavoidable Foundations masters only after verifying that linked instances remain visible.
-
-Existing component conformance:
-    ☐ Keep all UI text at the single established game text size.
-    ☐ Apply font.baseGame to every text shape.
-    ☐ Link every text, fill, stroke, border, selection, and status color to an established DF palette preset.
-    ☐ Use no unlinked solid color.
-    ☐ Use existing CP437 tile assets for every visual symbol.
-    ☐ Reuse TextButton for actions.
-    ☐ Reuse Dropdown for configurable choices.
-    ☐ Reuse EditField only for actual editable or copyable field interactions.
-    ☐ Reuse Breadcrumb at the Test Results title bar.
-    ☐ Reuse Tree View With Columns for the explorer.
-    ☐ Reuse Generic Table View for the results index.
-    ☐ Reuse the normal Scrollbar wherever scrolling is required.
-    ☐ Reuse Command Menu only where a transient action menu is appropriate.
-    ☐ Reuse existing issue, targeting-prompt, list-box, and indicator widgets only when their semantics match.
-    ☐ Record why any new component subtype cannot be represented by an existing widget component.
+Workspace composition:
+    ☐ Compose the workspace from Runner Header, Test Explorer Panel, Test Results Panel, Command Trace Panel, Evidence Inspector, Output Drawer, and Runner Status Bar.
+    ☐ Keep the entire workspace as a composition board rather than one monolithic component.
+    ☐ Retain the left explorer as the scope-navigation pane.
+    ☐ Retain the results table as the selected scope's result index.
+    ☐ Make the ordered trace the primary selected-attempt debugging view.
+    ☐ Use Evidence Inspector for selected-step and failure evidence.
+    ☐ Keep raw DFHack output and diagnostic logs in a resizable or collapsible bottom drawer.
+    ☐ Evaluate which panes can be collapsed or resized without violating the DFHack widget model.
+    ☐ Keep cross-panel selection and state synchronization in the workspace prototype.
 
 Mockup state coverage:
-    ☐ Create an idle and connected state.
-    ☐ Create a discovery or loading state.
+    ☐ Create an idle and connected state from linked screen-panel instances.
+    ☐ Create a discovery or loading state from linked screen-panel instances.
     ☐ Create a running state with live progress and a running trace step.
     ☐ Create a completed all-passing state.
     ☐ Create a selected assertion-failure state.
@@ -206,34 +369,100 @@ Mockup state coverage:
     ☐ Create a host-disconnected or unresponsive state.
     ☐ Create a stopped or cancelled run state.
     ☐ Create an empty-filter state.
+    ☐ Verify that every state reuses the same linked screen-panel components.
     ☐ Verify that successful cleanup remains non-visible in every applicable state.
 
 Penpot prototype:
-    ☐ Prototype selecting a file or suite in the explorer.
-    ☐ Prototype selecting a test result.
-    ☐ Prototype selecting a command or event trace step.
-    ☐ Prototype switching attempts.
-    ☐ Prototype opening and closing Mode, Repeat, and Debug Options dropdowns.
+    ☐ Prototype selecting a file or suite in Test Explorer Panel.
+    ☐ Prototype selecting a test result in Test Results Panel.
+    ☐ Prototype selecting an attempt in Attempt Selector.
+    ☐ Prototype selecting a trace step in Command Trace.
+    ☐ Synchronize test selection with results, attempts, trace, evidence, and raw-log position.
+    ☐ Synchronize attempt selection with trace, failure details, timings, evidence, and raw-log anchor.
+    ☐ Synchronize trace-step selection with Evidence Inspector and the correlated raw-log entry.
+    ☐ Prototype opening and closing Mode, Repeat, Filter, and Debug Options dropdowns.
     ☐ Prototype cycling table-header sort modes.
-    ☐ Prototype switching raw-log tabs.
-    ☐ Prototype toggling follow-output and wrap.
+    ☐ Prototype switching Output Drawer tabs.
+    ☐ Prototype toggling Follow Output and Wrap.
     ☐ Prototype expanding and collapsing trace groups.
-    ☐ Prototype Run, Rerun Selected, Rerun Failed, Debug Selected, and Stop state transitions.
+    ☐ Prototype collapsing and expanding Output Drawer.
+    ☐ Prototype Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop state transitions.
     ☐ Prototype Open Source as an external-editor handoff representation.
-    ☐ Verify that every linked selection visibly updates all dependent panes.
+    ☐ Verify that components own local visual states while the workspace owns cross-component transitions.
+
+Penpot page and master organization:
+    ☐ Place every generic component and its variants on a dedicated, clearly named component page.
+    ☐ Place every DwarfSpec domain component and its variants on a dedicated, clearly named component page.
+    ☐ Place every reusable screen panel and its states on a dedicated, clearly named component page.
+    ☐ Wrap every specimen and variant set in an appropriately named top-level group or board.
+    ☐ Use the established dark Canvas Background on every page.
+    ☐ Move all dedicated-page variants off the Foundations page.
+    ☐ Keep Foundations limited to genuine foundations and unavoidable component masters.
+    ☐ Hide an unavoidable Foundations master only after verifying that every linked instance remains visible.
+    ☐ Remove transfer, relocation, and temporary rebuild artifacts after verifying component links.
+    ☐ Keep workspace state boards separate from component-specimen pages.
+
+Visual and component conformance:
+    ☐ Keep all UI text at the single established game text size.
+    ☐ Apply font.baseGame to every text shape.
+    ☐ Link every text, fill, stroke, border, selection, and status color to an established DF palette preset.
+    ☐ Use no unlinked solid color.
+    ☐ Use existing CP437 tile assets for every visual symbol.
+    ☐ Use the normal Scrollbar; do not introduce custom scrollbars.
+    ☐ Keep action buttons compact and free of dead space.
+    ☐ Keep status indicators color-coded and understandable without color.
+    ☐ Keep Tree View With Columns headerless with integrated row columns.
+    ☐ Keep Generic Table View headers within the black, white, and brown palette.
+    ☐ Keep Dropdown Menu Panel bordered like Dropdown Field.
+    ☐ Keep selected dropdown items cyan on black.
+    ☐ Keep the open dropdown triangle orange.
+    ☐ Keep successful cleanup non-visible.
+    ☐ Keep the host-responsive badge at the bottom-right.
+
+Component verification:
+    ☐ Verify that every extracted generic component has at least two demonstrated reuse points or an independent interaction responsibility.
+    ☐ Verify that no generic component contains DwarfSpec-specific labels or rules.
+    ☐ Verify that no domain component duplicates an existing DFHack control.
+    ☐ Verify that every domain component composes linked generic or existing component instances.
+    ☐ Verify that every screen panel composes linked domain and generic component instances.
+    ☐ Verify that every workspace state composes linked screen-panel instances.
+    ☐ Verify that changing a shared component master updates all intended dependent instances.
+    ☐ Verify that master visibility changes do not hide linked instances.
+    ☐ Verify that overrides do not detach instances unnecessarily.
+    ☐ Verify that component names communicate responsibility rather than mockup position.
+    ☐ Verify that no component owns both raw-log rendering and structured-trace rendering.
+    ☐ Verify that no component owns both evidence capture and evidence presentation.
+    ☐ Verify that no component owns both source presentation and editor launching.
+    ☐ Verify that no component owns both status presentation and aggregate-status calculation.
+
+Runtime capability decisions:
+    ☐ Confirm which run modes can be configured.
+    ☐ Confirm whether repeat count is configurable from the UI.
+    ☐ Confirm whether the runner can report attempt-level outcomes.
+    ☐ Confirm whether the runner can identify flaky outcomes within one repeated run.
+    ☐ Confirm whether the runner can emit structured command and event steps.
+    ☐ Confirm whether trace steps can identify source locations and raw-log anchors.
+    ☐ Confirm whether the runner can provide retry, wait, or polling details.
+    ☐ Confirm which host-evidence modes can be provided.
+    ☐ Confirm whether evidence is live, captured, retained, inferred, or unavailable.
+    ☐ Confirm whether Open Source can target file, line, and column in the configured editor.
+    ☐ Confirm which debug-break and pause options are supported.
+    ☐ Confirm whether Host Events can be separated reliably from raw DFHack output.
+    ☐ Remove or mark unavailable every affordance not supported by the confirmed contracts.
 
 Review and handoff:
-    ☐ Review the completed primary flow as a Cypress-like run viewer rather than an IDE replacement.
-    ☐ Verify that the command and event trace is more prominent than debug configuration.
+    ☐ Review the primary flow as a Cypress-like run viewer rather than an IDE replacement.
+    ☐ Verify that the command trace is more prominent than debug configuration.
     ☐ Verify that the selected test, attempt, and step are always unambiguous.
     ☐ Verify that behavior, infrastructure, cleanup, and host-health results cannot mask one another.
+    ☐ Verify that the component dependency direction is: existing primitives -> generic components -> domain components -> screen panels -> workspace mockups.
     ☐ Audit all visible text for the single game size and font.baseGame.
     ☐ Audit all fills and strokes for linked DF palette presets.
     ☐ Audit all visual symbols for existing CP437 asset usage.
-    ☐ Audit all applicable controls for reuse of existing DFHack widget components.
+    ☐ Audit all controls for reuse of existing DFHack widget components.
     ☐ Audit every page for the established dark Canvas Background.
     ☐ Audit every specimen for a clear top-level name.
-    ☐ Audit Foundations for component variants that belong on dedicated pages.
+    ☐ Audit Foundations for variants that belong on dedicated pages.
     ☐ Audit the final mockups for hidden obsolete layers and duplicate indicators.
     ☐ Exercise every prototype interaction from idle through failure triage and rerun.
     ☐ Record unresolved runtime dependencies and remove unsupported affordances from the final proposal.
