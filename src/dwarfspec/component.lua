@@ -9,7 +9,7 @@ M.DEFAULT_VIEWPORT = {width=128, height=64}
 M.PUBLIC_API = {
     mount_context={'mount', 'root', 'unmount', 'viewport'},
     subject={
-        'click', 'hover', 'move_pointer', 'input', 'type',
+        'click', 'hover', 'move_pointer', 'mouseWheel', 'input', 'type',
         'inspect', 'text', 'raw',
     },
 }

@@ -299,11 +299,14 @@ describe('complete screen component mount', function()
         assert.equals(1, up.mouse_lbut_lift)
         assert.is_true(up.mouse_focus)
 
-        target:hover('center')
         local backing_wheels = backing.forwarded_wheel or 0
-        ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
-        assert.equals(1, screen.wheel_count)
-        assert.equals(backing_wheels + 1, backing.forwarded_wheel,
+        target:mouseWheel({
+            direction=ds.EMouseButton.SCROLL_DOWN,
+            steps=3,
+            anchor='center',
+        })
+        assert.equals(3, screen.wheel_count)
+        assert.equals(backing_wheels + 3, backing.forwarded_wheel,
             'unconsumed complete-screen wheel input must reach the backing screen')
         assert.equals('wheel', screen.physical_events[#screen.physical_events].kind)
 

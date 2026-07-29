@@ -250,6 +250,8 @@ simulation ticks stop while the game is paused.
 | `ds.type(text, subject)` | Type ASCII text through the subject's mount. |
 | `subject:type(text)` | Type ASCII text through the mounted screen. |
 | `ds.mouseInput(button, action)` | Send an `EMouseButton` action, defaulting physical buttons to `CLICK`; DwarfSpec automatically restores persistent button state during cleanup. |
+| `ds.mouseWheel({direction=..., steps=...}, subject)` | Send one or more discrete wheel inputs at the current pointer or a subject; only the final render is awaited. |
+| `subject:mouseWheel({direction=..., steps=..., anchor=...})` | Position over the subject, settle, and send a discrete wheel-input batch. |
 | `ds.redraw(subject, options)` | Invalidate the mounted screen and wait by default; use `{wait=false}` to skip the wait. |
 | `subject:redraw(options)` | Redraw the subject's mounted screen, preserve the subject, and wait by default. |
 | `ds.capture_view_tree(name, options)` | Retain the selected source's structured view tree. |

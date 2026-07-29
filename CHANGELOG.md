@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `ds.mouseWheel({direction=..., steps=...}, subject)` and
+  `Subject:mouseWheel(options)` dispatch a batch of discrete wheel inputs with
+  one final render wait while resolving the current input viewscreen for each
+  individual input.
 - Automatic example and file-suite guards warn when a test leaves a different
   base-game viewscreen or DFHack focus than it inherited. Comparisons occur
   after project teardown and DwarfSpec cleanup, exclude explicitly mounted

@@ -201,6 +201,22 @@ Unlike `subject:click()`, `ds.mouseInput()` does not move the pointer. It sends
 the selected button or wheel input at the position established by
 `subject:hover()` or `subject:move_pointer()`.
 
+Use `ds.mouseWheel()` when a test needs multiple discrete wheel inputs without
+waiting for a render after each one. `steps` is an input count, not pixels or a
+guaranteed number of rows. The command awaits only the completed batch render:
+
+```lua
+ds.get('route_list'):mouseWheel({
+    direction=ds.EMouseButton.SCROLL_DOWN,
+    steps=16,
+    anchor='center',
+})
+```
+
+`direction` must be `SCROLL_UP` or `SCROLL_DOWN`; `steps` defaults to `1` and
+must be a positive integer. Use individual `ds.mouseInput()` calls when the
+test must inspect state between wheel inputs.
+
 ### Choosing pointer coordinates
 
 Pointer coordinates can use either zero-based UI-grid cells or zero-based
@@ -423,7 +439,7 @@ ds.move_pointer(17, 9)
 ds.mouseInput(ds.EMouseButton.LEFT) -- defaults to EInputState.CLICK
 ds.mouseInput(ds.EMouseButton.RIGHT, ds.EInputState.DOWN)
 ds.mouseInput(ds.EMouseButton.RIGHT, ds.EInputState.UP)
-ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
+ds.mouseWheel({direction=ds.EMouseButton.SCROLL_DOWN, steps=4})
 
 ds.get('menu'):move_pointer('center'):click()
 ds.redraw()                         -- waits for a completed render
@@ -767,10 +783,10 @@ The first-release surface is intentionally small:
 
 - synchronization: `await`, `wait_frames`, `wait_ticks`;
 - components: `mount`, `root`, `get`, `unmount`, `viewport`;
-- subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
+- subjects: `click`, `hover`, `move_pointer`, `mouseWheel`, `input`, `type`, `inspect`,
   `text`, and the exceptional `raw` escape hatch;
-- positioned mouse input: `mouseInput` with `EMouseButton` and
-  `EInputState`;
+- positioned mouse input: `mouseInput` with `EMouseButton` and `EInputState`,
+  plus batched discrete wheel input through `mouseWheel`;
 - evidence: `capture_view_tree`, `capture_screen`; and
 - real registration integration: `stage_overlay_registration`.
 

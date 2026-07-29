@@ -33,6 +33,9 @@ describe('DwarfSpec subject commands', function()
                 move_pointer=function(_, anchor)
                     table.insert(calls, {'move_pointer', anchor})
                 end,
+                mouseWheel=function(_, options)
+                    table.insert(calls, {'mouseWheel', options})
+                end,
                 input=function(_, keys)
                     table.insert(calls, {'input', keys})
                 end,
@@ -70,6 +73,7 @@ describe('DwarfSpec subject commands', function()
         assert.same({{'click', 'right'}}, calls)
         assert.equals(subject, subject:hover('top_left'))
         assert.equals(subject, subject:move_pointer('center'))
+        assert.equals(subject, subject:mouseWheel({direction='scroll_down'}))
         assert.equals(subject, subject:input('SELECT'))
         assert.equals(subject, subject:type('abc'))
         assert.equals(subject, subject:redraw())
@@ -80,6 +84,7 @@ describe('DwarfSpec subject commands', function()
             {'click', 'right'},
             {'hover', 'top_left'},
             {'move_pointer', 'center'},
+            {'mouseWheel', {direction='scroll_down'}},
             {'input', 'SELECT'},
             {'type', 'abc'},
             {'redraw', nil},
@@ -96,6 +101,8 @@ describe('DwarfSpec subject commands', function()
         subject._references.context = nil
 
         assert.has_error(function() subject:click() end,
+            'DwarfSpec subject is unavailable because its run has ended')
+        assert.has_error(function() subject:mouseWheel({}) end,
             'DwarfSpec subject is unavailable because its run has ended')
         assert.has_error(function() subject:redraw() end,
             'DwarfSpec subject is unavailable because its run has ended')

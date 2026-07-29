@@ -185,6 +185,11 @@
 ---@class dwarfspec.Subject
 local Subject = {}
 
+---@class dwarfspec.MouseWheelOptions
+---@field direction dwarfspec.EMouseButton
+---@field steps? integer Defaults to one discrete wheel input.
+---@field anchor? dwarfspec.PointerAnchor
+
 ---Clicks this subject and preserves it for fluent chaining.
 ---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---It does not reverse game or UI effects caused by the click.
@@ -203,6 +208,12 @@ function Subject:hover(anchor) end
 ---@param anchor? dwarfspec.PointerAnchor
 ---@return dwarfspec.Subject
 function Subject:move_pointer(anchor) end
+
+---Sends a discrete wheel-input batch over this subject and preserves it.
+---Only the render after the complete batch is awaited.
+---@param options dwarfspec.MouseWheelOptions
+---@return dwarfspec.Subject
+function Subject:mouseWheel(options) end
 
 ---Sends native input through this subject's mounted screen.
 ---@param keys string|string[]|table
@@ -409,6 +420,14 @@ function DS.input(keys, subject) end
 ---@param action? dwarfspec.EInputState
 ---@return integer
 function DS.mouseInput(button, action) end
+
+---Sends discrete wheel inputs at the current pointer or over a subject.
+---Steps are inputs, not pixels or guaranteed scroll rows; only the final
+---render is awaited.
+---@param options dwarfspec.MouseWheelOptions
+---@param subject? dwarfspec.Subject
+---@return integer
+function DS.mouseWheel(options, subject) end
 
 ---Clicks a view with a supported native mouse button and waits for render.
 ---DwarfSpec automatically restores inherited pointer state during cleanup.

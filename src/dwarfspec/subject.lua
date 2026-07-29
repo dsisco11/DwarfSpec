@@ -68,6 +68,14 @@ function Subject:move_pointer(anchor, space)
     return self
 end
 
+---Sends a batch of wheel inputs over this subject and preserves fluent chaining.
+---@param options table
+---@return dwarfspec.Subject
+function Subject:mouseWheel(options)
+    invoke(self, 'mouseWheel', options)
+    return self
+end
+
 ---Sends native input through this subject's mounted screen.
 ---@param keys string|table
 ---@return dwarfspec.Subject

@@ -302,16 +302,22 @@ describe('overlay widget component host', function()
             assert.is_not_nil(list_y,
                 'virtual pointer must be over the rendered native list')
 
-            ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
-            assert.equals(1, instance.wheel_count)
+            target:mouseWheel({
+                direction=ds.EMouseButton.SCROLL_DOWN,
+                steps=2,
+                anchor='top_left',
+            })
+            assert.equals(2, instance.wheel_count)
             assert.equals(0, backing.wheel_count)
-            assert.equals(1, list.page_top)
+            assert.equals(1, list.page_top,
+                'native list row movement is render-coalesced')
 
             instance.consume_wheel = false
             ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
-            assert.equals(2, instance.wheel_count)
+            assert.equals(3, instance.wheel_count)
             assert.equals(1, backing.wheel_count)
-            assert.equals(2, list.page_top)
+            assert.equals(2, list.page_top,
+                'native list row movement is render-coalesced')
         end, debug.traceback)
 
         local unmounted, unmount_failure = true, nil

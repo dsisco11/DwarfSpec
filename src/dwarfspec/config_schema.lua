@@ -23,6 +23,7 @@ local RESERVED_COMMANDS = {
     isGamePaused=true,
     mount=true,
     mouseInput=true,
+    mouseWheel=true,
     move_pointer=true,
     protocol_version=true,
     redraw=true,

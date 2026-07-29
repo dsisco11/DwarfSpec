@@ -2419,6 +2419,78 @@ describe('DwarfSpec public mount commands', function()
         end, 'mouse wheel input does not accept a button action')
     end)
 
+    it('batches wheel input with one render wait and validates its options',
+            function()
+        local mounted = ds.mount(TestWidget, {
+            frame_body={x1=10, y1=20, x2=14, y2=24},
+        })
+        local baseline_waits = wait_until_calls
+
+        assert.equals(mounted, mounted:mouseWheel({
+            direction=EMouseButton.SCROLL_DOWN,
+            steps=3,
+            anchor='top_left',
+        }))
+
+        assert.equals(baseline_waits + 2, wait_until_calls,
+            'subject routing settles pointer movement and then the batch')
+        assert.same({
+            'CONTEXT_SCROLL_DOWN',
+            'CONTEXT_SCROLL_DOWN',
+            'CONTEXT_SCROLL_DOWN',
+        }, {
+            simulated_inputs[1].key,
+            simulated_inputs[2].key,
+            simulated_inputs[3].key,
+        })
+        for _, input in ipairs(simulated_inputs) do
+            assert.same({10, 20}, {input.x, input.y})
+            assert.is_true(input.mouse_focus)
+            assert.equals(1, input.tracking_on)
+        end
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+
+        local cases = {
+            {options=nil, expected='mouseWheel options must be a table'},
+            {options={}, expected='mouseWheel direction must be SCROLL_UP or SCROLL_DOWN'},
+            {options={direction=EMouseButton.LEFT}, expected='mouseWheel direction must be SCROLL_UP or SCROLL_DOWN'},
+            {options={direction=EMouseButton.SCROLL_DOWN, steps=0}, expected='mouseWheel steps must be a positive integer'},
+            {options={direction=EMouseButton.SCROLL_DOWN, steps=1.5}, expected='mouseWheel steps must be a positive integer'},
+            {options={direction=EMouseButton.SCROLL_DOWN, extra=true}, expected='unsupported mouseWheel option: extra'},
+        }
+        for _, case in ipairs(cases) do
+            assert.has_error(function() ds.mouseWheel(case.options) end,
+                case.expected)
+        end
+        assert.has_error(function()
+            ds.mouseWheel({direction=EMouseButton.SCROLL_DOWN, anchor='center'})
+        end, 'mouseWheel anchor requires a subject')
+    end)
+
+    it('restores mouse focus after a mid-batch wheel-input failure',
+            function()
+        local mounted = ds.mount(TestWidget, {
+            frame_body={x1=10, y1=20, x2=14, y2=24},
+        })
+        mounted:move_pointer('top_left')
+        simulate_input_dispatch = function()
+            simulate_input_failure = 'injected second wheel failure'
+        end
+
+        local ok, failure = pcall(ds.mouseWheel, {
+            direction=EMouseButton.SCROLL_DOWN,
+            steps=2,
+        })
+
+        simulate_input_dispatch = nil
+        assert.is_false(ok)
+        assert.matches('injected second wheel failure', failure, 1, true)
+        assert.equals(1, #simulated_inputs)
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+    end)
+
     it('routes every subject input family through the live input screen',
             function()
         local native_callback_calls = 0
@@ -2735,11 +2807,21 @@ describe('DwarfSpec public mount commands', function()
         }
         local wheel_screen = current_native_screen
         ds.mouseInput(EMouseButton.SCROLL_DOWN)
+        local wheel_batch_screen = {name='wheel-batch-screen'}
+        simulate_input_dispatch = function(_, key)
+            if key == 'CONTEXT_SCROLL_UP' then
+                current_native_screen = wheel_batch_screen
+            end
+        end
+        ds.mouseWheel({direction=EMouseButton.SCROLL_UP, steps=2})
+        simulate_input_dispatch = nil
         ds.move_pointer(4, 5)
         assert.equals(native_root, mounted:raw())
         assert.equals(next_screen, simulated_inputs[1].screen)
         assert.equals(next_screen, simulated_inputs[2].screen)
         assert.equals(wheel_screen, simulated_inputs[3].screen)
+        assert.equals(wheel_screen, simulated_inputs[4].screen)
+        assert.equals(wheel_batch_screen, simulated_inputs[5].screen)
         assert.same({4, 5}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,

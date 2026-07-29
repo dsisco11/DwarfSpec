@@ -147,6 +147,13 @@ describe('DwarfSpec consumer extensions', function()
             'ds.mouseInput')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={mouseWheel=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.mouseWheel')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={EMouseButton=function() end},
         }
         assert.has_error(function() extensions.load(descriptor, loader) end,

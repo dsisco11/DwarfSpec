@@ -1537,6 +1537,26 @@ local TestStatus = load_automation_module(package_root,
         [EMouseButton.SCROLL_DOWN]='CONTEXT_SCROLL_DOWN',
     }
 
+    ---Validates options for a batch of discrete mouse-wheel inputs.
+    ---@param options table
+    ---@return DwarfSpecEMouseButton, integer, string|nil
+    local function normalize_mouse_wheel_options(options)
+        assert(type(options) == 'table',
+            'mouseWheel options must be a table')
+        for name in pairs(options) do
+            assert(name == 'direction' or name == 'steps' or name == 'anchor',
+                'unsupported mouseWheel option: ' .. tostring(name))
+        end
+        local key = mouse_wheel_keys[options.direction]
+        assert(key, 'mouseWheel direction must be SCROLL_UP or SCROLL_DOWN')
+        local steps = options.steps or 1
+        assert(type(steps) == 'number' and steps > 0 and steps % 1 == 0,
+            'mouseWheel steps must be a positive integer')
+        assert(options.anchor == nil or type(options.anchor) == 'string',
+            'mouseWheel anchor must be a string')
+        return options.direction, steps, options.anchor
+    end
+
     ---Sends one mouse action at the current virtual pointer position.
     ---DwarfSpec automatically restores persistent button state during cleanup.
     ---@param button DwarfSpecEMouseButton
@@ -1581,6 +1601,30 @@ local TestStatus = load_automation_module(package_root,
                     action == EInputState.DOWN,
                     dispatch)
             end
+        end)
+    end
+
+    ---Sends a batch of discrete wheel inputs at the current virtual pointer.
+    ---Only the render after the complete batch is awaited.
+    ---@param options table
+    ---@param subject table|nil
+    ---@return integer
+    function ds.mouseWheel(options, subject)
+        local direction, steps, anchor = normalize_mouse_wheel_options(options)
+        assert(subject ~= nil or anchor == nil,
+            'mouseWheel anchor requires a subject')
+        if subject then ds.hover(subject, anchor) end
+        local interaction_target
+        _, interaction_target = resolve_interaction_target(subject, 'mouseWheel')
+        local key = mouse_wheel_keys[direction]
+        pointer_adapter_module.position(context.pointer)
+        return mutate_pointer('mouseWheel', function()
+            pointer_adapter_module.with_mouse_focus(context.pointer, function()
+                for _ = 1, steps do
+                    pointer_adapter_module.sync(context.pointer)
+                    simulate_input(interaction_target, 'mouse wheel', key)
+                end
+            end)
         end)
     end
 
@@ -1683,6 +1727,9 @@ local TestStatus = load_automation_module(package_root,
         hover=function(subject, anchor) return ds.hover(subject, anchor) end,
         move_pointer=function(subject, anchor)
             return ds.move_pointer(subject, anchor)
+        end,
+        mouseWheel=function(subject, options)
+            return ds.mouseWheel(options, subject)
         end,
         input=function(subject, keys) return ds.input(keys, subject) end,
         type=function(subject, text) return ds.type(text, subject) end,

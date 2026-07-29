@@ -99,6 +99,9 @@ structures. Subject lookup, redraw observation, focus-list access, and lifetime
 validation remain associated with the borrowed base viewscreen. Simulated
 keyboard, text, click, button, and wheel input instead resolves and targets the
 current top viewscreen immediately before each dispatch.
+`mouseWheel` groups repeated discrete wheel dispatches into one pointer
+mutation and waits only after the final dispatch, while retaining that
+per-dispatch current-screen resolution.
 Native subjects traverse only widget objects exposed by DFHack; pixels and
 procedurally rendered controls do not become subjects. A separately selected
 overlay source borrows an enabled registry widget while dispatch remains owned
