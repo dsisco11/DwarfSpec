@@ -3,7 +3,7 @@
 describe('game pause state', function()
     local original_pause_state
 
-    before_all(function()
+    setup(function()
         original_pause_state = ds.isGamePaused()
     end)
 

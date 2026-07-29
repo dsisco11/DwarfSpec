@@ -185,6 +185,16 @@ function NativeInputFullscreenScreen:onDestroy()
     self.cleanup_entry = nil
 end
 
+---Releases run cleanup ownership while the fixture remains independently live.
+---@return boolean
+function NativeInputFullscreenScreen:detach_cleanup()
+    if not self.cleanup_entry then return false end
+    local released = self.cleanup_module.release(
+        self.cleanup_registry, self.cleanup_entry)
+    self.cleanup_entry = nil
+    return released
+end
+
 ---@class tests.NativeInputFullscreenOverlay: plugins.overlay.OverlayWidget
 ---@field consume_input boolean
 ---@field active_screen tests.NativeInputFullscreenScreen|nil

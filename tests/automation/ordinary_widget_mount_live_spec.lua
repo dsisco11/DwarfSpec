@@ -433,6 +433,12 @@ describe('ordinary widget component host', function()
         assert.equals('wheel',
             component.physical_events[#component.physical_events].kind)
 
+        local discrete_wheel_count = component.pointer_wheel_count
+        ds.mouseWheel({direction=ds.EMouseButton.SCROLL_DOWN, steps=2},
+            target)
+        assert.equals(discrete_wheel_count + 2, component.pointer_wheel_count,
+            'discrete wheel dispatch must deliver every requested step')
+
         ds.unmount()
         command_conformance.assert_pointer_restored(
             initial_pointer, command_conformance.pointer_snapshot())

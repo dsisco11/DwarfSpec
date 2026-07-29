@@ -291,6 +291,8 @@ describe('native input routing through a registered fullscreen overlay',
             'dwarfmode/Default', native_screen))
 
         local active_screen = fixture_screen
+        assert.is_true(active_screen:detach_cleanup(),
+            'independent fullscreen fixture cleanup must not nest in unmount')
         ds.unmount()
         local cleanup = run.mount_cleanup_probe()
         assert.is_true(active_screen:isActive(),

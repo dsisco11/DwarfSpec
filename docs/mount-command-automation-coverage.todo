@@ -1,7 +1,7 @@
 # Mount Command Automation Coverage
 
-Status: in progress; baseline, shared conformance support, ordinary-widget
-coverage, and native dynamic-input routing are complete.
+Status: complete; all declared command and subject surfaces have current
+focused live coverage, a verified shared boundary, or a tested diagnostic.
 
 ## Purpose
 
@@ -97,7 +97,7 @@ recovery scenarios.
 
 ## Current command inventory
 
-The declaration surface is 24 `ds` functions and 10 `Subject` methods.
+The declaration surface is 27 `ds` functions and 11 `Subject` methods.
 
 Legend:
 
@@ -134,6 +134,7 @@ Legend:
 | `ds.hover()` | covered for `O` and `W` | cover `S`, native-widget, and registered-overlay geometry |
 | `ds.input()` | covered for `O`, `S`, and native dynamic routing | cover the distinct `W` input ingress; subject source does not create another input target |
 | `ds.mouseInput()` | click/down/up/wheel covered for `O`; wheel covered for `W`; click/down/up/wheel and top-screen routing covered for `N` | cover the complete-screen physical mouse boundary |
+| `ds.mouseWheel()` | covered for `O` with exact multi-step dispatch | none; fluent calls use this same route |
 | `ds.click()` | top-level route covered for `O`; Lua host behavior covered for `O`, `W`, and `S` | cover native-widget and registered-overlay bounds/dispatch |
 | `ds.type()` | covered for `O`; complete-screen behavior covered through the fluent route | cover the distinct `W` and borrowed-native input targets, once each |
 | `ds.viewport()` | covered for `O`, `W`, and `S` | prove native mounts reject owned-viewport mutation |
@@ -147,6 +148,7 @@ Legend:
 | `Subject:click()` | covered for `O`, `W`, and `S` | cover native-widget and registered-overlay targets |
 | `Subject:hover()` | covered for `O` and `W` | cover `S`, native-widget, and registered-overlay targets |
 | `Subject:move_pointer()` | covered for the Lua adapter, native widgets, and a registered overlay | cover the distinct complete-screen geometry |
+| `Subject:mouseWheel()` | covered for `W` and `S` | none; it forwards to the covered top-level discrete-wheel route |
 | `Subject:input()` | covered for `O`, `S`, and native dynamic routing | cover the distinct `W` input ingress; no registered-overlay duplicate is required |
 | `Subject:type()` | covered for `O` and `S` | cover `W` and the borrowed-native input target; native versus overlay source is irrelevant |
 | `Subject:redraw()` | default redraw covered for `O`, `W`, and native widgets | cover the distinct complete-screen render boundary; source-specific and no-wait duplicates are shared |
@@ -354,21 +356,41 @@ Evidence (2026-07-28):
 
 ### Phase 7: closure
 
-- [ ] Re-audit all 24 declared `ds` functions and 10 declared `Subject`
+- [x] Re-audit all 27 declared `ds` functions and 11 declared `Subject`
   methods against the current source before closure.
-- [ ] Confirm each remaining matrix entry is either live-covered, explicitly
+- [x] Confirm each remaining matrix entry is either live-covered, explicitly
   shared across a verified implementation boundary, or documented as
   unsupported with a tested diagnostic.
-- [ ] Run each focused host/source spec independently.
-- [ ] Run the complete thin live wrapper once; do not use reload commands as
+- [x] Run each focused host/source spec independently.
+- [x] Run the complete thin live wrapper once; do not use reload commands as
   test setup.
-- [ ] Run the complete unit suite.
-- [ ] Run the Lua syntax check.
-- [ ] Report focused live, full live, unit, syntax, package/process, and cleanup
+- [x] Run the complete unit suite.
+- [x] Run the Lua syntax check.
+- [x] Report focused live, full live, unit, syntax, package/process, and cleanup
   evidence separately.
-- [ ] Confirm no screens, overlays, registry entries, observers, render
+- [x] Confirm no screens, overlays, registry entries, observers, render
   instrumentation, scheduled callbacks, focus changes, pointer changes, view
   position changes, or global mutations remain.
+
+Evidence (2026-07-28):
+
+- Declaration audit: `src/ds.d.lua` exposes 27 `DS` functions and 11
+  `Subject` methods. The inventory was corrected to include both
+  `ds.mouseWheel()` and `Subject:mouseWheel()`; the ordinary-widget live
+  spec now proves exact multi-step top-level wheel dispatch.
+- Focused live: all 14 automation specs passed independently, totaling 43
+  successes with zero failures, errors, or pending tests; every run reported
+  `cleanup_confirmed=true`.
+- Full live: `./tools/Run-AutomationTests.ps1` passed 43/43 with zero
+  failures, errors, or pending tests and `cleanup_confirmed=true`.
+- Unit: `./tools/Run-UnitTests.ps1` passed 523/523.
+- Lua: `./tools/Check-Lua.ps1` passed syntax and formatting for 252 files.
+- Package: `./tools/Publish.ps1` linted and built
+  `dist/dwarfspec-0.2.0-1.all.rock`; archive inspection confirmed production
+  modules and no `tests/` content.
+- Process and cleanup: the live Dwarf Fortress process remained responsive;
+  focused and full lifecycle probes confirmed exact restoration and no
+  DwarfSpec-owned residue.
 
 ## Historical evidence ledger
 
