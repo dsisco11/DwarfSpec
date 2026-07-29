@@ -34,6 +34,9 @@ function CompleteScreenBacking:onInput(keys)
         self.forwarded_pause = (self.forwarded_pause or 0) + 1
         return true
     end
+    if keys.CONTEXT_SCROLL_DOWN then
+        self.forwarded_wheel = (self.forwarded_wheel or 0) + 1
+    end
     return CompleteScreenBacking.super.onInput(self, keys)
 end
 
@@ -85,6 +88,12 @@ UnpausedCompleteScreenHarness.ATTRS{
 
 ---Creates ordinary interactive descendants without test render hooks.
 function CompleteScreenHarness:init()
+    self.render_count = 0
+    self.pointer_click_count = 0
+    self.pointer_down_count = 0
+    self.pointer_up_count = 0
+    self.wheel_count = 0
+    self.physical_events = {}
     self:addviews{
         widgets.Panel{
             view_id='content',
@@ -112,9 +121,73 @@ function CompleteScreenHarness:init()
                     label='Open modal',
                     on_activate=self:callback('open_modal'),
                 },
+                widgets.Label{
+                    view_id='pointer_target',
+                    frame={l=2, t=10, w=24, h=2},
+                    text='Rendered pointer target',
+                },
             },
         },
     }
+end
+
+---Returns whether the live pointer lies within the rendered pointer target.
+---@return boolean
+function CompleteScreenHarness:isPointerOverTarget()
+    local x, y = dfhack.screen.getMousePos()
+    local body = self.subviews.pointer_target.frame_body
+    return x ~= nil and y ~= nil and body ~= nil and
+        body:inClipGlobalXY(x, y)
+end
+
+---Records one physical input with its temporary DF pointer ownership state.
+---@param kind string
+function CompleteScreenHarness:recordPhysicalEvent(kind)
+    local x, y = dfhack.screen.getMousePos()
+    table.insert(self.physical_events, {
+        kind=kind,
+        x=x,
+        y=y,
+        mouse_focus=df.global.enabler.mouse_focus,
+        tracking_on=df.global.enabler.tracking_on,
+        mouse_lbut_down=df.global.enabler.mouse_lbut_down,
+        mouse_lbut_lift=df.global.enabler.mouse_lbut_lift,
+    })
+end
+
+---Records physical input before allowing unconsumed events to reach backing screens.
+---@param keys table
+---@return boolean
+function CompleteScreenHarness:onInput(keys)
+    if keys._MOUSE_L and self:isPointerOverTarget() then
+        self.pointer_click_count = self.pointer_click_count + 1
+        self:recordPhysicalEvent('click')
+        return true
+    end
+    if keys._MOUSE_L_DOWN and self:isPointerOverTarget() then
+        self.pointer_down_count = self.pointer_down_count + 1
+        self:recordPhysicalEvent('down')
+        return true
+    end
+    if df.global.enabler.mouse_lbut_lift == 1 and self:isPointerOverTarget() then
+        self.pointer_up_count = self.pointer_up_count + 1
+        self:recordPhysicalEvent('up')
+        return true
+    end
+    if keys.CONTEXT_SCROLL_DOWN then
+        self.wheel_count = self.wheel_count + 1
+        self:recordPhysicalEvent('wheel')
+        self:sendInputToParent(keys)
+        return true
+    end
+    return CompleteScreenHarness.super.onInput(self, keys)
+end
+
+---Records each complete-screen render before delegating to the standard painter.
+---@param dc gui.Painter
+function CompleteScreenHarness:onRender(dc)
+    self.render_count = self.render_count + 1
+    return CompleteScreenHarness.super.onRender(self, dc)
 end
 
 ---Copies editor text into the visible status label.
@@ -145,12 +218,13 @@ describe('complete screen component mount', function()
 
     after_each(function()
         pcall(ds.unmount)
-        if backing and backing:isActive() then backing:dismiss() end
+        if backing then pcall(backing.dismiss, backing) end
         df.global.pause_state = original_pause
     end)
 
     it('mounts a class directly with fluent descendants and native behavior',
             function()
+        local pointer_before = command_conformance.pointer_snapshot()
         local root = ds.mount(CompleteScreenHarness, {
             backing_viewscreen=backing._native,
             initial_pause=true,
@@ -167,8 +241,8 @@ describe('complete screen component mount', function()
         assert.is_true(df.global.pause_state)
         assert.equals(52, screen.frame_parent_rect.width)
         assert.equals(16, screen.frame_parent_rect.height)
-        assert.is_nil(screen.render_generation)
-        assert.is_nil(rawget(CompleteScreenHarness, 'onRender'))
+        assert.is_true(screen.render_count > 0)
+        assert.is_function(CompleteScreenHarness.onRender)
 
         ds.get('content/editor'):click():type('value')
         ds.get('content/submit'):click()
@@ -189,15 +263,67 @@ describe('complete screen component mount', function()
         assert.matches(('control_path="modal_only" mount=%d missing ' ..
             'segment="modal_only" after="<root>"'):format(root.mount_id),
             selection_error, 1, true)
+        assert.equals(screen.modal._native, dfhack.gui.getCurViewscreen(true),
+            'a failed lookup must leave the active complete-screen child intact')
+        assert.equals(screen, ds.root():raw(),
+            'a failed lookup must retain the mounted complete-screen root')
         root:input('CUSTOM_A')
         assert.equals('handled', screen.modal_result)
         assert.is_false(screen.modal:isActive())
         assert.equals(screen, ds.root():raw())
 
+        local target = ds.get('content/pointer_target')
+        target:hover('center')
+        local hover_x, hover_y = dfhack.screen.getMousePos()
+        assert.is_true(screen:isPointerOverTarget())
+        assert.is_true(target:raw().frame_body:inClipGlobalXY(hover_x, hover_y))
+
+        ds.mouseInput(ds.EMouseButton.LEFT)
+        assert.equals(1, screen.pointer_click_count)
+        assert.equals('click', screen.physical_events[1].kind)
+        assert.is_true(screen.physical_events[1].mouse_focus)
+
+        target:hover('center')
+        ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.DOWN)
+        assert.is_true(screen.pointer_down_count > 0)
+        local down = screen.physical_events[#screen.physical_events]
+        assert.equals('down', down.kind)
+        assert.equals(1, down.mouse_lbut_down)
+        assert.is_true(down.mouse_focus)
+
+        target:hover('center')
+        ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.UP)
+        assert.is_true(screen.pointer_up_count > 0)
+        local up = screen.physical_events[#screen.physical_events]
+        assert.equals('up', up.kind)
+        assert.equals(1, up.mouse_lbut_lift)
+        assert.is_true(up.mouse_focus)
+
+        target:hover('center')
+        local backing_wheels = backing.forwarded_wheel or 0
+        ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
+        assert.equals(1, screen.wheel_count)
+        assert.equals(backing_wheels + 1, backing.forwarded_wheel,
+            'unconsumed complete-screen wheel input must reach the backing screen')
+        assert.equals('wheel', screen.physical_events[#screen.physical_events].kind)
+
+        assert.same({'dfhack/lua/dwarfspec/complete-screen-harness'},
+            root:getFocusList())
+        assert.same(dfhack.gui.getFocusStrings(screen._native),
+            root:getFocusList())
+
+        command_conformance.assert_default_wait_redraw(function()
+            return screen.render_count
+        end, function()
+            root:redraw()
+        end)
+
         ds.unmount()
         assert.is_false(screen:isActive())
+        assert.equals(backing._native, dfhack.gui.getCurViewscreen(true))
         assert.is_false(df.global.pause_state)
-        assert.is_nil(rawget(screen, 'onRender'))
+        command_conformance.assert_pointer_restored(
+            pointer_before, command_conformance.pointer_snapshot())
         assert.is_nil(rawget(screen, 'onResize'))
     end)
 

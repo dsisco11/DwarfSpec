@@ -262,17 +262,28 @@ Evidence (2026-07-27):
 Extend `tests/automation/complete_screen_mount_live_spec.lua` for behavior
 unique to a directly mounted `gui.ZScreen`.
 
-- [ ] Hover a rendered screen control and prove its complete-screen geometry
+- [x] Hover a rendered screen control and prove its complete-screen geometry
   through the public pointer lifecycle.
-- [ ] Prove physical click/down/up/wheel handling and unconsumed fallthrough
+- [x] Prove physical click/down/up/wheel handling and unconsumed fallthrough
   through the real screen chain.
-- [ ] Prove the direct screen's exact focus list.
-- [ ] Prove default fluent redraw while asserting the real complete-screen
+- [x] Prove the direct screen's exact focus list.
+- [x] Prove default fluent redraw while asserting the real complete-screen
   render counter/state. The shared no-wait branch is already covered.
-- [ ] Retain one class case and one instance case for ownership and cleanup;
+- [x] Retain one class case and one instance case for ownership and cleanup;
   run command behavior through one representative screen instead of
   duplicating the matrix.
-- [ ] Assert exact pre-test screen restoration after success and failure.
+- [x] Assert exact pre-test screen restoration after success and failure.
+
+Evidence (2026-07-28):
+
+- `.\tools\Run-AutomationTests.ps1 --test-glob
+  tests/automation/complete_screen_mount_live_spec.lua` passed 2/2 with
+  `cleanup_confirmed=true`.
+- `.\tools\Run-UnitTests.ps1` passed 521/521.
+- `.\tools\Check-Lua.ps1` passed syntax and formatting for 250 Lua files.
+- The full live wrapper reached 37 successes with `cleanup_confirmed=true`, but
+  did not pass: `game_pause_live_spec.lua` calls unsupported `before_all`, and
+  `native_input_routing_live_spec.lua` failed its fullscreen-unmount assertion.
 
 ### Phase 5: native widgets and registered overlays
 
