@@ -221,6 +221,7 @@ simulation ticks stop while the game is paused.
 | `ds.wait_ticks(count, options)` | Wait for unpaused simulation ticks; options are `timeout_ms` and diagnostic `description`. |
 | `ds.isGamePaused()` | Return whether the Dwarf Fortress simulation is paused. |
 | `ds.setGamePaused(paused)` | Set the simulation pause state for an example; cleanup restores the original state. |
+| `ds.getGameSpeed()` | Return the current game-speed target in ticks per second. |
 | `ds.setGameSpeed(tps)` | Set the target game speed in ticks per second; cleanup restores the original native speed state. |
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |

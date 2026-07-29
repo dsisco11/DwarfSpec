@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   currently paused without requiring a mount.
 - `ds.setGamePaused(paused)` sets the simulation pause state for an example
   and automatically restores the exact inherited state during cleanup.
+- `ds.getGameSpeed()` returns the current game-speed target in ticks per
+  second without requiring a mount.
 - `ds.setGameSpeed(tps)` sets the target game speed in ticks per second,
   updates DF's derived speed ratio, and restores the inherited state during
   cleanup.

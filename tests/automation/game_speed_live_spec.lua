@@ -26,7 +26,9 @@ describe('game speed', function()
         local requested = inherited.tps == 100 and 101 or 100
         local enabler = df.global.enabler
 
+        assert.equals(inherited.tps, ds.getGameSpeed())
         assert.equals(requested, ds.setGameSpeed(requested))
+        assert.equals(requested, ds.getGameSpeed())
         assert.equals(requested, enabler.fps)
         assert.is_true(ratio_matches(
             enabler.fps_per_gfps, requested / inherited.graphical_rate))
@@ -39,6 +41,7 @@ describe('game speed', function()
     it('02 restores the inherited speed state after the example', function()
         local enabler = df.global.enabler
 
+        assert.equals(inherited.tps, ds.getGameSpeed())
         assert.equals(inherited.tps, enabler.fps)
         assert.equals(inherited.graphical_rate, enabler.gfps)
         assert.equals(inherited.speed_ratio, enabler.fps_per_gfps)

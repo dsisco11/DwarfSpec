@@ -270,6 +270,10 @@ function DS.isGamePaused() end
 ---@return boolean
 function DS.setGamePaused(paused) end
 
+---Returns the current game ticks-per-second target.
+---@return integer
+function DS.getGameSpeed() end
+
 ---Sets the game ticks-per-second target and restores it after the example.
 ---@param tps integer
 ---@return integer

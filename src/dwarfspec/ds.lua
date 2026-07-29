@@ -926,6 +926,19 @@ local TestStatus = load_automation_module(package_root,
         return enabler, native_tps, graphical_rate, speed_ratio
     end
 
+    ---Returns the current game ticks-per-second target.
+    ---@return integer
+    function ds.getGameSpeed()
+        local enabler = context.get_game_enabler()
+        assert(enabler ~= nil,
+            'DwarfSpec getGameSpeed requires df.global.enabler')
+        local tps = enabler.fps
+        assert(is_finite_number(tps) and tps >= 1 and tps % 1 == 0,
+            'DwarfSpec getGameSpeed requires a valid positive integer ' ..
+                'df.global.enabler.fps')
+        return tps
+    end
+
     ---Sets the game ticks-per-second target for the current example.
     ---@param tps integer
     ---@return integer

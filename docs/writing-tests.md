@@ -546,6 +546,14 @@ assert.is_false(ds.isGamePaused())
 Repeated calls within the same example retain the original cleanup baseline;
 they do not replace it with an intermediate state.
 
+`ds.getGameSpeed()` returns the current game-speed target as an integer number
+of ticks per second. It is read-only, does not require a mount, and does not
+register cleanup:
+
+```lua
+local inherited_tps = ds.getGameSpeed()
+```
+
 `ds.setGameSpeed(tps)` accepts a positive integer game-speed target in ticks
 per second and returns the applied TPS value. It updates the same native
 `df.global.enabler.fps` and

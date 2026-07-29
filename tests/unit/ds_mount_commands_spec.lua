@@ -584,6 +584,36 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('returns the current game speed without a mount or cleanup',
+            function()
+        local enabler = df.global.enabler
+
+        assert.equals(100, ds.getGameSpeed())
+        enabler.fps = 120
+        assert.equals(120, ds.getGameSpeed())
+        assert.equals(0, cleanup.pending_count(registry))
+        assert.is_false(run.mount_cleanup_probe().game_speed_active)
+    end)
+
+    it('validates native game speed before returning it', function()
+        local enabler = df.global.enabler
+        for _, value in ipairs({
+                0, -1, 1.5, '100', 0 / 0, math.huge, -math.huge}) do
+            enabler.fps = value
+            assert.has_error(function()
+                ds.getGameSpeed()
+            end, 'DwarfSpec getGameSpeed requires a valid positive ' ..
+                'integer df.global.enabler.fps')
+        end
+        assert.equals(0, cleanup.pending_count(registry))
+
+        df.global.enabler = nil
+        assert.has_error(function()
+            ds.getGameSpeed()
+        end, 'DwarfSpec getGameSpeed requires df.global.enabler')
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
     it('sets and restores the native game speed without a mount',
             function()
         local enabler = df.global.enabler

@@ -203,6 +203,13 @@ describe('DwarfSpec consumer extensions', function()
             'ds.setGamePaused')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={getGameSpeed=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.getGameSpeed')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={setGameSpeed=function() end},
         }
         assert.has_error(function() extensions.load(descriptor, loader) end,
