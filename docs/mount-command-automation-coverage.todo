@@ -330,19 +330,27 @@ Evidence (2026-07-28):
 Cover invalidation that still exists in the current system, rather than
 ordinary top-screen transitions.
 
-- [ ] On one representative owned component, prove native/overlay source
+- [x] On one representative owned component, prove native/overlay source
   options fail deterministically and leave the component usable.
-- [ ] Disable or remove a registered overlay after subject resolution; prove
+- [x] Disable or remove a registered overlay after subject resolution; prove
   the retained subject fails with a stable diagnostic and a fresh `ds.get()`
   observes the current registry state.
-- [ ] Replace a registered overlay entry; prove old and new identities are not
+- [x] Replace a registered overlay entry; prove old and new identities are not
   silently conflated.
-- [ ] Prove missing/disabled registry diagnostics do not mutate registration,
+- [x] Prove missing/disabled registry diagnostics do not mutate registration,
   visibility, focus, or the viewscreen chain.
-- [ ] After representative registry and command failures, prove the real native
+- [x] After representative registry and command failures, prove the real native
   observer, attachment, and cleanup registry have no residue.
-- [ ] After each failure group, prove explicit unmount or a fresh mount still
+- [x] After each failure group, prove explicit unmount or a fresh mount still
   works and restores the exact pre-test state.
+
+Evidence (2026-07-28):
+
+- `.\tools\Run-AutomationTests.ps1 --test-glob
+  tests/automation/registry_invalidation_live_spec.lua` passed 3/3 with
+  `cleanup_confirmed=true`.
+- `.\tools\Run-UnitTests.ps1` passed 523/523.
+- `.\tools\Check-Lua.ps1` passed syntax and formatting for 252 Lua files.
 
 ### Phase 7: closure
 
