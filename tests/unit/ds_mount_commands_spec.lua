@@ -89,6 +89,8 @@ describe('DwarfSpec public mount commands', function()
     local map_view_dimensions_failure
     local map_view_get_failure
     local map_view_set_failure
+    local game_speed_set_failure
+    local game_speed_ratio_override
     local original_native_render_dispatcher
     local native_render_failure
     local suppress_native_render
@@ -184,6 +186,8 @@ describe('DwarfSpec public mount commands', function()
         map_view_dimensions_failure = nil
         map_view_get_failure = nil
         map_view_set_failure = nil
+        game_speed_set_failure = nil
+        game_speed_ratio_override = nil
         native_render_failure = nil
         suppress_native_render = false
         wait_until_failure = nil
@@ -246,6 +250,9 @@ describe('DwarfSpec public mount commands', function()
                     tile_pixel_y=8,
                 },
                 enabler={
+                    fps=100,
+                    gfps=50,
+                    fps_per_gfps=2,
                     mouse_focus=false,
                     tracking_on=0,
                     mouse_lbut_down=0,
@@ -383,6 +390,15 @@ describe('DwarfSpec public mount commands', function()
                         error(map_view_dimensions_failure, 0)
                     end
                     return map_view_dimensions
+                end,
+                set_game_speed=function(enabler, tps, speed_ratio)
+                    if game_speed_set_failure then
+                        error(game_speed_set_failure, 0)
+                    end
+                    enabler.fps = tps
+                    enabler.fps_per_gfps =
+                        game_speed_ratio_override or speed_ratio
+                    return true
                 end,
                 native_viewscreen=function() return native_df_screen end,
                 is_native_widget_root=function(root)
@@ -568,6 +584,131 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('sets and restores the native game speed without a mount',
+            function()
+        local enabler = df.global.enabler
+
+        assert.equals(120, ds.setGameSpeed(120))
+        assert.equals(120, enabler.fps)
+        assert.equals(2.4, enabler.fps_per_gfps)
+        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        enabler.gfps = 60
+        assert.equals(180, ds.setGameSpeed(180))
+        assert.equals(180, enabler.fps)
+        assert.equals(3, enabler.fps_per_gfps)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        reset('game speed example cleanup')
+
+        assert.equals(100, enabler.fps)
+        assert.equals(2, enabler.fps_per_gfps)
+        assert.equals(60, enabler.gfps)
+        assert.is_false(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('validates game speed and native state before owning cleanup',
+            function()
+        local nan = 0 / 0
+        for _, value in ipairs({
+                0, -1, 1.5, '100', nan, math.huge, -math.huge}) do
+            assert.has_error(function()
+                ds.setGameSpeed(value)
+            end, 'game speed must be a positive integer TPS target')
+        end
+        assert.equals(0, cleanup.pending_count(registry))
+
+        local enabler = df.global.enabler
+        local cases = {
+            {
+                field='fps',
+                value=0,
+                expected='DwarfSpec setGameSpeed requires a valid positive ' ..
+                    'integer df.global.enabler.fps',
+            },
+            {
+                field='gfps',
+                value=0,
+                expected='DwarfSpec setGameSpeed requires a valid positive ' ..
+                    'df.global.enabler.gfps',
+            },
+            {
+                field='fps_per_gfps',
+                value=nan,
+                expected='DwarfSpec setGameSpeed requires a valid ' ..
+                    'df.global.enabler.fps_per_gfps',
+            },
+        }
+        for _, case in ipairs(cases) do
+            enabler.fps = 100
+            enabler.gfps = 50
+            enabler.fps_per_gfps = 2
+            enabler[case.field] = case.value
+            assert.has_error(function()
+                ds.setGameSpeed(120)
+            end, case.expected)
+            assert.equals(0, cleanup.pending_count(registry))
+        end
+
+        df.global.enabler = nil
+        assert.has_error(function()
+            ds.setGameSpeed(120)
+        end, 'DwarfSpec setGameSpeed requires df.global.enabler')
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('retains restoration after a game-speed setter failure', function()
+        local enabler = df.global.enabler
+        game_speed_set_failure = 'injected game-speed setter failure'
+
+        local ok, failure = pcall(ds.setGameSpeed, 120)
+
+        assert.is_false(ok)
+        assert.matches('injected game-speed setter failure', failure, 1, true)
+        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        game_speed_set_failure = nil
+        reset('failed game speed setter cleanup')
+        assert.equals(100, enabler.fps)
+        assert.equals(2, enabler.fps_per_gfps)
+        assert.is_false(run.mount_cleanup_probe().game_speed_active)
+    end)
+
+    it('restores after game-speed ratio verification fails', function()
+        local enabler = df.global.enabler
+        game_speed_ratio_override = 999
+
+        assert.has_error(function()
+            ds.setGameSpeed(120)
+        end, 'DFHack did not apply the requested game speed ratio')
+        assert.equals(120, enabler.fps)
+        assert.equals(999, enabler.fps_per_gfps)
+        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+
+        game_speed_ratio_override = nil
+        reset('failed game speed verification cleanup')
+        assert.equals(100, enabler.fps)
+        assert.equals(2, enabler.fps_per_gfps)
+    end)
+
+    it('reports game-speed restoration failures through cleanup', function()
+        ds.setGameSpeed(120)
+        game_speed_set_failure = 'injected game-speed restore failure'
+
+        local ok, failure = pcall(
+            reset, 'failed game speed restoration')
+
+        assert.is_false(ok)
+        assert.matches('restore game speed', failure, 1, true)
+        assert.matches('injected game-speed restore failure',
+            failure, 1, true)
+        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
     it('returns the current DFHack time without requiring a mount', function()
         assert.equals(67890, ds.getTime())
         dfhack_time = 67891
@@ -704,6 +845,7 @@ describe('DwarfSpec public mount commands', function()
             button_state_active=false,
             map_view_position_active=false,
             game_pause_state_active=false,
+            game_speed_active=false,
             render_observer_active=true,
         }, run.mount_cleanup_probe())
         assert.has_error(function()

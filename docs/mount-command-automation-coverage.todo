@@ -63,7 +63,7 @@ recovery scenarios.
   current mount and must not be repeated per host.
 - `ds.await()`, `ds.wait_frames()`, `ds.wait_ticks()`, `ds.getTick()`,
   `ds.getTime()`, `ds.isGamePaused()`, `ds.setGamePaused()`,
-  `ds.hasFocus()`, `ds.getViewPos()`, `ds.setViewPos()`, and
+  `ds.setGameSpeed()`, `ds.hasFocus()`, `ds.getViewPos()`, `ds.setViewPos()`, and
   `ds.stage_overlay_registration()` are not mount-host matrix entries.
 - Grid and pixel pointer spaces are interaction-layer behavior. Their shared
   live proof belongs in `interaction_live_spec.lua`; host specs only need to
@@ -116,6 +116,7 @@ Legend:
 | `ds.getTime()` | covered in `native_screen_mount_live_spec.lua` | none |
 | `ds.isGamePaused()` | implemented in `native_screen_mount_live_spec.lua` | execute the focused live proof |
 | `ds.setGamePaused()` | implemented in `game_pause_live_spec.lua` with inter-example restoration | execute the focused live proof |
+| `ds.setGameSpeed()` | covered in `game_speed_live_spec.lua` with exact native speed-state restoration | none |
 | `ds.hasFocus()` | covered in `native_screen_mount_live_spec.lua` | none |
 | `ds.getViewPos()` | covered in `view_pos_live_spec.lua` | none |
 | `ds.setViewPos()` | covered in `view_pos_live_spec.lua` | none |

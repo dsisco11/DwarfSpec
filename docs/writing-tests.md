@@ -546,6 +546,24 @@ assert.is_false(ds.isGamePaused())
 Repeated calls within the same example retain the original cleanup baseline;
 they do not replace it with an intermediate state.
 
+`ds.setGameSpeed(tps)` accepts a positive integer game-speed target in ticks
+per second and returns the applied TPS value. It updates the same native
+`df.global.enabler.fps` and
+`fps_per_gfps` fields as DFHack's `setfps` command:
+
+```lua
+assert.equals(100, ds.setGameSpeed(100))
+```
+
+The first call in an example captures the exact inherited speed state. Repeated
+calls retain that baseline, and DwarfSpec restores it during cleanup. The
+command does not change the pause state.
+
+The value is a target, not a guarantee that the computer can achieve the
+requested tick rate. A low target can cause a `ds.wait_ticks()` wall-clock
+timeout, so tests that deliberately run slowly should provide a suitable
+`timeout_ms`.
+
 `ds.getTick()` returns the current in-year Dwarf Fortress simulation tick from
 `df.global.cur_year_tick`. It is a read-only top-level command and does not
 require a mount:

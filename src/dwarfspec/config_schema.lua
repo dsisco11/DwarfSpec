@@ -27,6 +27,7 @@ local RESERVED_COMMANDS = {
     redraw=true,
     root=true,
     setGamePaused=true,
+    setGameSpeed=true,
     setViewPos=true,
     stage_overlay_registration=true,
     type=true,

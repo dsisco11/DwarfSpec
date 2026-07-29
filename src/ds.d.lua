@@ -270,6 +270,11 @@ function DS.isGamePaused() end
 ---@return boolean
 function DS.setGamePaused(paused) end
 
+---Sets the game ticks-per-second target and restores it after the example.
+---@param tps integer
+---@return integer
+function DS.setGameSpeed(tps) end
+
 ---Returns the current in-year simulation tick for the loaded DF world.
 ---@return integer
 function DS.getTick() end

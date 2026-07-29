@@ -198,8 +198,18 @@ local TestStatus = load_automation_module(package_root,
                     'DwarfSpec requires dfhack.gui.getDwarfmodeViewDims')
                 return gui.getDwarfmodeViewDims()
         end,
+        get_game_enabler=mount_dependencies.get_game_enabler or function()
+            return df and df.global and df.global.enabler
+        end,
+        set_game_speed=mount_dependencies.set_game_speed or
+            function(enabler, tps, speed_ratio)
+                enabler.fps = tps
+                enabler.fps_per_gfps = speed_ratio
+                return true
+            end,
         map_view_cleanup_entry=nil,
         game_pause_cleanup_entry=nil,
+        game_speed_cleanup_entry=nil,
     }
     local publisher = context.run.event_publisher
 
@@ -490,6 +500,8 @@ local TestStatus = load_automation_module(package_root,
             context.map_view_cleanup_entry ~= nil
         state.game_pause_state_active =
             context.game_pause_cleanup_entry ~= nil
+        state.game_speed_active =
+            context.game_speed_cleanup_entry ~= nil
         state.render_observer_active =
             context.mount_context.current ~= nil and
             context.mount_context.current.render_observer ~= nil
@@ -869,6 +881,90 @@ local TestStatus = load_automation_module(package_root,
         assert(global.pause_state == paused,
             'DFHack rejected the requested game pause state')
         return paused
+    end
+
+    ---Returns whether a value is a finite Lua number.
+    ---@param value any
+    ---@return boolean
+    local function is_finite_number(value)
+        return type(value) == 'number' and value == value and
+            value ~= math.huge and value ~= -math.huge
+    end
+
+    ---Returns whether two finite numbers match within float precision.
+    ---@param actual number
+    ---@param expected number
+    ---@return boolean
+    local function game_speed_ratio_matches(actual, expected)
+        if not is_finite_number(actual) or
+                not is_finite_number(expected) then
+            return false
+        end
+        local scale = math.max(1, math.abs(expected))
+        return math.abs(actual - expected) <= 1e-6 * scale
+    end
+
+    ---Reads and validates the native fields that define the game TPS target.
+    ---@return table, number, number, number
+    local function game_speed_state()
+        local enabler = context.get_game_enabler()
+        assert(enabler ~= nil,
+            'DwarfSpec setGameSpeed requires df.global.enabler')
+        local native_tps = enabler.fps
+        assert(is_finite_number(native_tps) and native_tps >= 1 and
+                native_tps % 1 == 0,
+            'DwarfSpec setGameSpeed requires a valid positive integer ' ..
+                'df.global.enabler.fps')
+        local graphical_rate = enabler.gfps
+        assert(is_finite_number(graphical_rate) and graphical_rate > 0,
+            'DwarfSpec setGameSpeed requires a valid positive ' ..
+                'df.global.enabler.gfps')
+        local speed_ratio = enabler.fps_per_gfps
+        assert(is_finite_number(speed_ratio),
+            'DwarfSpec setGameSpeed requires a valid ' ..
+                'df.global.enabler.fps_per_gfps')
+        return enabler, native_tps, graphical_rate, speed_ratio
+    end
+
+    ---Sets the game ticks-per-second target for the current example.
+    ---@param tps integer
+    ---@return integer
+    function ds.setGameSpeed(tps)
+        assert(is_finite_number(tps) and tps >= 1 and tps % 1 == 0,
+            'game speed must be a positive integer TPS target')
+        local enabler, original_tps, graphical_rate, original_ratio =
+            game_speed_state()
+        if context.game_speed_cleanup_entry == nil then
+            context.game_speed_cleanup_entry = cleanup_module.push(
+                cleanup_registry, 'restore game speed', function()
+                    local current = context.get_game_enabler()
+                    assert(current ~= nil,
+                        'DwarfSpec could not restore game speed: ' ..
+                            'df.global.enabler is unavailable')
+                    local restored = context.set_game_speed(
+                        current, original_tps, original_ratio)
+                    assert(restored ~= false,
+                        'DFHack rejected the original game speed')
+                    assert(current.fps == original_tps and
+                        current.fps_per_gfps == original_ratio,
+                        'DFHack did not restore the original game speed')
+                    context.game_speed_cleanup_entry = nil
+                end)
+        end
+
+        local expected_ratio = tps / graphical_rate
+        local ok, accepted = pcall(
+            context.set_game_speed, enabler, tps, expected_ratio)
+        assert(ok, 'DwarfSpec could not set game speed: ' ..
+            tostring(accepted))
+        assert(accepted ~= false,
+            'DFHack rejected the requested game speed')
+        assert(enabler.fps == tps,
+            'DFHack did not apply the requested game TPS target')
+        assert(game_speed_ratio_matches(
+            enabler.fps_per_gfps, expected_ratio),
+            'DFHack did not apply the requested game speed ratio')
+        return tps
     end
 
     ---Returns the current in-year simulation tick for the loaded DF world.
