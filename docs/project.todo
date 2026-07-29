@@ -7,6 +7,7 @@ Documentation:
 
 Frontend:
     ☐ Create a test-runner UI for running and debugging tests, including a test results panel and test command logs.
+        - Detailed design and verification task list: `docs/test-runner-ui.todo`.
     ☐ test-runner UI should have the ability to re-run failed tests.
     ☐ test-runner UI should have the ability to filter tests by tags or categories.
     ☐ test-runner UI should have the ability to click through command log items and see the snapshots of the component tree at that point in time.

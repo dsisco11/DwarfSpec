@@ -1,0 +1,240 @@
+DwarfSpec Test Runner UI Proposal
+=================================
+
+Purpose:
+    ☐ Design a Cypress-like viewer for running, observing, and triaging DwarfSpec tests.
+    ☐ Keep source editing, general breakpoints, variables, watches, and call-stack debugging in VS Code.
+    ☐ Optimize the primary workflow for: select scope -> run -> select test -> inspect step and evidence -> rerun or open source.
+    ☐ Do not imply runtime capabilities, such as host-screen capture or replay, until their feasibility and data contracts are confirmed.
+
+Completion contract:
+    ☐ Complete every applicable Penpot component, mockup-state, prototype, organization, and audit item below.
+    ☐ Record any rejected or deferred item with its rationale and the runtime or product dependency that blocks it.
+    ☐ Preserve all established DFHack visual constraints throughout the proposal.
+    ☐ Reuse every applicable existing DFHack widget component before creating a new component subtype.
+    ☐ Keep every complex component specimen and its variants on a dedicated, clearly named Penpot page.
+
+Product and information architecture:
+    ☐ Document the four selection levels: run, file or suite, test attempt, and command or event step.
+    ☐ Define which selection level owns each action, status, summary, log, and evidence view.
+    ☐ Define the minimum information required to answer: what failed, why, at which step, in which attempt, and what should be rerun.
+    ☐ Define the boundary between structured runner evidence and raw DFHack output.
+    ☐ Define the boundary between the runner's Debug action and external VS Code debugging.
+    ☐ Keep the TEST RESULTS pane title; use the breadcrumb to identify its current scope.
+    ☐ Extend the selected-test context to include the test name and active attempt without overloading the breadcrumb.
+
+Current proposal cleanup:
+    ☐ Remove the TEST, RESULT, and R headers from tree-view-with-columns.
+    ☐ Remove the duplicate Result Column Indicator list from the test explorer.
+    ☐ Keep exactly one status indicator inside each tree row and inside the tree's shared scroll panel.
+    ☐ Replace every typed visual symbol with the corresponding existing CP437 tile asset.
+        ☐ Replace typed connection, follow-output, and host-responsive bullets.
+        ☐ Replace typed pass, failure, and error marks.
+        ☐ Replace typed arrows in stacks, flows, and event descriptions.
+        ☐ Replace typed multiplication and separator symbols where they serve as visual symbols.
+    ☐ Remove or archive the hidden list-based result layers superseded by Generic Table View.
+    ☐ Remove or archive other hidden, superseded presentation layers after verifying that no live component instance depends on them.
+    ☐ Remove the decorative RUN / INSPECT / REPRODUCE / RESTORE title-bar copy.
+    ☐ Remove any protocol-version or DFHack-version badges.
+
+Revised workspace layout:
+    ☐ Retain a compact title and run bar.
+    ☐ Show current scope, run state, progress, elapsed time, and active test in the title or run bar.
+    ☐ Retain the left test explorer as the scope-navigation pane.
+    ☐ Retain the results table as the selected scope's result index.
+    ☐ Add a first-class ordered command and event trace for the selected test attempt.
+    ☐ Replace most permanent Debug Context content with selected-step evidence and failure context.
+    ☐ Move breakpoint and pause configuration into a compact Debug Options control.
+    ☐ Keep raw DFHack output and diagnostic logs in a resizable or collapsible bottom drawer.
+    ☐ Keep the host-responsive indicator badge at the bottom-right of the window.
+    ☐ Evaluate which panes can be collapsed or resized without violating the DFHack widget model.
+    ☐ Ensure the initial layout prioritizes the selected test's execution trace over runner configuration.
+
+Run bar and actions:
+    ☐ Provide compact actions for Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop.
+    ☐ Define enabled, disabled, focused, running, and stopping states for each action.
+    ☐ Replace static Mode and Repeat labels with existing dropdown components when the values are configurable.
+    ☐ Define mode choices without inventing unsupported runner modes.
+    ☐ Define repeat choices and show the selected repeat count.
+    ☐ Consolidate the duplicate top command preview and bottom rerun command.
+    ☐ Present one contextual, copyable REPRODUCE COMMAND near the selected result or failure.
+    ☐ Do not present the reproduce command as a replacement shell or source editor.
+
+Test explorer:
+    ☐ Show file, suite, and test hierarchy using tree-view-with-columns.
+    ☐ Keep every tree column within the tree's single normal scroll panel.
+    ☐ Keep tree-view-with-columns free of column headers.
+    ☐ Show one right-aligned aggregate status per visible tree item.
+    ☐ Define parent-node aggregation for running, passed, failed, errored, skipped, flaky, cleanup-failed, and disconnected descendants.
+    ☐ Add search or text filtering.
+    ☐ Add status filtering for failed, errored, flaky, cleanup-failed, and not-run tests.
+    ☐ Evaluate tag and category filters against the runner's actual discovery metadata.
+    ☐ Keep the active run scope visible below or adjacent to the explorer.
+    ☐ Define empty, loading, no-match, discovery-error, and disconnected explorer states.
+
+Test results table:
+    ☐ Continue using Generic Table View.
+    ☐ Preserve original runner ordering as the default no-sort mode.
+    ☐ Keep none, ascending, and descending sort modes for applicable columns.
+    ☐ Use existing CP437 up and down arrow assets beside sorted column labels.
+    ☐ Use the normal DFHack scrollbar component.
+    ☐ Retain the black, white, and brown header palette.
+    ☐ Reevaluate whether KIND provides more triage value than attempt outcome or failure category.
+    ☐ Show status, duration, and concise anomaly detail without forcing users to parse padded text.
+    ☐ Make source locations actionable without embedding a source editor.
+    ☐ Define selected, focused, running, passed, failed, errored, skipped, flaky, and cleanup-failed row variants.
+    ☐ Avoid sorting any command or lifecycle trace where chronological order is semantically required.
+
+Attempt and flake inspection:
+    ☐ Define an Attempt Selector component for repeated test runs.
+    ☐ Show the active attempt as current attempt over total attempts.
+    ☐ Show a compact status for every attempt.
+    ☐ Synchronize attempt selection with the trace, failure inspector, timings, host evidence, and raw-log anchor.
+    ☐ Define FLAKY as inconsistent outcomes within the current repeated run unless historical data is explicitly available.
+    ☐ Distinguish a failed assertion from an attempt that failed only during cleanup or infrastructure handling.
+    ☐ Define the no-repeat and single-attempt presentation without reserving dead space.
+
+Command and event trace:
+    ☐ Define the ordered step taxonomy for setup, test commands, inputs, waits, assertions, cleanup, host events, and runner events.
+    ☐ Design a reusable Trace Row component.
+    ☐ Show step status, sequence, command or event name, important target or argument, and duration.
+    ☐ Show retry, poll, or wait information only when the runner reports it.
+    ☐ Show a source location only when one exists.
+    ☐ Define queued, running, passed, failed, errored, skipped, cancelled, and not-run trace-row states.
+    ☐ Group setup, behavior, and cleanup steps without hiding their chronological ordering.
+    ☐ Allow groups to expand and collapse using existing CP437 assets.
+    ☐ Keep the selected failing step visible when changing attempts or log tabs.
+    ☐ Synchronize trace selection with failure details, host evidence, and the matching raw-log position.
+    ☐ Define behavior when a step has no host evidence or raw-log entry.
+    ☐ Define long-command, long-argument, nested-command, and large-trace scrolling behavior.
+
+Host evidence:
+    ☐ Determine whether the runner can provide live host rendering, captured frames, component-tree snapshots, or only textual state.
+    ☐ Document the chosen evidence modes and their availability conditions.
+    ☐ Design a reusable Host Evidence component that can represent each supported mode.
+    ☐ Show the evidence captured for the selected trace step.
+    ☐ When available, expose focus path, active viewscreen, pointer position, input target, and mounted-screen ownership.
+    ☐ When available, expose selected widget bounds without obscuring the underlying render.
+    ☐ Define unavailable, pending, stale, capture-failed, and host-disconnected evidence states.
+    ☐ Never label inferred state as captured or visually verified evidence.
+    ☐ Avoid implying full time travel unless the runner retains the required per-step state.
+
+Failure inspector:
+    ☐ Keep behavior failure, infrastructure error, cleanup failure, and host-health evidence visually distinct.
+    ☐ Show failure category, concise message, source location, expected value, and actual value when available.
+    ☐ Add a short code-frame treatment when source context is available.
+    ☐ Keep the stack collapsed by default when the concise failure context is sufficient.
+    ☐ Make file and stack locations open the external configured editor at the appropriate line and column.
+    ☐ Provide Copy Failure and Copy Reproduce Command actions.
+    ☐ Keep Open Source as the primary transition to VS Code.
+    ☐ Show cleanup status only when cleanup failed, was interrupted, or could not be confirmed.
+    ☐ Show quarantine or dirty-host state as a separate critical condition.
+    ☐ Define assertion, Lua error, timeout, discovery error, cleanup failure, host loss, and cancellation examples.
+
+Debug options:
+    ☐ Design a compact Debug Options dropdown, menu, or popover using existing DFHack components.
+    ☐ Include Break on Assertion only if supported by the runner.
+    ☐ Include Break on Lua Error only if supported by the runner.
+    ☐ Include Break on Cleanup Failure only if supported by the runner.
+    ☐ Include Pause Before Input only if supported by the runner.
+    ☐ Clearly indicate armed debug behavior without occupying the normal evidence pane.
+    ☐ Define how Debug Selected changes the reproduce command and run state.
+    ☐ Do not add variables, watches, breakpoint management, or embedded source editing.
+
+Logs and reports:
+    ☐ Define TRACE as the structured selected-attempt view rather than another raw-output tab.
+    ☐ Retain DFHACK OUTPUT for raw console output.
+    ☐ Add HOST EVENTS only if connection, focus, executor, queue, and quarantine events can be separated reliably.
+    ☐ Retain REPORT only when exposing the raw structured report helps diagnose runner behavior.
+    ☐ Define timestamp, source, severity, and message columns for raw logs.
+    ☐ Add follow-output, wrap, and filter controls using existing components.
+    ☐ Use an existing status indicator asset for follow-output state.
+    ☐ Define selection and highlighting for the raw-log entry correlated with the selected trace step.
+    ☐ Define log buffering, truncation, and large-output presentation.
+    ☐ Define empty, streaming, paused-follow, filtered-empty, and disconnected log states.
+
+Status system:
+    ☐ Define a reusable status-indicator component or extend the established DFHack indicator component.
+    ☐ Cover queued, running, passed, failed, errored, skipped, cancelled, not-run, flaky, cleanup-failed, and host-disconnected states.
+    ☐ Assign every status an established DF palette preset.
+    ☐ Assign every status an existing CP437 asset.
+    ☐ Pair symbols and colors with text wherever ambiguity would remain.
+    ☐ Keep behavior status independent from cleanup, infrastructure, and host-health status.
+    ☐ Define aggregate precedence for parent tree nodes and run summaries.
+    ☐ Verify that no success state relies solely on green and no failure state relies solely on red.
+
+New reusable components:
+    ☐ Create a dedicated page for Trace Row and its variants.
+    ☐ Create a dedicated page for Command and Event Trace.
+    ☐ Create a dedicated page for Attempt Selector.
+    ☐ Create a dedicated page for Host Evidence.
+    ☐ Create a dedicated page for Failure Inspector.
+    ☐ Create a dedicated page for Run Progress or Run Summary.
+    ☐ Create a dedicated page for any new Status Indicator subtype.
+    ☐ Create a dedicated page for Debug Options if it becomes a complex composition.
+    ☐ Wrap every specimen and variant set in an appropriately named top-level group or board.
+    ☐ Use the established dark Canvas Background on every new page.
+    ☐ Move all dedicated-page variants off the Foundations page.
+    ☐ Hide unavoidable Foundations masters only after verifying that linked instances remain visible.
+
+Existing component conformance:
+    ☐ Keep all UI text at the single established game text size.
+    ☐ Apply font.baseGame to every text shape.
+    ☐ Link every text, fill, stroke, border, selection, and status color to an established DF palette preset.
+    ☐ Use no unlinked solid color.
+    ☐ Use existing CP437 tile assets for every visual symbol.
+    ☐ Reuse TextButton for actions.
+    ☐ Reuse Dropdown for configurable choices.
+    ☐ Reuse EditField only for actual editable or copyable field interactions.
+    ☐ Reuse Breadcrumb at the Test Results title bar.
+    ☐ Reuse Tree View With Columns for the explorer.
+    ☐ Reuse Generic Table View for the results index.
+    ☐ Reuse the normal Scrollbar wherever scrolling is required.
+    ☐ Reuse Command Menu only where a transient action menu is appropriate.
+    ☐ Reuse existing issue, targeting-prompt, list-box, and indicator widgets only when their semantics match.
+    ☐ Record why any new component subtype cannot be represented by an existing widget component.
+
+Mockup state coverage:
+    ☐ Create an idle and connected state.
+    ☐ Create a discovery or loading state.
+    ☐ Create a running state with live progress and a running trace step.
+    ☐ Create a completed all-passing state.
+    ☐ Create a selected assertion-failure state.
+    ☐ Create a Lua or runner-error state.
+    ☐ Create a repeated-run flaky state with attempt switching.
+    ☐ Create a cleanup-failure or dirty-host state.
+    ☐ Create a host-disconnected or unresponsive state.
+    ☐ Create a stopped or cancelled run state.
+    ☐ Create an empty-filter state.
+    ☐ Verify that successful cleanup remains non-visible in every applicable state.
+
+Penpot prototype:
+    ☐ Prototype selecting a file or suite in the explorer.
+    ☐ Prototype selecting a test result.
+    ☐ Prototype selecting a command or event trace step.
+    ☐ Prototype switching attempts.
+    ☐ Prototype opening and closing Mode, Repeat, and Debug Options dropdowns.
+    ☐ Prototype cycling table-header sort modes.
+    ☐ Prototype switching raw-log tabs.
+    ☐ Prototype toggling follow-output and wrap.
+    ☐ Prototype expanding and collapsing trace groups.
+    ☐ Prototype Run, Rerun Selected, Rerun Failed, Debug Selected, and Stop state transitions.
+    ☐ Prototype Open Source as an external-editor handoff representation.
+    ☐ Verify that every linked selection visibly updates all dependent panes.
+
+Review and handoff:
+    ☐ Review the completed primary flow as a Cypress-like run viewer rather than an IDE replacement.
+    ☐ Verify that the command and event trace is more prominent than debug configuration.
+    ☐ Verify that the selected test, attempt, and step are always unambiguous.
+    ☐ Verify that behavior, infrastructure, cleanup, and host-health results cannot mask one another.
+    ☐ Audit all visible text for the single game size and font.baseGame.
+    ☐ Audit all fills and strokes for linked DF palette presets.
+    ☐ Audit all visual symbols for existing CP437 asset usage.
+    ☐ Audit all applicable controls for reuse of existing DFHack widget components.
+    ☐ Audit every page for the established dark Canvas Background.
+    ☐ Audit every specimen for a clear top-level name.
+    ☐ Audit Foundations for component variants that belong on dedicated pages.
+    ☐ Audit the final mockups for hidden obsolete layers and duplicate indicators.
+    ☐ Exercise every prototype interaction from idle through failure triage and rerun.
+    ☐ Record unresolved runtime dependencies and remove unsupported affordances from the final proposal.
+    ☐ Obtain final product review of the revised Penpot proposal.
