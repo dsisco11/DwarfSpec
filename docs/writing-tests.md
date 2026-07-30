@@ -637,6 +637,18 @@ local milliseconds = ds.getTime()
 assert.is_true(milliseconds >= 0)
 ```
 
+`ds.getSaveDirectoryName()` returns the directory name of the currently loaded
+save game through `dfhack.world.ReadWorldFolder()`. It is read-only and does
+not require a mount:
+
+```lua
+assert.equals('region1', ds.getSaveDirectoryName())
+```
+
+It fails explicitly when no save is loaded or DFHack cannot provide a nonempty
+directory name. This is the save-directory identifier, not the translated
+world name or a fortress/site name.
+
 `ds.wait_ticks(count, options)` suspends the test until exactly `count`
 unpaused Dwarf Fortress simulation ticks have passed:
 

@@ -1010,6 +1010,23 @@ local TestStatus = load_automation_module(package_root,
         return time
     end
 
+    ---Returns the directory name of the currently loaded save game.
+    ---@return string
+    function ds.getSaveDirectoryName()
+        local is_world_loaded = dfhack and dfhack.isWorldLoaded
+        assert(type(is_world_loaded) == 'function' and is_world_loaded(),
+            'DwarfSpec getSaveDirectoryName requires a loaded save game')
+        local world = dfhack.world
+        assert(type(world) == 'table' and
+                type(world.ReadWorldFolder) == 'function',
+            'DwarfSpec getSaveDirectoryName requires ' ..
+                'dfhack.world.ReadWorldFolder')
+        local name = world.ReadWorldFolder()
+        assert(type(name) == 'string' and name ~= '',
+            'DFHack ReadWorldFolder did not return a valid save directory name')
+        return name
+    end
+
     ---Returns whether the current DFHack focus matches one focus path.
     ---@param path string
     ---@return boolean

@@ -225,6 +225,7 @@ simulation ticks stop while the game is paused.
 | `ds.setGameSpeed(tps)` | Set the target game speed in ticks per second; DwarfSpec automatically restores the inherited state during example cleanup. |
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
+| `ds.getSaveDirectoryName()` | Return the directory name of the currently loaded save game. |
 | `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
 | `ds.getViewPos(origin)` | Return the map tile aligned with an `EScreenOrigin`; defaults to `CENTER`. |
 | `ds.setViewPos({x=..., y=..., z=...}, origin)` | Align a map tile with an `EScreenOrigin`, defaulting to `CENTER`; DwarfSpec automatically restores the inherited view during example cleanup. |

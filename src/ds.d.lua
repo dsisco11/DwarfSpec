@@ -323,6 +323,10 @@ function DS.getTick() end
 ---@return integer
 function DS.getTime() end
 
+---Returns the directory name of the currently loaded save game.
+---@return string
+function DS.getSaveDirectoryName() end
+
 ---Returns whether the current DFHack focus matches one focus path.
 ---@param path string
 ---@return boolean

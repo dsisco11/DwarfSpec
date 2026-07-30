@@ -85,6 +85,8 @@ describe('DwarfSpec public mount commands', function()
     local focus_queries
     local focus_match_queries
     local dfhack_time
+    local save_directory_name
+    local world_loaded
     local map_view_position
     local map_view_dimensions
     local map_view_dimensions_failure
@@ -177,6 +179,8 @@ describe('DwarfSpec public mount commands', function()
         focus_queries = {}
         focus_match_queries = {}
         dfhack_time = 67890
+        save_directory_name = 'region1'
+        world_loaded = true
         map_view_position = {x=12, y=34, z=5}
         map_view_dimensions = {
             map_x1=3,
@@ -199,6 +203,10 @@ describe('DwarfSpec public mount commands', function()
         wait_until_calls = 0
         rawset(_G, 'dfhack', {
             getTickCount=function() return dfhack_time end,
+            isWorldLoaded=function() return world_loaded end,
+            world={
+                ReadWorldFolder=function() return save_directory_name end,
+            },
             screen={
                 getMousePos=function() return 90, 91 end,
                 getMousePixels=function() return 900, 910 end,
@@ -755,6 +763,28 @@ describe('DwarfSpec public mount commands', function()
         dfhack.getTickCount = nil
         assert.has_error(function() ds.getTime() end,
             'DwarfSpec getTime requires dfhack.getTickCount')
+    end)
+
+    it('returns the loaded save directory name without requiring a mount',
+            function()
+        assert.equals('region1', ds.getSaveDirectoryName())
+        save_directory_name = 'region2'
+        assert.equals('region2', ds.getSaveDirectoryName())
+        assert.equals(0, cleanup.pending_count(registry))
+
+        world_loaded = false
+        assert.has_error(function() ds.getSaveDirectoryName() end,
+            'DwarfSpec getSaveDirectoryName requires a loaded save game')
+
+        world_loaded = true
+        save_directory_name = ''
+        assert.has_error(function() ds.getSaveDirectoryName() end,
+            'DFHack ReadWorldFolder did not return a valid save directory name')
+
+        dfhack.world = nil
+        assert.has_error(function() ds.getSaveDirectoryName() end,
+            'DwarfSpec getSaveDirectoryName requires ' ..
+                'dfhack.world.ReadWorldFolder')
     end)
 
     it('matches the current DFHack focus without requiring a mount',
