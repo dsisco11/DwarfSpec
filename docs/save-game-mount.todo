@@ -1,0 +1,282 @@
+DwarfSpec Save-Game Mount Implementation
+=========================================
+
+Purpose:
+    ☐ Add `ds.mountSaveGame(directory_name)` for deterministic save selection in live DwarfSpec automation.
+    ☐ Load the requested active save directory when it is not already loaded.
+    ☐ Discard and unload any different currently loaded world without saving it.
+    ☐ Restore the inherited save-game state during example cleanup when DwarfSpec initiated a transition.
+    ☐ Keep the command synchronous from the spec author's perspective while Dwarf Fortress unloads and loads across raw frames.
+
+Completion contract:
+    ☐ Complete every applicable implementation, focused-test, full-test, declaration, documentation, package, cleanup, and live-evidence item below.
+    ☐ Treat this checklist as the source of truth for implementation status.
+    ☐ Preserve unrelated worktree and index changes; do not stash or commit user changes.
+    ☐ Record every deferred or rejected item with its rationale and the evidence that made it unnecessary or unsafe.
+    ☐ Keep `ds.mountSaveGame(directory_name)` free of save-or-discard policy options.
+    ☐ Always discard a world when DwarfSpec must unload it; never save automation mutations as part of this command or its cleanup.
+    ☐ Treat an already-loaded requested save as borrowed state and do not unload or reload it during cleanup.
+    ☐ Treat a save loaded by DwarfSpec as owned state and clean it up after the example, even when the example fails.
+    ☐ Restore the originally loaded save after an owned mount, or return to the title screen when the example inherited no loaded world.
+    ☐ Attempt restoration after every partial transition failure that occurs after the inherited world has been unloaded.
+    ☐ Never discard an unrelated save that appears while DwarfSpec is cleaning an owned save-game mount.
+    ☐ Use raw-frame waits that remain valid across world unload; do not use simulation-tick waits for world transitions.
+    ☐ Do not select unload actions by localized text, fixed pixel coordinates, or resolution-specific layout.
+    ☐ Keep focused unit, full unit, Lua syntax, package, cleanup, and live DFHack evidence distinct in the final handoff.
+    ☐ Never treat mocked state-machine coverage as proof that Dwarf Fortress successfully unloaded or loaded a save.
+
+Public contract:
+    ☐ Export `ds.mountSaveGame(directory_name)`.
+    ☐ Accept exactly one nonempty save-directory name.
+    ☐ Reject directory separators, absolute paths, current-directory segments, parent-directory segments, and traversal attempts.
+    ☐ Return the requested directory name after the exact save is loaded.
+    ☐ Return immediately when the requested directory is already loaded.
+    ☐ Discard the currently loaded world when its directory differs from the request.
+    ☐ Load only saves exposed as active saves by Dwarf Fortress.
+    ☐ Report inactive, missing, incompatible, or otherwise unavailable saves as bounded command errors.
+    ☐ Make every subject, component mount, native-screen attachment, and other world-bound handle from an unloaded world unusable.
+    ☐ Require a transitioning `mountSaveGame` call to be the first stateful DwarfSpec command in its example for the initial implementation.
+    ☐ Permit later stateful commands after the requested save has mounted.
+    ☐ Clean later stateful resources before discarding the owned save during LIFO example cleanup.
+
+Non-goals:
+    ☐ Do not add a public unload policy or save-before-unload option.
+    ☐ Do not preserve in-memory gameplay mutations from a discarded world.
+    ☐ Do not load inactive worlds that have no active fortress or adventure save.
+    ☐ Do not generate, copy, rename, delete, or migrate save directories from the public command.
+    ☐ Do not support multiple simultaneously owned save-game mounts.
+    ☐ Do not expose raw viewscreen manipulation or transition-state mutation as public DwarfSpec commands.
+    ☐ Do not make ordinary UI mounts responsible for world switching.
+
+Phase 0 - Reconcile the contract and record the baseline:
+    ☐ Re-read this checklist and reconcile every public name, ownership rule, transition, cleanup rule, and acceptance criterion before editing runtime code.
+    ☐ Inventory the active checkout, branch, worktree state, index state, installed rock version, and current package archive contents.
+    ☐ Record the current `ds.getSaveDirectoryName()` runtime, declaration, unit coverage, live coverage, and documentation.
+    ☐ Record the existing `ds.mount`, `ds.mountNativeScreen`, cleanup-registry, Busted lifecycle, scheduler, executor-lease, and failure-reporting paths.
+    ☐ Confirm that DwarfSpec raw-frame scheduler and lease timers remain active across `SC_WORLD_UNLOADED`.
+    ☐ Confirm that simulation-tick timers are unsuitable for the transition path.
+    ☐ Inventory DFHack 53.15-r1 save-loading scripts, title/load-game viewscreens, options state, relevant input keys, and state-change events.
+    ☐ Confirm that no public DwarfSpec or DFHack Lua function already implements the complete discard-unload-load-restore transaction.
+    ☐ Select exact production filenames beneath `src/dwarfspec/` for the save-game mount controller, adapter, transition states, and diagnostics.
+    ☐ Select exact focused unit-test and live-automation filenames before implementation.
+    ☐ Run and record the pre-change focused command and cleanup tests.
+    ☐ Run and record the pre-change full standalone unit suite.
+    ☐ Run and record the pre-change Lua syntax and formatting checks.
+    ☐ Stop and update this checklist if the active runtime contract materially differs from the assumptions above.
+
+Phase 1 - Characterize a stable discard-and-unload mechanism:
+    ☐ Add a separately selected live characterization probe that starts with a disposable automation save loaded.
+    ☐ Open the Dwarf Fortress options interface through stable native input.
+    ☐ Identify the `QUIT_WITHOUT_SAVING` action through `df.main_menu_option_type`.
+    ☐ Determine whether the action can be activated through stable enum- or index-based simulated input.
+    ☐ Determine the exact confirmation state and stable input required to approve discarding the world.
+    ☐ Record the observed focus paths, viewscreen identities, options contexts, state-change events, and frame ordering.
+    ☐ Verify that the world unload emits the expected world and map unload events.
+    ☐ Verify that the transition reaches a title or load-game screen accepted by `load-save`.
+    ☐ Verify that raw-frame callbacks continue throughout the unload.
+    ☐ Verify that DwarfSpec's process-wide service registry and active coroutine remain reachable after unload.
+    ☐ Reject any candidate mechanism that requires localized labels, pixel coordinates, resolution assumptions, or private memory offsets.
+    ☐ If stable native input is unavailable, define the smallest internal DFHack helper boundary required to activate the enum-identified action.
+    ☐ Keep the characterization probe out of ordinary automation globs.
+    ☐ Record the accepted unload mechanism and evidence directly in this checklist before production implementation.
+
+Phase 2 - Define save-game mount types and transition diagnostics:
+    ☐ Define private transition states for validation, borrowed completion, unloading the inherited save, loading the target, mounted ownership, unloading the target, restoring the inherited save, returning to title, completion, and failure.
+    ☐ Define a private save-game mount record with requested directory, inherited directory, ownership, current state, cleanup identity, and failure context.
+    ☐ Define injected adapter interfaces for current-world detection, directory lookup, unload initiation, load initiation, frame waiting, focus diagnostics, viewscreen diagnostics, and cleanup registration.
+    ☐ Define bounded transition diagnostics containing the operation, transition state, requested directory, inherited directory, observed directory, focus, viewscreen, elapsed frames, and elapsed milliseconds.
+    ☐ Define a composed failure shape that preserves both the primary transition error and any restoration error.
+    ☐ Define exact ownership rules for borrowed and owned save-game mounts.
+    ☐ Define exact rules for detecting an unrelated externally loaded save during cleanup.
+    ☐ Add language-appropriate documentation comments for every new production class and method.
+    ☐ Keep private transition types out of the public `ds` declaration surface.
+    ☐ Add focused tests for state names, record construction, bounded diagnostics, and composed failures.
+
+Phase 3 - Implement validation and preflight checks:
+    ☐ Validate that `directory_name` is a string.
+    ☐ Reject an empty directory name.
+    ☐ Reject forward slashes and backslashes.
+    ☐ Reject absolute paths, drive-qualified paths, current-directory segments, parent-directory segments, and traversal attempts.
+    ☐ Bound the accepted directory-name length and error rendering.
+    ☐ Read the current world-loaded state through DFHack.
+    ☐ Read and validate the inherited directory through `dfhack.world.ReadWorldFolder()` when a world is loaded.
+    ☐ Return a borrowed result immediately when the requested directory already matches.
+    ☐ Perform a filesystem preflight when the requested save directory can be checked without changing game state.
+    ☐ Treat the Dwarf Fortress active-save list as authoritative after reaching the title or load-game screen.
+    ☐ Reject a transitioning call when an owned save-game mount is already active.
+    ☐ Reject a transitioning call after another example-owned stateful cleanup resource has been registered.
+    ☐ Report which existing resource prevents the command from being the first stateful operation when that information is available.
+    ☐ Avoid registering cleanup or mutating game state on every validation and preflight failure.
+    ☐ Add focused tests for all accepted and rejected names, borrowed behavior, preflight failures, and first-stateful-command enforcement.
+
+Phase 4 - Implement the discard-and-unload adapter:
+    ☐ Add the private production adapter selected by Phase 1.
+    ☐ Verify that the expected inherited directory is still loaded immediately before initiating unload.
+    ☐ Open the options interface only when it is not already in the required state.
+    ☐ Select `QUIT_WITHOUT_SAVING` by stable native identity.
+    ☐ Approve the discard confirmation through stable native input.
+    ☐ Wait across raw frames for the world to become unloaded.
+    ☐ Wait for a title or load-game screen from which the target can be loaded.
+    ☐ Treat duplicate or reordered state-change notifications as observations rather than transaction authority.
+    ☐ Treat `dfhack.isWorldLoaded()` plus the exact observed directory as authoritative world state.
+    ☐ Reject unload completion if the expected inherited world remains loaded.
+    ☐ Reject unexpected arrival in a different loaded world.
+    ☐ Restore temporary pointer, tracking, and input state used by the adapter.
+    ☐ Include focus, viewscreen, transition state, and elapsed-time evidence in every timeout.
+    ☐ Add focused adapter tests for success, existing options state, confirmation, reordered events, timeout, unexpected world, and temporary-input cleanup.
+
+Phase 5 - Implement exact target loading:
+    ☐ Invoke the installed `load-save` script only from a compatible title or load-game screen.
+    ☐ Pass the validated directory name as one exact argument.
+    ☐ Capture immediate script errors for missing, inactive, or unavailable saves.
+    ☐ Account for `load-save` deferring its final selection by one raw frame.
+    ☐ Wait for loading to begin without treating an intermediate load-game screen as success.
+    ☐ Wait for `dfhack.isWorldLoaded()` to become true.
+    ☐ Read the resulting directory through `dfhack.world.ReadWorldFolder()`.
+    ☐ Require the resulting directory to equal the request exactly.
+    ☐ Reject an unexpected loaded directory and preserve it for recovery diagnostics.
+    ☐ Use a dedicated bounded world-load timeout suitable for slow automation saves.
+    ☐ Reset the loaded fortress to a deterministic paused base view only if that behavior is accepted as part of the public contract.
+    ☐ Avoid changing game speed, camera position, UI focus, or pause state unless required for a stable post-load boundary.
+    ☐ Add focused tests for successful deferred loading, immediate script failure, inactive save, wrong directory, load timeout, and malformed DFHack results.
+
+Phase 6 - Implement transactional ownership and rollback:
+    ☐ Add the private save-game mount controller.
+    ☐ Register the owned mount's cleanup intent before unloading the inherited world.
+    ☐ Mark each irreversible transition only after its authoritative state check succeeds.
+    ☐ Unload the inherited world through the discard adapter.
+    ☐ Load and verify the requested target.
+    ☐ Publish ownership only after the exact target is loaded.
+    ☐ Return the requested directory after successful owned mounting.
+    ☐ On failure before inherited unload, release the unused cleanup intent without changing worlds.
+    ☐ On failure after inherited unload, attempt to restore the inherited save.
+    ☐ When no inherited save existed, recover to the title screen.
+    ☐ Preserve the primary error when recovery succeeds.
+    ☐ Preserve and clearly separate primary and recovery errors when recovery fails.
+    ☐ Never report a failed target as successfully mounted.
+    ☐ Never leave a completed cleanup entry registered as pending.
+    ☐ Add focused transaction tests for every success, failure, rollback, and rollback-failure boundary.
+
+Phase 7 - Integrate automatic example cleanup:
+    ☐ Push the save-game restoration action beneath every stateful resource created after the mount.
+    ☐ Ensure ordinary component, native-screen, pointer, input, pause, speed, and view-position cleanup completes before world restoration begins.
+    ☐ Verify that cleanup still owns the exact target save before discarding it.
+    ☐ Discard the owned target without saving automation mutations.
+    ☐ Reload and verify the inherited directory when one existed.
+    ☐ Return to and verify the title screen when the example inherited no loaded world.
+    ☐ Leave an already-loaded borrowed target untouched.
+    ☐ Refuse to discard an unrelated loaded save encountered during cleanup.
+    ☐ Convert cleanup unload, title, load, and verification timeouts into ordinary DwarfSpec cleanup failures.
+    ☐ Preserve `cleanup_confirmed=false` and executor quarantine when restoration cannot be proven.
+    ☐ Clear controller ownership, timers, state-change listeners, retained directories, and transition diagnostics after successful cleanup.
+    ☐ Verify idempotent cleanup when Busted and emergency cleanup paths both attempt restoration.
+    ☐ Add focused cleanup tests for owned, borrowed, title-inherited, assertion-failure, unrelated-world, timeout, idempotence, and quarantine outcomes.
+
+Phase 8 - Export the command and declarations:
+    ☐ Wire the controller into the run-scoped `ds` namespace.
+    ☐ Implement `ds.mountSaveGame(directory_name)` with a language-appropriate documentation comment.
+    ☐ Keep `ds.getSaveDirectoryName()` unchanged as the read-only current-save query.
+    ☐ Add the public declaration to `src/ds.d.lua`.
+    ☐ Document the exact string return value.
+    ☐ Document that the command always discards worlds it unloads.
+    ☐ Document borrowed versus owned behavior.
+    ☐ Document the first-stateful-command restriction for transitions.
+    ☐ Reject extra arguments and configuration tables with an exact bounded error.
+    ☐ Add export coverage to the live `ds` surface test.
+    ☐ Add command-level unit coverage for delegation, borrowed return, owned return, errors, and cleanup registration.
+
+Phase 9 - Add focused and full automated coverage:
+    ☐ Add isolated controller unit tests with injected world, screen, timer, input, and loader adapters.
+    ☐ Add isolated discard-adapter tests without requiring Dwarf Fortress.
+    ☐ Add command-level tests in the existing mount-command suite.
+    ☐ Prove same-save idempotence registers no owned cleanup.
+    ☐ Prove title-to-target ownership.
+    ☐ Prove inherited-A-to-target-B ownership.
+    ☐ Prove target-B cleanup restores inherited A.
+    ☐ Prove title-inherited cleanup returns to title.
+    ☐ Prove a target load failure restores inherited A.
+    ☐ Prove a failed restoration reports both errors.
+    ☐ Prove cleanup will not discard unrelated C.
+    ☐ Prove later UI mounts clean before target B unloads.
+    ☐ Prove no timer, listener, mount, subject, pointer, or input ownership leaks after success and failure.
+    ☐ Run and record focused unit results.
+    ☐ Run and record the full standalone unit suite separately.
+    ☐ Run and record Lua syntax and formatting checks separately.
+    ☐ Run and record `git diff --check`.
+
+Phase 10 - Add selected live save-transition coverage:
+    ☐ Define two explicitly disposable active automation save fixtures, A and B.
+    ☐ Keep fixture preparation outside the public `ds.mountSaveGame` command.
+    ☐ Verify fixture names are distinct and both are exposed by Dwarf Fortress before destructive coverage begins.
+    ☐ Add a safe ordinary live test proving same-save idempotence.
+    ☐ Add a separately selected live spec for A to B to automatic A restoration.
+    ☐ Assert the exact directory after B mounts.
+    ☐ Create later example-owned UI and pointer resources while B is mounted.
+    ☐ Assert those resources clean before B unload begins.
+    ☐ Cause an example assertion failure while B is mounted and prove cleanup still restores A.
+    ☐ Add a separately selected failure case for an unavailable target and prove A is restored.
+    ☐ Add a separately selected title-to-B-to-title scenario.
+    ☐ Prove the DwarfSpec coroutine, scheduler, executor lease, and event publisher survive every unload and load.
+    ☐ Prove each selected run reports `cleanup_confirmed=true`.
+    ☐ Prove the final directory or title state exactly matches the inherited state.
+    ☐ Prove the executor is idle, the queue is empty, quarantine is absent, mounts are clear, pointer tracking is restored, and no buttons remain pressed.
+    ☐ Run the complete live suite only after the selected destructive transition specs pass.
+    ☐ Record selected live results separately from complete live-suite results.
+
+Phase 11 - Document authoring and operational boundaries:
+    ☐ Add `ds.mountSaveGame()` to the README command table.
+    ☐ Add an authoring example that mounts a disposable save before later stateful commands.
+    ☐ Explain that DwarfSpec discards both the inherited world during switching and the owned target during cleanup without saving.
+    ☐ Explain that the inherited save is reloaded from its last on-disk state.
+    ☐ Explain borrowed behavior when the requested save is already loaded.
+    ☐ Explain automatic restoration after success, assertion failure, command failure, and cleanup.
+    ☐ Explain the first-stateful-command restriction and why it protects LIFO cleanup ordering.
+    ☐ Explain that inactive saves are unsupported by the underlying DF load path.
+    ☐ Explain expected timeout diagnostics and restoration-error reporting.
+    ☐ Explain that the command is intended for controlled automation installations with disposable fixtures.
+    ☐ Keep public documentation free of player-oriented save-policy configuration.
+    ☐ Reconcile architecture documentation with the new world-level ownership boundary.
+
+Phase 12 - Verify packaging and final acceptance:
+    ☐ Update the LuaRocks package manifest for every new production module and declaration artifact.
+    ☐ Build the release rock through the repository publish tooling.
+    ☐ Inspect the archive contents directly.
+    ☐ Require every new production module and public declaration in the archive.
+    ☐ Reject unit tests, live probes, fixture saves, generated logs, and temporary transition artifacts from the archive.
+    ☐ Install or load the built artifact in the controlled DFHack environment.
+    ☐ Re-run the safe export and same-save tests against the packaged artifact.
+    ☐ Re-run the selected A-to-B-to-A transition against the packaged artifact.
+    ☐ Re-run focused unit, full unit, Lua syntax, selected live, full live, package, and `git diff --check` gates after final edits.
+    ☐ Verify the final DFHack process is responsive.
+    ☐ Verify the final inherited save or title state is restored.
+    ☐ Verify `cleanup_confirmed=true` for the final selected live run.
+    ☐ Verify the executor is idle, the queue is empty, quarantine is absent, mounts are clear, pointer tracking is restored, and no buttons remain pressed.
+    ☐ Record exact commands, results, fixture identities, package path, archive audit, and final cleanup state in the completion evidence below.
+
+Completion evidence:
+    ☐ Contract and baseline:
+        - Evidence:
+    ☐ Accepted discard-and-unload mechanism:
+        - Evidence:
+    ☐ Focused unit tests:
+        - Evidence:
+    ☐ Full standalone unit suite:
+        - Evidence:
+    ☐ Lua syntax and formatting:
+        - Evidence:
+    ☐ Safe same-save live automation:
+        - Evidence:
+    ☐ Selected A-to-B-to-A live automation:
+        - Evidence:
+    ☐ Failure-and-restoration live automation:
+        - Evidence:
+    ☐ Title-to-target-to-title live automation:
+        - Evidence:
+    ☐ Complete live suite:
+        - Evidence:
+    ☐ Package build and archive audit:
+        - Evidence:
+    ☐ Diff and worktree audit:
+        - Evidence:
+    ☐ Final DFHack cleanup state:
+        - Evidence:
