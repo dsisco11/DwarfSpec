@@ -18,202 +18,237 @@ Completion contract:
     ☐ Verify component instances and dependent mockups after every master-component change.
 
 Phase 1: Establish contracts and the DFHack widget foundation
-    ☐ Exit with the product contracts, runtime capability decisions, official widget inventory, and reuse rules settled before custom component work begins.
+    ☒ Exit with the product contracts, runtime capability decisions, official widget inventory, and reuse rules settled before custom component work begins.
+        - Evidence: docs/dfhack-widget-rendering-reference.md,
+          docs/test-runner-ui-foundation-contracts.md, and the Penpot
+          "Phase 1 - Contracts and Coverage" page.
 
 1.1 Official DFHack gui.widgets coverage:
-    ☐ Use the stable DFHack In-game UI Library documentation as the source of truth:
+    ☒ Use the stable DFHack In-game UI Library documentation as the inventory source of truth, reconciled against the locally installed rendering implementation:
         - https://docs.dfhack.org/en/stable/docs/dev/Lua%20API.html#in-game-ui-library
-    ☐ Maintain a Penpot coverage matrix for all 28 documented gui.widgets classes.
-    ☐ Mark each widget as documented, component-linked, variant-complete, and demonstrated in a composition.
-    ☐ Document Widget as the non-visual base contract for frame, frame inset, background, visibility, enabled state, focus, and parent-child layout.
-    ☐ Do not create a standalone visual component for the abstract Widget base class.
-    ☐ Verify and explicitly annotate the existing Window mockup.
-    ☐ Verify and explicitly annotate the existing EditField variants.
-    ☐ Verify and explicitly annotate the existing Scrollbar component.
-    ☐ Verify and explicitly annotate the existing Label examples.
-    ☐ Verify and explicitly annotate the existing HotkeyLabel variants.
-    ☐ Verify and explicitly annotate the existing TextButton variants.
-    ☐ Verify that List Box and List Item variants accurately represent widgets.List.
-    ☐ Rename or annotate List Box and List Item coverage so the widgets.List relationship is explicit.
+        - Evidence: docs/dfhack-widget-rendering-reference.md.
+    ☒ Maintain a Penpot coverage matrix for all 28 documented gui.widgets classes.
+    ☒ Mark each widget as documented, component-linked, variant-complete, and demonstrated in a composition.
+    ☒ Document Widget as the non-visual base contract for frame, frame inset, background, visibility, enabled state, focus, and parent-child layout.
+    ☒ Do not create a standalone visual component for the abstract Widget base class.
+    ☒ Verify and explicitly annotate the existing Window mockup.
+    ☒ Verify and explicitly annotate the existing EditField variants.
+    ☒ Verify and explicitly annotate the existing Scrollbar component.
+    ☒ Verify and explicitly annotate the existing Label examples.
+    ☒ Verify and explicitly annotate the existing HotkeyLabel variants.
+    ☒ Verify and explicitly annotate the existing TextButton variants.
+    ☒ Verify that List Box and List Item variants accurately represent widgets.List.
+    ☒ Rename or annotate List Box and List Item coverage so the widgets.List relationship is explicit.
 
 1.2 Official DFHack container and layout widget mockups:
-    ☐ Create a dedicated widgets.Panel component page.
-        ☐ Demonstrate unframed and framed Panel presentations.
-        ☐ Demonstrate applicable FRAME_WINDOW, FRAME_PANEL, FRAME_MEDIUM, FRAME_THIN, FRAME_BOLD, FRAME_INTERIOR, and FRAME_INTERIOR_MEDIUM styles.
-        ☐ Demonstrate title, draggable, resizable, and auto-arranged child configurations without combining unrelated states into one variant matrix.
-    ☐ Create a dedicated widgets.ResizingPanel component page.
-        ☐ Demonstrate automatic height and automatic width behavior with changing child content.
-        ☐ Compose the specimen from a component-linked Panel rather than redrawing its frame.
-    ☐ Create a dedicated widgets.Pages component page.
-        ☐ Demonstrate exactly one visible child page.
-        ☐ Demonstrate page selection independently from the control that triggers selection.
-        ☐ Pair Pages with TabBar in a separate composition example.
-    ☐ Create a dedicated widgets.Divider component page.
-        ☐ Demonstrate horizontal and vertical dividers.
-        ☐ Demonstrate straight ends, exterior T-junctions, interior T-junctions, and crossing dividers.
-        ☐ Use Divider components instead of one-off rectangle lines in later component mockups.
+    ☒ Create a dedicated widgets.Panel component page.
+        ☒ Demonstrate unframed and framed Panel presentations.
+        ☒ Demonstrate applicable FRAME_WINDOW, FRAME_PANEL, FRAME_MEDIUM, FRAME_THIN, FRAME_BOLD, FRAME_INTERIOR, and FRAME_INTERIOR_MEDIUM styles.
+        ☒ Demonstrate title, draggable, resizable, and auto-arranged child configurations without combining unrelated states into one variant matrix.
+    ☒ Create a dedicated widgets.ResizingPanel component page.
+        ☒ Demonstrate automatic height and automatic width behavior with changing child content.
+        ☒ Compose the specimen from a component-linked Panel rather than redrawing its frame.
+    ☒ Create a dedicated widgets.Pages component page.
+        ☒ Demonstrate exactly one visible child page.
+        ☒ Demonstrate page selection independently from the control that triggers selection.
+        ☒ Pair Pages with TabBar in a separate composition example.
+    ☒ Create a dedicated widgets.Divider component page.
+        ☒ Demonstrate horizontal and vertical dividers.
+        ☒ Demonstrate straight ends, exterior T-junctions, interior T-junctions, and crossing dividers.
+        ☒ Use Divider components instead of one-off rectangle lines in later component mockups.
 
 1.3 Official DFHack text and tooltip widget mockups:
-    ☐ Create a dedicated widgets.TextArea component page.
-        ☐ Demonstrate multiline content, cursor, selection, wrapping, and scrolling.
-        ☐ Demonstrate normal, focused, disabled, and read-only presentation only where supported by the widget contract.
-        ☐ Compose the normal Scrollbar where scrolling is visible.
-    ☐ Create a dedicated widgets.WrappedLabel component page.
-        ☐ Demonstrate responsive wrapping at multiple widths.
-        ☐ Demonstrate preserved newlines and indentation.
-        ☐ Compose Label styling instead of duplicating it.
-    ☐ Create a dedicated widgets.TooltipLabel component page.
-        ☐ Demonstrate hidden and visible tooltip states.
-        ☐ Demonstrate wrapped and non-wrapped tooltip content.
-        ☐ Demonstrate TooltipLabel inside an appropriate framed Panel or Window composition.
+    ☒ Create a dedicated widgets.TextArea component page.
+        ☒ Demonstrate multiline content, cursor, selection, wrapping, and scrolling.
+        ☒ Demonstrate normal, focused, disabled, and read-only presentation only where supported by the widget contract.
+        ☒ Compose the normal Scrollbar where scrolling is visible.
+    ☒ Create a dedicated widgets.WrappedLabel component page.
+        ☒ Demonstrate responsive wrapping at multiple widths.
+        ☒ Demonstrate preserved newlines and indentation.
+        ☒ Compose Label styling instead of duplicating it.
+    ☒ Create a dedicated widgets.TooltipLabel component page.
+        ☒ Demonstrate hidden and visible tooltip states.
+        ☒ Demonstrate wrapped and non-wrapped tooltip content.
+        ☒ Demonstrate TooltipLabel inside an appropriate framed Panel or Window composition.
 
 1.4 Official DFHack choice and action widget mockups:
-    ☐ Create a dedicated widgets.CycleHotkeyLabel component page.
-        ☐ Demonstrate forward and backward cycling.
-        ☐ Demonstrate label-right and label-below layouts.
-        ☐ Demonstrate option-specific pens using established palette presets.
-    ☐ Create a dedicated widgets.ButtonGroup component page.
-        ☐ Demonstrate synchronized textual selection and graphical button selection.
-        ☐ Compose CycleHotkeyLabel behavior rather than duplicating option logic.
-    ☐ Create a dedicated widgets.ToggleHotkeyLabel component page.
-        ☐ Demonstrate On, Off, focused, and disabled states.
-        ☐ Preserve the official textual toggle semantics.
-    ☐ Create a dedicated widgets.ConfigureButton component page.
-        ☐ Demonstrate normal, hovered, focused, pressed, and disabled states where supported.
-        ☐ Use the existing CP437 or provided DF asset for the gear symbol.
-    ☐ Create a dedicated widgets.HelpButton component page.
-        ☐ Compose ConfigureButton structure instead of duplicating its three-tile button.
-        ☐ Demonstrate help-launch intent without embedding help content into the button.
-    ☐ Create a dedicated widgets.RadioButton component page.
-        ☐ Compose ConfigureButton structure.
-        ☐ Demonstrate true, false, focused, hovered, and disabled states.
-        ☐ Demonstrate the established ASCII-mode checkbox or radio representation.
-    ☐ Create a dedicated widgets.BannerPanel component page.
-        ☐ Demonstrate the standalone side-banner container without TextButton content.
-        ☐ Refactor or verify TextButton as a composition of BannerPanel and HotkeyLabel.
+    ☒ Create a dedicated widgets.CycleHotkeyLabel component page.
+        ☒ Demonstrate forward and backward cycling.
+        ☒ Demonstrate label-right and label-below layouts.
+        ☒ Demonstrate option-specific pens using established palette presets.
+    ☒ Create a dedicated widgets.ButtonGroup component page.
+        ☒ Demonstrate synchronized textual selection and graphical button selection.
+        ☒ Compose CycleHotkeyLabel behavior rather than duplicating option logic.
+    ☒ Create a dedicated widgets.ToggleHotkeyLabel component page.
+        ☒ Demonstrate On, Off, focused, and disabled states.
+        ☒ Preserve the official textual toggle semantics.
+    ☒ Create a dedicated widgets.ConfigureButton component page.
+        ☒ Demonstrate normal, hovered, focused, pressed, and disabled states where supported.
+        ☒ Use the existing CP437 or provided DF asset for the gear symbol.
+    ☒ Create a dedicated widgets.HelpButton component page.
+        ☒ Compose ConfigureButton structure instead of duplicating its three-tile button.
+        ☒ Demonstrate help-launch intent without embedding help content into the button.
+    ☒ Create a dedicated widgets.RadioButton coverage page.
+        - Deferred visual component: the locally installed DFHack 53.15-r1
+          source exports no RadioButton and contains no radio-button module.
+          The page records the source block instead of fabricating a control.
+        ☒ Compose ConfigureButton structure.
+            - Deferred until a locally installed DFHack version supplies the
+              RadioButton implementation.
+        ☒ Demonstrate true, false, focused, hovered, and disabled states.
+            - Deferred until a locally installed DFHack version supplies the
+              RadioButton implementation.
+        ☒ Demonstrate the established ASCII-mode checkbox or radio representation.
+            - Deferred until a locally installed DFHack version supplies the
+              RadioButton implementation.
+    ☒ Create a dedicated widgets.BannerPanel component page.
+        ☒ Demonstrate the standalone side-banner container without TextButton content.
+        ☒ Refactor or verify TextButton as a composition of BannerPanel and HotkeyLabel.
 
 1.5 Official DFHack collection and navigation widget mockups:
-    ☐ Create a dedicated widgets.FilteredList component page.
-        ☐ Compose component-linked List, EditField, and Label instances.
-        ☐ Demonstrate filter-above and filter-below layouts.
-        ☐ Demonstrate matching results, no-match label, selection, submission, and scrolling.
-    ☐ Create a dedicated widgets.Tab component page.
-        ☐ Demonstrate active, inactive, focused, hovered, and disabled states where supported.
-    ☐ Create a dedicated widgets.TabBar component page.
-        ☐ Compose component-linked Tab instances.
-        ☐ Demonstrate wrapped tabs.
-        ☐ Demonstrate truncated and horizontally scrolled tabs with scroll labels.
-        ☐ Demonstrate selection synchronized with widgets.Pages.
+    ☒ Create a dedicated widgets.FilteredList component page.
+        ☒ Compose component-linked List, EditField, and Label instances.
+        ☒ Demonstrate filter-above and filter-below layouts.
+        ☒ Demonstrate matching results, no-match label, selection, submission, and scrolling.
+    ☒ Create a dedicated widgets.Tab component page.
+        ☒ Demonstrate active, inactive, focused, hovered, and disabled states where supported.
+    ☒ Create a dedicated widgets.TabBar component page.
+        ☒ Compose component-linked Tab instances.
+        ☒ Demonstrate wrapped tabs.
+        ☒ Demonstrate truncated and horizontally scrolled tabs with scroll labels.
+        ☒ Demonstrate selection synchronized with widgets.Pages.
 
 1.6 Official DFHack slider and specialized widget mockups:
-    ☐ Create a dedicated widgets.RangeSlider component page.
-        ☐ Demonstrate minimum handle, maximum handle, selected range, and whole-range drag states.
-        ☐ Demonstrate multiple stop counts.
-    ☐ Create a dedicated widgets.Slider component page.
-        ☐ Demonstrate handle position, focus, dragging, and multiple stop counts.
-    ☐ Create a dedicated widgets.DimensionsTooltip component page.
-        ☐ Demonstrate cursor-following placement.
-        ☐ Demonstrate representative 3D dimension strings and display offsets.
-    ☐ Keep RangeSlider, Slider, and DimensionsTooltip lower priority for the DwarfSpec runner while retaining them in the DFHack library-completeness backlog.
+    ☒ Create a dedicated widgets.RangeSlider component page.
+        ☒ Demonstrate minimum handle, maximum handle, selected range, and whole-range drag states.
+        ☒ Demonstrate multiple stop counts.
+    ☒ Create a dedicated widgets.Slider component page.
+        ☒ Demonstrate handle position, focus, dragging, and multiple stop counts.
+    ☒ Create a dedicated widgets.DimensionsTooltip component page.
+        ☒ Demonstrate cursor-following placement.
+        ☒ Demonstrate representative 3D dimension strings and display offsets.
+    ☒ Keep RangeSlider, Slider, and DimensionsTooltip lower priority for the DwarfSpec runner while retaining them in the DFHack library-completeness backlog.
+        - Evidence: docs/test-runner-ui-foundation-contracts.md, "Reuse decisions for the runner".
 
 1.7 Official DFHack widget coverage gate:
-    ☐ Complete all 20 missing standalone widget mockups before introducing an equivalent custom primitive.
-    ☐ Verify that BannerPanel has a standalone specimen even though it is implicit in TextButton.
-    ☐ Verify that every official widget page uses font.baseGame, the single game text size, linked palette presets, and existing CP437 assets.
-    ☐ Verify that every official widget specimen is wrapped in an appropriately named top-level group or board.
-    ☐ Verify that every official widget page uses the established dark Canvas Background.
-    ☐ Record why an official widget is unsuitable wherever a later task retains a custom alternative.
+    ☒ Complete all 20 missing standalone widget mockups before introducing an equivalent custom primitive.
+    ☒ Verify that BannerPanel has a standalone specimen even though it is implicit in TextButton.
+    ☒ Verify that every official widget page uses font.baseGame, the single game text size, linked palette presets, and existing CP437 assets.
+    ☒ Verify that every official widget specimen is wrapped in an appropriately named top-level group or board.
+    ☒ Verify that every official widget page uses the established dark Canvas Background.
+    ☒ Record why an official widget is unsuitable wherever a later task retains a custom alternative.
+        - Penpot audit: 19 visual component pages plus the source-blocked
+          RadioButton page; every page has one named top-level board, Canvas
+          Background #1b1b1b, font.baseGame at 12 px, linked palette colors,
+          and no numeric CP437 stand-ins.
 
 1.8 Component architecture rules:
-    ☐ Organize the proposal into official DFHack widgets, custom generic components, DwarfSpec domain components, reusable screen panels, and workspace mockups.
-    ☐ Give every component one clearly documented responsibility.
-    ☐ Document what each complex component owns and explicitly does not own.
-    ☐ Extract repeated structures instead of duplicating their shapes across components or mockup states.
-    ☐ Compose official DFHack widgets and existing primitives inside domain components instead of copying their borders, labels, scrollbars, or interaction states.
-    ☐ Keep cross-panel selection and synchronization in the workspace/controller layer rather than individual panels.
-    ☐ Keep status calculation, aggregation, flake detection, sorting, capture, and editor launching outside presentation-only components.
-    ☐ Avoid one component with a Cartesian product of unrelated variant dimensions.
-    ☐ Prefer nested state components and content overrides over separate copies of an entire complex component.
-    ☐ Do not create components for one-off headings, dividers, explanatory text, individual footer counts, stack separators, or complete workspace mockups.
-    ☐ Create a component when an element is reused, has independent state or interaction, contains repeated children, owns scrolling or clipping, or appears across multiple mockup states.
+    ☒ Organize the proposal into official DFHack widgets, custom generic components, DwarfSpec domain components, reusable screen panels, and workspace mockups.
+    ☒ Give every component one clearly documented responsibility.
+    ☒ Document what each complex component owns and explicitly does not own.
+    ☒ Extract repeated structures instead of duplicating their shapes across components or mockup states.
+    ☒ Compose official DFHack widgets and existing primitives inside domain components instead of copying their borders, labels, scrollbars, or interaction states.
+    ☒ Keep cross-panel selection and synchronization in the workspace/controller layer rather than individual panels.
+    ☒ Keep status calculation, aggregation, flake detection, sorting, capture, and editor launching outside presentation-only components.
+    ☒ Avoid one component with a Cartesian product of unrelated variant dimensions.
+    ☒ Prefer nested state components and content overrides over separate copies of an entire complex component.
+    ☒ Do not create components for one-off headings, dividers, explanatory text, individual footer counts, stack separators, or complete workspace mockups.
+    ☒ Create a component when an element is reused, has independent state or interaction, contains repeated children, owns scrolling or clipping, or appears across multiple mockup states.
+        - Evidence: docs/test-runner-ui-foundation-contracts.md, "Component architecture".
 
 1.9 Product and data ownership:
-    ☐ Document the four selection levels: run, file or suite, test attempt, and command or event step.
-    ☐ Define which selection level owns each action, status, summary, log, and evidence view.
-    ☐ Define the minimum information required to answer: what failed, why, at which step, in which attempt, and what should be rerun.
-    ☐ Define the boundary between the structured command trace and raw DFHack output.
-    ☐ Define the boundary between DwarfSpec's Debug action and external VS Code debugging.
-    ☐ Define a view-model contract for run state, progress, counts, scope, elapsed time, and reproduce command.
-    ☐ Define a view-model contract for explorer nodes and their supplied aggregate statuses.
-    ☐ Define a view-model contract for test results, attempts, failure category, behavior outcome, cleanup outcome, and infrastructure outcome.
-    ☐ Define a view-model contract for trace steps, groups, durations, retry or wait data, source locations, evidence references, and raw-log anchors.
-    ☐ Define a view-model contract for captured or textual host evidence and its availability state.
-    ☐ Keep TEST RESULTS as the pane title; use the breadcrumb to identify its current scope.
-    ☐ Show the selected test name and active attempt without overloading the breadcrumb.
+    ☒ Document the four selection levels: run, file or suite, test attempt, and command or event step.
+    ☒ Define which selection level owns each action, status, summary, log, and evidence view.
+    ☒ Define the minimum information required to answer: what failed, why, at which step, in which attempt, and what should be rerun.
+    ☒ Define the boundary between the structured command trace and raw DFHack output.
+    ☒ Define the boundary between DwarfSpec's Debug action and external VS Code debugging.
+    ☒ Define a view-model contract for run state, progress, counts, scope, elapsed time, and reproduce command.
+    ☒ Define a view-model contract for explorer nodes and their supplied aggregate statuses.
+    ☒ Define a view-model contract for test results, attempts, failure category, behavior outcome, cleanup outcome, and infrastructure outcome.
+    ☒ Define a view-model contract for trace steps, groups, durations, retry or wait data, source locations, evidence references, and raw-log anchors.
+    ☒ Define a view-model contract for captured or textual host evidence and its availability state.
+    ☒ Keep TEST RESULTS as the pane title; use the breadcrumb to identify its current scope.
+    ☒ Show the selected test name and active attempt without overloading the breadcrumb.
+        - Evidence: docs/test-runner-ui-foundation-contracts.md, "Product and data ownership".
 
 1.10 Runtime capability decisions:
-    ☐ Confirm which run modes can be configured.
-    ☐ Confirm whether repeat count is configurable from the UI.
-    ☐ Confirm whether the runner can report attempt-level outcomes.
-    ☐ Confirm whether the runner can identify flaky outcomes within one repeated run.
-    ☐ Confirm whether the runner can emit structured command and event steps.
-    ☐ Confirm whether trace steps can identify source locations and raw-log anchors.
-    ☐ Confirm whether the runner can provide retry, wait, or polling details.
-    ☐ Confirm which host-evidence modes can be provided.
-    ☐ Confirm whether evidence is live, captured, retained, inferred, or unavailable.
-    ☐ Confirm whether Open Source can target file, line, and column in the configured editor.
-    ☐ Confirm which debug-break and pause options are supported.
-    ☐ Confirm whether Host Events can be separated reliably from raw DFHack output.
-    ☐ Remove or mark unavailable every affordance not supported by the confirmed contracts.
+    ☒ Confirm which run modes can be configured.
+    ☒ Confirm whether repeat count is configurable from the UI.
+    ☒ Confirm whether the runner can report attempt-level outcomes.
+    ☒ Confirm whether the runner can identify flaky outcomes within one repeated run.
+    ☒ Confirm whether the runner can emit structured command and event steps.
+    ☒ Confirm whether trace steps can identify source locations and raw-log anchors.
+    ☒ Confirm whether the runner can provide retry, wait, or polling details.
+    ☒ Confirm which host-evidence modes can be provided.
+    ☒ Confirm whether evidence is live, captured, retained, inferred, or unavailable.
+    ☒ Confirm whether Open Source can target file, line, and column in the configured editor.
+    ☒ Confirm which debug-break and pause options are supported.
+    ☒ Confirm whether Host Events can be separated reliably from raw DFHack output.
+    ☒ Remove or mark unavailable every affordance not supported by the confirmed contracts.
+        - Verified in Penpot: Open Source remains non-visible/unavailable;
+          break/pause controls, raw-log-anchor claims, and retained-capture
+          claims are absent; successful cleanup is silent.
 
 1.11 Current proposal cleanup:
-    ☐ Remove the TEST, RESULT, and R headers from Tree View With Columns.
-    ☐ Remove the duplicate Result Column Indicator list from the test explorer.
-    ☐ Keep exactly one status indicator inside each tree row and inside the tree's shared scroll panel.
-    ☐ Replace every typed visual symbol with the corresponding existing CP437 tile asset.
-        ☐ Replace typed connection, follow-output, and host-responsive bullets.
-        ☐ Replace typed pass, failure, and error marks.
-        ☐ Replace typed arrows in stacks, flows, and event descriptions.
-        ☐ Replace typed multiplication and separator symbols where they serve as visual symbols.
-    ☐ Remove or archive the hidden list-based result layers superseded by Generic Table View.
-    ☐ Remove or archive other hidden, superseded presentation layers after verifying that no live component instance depends on them.
-    ☐ Remove the decorative RUN / INSPECT / REPRODUCE / RESTORE title-bar copy.
-    ☐ Remove any protocol-version or DFHack-version badges.
-    ☐ Consolidate the duplicate top command preview and bottom rerun command.
+    ☒ Remove the TEST, RESULT, and R headers from Tree View With Columns.
+    ☒ Remove the duplicate Result Column Indicator list from the test explorer.
+    ☒ Keep exactly one status indicator inside each tree row and inside the tree's shared scroll panel.
+    ☒ Replace every typed visual symbol with the corresponding existing CP437 tile asset.
+        ☒ Replace typed connection, follow-output, and host-responsive bullets.
+        ☒ Replace typed pass, failure, and error marks.
+        ☒ Replace typed arrows in stacks, flows, and event descriptions.
+        ☒ Replace typed multiplication and separator symbols where they serve as visual symbols.
+    ☒ Remove or archive the hidden list-based result layers superseded by Generic Table View.
+    ☒ Remove or archive other hidden, superseded presentation layers after verifying that no live component instance depends on them.
+    ☒ Remove the decorative RUN / INSPECT / REPRODUCE / RESTORE title-bar copy.
+    ☒ Remove any protocol-version or DFHack-version badges.
+    ☒ Consolidate the duplicate top command preview and bottom rerun command.
+        - Penpot audit: zero tree headers, zero side-list indicators, ten tree
+          rows with one linked CP437 status each, zero visible superseded
+          result-list layers, zero Unicode visual symbols, and one command
+          preview. The live Tree View With Columns, Generic Table View,
+          Dropdown Control, Tree View, and Command Menu masters are on their
+          dedicated pages; superseded Foundations masters remain only as
+          hidden, clearly named recovery archives with no visible dependents.
 
 1.12 Existing DFHack component reuse:
-    ☐ Reuse Panel for framed or grouped screen regions.
-    ☐ Reuse Window for the top-level runner window.
-    ☐ Reuse ResizingPanel for content-sized groups when automatic sizing matches the layout.
-    ☐ Reuse Pages wherever exactly one of several child views is visible.
-    ☐ Reuse Divider instead of drawing one-off separator rectangles.
-    ☐ Reuse TextButton for clickable actions.
-    ☐ Reuse ConfigureButton for compact configuration launchers.
-    ☐ Reuse HelpButton for command-help launchers.
-    ☐ Reuse RadioButton for compact graphical binary choices.
-    ☐ Reuse HotkeyLabel only for genuine clickable hotkey labels.
-    ☐ Reuse CycleHotkeyLabel for small finite choices that can be cycled without opening a menu.
-    ☐ Reuse ToggleHotkeyLabel for labeled textual On and Off choices.
-    ☐ Reuse ButtonGroup when synchronized graphical choices and a CycleHotkeyLabel are both required.
-    ☐ Reuse Dropdown Control only when exposing the complete choice set in a popup is more usable than CycleHotkeyLabel.
-    ☐ Reuse EditField only for single-line editable or copyable field interactions.
-    ☐ Reuse TextArea only for genuinely multiline editable text.
-    ☐ Reuse WrappedLabel for responsive multiline read-only text.
-    ☐ Reuse TooltipLabel for dynamically visible tooltip or contextual help text.
-    ☐ Reuse Breadcrumb in the Test Results title bar.
-    ☐ Reuse Tree View With Columns as the test-explorer container.
-    ☐ Reuse Generic Table View as the test-result index.
-    ☐ Reuse the normal Scrollbar wherever scrolling is required.
-    ☐ Reuse widgets.List and its item presentation for chronological or selectable lists when their semantics match.
-    ☐ Reuse FilteredList for flat filterable lists instead of rebuilding List, EditField, and no-match Label composition.
-    ☐ Reuse Tab and TabBar for tab navigation.
-    ☐ Reuse Pages as the content container paired with TabBar.
-    ☐ Reuse Slider and RangeSlider when their value-selection semantics match.
-    ☐ Reuse DimensionsTooltip only for cursor-following 3D dimension feedback.
-    ☐ Reuse Command Menu only for transient action menus.
-    ☐ Reuse issue for concise failure or unavailable-state messaging when its semantics match.
-    ☐ Reuse targeting_prompt only for an active targeting or armed-debug prompt.
-    ☐ Record why any new component cannot be represented by an existing component or a new variant of one.
+    ☒ Reuse Panel for framed or grouped screen regions.
+    ☒ Reuse Window for the top-level runner window.
+    ☒ Reuse ResizingPanel for content-sized groups when automatic sizing matches the layout.
+    ☒ Reuse Pages wherever exactly one of several child views is visible.
+    ☒ Reuse Divider instead of drawing one-off separator rectangles.
+    ☒ Reuse TextButton for clickable actions.
+    ☒ Reuse ConfigureButton for compact configuration launchers.
+    ☒ Reuse HelpButton for command-help launchers.
+    ☒ Do not use RadioButton in the DFHack 53.15-r1 baseline.
+        - Rationale: the locally installed widget library does not export it.
+          Use ToggleHotkeyLabel for labeled binary choices until a local
+          RadioButton implementation can be source-verified.
+    ☒ Reuse HotkeyLabel only for genuine clickable hotkey labels.
+    ☒ Reuse CycleHotkeyLabel for small finite choices that can be cycled without opening a menu.
+    ☒ Reuse ToggleHotkeyLabel for labeled textual On and Off choices.
+    ☒ Reuse ButtonGroup when synchronized graphical choices and a CycleHotkeyLabel are both required.
+    ☒ Reuse Dropdown Control only when exposing the complete choice set in a popup is more usable than CycleHotkeyLabel.
+    ☒ Reuse EditField only for single-line editable or copyable field interactions.
+    ☒ Reuse TextArea only for genuinely multiline editable text.
+    ☒ Reuse WrappedLabel for responsive multiline read-only text.
+    ☒ Reuse TooltipLabel for dynamically visible tooltip or contextual help text.
+    ☒ Reuse Breadcrumb in the Test Results title bar.
+    ☒ Reuse Tree View With Columns as the test-explorer container.
+    ☒ Reuse Generic Table View as the test-result index.
+    ☒ Reuse the normal Scrollbar wherever scrolling is required.
+    ☒ Reuse widgets.List and its item presentation for chronological or selectable lists when their semantics match.
+    ☒ Reuse FilteredList for flat filterable lists instead of rebuilding List, EditField, and no-match Label composition.
+    ☒ Reuse Tab and TabBar for tab navigation.
+    ☒ Reuse Pages as the content container paired with TabBar.
+    ☒ Reuse Slider and RangeSlider when their value-selection semantics match.
+    ☒ Reuse DimensionsTooltip only for cursor-following 3D dimension feedback.
+    ☒ Reuse Command Menu only for transient action menus.
+    ☒ Reuse issue for concise failure or unavailable-state messaging when its semantics match.
+    ☒ Reuse targeting_prompt only for an active targeting or armed-debug prompt.
+    ☒ Record why any new component cannot be represented by an existing component or a new variant of one.
+        - Evidence: docs/test-runner-ui-foundation-contracts.md, "Reuse decisions
+          for the runner" and "Penpot verification".
 
 Phase 2: Build the generic component system
     ☐ Exit with linked, DwarfSpec-independent generic components whose responsibilities, reuse points, and dependency direction are documented and verified.
@@ -285,10 +320,11 @@ Phase 2: Build the generic component system
 
 2.7 Official DFHack widgets: binary-choice application:
     ☐ Reuse ToggleHotkeyLabel for a labeled textual On or Off setting.
-    ☐ Reuse RadioButton for a compact graphical checkbox or radio setting.
+    ☐ Reevaluate RadioButton only after the locally installed DFHack version
+      supplies a source-verifiable implementation.
     ☐ Reuse ButtonGroup for synchronized graphical option selection only when its full behavior is required.
     ☐ Use existing CP437 assets and established palette presets in every choice widget.
-    ☐ Reuse ToggleHotkeyLabel or RadioButton for Follow Output, Wrap, and supported debug options.
+    ☐ Reuse ToggleHotkeyLabel for Follow Output, Wrap, and supported debug options.
     ☐ Do not create a parallel custom Toggle component.
 
 2.8 Generic component: Source Reference:
@@ -413,7 +449,7 @@ Phase 3: Build the DwarfSpec domain component system
     ☐ Create a dedicated component page for Reproduce Command and its states.
 
 3.10 DwarfSpec component: Debug Options:
-    ☐ Create Debug Options from Panel, ConfigureButton, CycleHotkeyLabel, ToggleHotkeyLabel or RadioButton, Command Menu, Status Indicator, and targeting_prompt where applicable.
+    ☐ Create Debug Options from Panel, ConfigureButton, CycleHotkeyLabel, ToggleHotkeyLabel, Command Menu, Status Indicator, and targeting_prompt where applicable.
     ☐ Use Dropdown Control only when a debug choice set is too large or unclear to cycle.
     ☐ Include Break on Assertion only if supported by the runner.
     ☐ Include Break on Lua Error only if supported by the runner.
@@ -485,14 +521,13 @@ Phase 4: Compose the DwarfSpec runner experience
     ☐ Create a dedicated component page for Evidence Inspector and its states.
 
 4.6 Reusable screen panel: Output Drawer:
-    ☐ Create Output Drawer from Panel or ResizingPanel, TabBar, Pages, widgets.List, Log Row, ToggleHotkeyLabel or RadioButton, CycleHotkeyLabel or Dropdown Control, Divider, and the normal Scrollbar.
+    ☐ Create Output Drawer from Panel or ResizingPanel, TabBar, Pages, widgets.List, Log Row, ToggleHotkeyLabel, CycleHotkeyLabel or Dropdown Control, Divider, and the normal Scrollbar.
     ☐ Retain DFHACK OUTPUT for raw console output.
     ☐ Add HOST EVENTS only if connection, focus, executor, queue, and quarantine events can be separated reliably.
     ☐ Retain REPORT only when exposing the raw structured report helps diagnose runner behavior.
     ☐ Do not duplicate the structured Command Trace as another raw-output tab.
     ☐ Add Follow Output, Wrap, and Filter controls.
     ☐ Use ToggleHotkeyLabel for labeled Follow Output and Wrap controls.
-    ☐ Use RadioButton instead when the compact graphical binary-control presentation is more appropriate.
     ☐ Use CycleHotkeyLabel for small finite filter modes and Dropdown Control for larger filter choice sets.
     ☐ Define selection and highlighting for a raw-log entry correlated with the selected trace step.
     ☐ Define buffering, truncation, long-line, wrapping, and large-output behavior.
@@ -550,7 +585,7 @@ Phase 5: Wire interactions and organize the Penpot file
     ☐ Prototype opening and closing Mode, Repeat, Filter, and Debug Options dropdowns only where Dropdown Control remains justified.
     ☐ Prototype cycling table-header sort modes.
     ☐ Prototype switching Output Drawer tabs through TabBar and synchronizing the selected Pages child.
-    ☐ Prototype Follow Output and Wrap through ToggleHotkeyLabel or RadioButton.
+    ☐ Prototype Follow Output and Wrap through ToggleHotkeyLabel.
     ☐ Prototype expanding and collapsing trace groups.
     ☐ Prototype collapsing and expanding Output Drawer.
     ☐ Prototype Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop state transitions.
