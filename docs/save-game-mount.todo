@@ -34,13 +34,20 @@ Non-goals:
     ☐ Do not load inactive worlds that the underlying Dwarf Fortress load path cannot select.
 
 Phase 0 - Confirm the runtime boundary:
-    ☐ Record the active checkout, branch, worktree state, installed rock version, and package contents before editing.
-    ☐ Record the existing `ds.getSaveDirectoryName()` implementation, declaration, unit coverage, live coverage, and documentation.
-    ☐ Confirm the DFHack APIs and state-change events used to determine whether a world is loaded and which save directory it uses.
-    ☐ Confirm that raw-frame waits continue across world unload and load.
-    ☐ Confirm the supported screens from which the installed `load-save` command can load a requested save.
-    ☐ Confirm a stable mechanism for choosing `QUIT_WITHOUT_SAVING` without localized text, pixel coordinates, or resolution assumptions.
-    ☐ Record the focused and full pre-change test baselines.
+    ☒ Record the active checkout, branch, worktree state, installed rock version, and package contents before editing.
+        - Evidence: `world-mount-system` at `ead0763`; worktree and index were clean. LuaRocks has `dwarfspec 0.2.0-1` installed. `dist/dwarfspec-0.2.0-1.all.rock` contains 92 entries, including `lua/dwarfspec/ds.lua`, and no test entries.
+    ☒ Record the existing `ds.getSaveDirectoryName()` implementation, declaration, unit coverage, live coverage, and documentation.
+        - Evidence: the implementation is in `src/dwarfspec/ds.lua`; the declaration is in `src/ds.d.lua`; coverage is in `tests/unit/ds_mount_commands_spec.lua` and `tests/automation/ds_export_live_spec.lua`; the command table is in `README.md`.
+    ☒ Confirm the DFHack APIs and state-change events used to determine whether a world is loaded and which save directory it uses.
+        - Evidence: `dfhack.isWorldLoaded()` is the world-loaded predicate and `dfhack.world.ReadWorldFolder()` returns the loaded directory. DFHack publishes `SC_WORLD_LOADED` and `SC_WORLD_UNLOADED`; direct predicate and directory reads remain the command's authoritative checks.
+    ☒ Confirm that raw-frame waits continue across world unload and load.
+        - Evidence: DwarfSpec schedules ordinary waits with `dfhack.timeout(..., 'frames', ...)`. DFHack stores frame timers separately and cancels only tick timers on `SC_WORLD_UNLOADED`; raw-frame callbacks therefore remain available during the transition.
+    ☒ Confirm the supported screens from which the installed `load-save` command can load a requested save.
+        - Evidence: DFHack 53.15-r1 `scripts/load-save.lua` accepts an existing `viewscreen_loadgamest`, or a `viewscreen_titlest` containing the `Continue` choice, then defers its final `SELECT` by one raw frame.
+    ☒ Confirm a stable mechanism for choosing `QUIT_WITHOUT_SAVING` without localized text, pixel coordinates, or resolution assumptions.
+        - Evidence: `df.main_menu_option_type.QUIT_WITHOUT_SAVING` is a generated enum value. The native options interface exposes its current `option` vector and dedicated fortress/adventure confirmation flags, allowing the adapter to locate the action by enum identity rather than rendered text or coordinates. Phase 2 will validate the corresponding input sequence against a disposable live save.
+    ☒ Record the focused and full pre-change test baselines.
+        - Evidence: focused current-save unit coverage: 1 success, 0 failures, 0 errors; full unit suite: 530 successes, 0 failures, 0 errors; Lua syntax and formatting: 253 files; safe live export suite: 2 successes, 0 failures, 0 errors, `cleanup_confirmed=true`.
 
 Phase 1 - Implement current-save comparison and validation:
     ☐ Validate that `directory_name` is a string containing one nonempty directory name.
