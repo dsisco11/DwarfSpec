@@ -1910,6 +1910,107 @@ describe('DwarfSpec public mount commands', function()
         assert.same({482, 102}, {dfhack.screen.getMousePixels()})
     end)
 
+    it('moves to world tiles and recenters the map view by default',
+            function()
+        ds.mountNativeScreen()
+
+        assert.same({40, 50, 5}, {
+            ds.move_pointer(
+                {x=40, y=50, z=5}, EPointerSpace.WORLD_TILE)
+        })
+
+        assert.same({x=35, y=47, z=5}, map_view_position)
+        assert.same({5, 3}, {dfhack.screen.getMousePos()})
+        assert.same({55, 28}, {dfhack.screen.getMousePixels()})
+
+        assert.is_true(cleanup.run(registry, 'world-tile pointer test'))
+        assert.same({x=12, y=34, z=5}, map_view_position)
+        assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+    end)
+
+    it('moves to an already visible world tile without recentering',
+            function()
+        ds.mountNativeScreen()
+
+        assert.same({14, 36, 5}, {
+            ds.move_pointer({x=14, y=36, z=5},
+                EPointerSpace.WORLD_TILE, {recenter=false})
+        })
+
+        assert.same({x=12, y=34, z=5}, map_view_position)
+        assert.same({2, 2}, {dfhack.screen.getMousePos()})
+        assert.same({25, 20}, {dfhack.screen.getMousePixels()})
+    end)
+
+    it('uses Premium map pixels for world-tile pointer movement', function()
+        ds.mountNativeScreen()
+        dfhack.screen.inGraphicsMode = function() return true end
+        df.global.gps.viewport_zoom_factor = 32
+
+        ds.move_pointer(
+            {x=40, y=50, z=5}, EPointerSpace.WORLD_TILE)
+
+        assert.same({4, 3}, {dfhack.screen.getMousePos()})
+        assert.same({44, 28}, {dfhack.screen.getMousePixels()})
+    end)
+
+    it('rejects invalid or invisible world-tile pointer requests',
+            function()
+        ds.mountNativeScreen()
+        local cases = {
+            {
+                invoke=function()
+                    ds.move_pointer({x=-1, y=36, z=5},
+                        EPointerSpace.WORLD_TILE)
+                end,
+                expected='world-tile x coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer({x=14, y=36},
+                        EPointerSpace.WORLD_TILE)
+                end,
+                expected='world-tile z coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer({x=14, y=36, z=5},
+                        EPointerSpace.WORLD_TILE, 'bad')
+                end,
+                expected='world-tile pointer options must be a table',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer({x=14, y=36, z=5},
+                        EPointerSpace.WORLD_TILE, {recenter='yes'})
+                end,
+                expected='world-tile pointer recenter option must be a boolean',
+            },
+        }
+        for _, case in ipairs(cases) do
+            assert.has_error(case.invoke, case.expected)
+        end
+        local invisible_cases = {
+            {
+                position={x=14, y=36, z=6},
+                expected='world tile z coordinate 6 is not on the visible ' ..
+                    'z-level 5',
+            },
+            {
+                position={x=100, y=100, z=5},
+                expected='world tile (100, 100, 5) is outside the current ' ..
+                    'map view',
+            },
+        }
+        for _, case in ipairs(invisible_cases) do
+            local ok, failure = pcall(ds.move_pointer, case.position,
+                EPointerSpace.WORLD_TILE, {recenter=false})
+            assert.is_false(ok)
+            assert.matches(case.expected, failure, 1, true)
+        end
+    end)
+
     it('rejects invalid arbitrary pointer coordinates explicitly', function()
         ds.mountNativeScreen()
         local cases = {

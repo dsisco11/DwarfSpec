@@ -6,4 +6,5 @@ local immutable_enum = require('dwarfspec.immutable_enum')
 return immutable_enum.define_numeric({
     GRID=1,
     PIXELS=2,
+    WORLD_TILE=3,
 })

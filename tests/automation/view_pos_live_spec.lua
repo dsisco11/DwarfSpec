@@ -74,4 +74,36 @@ describe('map-view position command', function()
         assert.is_true(ds.current_run().mount_cleanup_probe()
             .map_view_position_active)
     end)
+
+    it('moves the pointer to a live world tile with optional recentering',
+            function()
+        assert.is_true(dfhack.isMapLoaded(),
+            'world-tile pointer acceptance requires a loaded map')
+        ds.mountNativeScreen()
+        local visible_target = ds.getViewPos(ds.EScreenOrigin.CENTER)
+
+        assert.same({
+            visible_target.x,
+            visible_target.y,
+            visible_target.z,
+        }, {
+            ds.move_pointer(visible_target, ds.EPointerSpace.WORLD_TILE,
+                {recenter=false})
+        })
+        assert.same(visible_target, dfhack.gui.getMousePos(true))
+
+        local recentered_target = alternate_view_position(visible_target)
+        assert.same({
+            recentered_target.x,
+            recentered_target.y,
+            recentered_target.z,
+        }, {
+            ds.move_pointer(
+                recentered_target, ds.EPointerSpace.WORLD_TILE)
+        })
+        assert.same(recentered_target, dfhack.gui.getMousePos(true))
+        local cleanup = ds.current_run().mount_cleanup_probe()
+        assert.is_true(cleanup.pointer_active)
+        assert.is_true(cleanup.map_view_position_active)
+    end)
 end)

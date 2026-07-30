@@ -30,8 +30,11 @@
 ---The `ds.EPointerSpace.PIXELS` coordinate-space value.
 ---@alias dwarfspec.PixelPointerSpace 2
 
+---The `ds.EPointerSpace.WORLD_TILE` coordinate-space value.
+---@alias dwarfspec.WorldTilePointerSpace 3
+
 ---A pointer coordinate space obtained from `ds.EPointerSpace`.
----@alias dwarfspec.EPointerSpace dwarfspec.GridPointerSpace|dwarfspec.PixelPointerSpace
+---@alias dwarfspec.EPointerSpace dwarfspec.GridPointerSpace|dwarfspec.PixelPointerSpace|dwarfspec.WorldTilePointerSpace
 
 ---@alias dwarfspec.EScreenOrigin
 ---| 'top_left'
@@ -66,10 +69,12 @@
 ---@field UP `up`
 
 ---Immutable pointer coordinate spaces. Use these members instead of backing
----values: `GRID` addresses UI-grid cells and `PIXELS` addresses screen pixels.
+---values: `GRID` addresses UI-grid cells, `PIXELS` addresses screen pixels,
+---and `WORLD_TILE` addresses map tiles.
 ---@class dwarfspec.EPointerSpaceEnum
 ---@field GRID dwarfspec.GridPointerSpace Zero-based UI-grid cells; the default.
 ---@field PIXELS dwarfspec.PixelPointerSpace Exact zero-based screen pixels.
+---@field WORLD_TILE dwarfspec.WorldTilePointerSpace Zero-based world-map tiles.
 
 ---Immutable map viewport anchors used by `getViewPos()` and `setViewPos()`.
 ---@class dwarfspec.EScreenOriginEnum
@@ -116,6 +121,9 @@
 
 ---@class dwarfspec.RedrawOptions
 ---@field wait? boolean Wait for the resulting completed render; defaults to true.
+
+---@class dwarfspec.WorldTilePointerOptions
+---@field recenter? boolean Recenter the map view on the tile before moving; defaults to true.
 
 ---@class dwarfspec.Viewport
 ---@field width integer
@@ -379,14 +387,18 @@ function DS.redraw(view, options) end
 ---@return table
 function DS.capture_view_tree(name, options) end
 
----Moves the pointer by subject anchor, UI-grid cell, or exact screen pixel.
+---Moves the pointer by subject anchor, UI-grid cell, exact screen pixel, or
+---world tile.
 ---Numeric calls default to `EPointerSpace.GRID`. Explicit pixel calls preserve
----the requested pixel exactly and expose its derived UI-grid cell. DwarfSpec
----reads current effective renderer geometry for each move and restores both
----coordinate representations automatically during cleanup.
+---the requested pixel exactly and expose its derived UI-grid cell. World-tile
+---calls recenter the map view by default; pass `{recenter=false}` to require
+---the tile to already be visible. DwarfSpec reads current effective renderer
+---geometry for each move and restores pointer and camera state automatically
+---during cleanup.
 ---@overload fun(x: integer, y: integer): integer, integer
 ---@overload fun(x: integer, y: integer, space: dwarfspec.GridPointerSpace): integer, integer
 ---@overload fun(x: integer, y: integer, space: dwarfspec.PixelPointerSpace): integer, integer
+---@overload fun(position: dwarfspec.MapViewPosition, space: dwarfspec.WorldTilePointerSpace, options?: dwarfspec.WorldTilePointerOptions): integer, integer, integer
 ---@param view? dwarfspec.Subject Defaults to the current source root.
 ---@param anchor? dwarfspec.PointerAnchor Subject anchors use UI-grid cells.
 ---@return integer x

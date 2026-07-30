@@ -240,6 +240,7 @@ simulation ticks stop while the game is paused.
 | `subject:text()` | Return the selected view's inspected text value. |
 | `subject:raw()` | Access the borrowed Lua view or native DF widget as an exceptional escape hatch. |
 | `ds.move_pointer(x, y, space)` | Move by zero-based grid cell by default or exact pixel with `PIXELS`; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `ds.move_pointer(position, ds.EPointerSpace.WORLD_TILE, options)` | Move to a world tile, recentering the camera by default; use `{recenter=false}` to require the tile to already be visible. |
 | `ds.hover(x, y, space)` | Move to a numeric pointer coordinate and wait for render; DwarfSpec automatically restores inherited pointer state during cleanup. |
 | `subject:move_pointer(anchor)` | Move into the selected view; DwarfSpec automatically restores inherited pointer state during cleanup. |
 | `subject:hover(anchor)` | Hover the selected view and preserve the subject; DwarfSpec automatically restores inherited pointer state during cleanup. |
@@ -261,21 +262,25 @@ simulation ticks stop while the game is paused.
 ### Pointer coordinate spaces
 
 Use `ds.EPointerSpace.GRID` for UI-grid cells and
-`ds.EPointerSpace.PIXELS` for exact screen pixels:
+`ds.EPointerSpace.PIXELS` for exact screen pixels. Use
+`ds.EPointerSpace.WORLD_TILE` with an `{x, y, z}` position for a map tile:
 
 ```lua
 ds.move_pointer(12, 8) -- GRID is the backward-compatible default
 ds.move_pointer(12, 8, ds.EPointerSpace.GRID)
 ds.move_pointer(420, 260, ds.EPointerSpace.PIXELS)
+ds.move_pointer({x=120, y=85, z=42}, ds.EPointerSpace.WORLD_TILE)
 ```
 
 `ds.hover()` accepts the same numeric coordinate-space overloads.
 
 UI widgets, subjects, and subject anchors use UI-grid cells. Premium map mouse
 interaction uses screen pixels, so use `PIXELS` when a test must target an exact
-rendered map location. Map tiles are a third coordinate system: map-view
-positions such as those returned by `ds.getViewPos()` are not pointer
-coordinates.
+rendered map location. `WORLD_TILE` positions use map coordinates such as those
+returned by `ds.getViewPos()`. DwarfSpec recenters the camera on the requested
+tile by default and automatically restores the inherited camera position
+during cleanup. Pass `{recenter=false}` as the third argument to leave the
+camera unchanged; the command then fails unless the tile is already visible.
 
 DwarfSpec reads the effective renderer geometry on every move, so conversion
 tracks the current runtime UI scale. Configured scaling preferences are not

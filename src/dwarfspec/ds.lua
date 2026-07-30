@@ -1045,15 +1045,9 @@ local TestStatus = load_automation_module(package_root,
         return size - 1
     end
 
-    ---Returns the map-tile offset for one screen origin.
-    ---@param origin DwarfSpecEScreenOrigin|nil
-    ---@return integer, integer
-    local function screen_origin_offset(origin)
-        origin = origin or EScreenOrigin.CENTER
-        local axes = screen_origin_axes[origin]
-        assert(axes,
-            'screen origin must be a ds.EScreenOrigin value')
-        if origin == EScreenOrigin.TOP_LEFT then return 0, 0 end
+    ---Returns the validated current map-view dimensions.
+    ---@return table
+    local function current_map_view_dimensions()
         local ok, dimensions = pcall(context.get_map_view_dimensions)
         assert(ok,
             'DwarfSpec could not query the current map-view dimensions: ' ..
@@ -1069,6 +1063,19 @@ local TestStatus = load_automation_module(package_root,
         local height = dimensions.map_y2 - dimensions.map_y1 + 1
         assert(width > 0 and height > 0,
             'DFHack returned invalid map-view dimensions')
+        return dimensions, width, height
+    end
+
+    ---Returns the map-tile offset for one screen origin.
+    ---@param origin DwarfSpecEScreenOrigin|nil
+    ---@return integer, integer
+    local function screen_origin_offset(origin)
+        origin = origin or EScreenOrigin.CENTER
+        local axes = screen_origin_axes[origin]
+        assert(axes,
+            'screen origin must be a ds.EScreenOrigin value')
+        if origin == EScreenOrigin.TOP_LEFT then return 0, 0 end
+        local _, width, height = current_map_view_dimensions()
         return screen_origin_axis_offset(axes[1], width),
             screen_origin_axis_offset(axes[2], height)
     end
@@ -1405,57 +1412,152 @@ local TestStatus = load_automation_module(package_root,
         return table.unpack(results, 1, results.n)
     end
 
-    ---Moves the virtual pointer to coordinates or an anchor inside a subject.
-    ---DwarfSpec automatically restores inherited pointer state during cleanup.
-    ---@overload fun(x: integer, y: integer, space: DwarfSpecEPointerSpace|nil): integer, integer
-    ---@param view table|integer|nil
-    ---@param anchor string|integer|nil
-    ---@param space DwarfSpecEPointerSpace|nil
+    ---Normalizes and applies one pointer coordinate pair.
+    ---@param x any
+    ---@param y any
+    ---@param space DwarfSpecEPointerSpace
+    local function set_pointer_coordinates(x, y, space)
+        local geometry = pointer_adapter_module.geometry(context.pointer)
+        local position = pointer_adapter_module.normalize_position(
+            x, y, space, geometry)
+        mutate_pointer('move_pointer', function()
+            pointer_adapter_module.set(context.pointer, position)
+        end)
+    end
+
+    ---Moves the virtual pointer to one UI-grid cell.
+    ---@param x any
+    ---@param y any
     ---@return integer, integer
-    function ds.move_pointer(view, anchor, space)
-        local explicit_space = space ~= nil
-        if explicit_space and
-                (type(view) == 'table' or view == nil) then
-            error('pointer coordinate space is only valid with numeric ' ..
-                'coordinates', 2)
+    local function move_pointer_to_grid(x, y)
+        local target
+        _, target = resolve_interaction_target(nil, 'move_pointer')
+        assert(type(x) == 'number' and x % 1 == 0 and x >= 0,
+            'pointer x coordinate must be a nonnegative integer')
+        assert(type(y) == 'number' and y % 1 == 0 and y >= 0,
+            'pointer y coordinate must be a nonnegative integer')
+        local width, height = current_window_size(target, 'move_pointer')
+        assert(x < width,
+            ('pointer x coordinate %d is outside the current window width %d')
+                :format(x, width))
+        assert(y < height,
+            ('pointer y coordinate %d is outside the current window height %d')
+                :format(y, height))
+        set_pointer_coordinates(x, y, EPointerSpace.GRID)
+        return x, y
+    end
+
+    ---Moves the virtual pointer to one exact screen pixel.
+    ---@param x any
+    ---@param y any
+    ---@return integer, integer
+    local function move_pointer_to_pixels(x, y)
+        resolve_interaction_target(nil, 'move_pointer')
+        set_pointer_coordinates(x, y, EPointerSpace.PIXELS)
+        return x, y
+    end
+
+    ---Validates and copies one requested world-tile position.
+    ---@param position table
+    ---@return table
+    local function validate_world_tile_position(position)
+        assert(type(position) == 'table',
+            'world-tile position must be a table with x, y, and z coordinates')
+        local validated = {}
+        for _, axis in ipairs({'x', 'y', 'z'}) do
+            local value = position[axis]
+            assert(type(value) == 'number' and value % 1 == 0 and value >= 0,
+                ('world-tile %s coordinate must be a nonnegative integer')
+                    :format(axis))
+            validated[axis] = value
         end
-        if type(view) == 'number' or explicit_space then
-            local target
-            _, target = resolve_interaction_target(nil, 'move_pointer')
-            local x = view
-            local y = anchor
-            space = space or EPointerSpace.GRID
-            assert(space == EPointerSpace.GRID or
-                    space == EPointerSpace.PIXELS,
-                'unsupported pointer coordinate space: ' .. tostring(space))
-            if space == EPointerSpace.GRID then
-                assert(type(x) == 'number' and x % 1 == 0 and x >= 0,
-                    'pointer x coordinate must be a nonnegative integer')
-                assert(type(y) == 'number' and y % 1 == 0 and y >= 0,
-                    'pointer y coordinate must be a nonnegative integer')
-                local width, height =
-                    current_window_size(target, 'move_pointer')
-                assert(x < width,
-                    ('pointer x coordinate %d is outside the current ' ..
-                        'window width %d'):format(x, width))
-                assert(y < height,
-                    ('pointer y coordinate %d is outside the current ' ..
-                        'window height %d'):format(y, height))
+        return validated
+    end
+
+    ---Moves the virtual pointer to one visible world tile.
+    ---@param requested_position table
+    ---@param options table|nil
+    ---@return integer, integer, integer
+    local function move_pointer_to_world_tile(requested_position, options)
+        local position = validate_world_tile_position(requested_position)
+        assert(options == nil or type(options) == 'table',
+            'world-tile pointer options must be a table')
+        options = options or {}
+        assert(options.recenter == nil or type(options.recenter) == 'boolean',
+            'world-tile pointer recenter option must be a boolean')
+        local recenter = options.recenter ~= false
+        resolve_interaction_target(nil, 'move_pointer')
+        mutate_pointer('move_pointer', function()
+            if recenter then
+                ds.setViewPos(position, EScreenOrigin.CENTER)
             end
+            local dimensions = current_map_view_dimensions()
+            local view_position = ds.getViewPos(EScreenOrigin.TOP_LEFT)
+            assert(position.z == view_position.z,
+                ('world tile z coordinate %d is not on the visible z-level %d')
+                    :format(position.z, view_position.z))
+            local x = position.x - view_position.x
+            local y = position.y - view_position.y
+            local width = dimensions.map_x2 - dimensions.map_x1 + 1
+            local height = dimensions.map_y2 - dimensions.map_y1 + 1
+            assert(x >= 0 and x < width and y >= 0 and y < height,
+                ('world tile (%d, %d, %d) is outside the current map view')
+                    :format(position.x, position.y, position.z))
             local geometry = pointer_adapter_module.geometry(context.pointer)
-            local position = pointer_adapter_module.normalize_position(
-                x, y, space, geometry)
-            mutate_pointer('move_pointer', function()
-                pointer_adapter_module.set(context.pointer, position)
-            end)
-            return x, y
+            local pointer_space = EPointerSpace.GRID
+            local in_graphics_mode = pointer_screen.inGraphicsMode
+            if type(in_graphics_mode) == 'function' and
+                    in_graphics_mode() then
+                local zoom = pointer_gps.viewport_zoom_factor
+                assert(type(zoom) == 'number' and zoom % 1 == 0 and
+                        zoom >= 4,
+                    'DFHack returned an invalid viewport zoom factor')
+                local map_tile_pixels = math.floor(zoom / 4)
+                x = x * map_tile_pixels + math.floor(map_tile_pixels / 2)
+                y = y * map_tile_pixels + math.floor(map_tile_pixels / 2)
+                pointer_space = EPointerSpace.PIXELS
+            end
+            local pointer_position = pointer_adapter_module.normalize_position(
+                x, y, pointer_space, geometry)
+            pointer_adapter_module.set(context.pointer, pointer_position)
+        end)
+        return position.x, position.y, position.z
+    end
+
+    ---Returns the UI-grid coordinate selected by one subject anchor.
+    ---@param bounds table
+    ---@param anchor string|nil
+    ---@return integer, integer
+    local function pointer_anchor_coordinates(bounds, anchor)
+        anchor = anchor or 'center'
+        if anchor == 'top_left' then
+            return bounds.x1, bounds.y1
         end
-        local requested_subject = view
-        local adapter
+        if anchor == 'top_right' then
+            return bounds.x2, bounds.y1
+        end
+        if anchor == 'bottom_left' then
+            return bounds.x1, bounds.y2
+        end
+        if anchor == 'bottom_right' then
+            return bounds.x2, bounds.y2
+        end
+        assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
+        return math.floor((bounds.x1 + bounds.x2) / 2),
+            math.floor((bounds.y1 + bounds.y2) / 2)
+    end
+
+    ---Moves the virtual pointer to one anchor within a live subject.
+    ---@param requested_subject table|nil
+    ---@param anchor string|nil
+    ---@return integer, integer
+    local function move_pointer_to_subject(requested_subject, anchor)
+        local view
         local target
         local mount
+        local adapter
         view, target, mount, adapter = resolve_interaction_target(
-            view, 'move_pointer')
+            requested_subject, 'move_pointer')
         local source = requested_subject and
             requested_subject._descriptor.source or mount.subject_source
         local raw_bounds = adapter:bounds(view)
@@ -1469,20 +1571,7 @@ local TestStatus = load_automation_module(package_root,
             pointer_subject_diagnostics(requested_subject, source, adapter,
                 view, raw_bounds) ..
             ' reason="no usable live bounds within the current window"')
-        anchor = anchor or 'center'
-        local x = math.floor((body.x1 + body.x2) / 2)
-        local y = math.floor((body.y1 + body.y2) / 2)
-        if anchor == 'top_left' then
-            x, y = body.x1, body.y1
-        elseif anchor == 'top_right' then
-            x, y = body.x2, body.y1
-        elseif anchor == 'bottom_left' then
-            x, y = body.x1, body.y2
-        elseif anchor == 'bottom_right' then
-            x, y = body.x2, body.y2
-        else
-            assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
-        end
+        local x, y = pointer_anchor_coordinates(body, anchor)
         mutate_pointer('move_pointer', function()
             local geometry = pointer_adapter_module.geometry(context.pointer)
             local position = pointer_adapter_module.normalize_position(
@@ -1490,6 +1579,41 @@ local TestStatus = load_automation_module(package_root,
             pointer_adapter_module.set(context.pointer, position)
         end)
         return x, y
+    end
+
+    ---Moves the virtual pointer to coordinates or an anchor inside a subject.
+    ---DwarfSpec automatically restores inherited pointer state during cleanup.
+    ---@overload fun(x: integer, y: integer, space: DwarfSpecEPointerSpace|nil): integer, integer
+    ---@overload fun(position: table, space: DwarfSpecEPointerSpace, options: table|nil): integer, integer, integer
+    ---@param view table|integer|nil
+    ---@param anchor string|integer|DwarfSpecEPointerSpace|nil
+    ---@param space DwarfSpecEPointerSpace|table|nil
+    ---@return integer, integer
+    function ds.move_pointer(view, anchor, space)
+        if type(view) == 'table' and
+                anchor == EPointerSpace.WORLD_TILE then
+            return move_pointer_to_world_tile(view, space)
+        end
+        local explicit_space = space ~= nil
+        if explicit_space and
+                (type(view) == 'table' or view == nil) then
+            error('pointer coordinate space is only valid with numeric ' ..
+                'coordinates', 2)
+        end
+        if type(view) == 'number' or explicit_space then
+            local x = view
+            local y = anchor
+            space = space or EPointerSpace.GRID
+            if space == EPointerSpace.GRID then
+                return move_pointer_to_grid(x, y)
+            end
+            if space == EPointerSpace.PIXELS then
+                return move_pointer_to_pixels(x, y)
+            end
+            error('unsupported pointer coordinate space: ' .. tostring(space),
+                2)
+        end
+        return move_pointer_to_subject(view, anchor)
     end
 
     ---Moves the virtual pointer over a subject and waits for its render.

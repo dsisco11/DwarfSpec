@@ -222,12 +222,15 @@ test must inspect state between wheel inputs.
 ### Choosing pointer coordinates
 
 Pointer coordinates can use either zero-based UI-grid cells or zero-based
-screen pixels:
+screen pixels. World tiles use an `{x, y, z}` map position:
 
 ```lua
 ds.move_pointer(17, 9) -- UI-grid cells are the default
 ds.move_pointer(17, 9, ds.EPointerSpace.GRID)
 ds.move_pointer(640, 360, ds.EPointerSpace.PIXELS) -- exact screen pixel
+ds.move_pointer(
+    {x=120, y=85, z=42},
+    ds.EPointerSpace.WORLD_TILE)
 ```
 
 Use UI-grid cells for UI widgets and text-mode screen locations. Subjects and
@@ -236,9 +239,19 @@ so fluent `subject:move_pointer()` and `subject:hover()` do not accept a
 coordinate-space argument.
 
 Use screen pixels when Premium map interaction must target an exact rendered
-location. A map tile is not a UI-grid cell or a screen pixel; map-view
-coordinates such as `ds.getViewPos()` describe map tiles and are not accepted
-as pointer coordinates.
+location. Use `WORLD_TILE` when the test has a map position such as one returned
+by `ds.getViewPos()`. DwarfSpec recenters the camera on the requested tile by
+default, derives its live renderer position after any map-edge clamping, and
+restores the inherited camera position during cleanup. To preserve the camera,
+pass `{recenter=false}`; the command fails if the requested tile is not already
+visible:
+
+```lua
+ds.move_pointer(
+    {x=120, y=85, z=42},
+    ds.EPointerSpace.WORLD_TILE,
+    {recenter=false})
+```
 
 Map-view coordinates can be read or positioned at any viewport anchor:
 
