@@ -3,6 +3,7 @@
 local process = require('dwarfspec.process')
 local project = require('dwarfspec.project')
 local reports = require('dwarfspec.report')
+local ErrorFormat = require('dwarfspec.error_formats')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
 local ResultState = require('dwarfspec.automation.result_states')
 local result_store = require('dwarfspec.automation.result_store')
@@ -419,6 +420,7 @@ function M.run(options)
     local emit = options.emit or print
     local now = options.now or system.monotime
     local sleep = options.sleep or system.sleep
+    local error_format = options.error_format or ErrorFormat.MSBUILD
     local command_started_at = now()
     local submitted_at = timestamp(options)
     local run_id = options.run_id or generate_run_id(command_started_at)
@@ -443,6 +445,7 @@ function M.run(options)
     local event_journal = {}
     local queue_started_at
     local execution_started_at
+    local diagnostic_formatting_failed = false
 
     ---Persists one observed native state before continuing orchestration.
     ---@param report table
@@ -466,7 +469,8 @@ function M.run(options)
     ---Consumes one validated transport response in cursor order.
     ---@param transport table
     ---@param persist boolean
-    local function consume_transport(transport, persist)
+    ---@param render boolean|nil
+    local function consume_transport(transport, persist, render)
         for _, event in ipairs(transport.events) do
             table.insert(event_journal, event)
         end
@@ -476,8 +480,20 @@ function M.run(options)
             activated_at = timestamp(options)
             execution_started_at = now()
         end
-        for _, line in ipairs(reports.format_events(transport.events)) do
-            emit(line)
+        if render ~= false then
+            local formatted, lines = pcall(reports.format_events,
+                transport.events, {
+                    error_format=error_format,
+                    project_root=options.project_root,
+                    diagnostic_formatter=options.diagnostic_formatter,
+                })
+            if not formatted then
+                diagnostic_formatting_failed = true
+                fail(RunnerFailureKind.HOST,
+                    'DwarfSpec diagnostic formatting failed: ' ..
+                        clean_message(lines))
+            end
+            for _, line in ipairs(lines) do emit(line) end
         end
         if persist then persist_observation(native_report) end
     end
@@ -638,7 +654,8 @@ function M.run(options)
                 runner, options, run_id, owner_capability,
                 expected_identity, event_cursor, invoke)
             if recovered then
-                consume_transport(recovered, false)
+                consume_transport(recovered, false,
+                    not diagnostic_formatting_failed)
             end
             if recovery_error then
                 runner_error.message = runner_error.message ..

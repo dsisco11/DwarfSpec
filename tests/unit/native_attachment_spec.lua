@@ -27,7 +27,6 @@ describe('DwarfSpec native viewscreen attachment', function()
         }
         native = current
         attachment = native_attachment.new({
-            get_current_viewscreen=function() return current end,
             get_native_viewscreen=function() return native end,
             is_widget_root=function(candidate)
                 return type(candidate) == 'table' and
@@ -62,7 +61,7 @@ describe('DwarfSpec native viewscreen attachment', function()
         assert.equals(current.widgets,
             result.subject_source.adapter:root())
         assert.equals(current,
-            result.interaction_target:native_screen('input'))
+            result.interaction_target:input_screen('input'))
         assert.equals(1, target_factory_calls)
         assert.equals(1, source_factory_calls)
         assert.same({
@@ -80,14 +79,19 @@ describe('DwarfSpec native viewscreen attachment', function()
         })
     end)
 
-    it('rejects a missing current viewscreen before allocating resources',
+    it('attaches without a current input viewscreen',
             function()
         current = nil
 
-        assert.has_error(function() attachment:attach() end,
-            'DwarfSpec native mount requires a current viewscreen')
-        assert.equals(0, target_factory_calls)
-        assert.equals(0, source_factory_calls)
+        local result = attachment:attach()
+
+        assert.equals(native, result.pinned_screen)
+        assert.equals(native.widgets, result.root)
+        assert.has_error(
+            function() result.interaction_target:input_screen('input') end,
+            'DwarfSpec input requires a current input viewscreen')
+        assert.equals(1, target_factory_calls)
+        assert.equals(1, source_factory_calls)
     end)
 
     it('rejects a missing native DF viewscreen before allocating resources',
@@ -95,12 +99,12 @@ describe('DwarfSpec native viewscreen attachment', function()
         native = nil
 
         assert.has_error(function() attachment:attach() end,
-            'DwarfSpec native mount requires a native DF viewscreen')
+            'DwarfSpec native-screen mount requires a native DF viewscreen')
         assert.equals(0, target_factory_calls)
         assert.equals(0, source_factory_calls)
     end)
 
-    it('rejects a focused DFHack Lua screen without changing either screen',
+    it('borrows the native root beneath a focused DFHack Lua screen',
             function()
         local native_screen = {
             widgets={kind='widget-root'},
@@ -108,23 +112,25 @@ describe('DwarfSpec native viewscreen attachment', function()
         native = native_screen
         local before_current = current
 
-        assert.has_error(function() attachment:attach() end,
-            'DwarfSpec native mount requires the current viewscreen to be ' ..
-            'the native DF viewscreen; a DFHack Lua screen currently owns ' ..
-            'focus')
+        local result = attachment:attach()
+
+        assert.equals(native_screen, result.pinned_screen)
+        assert.equals(native_screen.widgets, result.root)
+        assert.equals(before_current,
+            result.interaction_target:input_screen('input'))
         assert.equals(before_current, current)
         assert.equals(native_screen, native)
-        assert.equals(0, target_factory_calls)
-        assert.equals(0, source_factory_calls)
+        assert.equals(1, target_factory_calls)
+        assert.equals(1, source_factory_calls)
     end)
 
     it('rejects a missing or invalid widget root before allocating resources',
             function()
-        current.widgets = nil
+        native.widgets = nil
 
         assert.has_error(function() attachment:attach() end,
-            'DwarfSpec native mount requires the current viewscreen to expose ' ..
-                'a valid widgets container')
+            'DwarfSpec native-screen mount requires the native DF viewscreen ' ..
+                'to expose a valid widgets container')
         assert.equals(0, target_factory_calls)
         assert.equals(0, source_factory_calls)
     end)
@@ -132,7 +138,6 @@ describe('DwarfSpec native viewscreen attachment', function()
     it('releases a partial target when source construction fails', function()
         local cleaned = 0
         attachment = native_attachment.new({
-            get_current_viewscreen=function() return current end,
             get_native_viewscreen=function() return native end,
             is_widget_root=function() return true end,
             interaction_target_factory=function()
@@ -157,7 +162,6 @@ describe('DwarfSpec native viewscreen attachment', function()
     it('preserves source failure when partial target cleanup also fails',
             function()
         attachment = native_attachment.new({
-            get_current_viewscreen=function() return current end,
             get_native_viewscreen=function() return native end,
             is_widget_root=function(root)
                 return root and root.kind == 'widget-root'
@@ -182,27 +186,21 @@ describe('DwarfSpec native viewscreen attachment', function()
         assert.matches('target cleanup exploded', failure, 1, true)
     end)
 
-    it('makes the root and interaction target stale after a transition',
+    it('retains the root while input follows a screen transition',
             function()
         local result = attachment:attach()
-        current = {
+        local next_screen = {
             widgets={kind='widget-root'},
         }
+        current = next_screen
 
-        local root_ok, root_failure = pcall(function()
-            result.subject_source.adapter:root()
-        end)
-        assert.is_false(root_ok)
-        assert.matches('DwarfSpec native root access rejected stale ' ..
-            'native%-screen mount; pinned viewscreen is no longer current;',
-            root_failure)
-        local redraw_ok, redraw_failure = pcall(function()
-            result.interaction_target:invalidate()
-        end)
-        assert.is_false(redraw_ok)
-        assert.matches('DwarfSpec redraw rejected stale native%-screen ' ..
-            'mount; pinned viewscreen is no longer current;',
-            redraw_failure)
-        assert.equals(0, invalidations)
+        assert.equals(native.widgets,
+            result.subject_source.adapter:root())
+        assert.equals(native,
+            result.interaction_target:native_screen('focus inspection'))
+        assert.equals(next_screen,
+            result.interaction_target:input_screen('input'))
+        result.interaction_target:invalidate()
+        assert.equals(1, invalidations)
     end)
 end)

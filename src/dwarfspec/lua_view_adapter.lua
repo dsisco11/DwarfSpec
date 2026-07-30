@@ -238,7 +238,14 @@ end
 function LuaViewAdapter:optional_fields(raw)
     assert(type(raw) == 'table',
         'Lua view optional inspection fields require a table')
-    return {}
+    local result = {}
+    if type(raw.page_top) == 'number' and raw.page_top % 1 == 0 then
+        result.scroll_position = raw.page_top
+    end
+    if type(raw.page_size) == 'number' and raw.page_size % 1 == 0 then
+        result.visible_row_count = raw.page_size
+    end
+    return result
 end
 
 ---Returns the existing stable Lua-view inspection schema.

@@ -42,12 +42,13 @@ describe('mounted failed-example recovery', function()
         assert.equals(original_pointer, dfhack.screen.getMousePos)
         assert.equals(original_pause, df.global.pause_state)
         assert.has_error(function() ds.root() end,
-            'DwarfSpec root requires a mounted component; call ' ..
-                'ds.mount(component, options) first')
+            'DwarfSpec root requires a current mount; call ' ..
+                'ds.mount(component, options) or ' ..
+                    'ds.mountNativeScreen() first')
         local available, stale_error = pcall(failed_subject.raw,
             failed_subject)
         assert.is_false(available)
-        assert.matches('no component is currently mounted', stale_error,
+        assert.matches('no current mount exists', stale_error,
             1, true)
     end)
 end)

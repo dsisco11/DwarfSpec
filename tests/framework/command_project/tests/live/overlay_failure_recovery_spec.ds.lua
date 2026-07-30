@@ -62,7 +62,8 @@ describe('failed overlay lifecycle recovery', function()
         assert.equals(original_pointer, dfhack.screen.getMousePos)
         assert.equals(original_pause, df.global.pause_state)
         assert.has_error(function() ds.root() end,
-            'DwarfSpec root requires a mounted component; call ' ..
-                'ds.mount(component, options) first')
+            'DwarfSpec root requires a current mount; call ' ..
+                'ds.mount(component, options) or ' ..
+                    'ds.mountNativeScreen() first')
     end)
 end)

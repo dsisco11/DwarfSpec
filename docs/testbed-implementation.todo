@@ -1,0 +1,366 @@
+DwarfSpec TestBed Implementation
+================================
+
+Purpose:
+    ☐ Implement the TestBed contract evaluated in `docs/testbed-evaluation.md`.
+    ☐ Provide one isolated Lua module and DFHack script-module graph for offline Busted unit tests and live DwarfSpec component tests.
+    ☐ Ship strong authoring types, runtime validation, deterministic ownership, and downstream installed-rock support as parts of the public contract.
+    ☐ Keep TestBed loader-centered; do not add a dependency-injection container, automatic mocks, constructor rewriting, or a second test framework.
+
+Completion contract:
+    ☐ Complete every applicable implementation, focused-test, full-test, declaration, documentation, package, cleanup, and live-evidence item below.
+    ☐ Treat this checklist as the source of truth for implementation status.
+    ☐ Preserve unrelated worktree and index changes; do not stash or commit user changes.
+    ☐ Record every deferred or rejected item with its rationale and the evidence that made it unnecessary or unsafe.
+    ☐ Keep `require('dwarfspec.testbed')` framework-neutral and usable without DFHack, Dwarf Fortress, DwarfSpec automation, or Busted globals.
+    ☐ Keep `TestBed.new()` and every TestBed configuration field optional where the public contract declares a default.
+    ☐ Keep `dwarfspec.TestBedConfig` as the single canonical configuration type used by `TestBed.new`, runtime validation, and every `ds.mount` overload.
+    ☐ Support faithful bed-local `reqscript` behavior in the first usable implementation.
+    ☐ Preserve every existing two-argument `ds.mount(component, options)` behavior.
+    ☐ Append the optional TestBed input in the same final position on every `ds.mount` overload.
+    ☐ Distinguish focused unit, full unit, Lua syntax, package, cleanup, and live DFHack evidence in the final handoff.
+    ☐ Never treat registration, cleanup, unit-test, or package evidence as proof of successful live rendering or interaction.
+    ☐ State explicitly in public documentation that closing a bed does not reverse native, file, timer, plugin, event, input, click, or gameplay effects caused by consumer code.
+
+Phase 0 - Freeze the implementable contract and baseline:
+    ☐ Re-read `docs/testbed-evaluation.md` and reconcile every public name, default, ownership rule, overload, and acceptance criterion before editing runtime code.
+    ☐ Inventory the active checkout, branch, worktree state, index state, installed rock version, and current package archive contents.
+    ☐ Record the existing `ds.mount` runtime signature, declaration signature, component categories, mount options, constructor-attribute forwarding, cleanup order, and failure-reporting path.
+    ☐ Inventory the current LuaLS declaration surface in `src/ds.d.lua` and the LuaRocks handling of declaration files.
+    ☐ Inventory representative downstream layouts in DwarfSpec consumers, including `src/scripts_modinstalled`, `src`, project-root modules, `mkmodule`, and annotated script modules.
+    ☐ Select exact production filenames beneath `src/dwarfspec/` for the public TestBed module and any internal configuration, path, resolver, or environment modules.
+    ☐ Select exact focused unit-test filenames and downstream fixture locations before implementation.
+    ☐ Confirm that no existing public module named `dwarfspec.testbed` or declaration type conflicts with the proposed names.
+    ☐ Run and record the pre-change focused mount tests.
+    ☐ Run and record the pre-change full standalone unit suite.
+    ☐ Build the pre-change rock and record its archive layout for later comparison.
+    ☐ Stop and update this checklist if the active runtime or packaging contract materially differs from the evaluation report.
+
+Phase 1 - Add canonical public authoring types:
+    ☐ Define the authoritative `dwarfspec.TestBedImportProfile` alias with the supported literal values.
+    ☐ Define the authoritative `dwarfspec.TestBedConfig` class.
+        ☐ Type optional `project_root` as a string.
+        ☐ Type optional `module_roots` as an ordered string array.
+        ☐ Type optional `modules` as an exact-name replacement map.
+        ☐ Type optional `sources` as an exact-name source-path map.
+        ☐ Type optional `globals` as a string-keyed value map.
+        ☐ Type optional `import_profile`.
+        ☐ Type optional `imports` as an exact-name string array.
+        ☐ Type optional `script_roots` as an ordered string array.
+        ☐ Type optional `scripts` as an exact-name script-environment map.
+        ☐ Type optional `script_sources` as an exact-name source-path map.
+        ☐ Document the default and replacement or extension behavior of every field at its declaration.
+    ☐ Define the authoritative `dwarfspec.TestBed` class.
+        ☐ Annotate `TestBed.new(config)`.
+        ☐ Annotate `TestBed:require(name)`.
+        ☐ Annotate `TestBed:reqscript(name)`.
+        ☐ Annotate `TestBed:close()`.
+        ☐ Annotate any public diagnostic or state method accepted into the implementation.
+    ☐ Define `dwarfspec.TestBedInput` as `dwarfspec.TestBedConfig|dwarfspec.TestBed`.
+    ☐ Define strongly typed module-component and script-component source records if source-backed mount overloads remain in the final runtime contract.
+    ☐ Add language-appropriate documentation comments for every new public and internal class and method.
+    ☐ Reference the canonical TestBed types from `src/ds.d.lua`; do not create a drifting duplicate configuration class.
+    ☐ Append `testbed? dwarfspec.TestBedInput` in the final parameter position of every declared `ds.mount` overload.
+    ☐ Keep the existing component and mount-option parameter order unchanged.
+    ☐ Add a declaration fixture that demonstrates completion and type checking for every valid configuration field.
+    ☐ Add negative declaration fixtures for unknown fields, invalid field types, invalid mount argument order, and invalid TestBed inputs.
+    ☐ Verify that an installed-rock consumer can discover the types without adding the DwarfSpec checkout to the LuaLS library path.
+
+Phase 2 - Implement configuration validation and lifecycle state:
+    ☐ Add the framework-neutral `dwarfspec.testbed` production module.
+    ☐ Make `TestBed.new()` and `TestBed.new(nil)` equivalent to an empty typed configuration.
+    ☐ Validate that configuration is nil or a table before reading fields.
+    ☐ Reject unknown configuration keys with a bounded error that names the key and the expected public type.
+    ☐ Validate every scalar, array, and map field against `dwarfspec.TestBedConfig`.
+    ☐ Validate module names, script names, import names, source paths, and root paths before loading code.
+    ☐ Copy configuration arrays and maps so caller mutation cannot change normalized configuration accidentally.
+    ☐ Normalize configuration without mutating the caller's table.
+    ☐ Implement the fixed offline defaults.
+        ☐ Default `project_root` to the current directory.
+        ☐ Default `module_roots` to `src/scripts_modinstalled`, `src`, then `.` beneath the project root.
+        ☐ Default `script_roots` to `src/scripts_modinstalled` beneath the project root.
+        ☐ Default replacement and source maps to empty private maps.
+        ☐ Default host imports to none.
+    ☐ Skip missing conventional directories without scanning for alternative layouts.
+    ☐ Make an explicit root list replace its default, including an explicit empty list.
+    ☐ Make explicit imports extend the selected import profile.
+    ☐ Make `import_profile=false` disable the default profile.
+    ☐ Define and implement explicit bed states.
+        ☐ Open and runtime-unbound after `TestBed.new`.
+        ☐ Standalone-bound after the first standalone load.
+        ☐ Live-bound after acquisition by a compatible live mount.
+        ☐ Mount-owned while acquired by `ds.mount`.
+        ☐ Closed after explicit or automatic close.
+    ☐ Freeze normalized configuration when the first module or script load begins.
+    ☐ Reject configuration mutation APIs after the first load if any such APIs are retained.
+    ☐ Make `close()` idempotent.
+    ☐ Make every load and acquisition operation fail clearly after close.
+    ☐ Release bed-owned references on close without mutating process-global loader tables.
+    ☐ Add focused tests for defaults, validation, copying, freezing, state transitions, idempotent close, and post-close failures.
+
+Phase 3 - Implement safe project-root and source resolution:
+    ☐ Add a platform-neutral path resolver compatible with Lua 5.3.
+    ☐ Normalize directory separators without assuming Windows-only or POSIX-only paths.
+    ☐ Collapse current-directory and parent-directory segments.
+    ☐ Resolve every relative root and source beneath the normalized `project_root`.
+    ☐ Reject source paths that escape their declared allowed root after normalization.
+    ☐ Reject empty module names, empty script names, absolute names masquerading as module names, and invalid separators.
+    ☐ Convert ordinary Lua module names deterministically for `name.lua` and `name/init.lua` lookup.
+    ☐ Preserve DFHack script-name semantics separately from ordinary module-name conversion.
+    ☐ Resolve exact `sources` before searching `module_roots`.
+    ☐ Resolve exact `script_sources` before searching `script_roots`.
+    ☐ Preserve declared root order.
+    ☐ Do not scan unrelated project directories or process package paths.
+    ☐ Report the requested name, effective project root, attempted exact mapping, attempted roots, and dependency chain on failure.
+    ☐ Bound diagnostic strings and collection sizes.
+    ☐ Add focused cross-platform path tests, containment tests, precedence tests, duplicate-name precedence tests, and bounded-error tests.
+
+Phase 4 - Implement the bed-local ordinary module graph:
+    ☐ Give each TestBed private equivalents of loaded modules, preloaded modules, loading state, environments, source records, and resolution diagnostics.
+    ☐ Implement `TestBed:require(name)` with deterministic precedence.
+        ☐ Return the bed-cached result first.
+        ☐ Return an exact `modules` replacement second.
+        ☐ Load an exact `sources` mapping third.
+        ☐ Search normalized `module_roots` fourth.
+        ☐ Borrow an exact effective host import last when a compatible runtime adapter exists.
+        ☐ Fail without falling back to process-global `require`.
+    ☐ Ensure repeated loads in one bed return the same identity.
+    ☐ Ensure separate beds loading the same source produce separate module tables, closures, classes, and module-local state.
+    ☐ Ensure nested `require` calls resolve through the same bed.
+    ☐ Implement explicit loading-state and dependency-chain tracking.
+    ☐ Define and test the supported ordinary-module circular-dependency behavior.
+    ☐ Preserve ordinary Lua return behavior for nil, false, tables, functions, and other supported module values.
+    ☐ Add a bed-local `mkmodule(name)`.
+        ☐ Return one stable environment per module name within a bed.
+        ☐ Return fresh environments across beds.
+        ☐ Keep direct module-global writes out of process `_G`.
+        ☐ Make `_G` refer to the bed base.
+    ☐ Build the curated standalone Lua base without arbitrary process `_G` fallback.
+    ☐ Add bed-local `require`, `mkmodule`, `_G`, and a restricted `package` facade to every source environment.
+    ☐ Expose only compatible `package.config`, `loaded`, `preload`, `path`, and `searchpath` behavior.
+    ☐ Do not expose process searchers that bypass the bed resolver.
+    ☐ Ensure bed-local `load`, `loadfile`, and `dofile` preserve the current bed environment and allowed roots or fail with a clear unsupported-operation error.
+    ☐ Close every opened source file deterministically on success and failure.
+    ☐ Do not mutate process `package.path`, `package.loaded`, `package.preload`, or `_G`.
+    ☐ Track and report whether each module came from cache, replacement, exact source, root, or host import.
+    ☐ Add focused tests for transitive loading, exact replacements, exact sources, root precedence, `mkmodule`, `_G`, package facade, load helpers, circular imports, failures, and two-bed isolation.
+
+Phase 5 - Implement faithful bed-local DFHack script modules:
+    ☐ Implement `TestBed:reqscript(name)` as a separate namespace and operation from `TestBed:require(name)`.
+    ☐ Give each bed a private script cache, loading-state map, preallocated environments, source records, and dependency diagnostics.
+    ☐ Resolve scripts deterministically.
+        ☐ Return a cached script environment first.
+        ☐ Return an exact `scripts` replacement second.
+        ☐ Load an exact `script_sources` mapping third.
+        ☐ Search normalized `script_roots` fourth.
+        ☐ Fail without process-global DFHack `reqscript` fallback.
+    ☐ Read and validate the `--@ module=true` declaration before executing script code.
+    ☐ Reject missing or invalid module declarations before any script side effect can run.
+    ☐ Set `dfhack_flags.module == true` in the script environment.
+    ☐ Preallocate and cache the script environment before execution.
+    ☐ Support documented circular script imports through stable partially initialized environments.
+    ☐ Inject bed-local unqualified `reqscript` into every bed-loaded module and script environment.
+    ☐ Expose the same operation as bed-local `dfhack.reqscript`.
+    ☐ Build the bed-local `dfhack` facade without modifying a borrowed or process-global `dfhack` table.
+    ☐ Keep module and script caches separate even when names or source files overlap.
+    ☐ Ensure separate beds do not share script globals or environments.
+    ☐ Ensure command-only code below a module guard does not run during import.
+    ☐ Report script source, cache state, circular chain, annotation failure, and resolution attempts without unbounded output.
+    ☐ Do not claim to emulate mod activation, installed script-path changes, save-specific paths, command execution, or hot reload.
+    ☐ Add focused tests for annotation parsing, pre-execution rejection, flags, unqualified `reqscript`, `dfhack.reqscript`, separate caches, circular imports, replacements, sources, missing scripts, and two-bed isolation.
+
+Phase 6 - Implement runtime adapters and host imports:
+    ☐ Define a private runtime-adapter contract shared by standalone and live bindings.
+    ☐ Keep runtime-adapter injection out of `dwarfspec.TestBedConfig`.
+    ☐ Bind a bed to standalone execution on its first standalone load.
+    ☐ Allow `ds.mount` to bind an unused runtime-unbound bed to the current live run.
+    ☐ Reject a standalone-bound bed when a live mount attempts to acquire it.
+    ☐ Reject a bed bound to another live run.
+    ☐ Permit a compatible current-run bed only when it is open and unowned.
+    ☐ Implement the documented live component host-import profile.
+        ☐ Include only `class`, `utils`, `gui`, `gui.widgets`, and `gui.dwarfmode` initially.
+        ☐ Keep registry- and scheduler-oriented modules outside the default profile.
+        ☐ Add explicit imports to the selected profile.
+        ☐ Support `import_profile=false` for strict source-only loading.
+    ☐ Borrow host modules only by exact effective allowlist name.
+    ☐ Do not unload, reload, clone, or restore borrowed host modules.
+    ☐ Preserve real DFHack class identities needed by component mounting.
+    ☐ Add the documented read-through layer for `dfhack.BASE_G` only in the live runtime adapter.
+    ☐ Keep borrowed mutable tables, userdata, functions, and standard libraries explicitly marked as shared.
+    ☐ Report every borrowed host module and live-runtime binding in diagnostics.
+    ☐ Add focused adapter tests for standalone binding, live binding, profile defaults, explicit imports, strict mode, incompatible bindings, shared host identities, and no arbitrary host fallback.
+
+Phase 7 - Extend every `ds.mount` overload:
+    ☐ Update the runtime `ds.mount` signature to accept an optional final `dwarfspec.TestBedInput`.
+    ☐ Update `src/ds.d.lua` so every overload exposes the same final parameter.
+    ☐ Preserve every existing one- and two-argument call.
+    ☐ Do not infer TestBed configuration from the component options table.
+    ☐ Validate the final input as either a `dwarfspec.TestBedConfig` table or a genuine `dwarfspec.TestBed` instance.
+    ☐ When configuration is supplied:
+        ☐ Create one fresh live-bound bed from the normalized configuration.
+        ☐ Mark the bed mount-owned before consumer source or constructors execute.
+        ☐ Close the bed automatically on every exit path.
+    ☐ When an instance is supplied:
+        ☐ Require it to be open.
+        ☐ Require it to be unowned.
+        ☐ Bind it to the current live run when it is still runtime-unbound.
+        ☐ Reject incompatible runtime bindings.
+        ☐ Transfer ownership to the mount exactly once.
+        ☐ Close it automatically on every exit path after acquisition.
+    ☐ Add a strongly typed ordinary-module component source overload.
+        ☐ Require a nonempty `module` name.
+        ☐ Allow one optional exact `export` key.
+        ☐ Resolve the component through bed-local `require`.
+    ☐ Add a strongly typed script-module component source overload.
+        ☐ Require a nonempty `script` name.
+        ☐ Allow one optional exact `export` key.
+        ☐ Resolve the component through bed-local `reqscript`.
+    ☐ Reject a source record containing both `module` and `script`.
+    ☐ When `export` is omitted, require the loaded value itself to be a supported component class.
+    ☐ When `export` is present, require the selected exact value to be a supported component class.
+    ☐ Pass resolved classes through the existing component classification, construction, adapter, render-settlement, and failure-reporting paths.
+    ☐ Pass existing mount options and component constructor attributes unchanged.
+    ☐ Allow class and instance overloads to accept TestBed input without claiming their defining modules were reloaded.
+    ☐ Emit a bounded diagnostic for class or instance mounts that identifies the narrower captured-dependency boundary.
+    ☐ Register bed cleanup before component cleanup so LIFO order unmounts the component before closing the bed.
+    ☐ On validation, binding, source resolution, export selection, construction, initialization, render, or mount failure, unwind every acquired resource immediately.
+    ☐ Ensure `ds.unmount()` closes a mount-owned bed after component teardown.
+    ☐ Ensure example cleanup closes a mount-owned bed after component teardown when the test fails.
+    ☐ Ensure a closed mount-owned instance cannot be reused by another mount.
+    ☐ Attach TestBed state, source resolution, ownership, and cleanup outcome to existing mount diagnostics.
+    ☐ Add focused mount tests for every component category and input form with nil, configuration, and instance TestBed inputs.
+
+Phase 8 - Complete standalone and integration unit coverage:
+    ☐ Add a synthetic conventional-layout fixture beneath the test tree.
+        ☐ Include ordinary returning modules.
+        ☐ Include `mkmodule` modules.
+        ☐ Include nested replacements and exact source mappings.
+        ☐ Include annotated script modules.
+        ☐ Include supported circular script imports.
+        ☐ Include invalid annotations, missing dependencies, traversal attempts, and duplicate names.
+    ☐ Add a representative real-consumer fixture or vendor a minimal stable consumer module with permission.
+    ☐ Test that loading `dwarfspec.testbed` does not load live host, scheduler, mount, `ds`, or Busted integration modules.
+    ☐ Snapshot and compare process `package.path`, `package.loaded`, `package.preload`, and selected `_G` keys before and after every core test group.
+    ☐ Test two beds concurrently in one process.
+    ☐ Test consecutive beds after failures.
+    ☐ Test configuration tables reused to create multiple fresh beds.
+    ☐ Test every lifecycle state and invalid transition.
+    ☐ Test bounded dependency diagnostics for modules and scripts.
+    ☐ Test mount ownership and cleanup with injected fake runtime adapters.
+    ☐ Test existing `ds.mount` options whose keys overlap TestBed configuration keys.
+    ☐ Test that every existing two-argument mount test remains unchanged or has a documented non-semantic annotation-only update.
+    ☐ Run focused TestBed core tests.
+    ☐ Run focused TestBed script-module tests.
+    ☐ Run focused mount-overload tests.
+    ☐ Run the full standalone unit suite.
+    ☐ Run the full framework test suite that does not require live DFHack.
+    ☐ Record focused and full results separately.
+
+Phase 9 - Prove live DFHack component behavior:
+    ☐ Build and install the current DwarfSpec rock into the live environment before interpreting live results.
+    ☐ Verify the installed mod and rock version used by the live process.
+    ☐ Add one focused live component spec using a `dwarfspec.TestBedConfig`.
+        ☐ Resolve the component from an ordinary module source through the bed.
+        ☐ Replace one production collaborator.
+        ☐ Mount the production-style component.
+        ☐ Interact through public DwarfSpec subject commands.
+        ☐ Assert rendered or inspected product behavior.
+        ☐ Confirm component teardown precedes bed close.
+    ☐ Add one focused live component spec using an actual `dwarfspec.TestBed` instance.
+        ☐ Create an unused runtime-unbound instance with `TestBed.new(config)`.
+        ☐ Pass it to a script-source mount overload.
+        ☐ Resolve an annotated component script with `reqscript`.
+        ☐ Exercise a module and script dependency in the same graph.
+        ☐ Assert product behavior through public DwarfSpec APIs.
+        ☐ Confirm the instance is closed after unmount.
+    ☐ Cover widget, overlay widget, and complete-screen mount categories where applicable.
+    ☐ Prove that assertion failure still unmounts the component before closing the bed.
+    ☐ Prove that source-resolution, export-selection, constructor, and first-render failures leave no active mount-owned bed.
+    ☐ Prove that consecutive examples receive fresh consumer module and script state.
+    ☐ Prove that an already-loaded class accepts a TestBed input but reports the narrower isolation boundary.
+    ☐ Prove that an unlisted live host module fails rather than falling back to host `require`.
+    ☐ Prove that an explicitly imported host class retains the real identity required by `ds.mount`.
+    ☐ Preserve and report `cleanup_confirmed` independently from component assertions.
+    ☐ Run one DwarfSpec live spec or glob per command.
+    ☐ Record focused live component evidence separately from full live-suite evidence.
+    ☐ Do not describe cleanup confirmation as proof that input or gameplay effects were undone.
+
+Phase 10 - Prove installed-rock downstream consumption:
+    ☐ Ensure the rock contains `dwarfspec.testbed` and every required production internal.
+    ☐ Ensure the rock contains the canonical TestBed annotations and updated `ds.d.lua`.
+    ☐ Ensure the rock does not contain DwarfSpec's own test modules or fixtures.
+    ☐ Add exact archive assertions for every TestBed production and declaration file.
+    ☐ Create a fresh empty LuaRocks tree for downstream proof.
+    ☐ Install the generated DwarfSpec rock into that tree.
+    ☐ Do not add the DwarfSpec checkout or a sibling repository to `LUA_PATH`.
+    ☐ Run a separate consumer fixture's offline Busted tests from the consumer project root.
+        ☐ Require `dwarfspec.testbed` from the installed rock.
+        ☐ Use `TestBed.new()` with conventional defaults.
+        ☐ Use a typed nonempty `dwarfspec.TestBedConfig`.
+        ☐ Load an ordinary `require` and `mkmodule` graph.
+        ☐ Load an annotated `reqscript` graph.
+        ☐ Verify replacements, isolation, and close behavior.
+    ☐ Run an installed-declaration authoring check.
+        ☐ Verify completion for every valid configuration field.
+        ☐ Verify invalid field types are reported.
+        ☐ Verify every `ds.mount` overload accepts configuration and instance inputs in the final position.
+        ☐ Verify existing two-argument calls retain their declaration behavior.
+    ☐ Use the same generated rock for a separate live DFHack consumer fixture.
+        ☐ Mount with a configuration object.
+        ☐ Mount with an actual TestBed instance.
+        ☐ Resolve ordinary and annotated script component sources from the consumer root.
+        ☐ Interact with the mounted component.
+        ☐ Confirm cleanup.
+    ☐ Run the Lua 5.3 syntax and compatibility gate against every TestBed production file and public declaration.
+    ☐ Run the normal Lua 5.4 unit and downstream gates.
+    ☐ Block release if archive, offline consumer, authoring-type, live consumer, Lua 5.3, or cleanup proof fails.
+
+Phase 11 - Complete documentation and declaration integration:
+    ☐ Update README usage with the smallest offline example.
+    ☐ Update README usage with configuration passed as the final `ds.mount` argument.
+    ☐ Update README usage with an actual TestBed instance passed to `ds.mount`.
+    ☐ Document the nil-options form `ds.mount(Component, nil, testbed)`.
+    ☐ Document module-source and script-source component overloads.
+    ☐ Document every `dwarfspec.TestBedConfig` field, default, replacement behavior, and validation error.
+    ☐ Document `TestBed.new`, `require`, `reqscript`, and `close`.
+    ☐ Document runtime-unbound, standalone-bound, live-bound, mount-owned, and closed instance states.
+    ☐ Document ownership transfer for an instance accepted by `ds.mount`.
+    ☐ Document that a mount-owned instance is closed automatically and cannot be reused.
+    ☐ Document the narrower boundary for an already-loaded class or instance.
+    ☐ Document the fixed conventional project roots and how to override them.
+    ☐ Document the default live host-import profile and strict mode.
+    ☐ Document borrowed host state and the absence of arbitrary host fallback.
+    ☐ Document faithful `reqscript` behaviors and explicitly excluded DFHack script-path behaviors.
+    ☐ Update `src/ds.d.lua` comments for every changed mount overload.
+    ☐ Update runtime comments in `src/dwarfspec/ds.lua` for the new final argument, ownership, and cleanup order.
+    ☐ Add language-appropriate comments to every new class and method in TestBed production modules.
+    ☐ Update installation and writing-tests documentation for downstream LuaRocks consumers.
+    ☐ Update the release checklist with TestBed archive, type, offline consumer, and live consumer gates.
+    ☐ Review `docs/testbed-evaluation.md` against implemented reality and correct any superseded proposal language.
+    ☐ State explicitly that restoring loader pointers and closing a bed does not undo clicks, input, native calls, files, timers, event registration, plugin state, or gameplay effects.
+    ☐ Audit documentation for stale examples, duplicate configuration types, obsolete overload order, and unsupported isolation claims.
+
+Phase 12 - Final verification, cleanup, and handoff:
+    ☐ Run TestBed configuration and type-focused tests.
+    ☐ Run ordinary loader-focused tests.
+    ☐ Run `reqscript`-focused tests.
+    ☐ Run mount-overload and ownership-focused tests.
+    ☐ Run the complete standalone unit suite.
+    ☐ Run the complete non-live framework suite.
+    ☐ Run Lua 5.3 syntax and compatibility checks.
+    ☐ Build the final rock.
+    ☐ Audit the final archive contents.
+    ☐ Run the empty-tree offline downstream Busted proof.
+    ☐ Run the installed declaration authoring proof.
+    ☐ Run the focused live configuration-backed component proof.
+    ☐ Run the focused live instance-backed component proof.
+    ☐ Run the applicable full live suite.
+    ☐ Record focused, full, syntax, package, downstream, cleanup, and live results separately.
+    ☐ Inspect every live result for `cleanup_confirmed` and report any unrelated live-suite blocker separately.
+    ☐ Run formatting and whitespace checks.
+    ☐ Run `git diff --check`.
+    ☐ Inspect the final worktree and index without modifying unrelated changes.
+    ☐ Remove only task-owned temporary LuaRocks trees, generated fixtures, logs, and archives that are not intended deliverables.
+    ☐ Verify that no TestBed, mount, scheduler, DFHack, Busted, or helper process started by this work remains active unexpectedly.
+    ☐ Verify that no source file, declaration, documentation file, or package gate required by this checklist remains incomplete.
+    ☐ Summarize implementation, compatibility, limitations, focused evidence, full evidence, package evidence, cleanup evidence, live evidence, and any remaining blockers in the final handoff.

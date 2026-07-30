@@ -122,9 +122,11 @@ mount and returns a subject for its root. `ds.get(control_path)` returns another
 subject by walking direct children from that root. A path such as
 `form/editor` selects `editor` only when it is a direct child of `form`, and
 `form` is a direct child of the mounted component. DwarfSpec never performs a
-global descendant-ID search. Calling either form of `ds.mount` again while the
-mount remains current is an error; call `ds.unmount()` before mounting another
-component or attaching to the current native screen.
+global descendant-ID search. Calling either public mount entry point again
+while the mount remains current is an error; call `ds.unmount()` before
+mounting another component or attaching to the current native screen.
+DwarfSpec automatically unmounts an owned component during example cleanup,
+including when the example fails.
 
 Every path segment is an exact `view_id`. `/` is reserved as the separator;
 paths cannot start or end with `/`, contain empty segments, `.` or `..`, or
@@ -149,6 +151,13 @@ subject for chaining. `inspect` returns a stable diagnostic table, while
 the selection; call `ds.get` to obtain a different subject. A subject is valid
 only while its original mount remains current; unmounting that mount makes the
 subject stale.
+
+`move_pointer`, `hover`, and `click` use DwarfSpec-owned virtual pointer state.
+DwarfSpec automatically restores the inherited pointer coordinates and
+accessors during example cleanup. Supported `dfhack.screen` and `dfhack.gui`
+pointer reads continue to observe the virtual position across later frames,
+even after DF refreshes its raw pointer fields. This restores automation
+instrumentation, not the game or UI effects caused by a click.
 
 `subject:redraw()` requests a repaint of the mount's interaction screen. It
 waits for render instrumentation to confirm a later completed render before
@@ -179,19 +188,92 @@ ds.mouseInput(ds.EMouseButton.RIGHT)
 Each left, right, and middle button exposes explicit `CLICK`, `DOWN`, and `UP`
 actions through the immutable `ds.EInputState` enum. The state defaults to
 `CLICK` when omitted for a physical button. A `DOWN` state remains held across
-pointer movement and later commands until the matching `UP` input or run
-cleanup:
+pointer movement and later commands until the matching `UP` input. DwarfSpec
+automatically restores the exact inherited persistent button state during
+example cleanup:
 
 ```lua
-ds.get('slider'):move_pointer('top_left')
+ds.get('slider'):move_pointer(ds.EPointerAnchor.TOP_LEFT)
 ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.DOWN)
-ds.get('slider'):move_pointer('top_right')
+ds.get('slider'):move_pointer(ds.EPointerAnchor.TOP_RIGHT)
 ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.UP)
 ```
 
 Unlike `subject:click()`, `ds.mouseInput()` does not move the pointer. It sends
 the selected button or wheel input at the position established by
 `subject:hover()` or `subject:move_pointer()`.
+
+Use `ds.mouseWheel()` when a test needs multiple discrete wheel inputs without
+waiting for a render after each one. `steps` is an input count, not pixels or a
+guaranteed number of rows. The command awaits only the completed batch render:
+
+```lua
+ds.get('route_list'):mouseWheel({
+    direction=ds.EMouseButton.SCROLL_DOWN,
+    steps=16,
+    anchor=ds.EPointerAnchor.CENTER,
+})
+```
+
+`direction` must be `SCROLL_UP` or `SCROLL_DOWN`; `steps` defaults to `1` and
+must be a positive integer. Use individual `ds.mouseInput()` calls when the
+test must inspect state between wheel inputs.
+
+### Choosing pointer coordinates
+
+Pointer coordinates can use either zero-based UI-grid cells or zero-based
+screen pixels. World tiles use an `{x, y, z}` map position:
+
+```lua
+ds.move_pointer(17, 9) -- UI-grid cells are the default
+ds.move_pointer(17, 9, ds.EPointerSpace.GRID)
+ds.move_pointer(640, 360, ds.EPointerSpace.PIXELS) -- exact screen pixel
+ds.move_pointer(
+    {x=120, y=85, z=42},
+    ds.EPointerSpace.WORLD_TILE)
+```
+
+Use UI-grid cells for UI widgets and text-mode screen locations. Subjects and
+their `center`, corner, and edge anchors are always resolved in UI-grid cells,
+so fluent `subject:move_pointer()` and `subject:hover()` do not accept a
+coordinate-space argument.
+
+Use screen pixels when Premium map interaction must target an exact rendered
+location. Use `WORLD_TILE` when the test has a map position such as one returned
+by `ds.getViewPos()`. DwarfSpec recenters the camera on the requested tile by
+default, derives its live renderer position after any map-edge clamping, and
+restores the inherited camera position during cleanup. To preserve the camera,
+pass `{recenter=false}`; the command fails if the requested tile is not already
+visible:
+
+```lua
+ds.move_pointer(
+    {x=120, y=85, z=42},
+    ds.EPointerSpace.WORLD_TILE,
+    {recenter=false})
+```
+
+Map-view coordinates can be read or positioned at any viewport anchor:
+
+```lua
+local center = ds.getViewPos(ds.EScreenOrigin.CENTER)
+ds.setViewPos(center, ds.EScreenOrigin.BOTTOM_RIGHT)
+```
+
+Omitting the origin selects `CENTER`. Available origins are
+`TOP_LEFT`, `TOP`, `TOP_RIGHT`, `LEFT`, `CENTER`, `RIGHT`, `BOTTOM_LEFT`,
+`BOTTOM`, and `BOTTOM_RIGHT`.
+
+The first `ds.setViewPos()` call in an example captures the inherited map-view
+position. DwarfSpec automatically restores that position during example
+cleanup, including when the example fails.
+
+DwarfSpec reads the effective renderer geometry for every pointer move. This
+tracks runtime UI-scale, resolution, and window changes; a configured scaling
+preference is not treated as the current conversion geometry. Grid input is
+paired with the selected cell's center pixel, while pixel input remains exact
+and is paired with its derived grid cell. Mouse input resynchronizes the pair,
+and cleanup automatically restores both coordinate representations.
 
 `subject:raw()` exposes the underlying object for an exceptional API that
 DwarfSpec does not model. It returns a Lua table for a Lua-view subject and
@@ -206,11 +288,19 @@ callers do not pass a root or screen.
 
 ## Borrowed native game screens
 
-Call `ds.mount()` with no arguments to attach to the current native DF
-viewscreen. This is a non-owning attachment: DwarfSpec does not create or show
-a `ZScreen`, change DFHack focus, alter the screen stack, or dismiss the
-borrowed screen. The returned root subject wraps the exact native widget
-container exposed by the current viewscreen.
+Call `ds.mountNativeScreen()` to create a native-screen mount for the base
+native DF viewscreen. Its implementation uses a non-owning native attachment:
+DwarfSpec does not create or show a `ZScreen`, change DFHack focus, alter the
+screen stack, or dismiss the borrowed screen. The returned root subject wraps
+the exact native widget container exposed by that base viewscreen.
+
+By contrast, `ds.mount(component, options)` creates an owned component mount.
+Both commands share one current mount and are released with `ds.unmount()`.
+`ESubjectSource` chooses native or registered-overlay subject hierarchies only
+after a native-screen mount exists; it does not choose how to mount.
+DwarfSpec automatically performs the corresponding unmount or non-owning
+detach during example cleanup. Detaching a native mount never dismisses the
+borrowed game screen.
 
 DFHack exposes many base-game controls as typed native widget objects. For
 those objects, DwarfSpec can traverse direct children, inspect names, types,
@@ -222,30 +312,112 @@ cannot be selected by `ds.get()` merely because text or pixels are visible.
 `subject:inspect()` keeps the common bounded fields and may add
 `native_type`, `name`, `effective_visible`, `effective_active`,
 `scroll_position`, `visible_row_count`, and `selected_index` when applicable.
+Scroll state is normalized from DFHack Lua list `page_top` and `page_size`,
+native `widget_scroll_rows`, and the embedded scroll rows owned by
+`widget_radio_rows` and `widget_table`.
 It does not expose an unbounded map of native fields or invoke arbitrary widget
 callbacks.
 
-Native paths are strict direct-child paths. A string selects one named child.
-Use a segment array for nested traversal, a zero-based child index, or a widget
-name containing `/`:
+`ds.root()` always wraps the exact borrowed `viewscreen.widgets` container
+when called without options. Direct viewscreen-widget paths remain strict:
+a string selects one named child, and a segment array supports nested widget
+names, zero-based child indices, and widget names containing `/`:
 
 ```lua
-local native_root = ds.mount()
-local named = ds.get('menu')
-local nested = ds.get({'menu', 'confirm'})
-local indexed = ds.get({'menu', 0})
-local slash_name = ds.get({'stockpiles/animals'})
+local native_root = ds.mountNativeScreen()
+local tooltip = ds.get('Tooltip')
 
 assert.equals(native_root:raw(), ds.root():raw())
-assert.is_userdata(named:raw())
-assert.is_table(named:inspect().body)
+assert.is_userdata(tooltip:raw())
 ```
 
+Many base-game controls are rooted under
+`df.global.game.main_interface` instead of `viewscreen.widgets`. Full game-UI
+paths are the common API for those controls; no source option is required:
+
+```lua
+ds.input('D_UNITLIST')
+
+local deceased = ds.get({
+    'info',
+    'creatures',
+    'Tabs',
+    'Dead/Missing',
+})
+```
+
+The leading `info` and `creatures` segments name declared DF structure fields.
+At `creatures`, `Tabs` is not a declared field and the current value is a
+`df.widget_container`, so DwarfSpec switches permanently to exact native
+widget traversal. A later widget name is never reinterpreted as a DF field.
+
+The live acceptance suite uses the same rule to reach a real Residents
+list row:
+
+```lua
+local row_index = 0
+local resident = ds.get({
+    'info',
+    'creatures',
+    'Tabs',
+    'Residents',
+    0,
+    'Unit List',
+    1,
+    row_index,
+})
+
+assert.is_userdata(resident:raw())
+assert.is_table(resident:inspect().body)
+```
+
+Without `native_root`, a native `ds.get()` preserves compatibility by
+attempting the exact path from `viewscreen.widgets` and, when its leading
+segment is a declared field, from `df.global.game.main_interface`. One
+successful result is returned. Two results with the same native identity are
+deduplicated; two different identities produce an explicit ambiguity error
+instead of selecting one by visibility, activity, focus, or traversal order.
+
+`native_root` remains an advanced escape hatch for an actual ambiguity or a DF
+structure the automatic field traversal does not support. It bypasses both
+automatic roots and resolves only from the supplied `df.widget_container`:
+
+```lua
+local full_path = {
+    'info',
+    'creatures',
+    'Tabs',
+    'Dead/Missing',
+}
+
+-- If ds.get(full_path) reports different identities from the automatic roots,
+-- select the intended exact root and use its root-relative widget path.
+local creatures = df.global.game.main_interface.info.creatures
+local deceased = ds.get({'Tabs', 'Dead/Missing'}, {
+    native_root=creatures,
+})
+local tree = ds.capture_view_tree('deceased-controls', {
+    native_root=creatures,
+})
+```
+
+The explicit root changes only subject resolution. Redraw observation,
+focus-list access, and lifetime checks remain associated with the base
+viewscreen borrowed by `ds.mountNativeScreen()`. Input and mouse input resolve
+the current top viewscreen immediately before each dispatch.
+
 The path array itself uses ordinary one-based Lua array positions; integer
-segments inside it are zero-based native child indices. Empty names, negative
-or fractional indices, gaps in the array, ambiguous slash-containing string
-paths, and missing children fail explicitly with bounded path and child
-diagnostics.
+segments after widget traversal begins are zero-based native child indices.
+Integers before that transition, empty names, negative or fractional indices,
+gaps in the array, ambiguous slash-containing string paths, missing declared
+fields, missing widgets, unsupported intermediate field values, and dual-root
+ambiguity fail explicitly with bounded diagnostics.
+
+The current Hauling route rows are procedurally rendered from
+`df.global.plotinfo.hauling` on the supported DFHack host. They are not native
+widget userdata and therefore cannot be returned by `ds.get()`. UI-grid or
+screen-pixel coordinates can drive that interface, but do not
+constitute widget identity.
 
 An attached native screen can also select an enabled widget from DFHack's live
 overlay registry. This source is externally owned and must be named exactly:
@@ -269,9 +441,11 @@ An overlay subject becomes stale if its registered instance is disabled,
 removed, or replaced. Overlay subjects expose their Lua view tables through
 `subject:raw()`; they do not become native DF userdata.
 
-Native and overlay subjects use the same interaction API. Subject input is
-sent through the pinned native viewscreen, while overlay rendering and input
-continue through DFHack's normal overlay registry:
+Native and overlay subjects use the same interaction API. Subject lookup stays
+rooted in the borrowed base hierarchy, while keyboard, text, click, physical
+button, and wheel input is sent through the current top viewscreen. DFHack's
+normal overlay routing decides whether that input is consumed or passed
+through:
 
 ```lua
 ds.get('menu'):input('SELECT')
@@ -280,27 +454,30 @@ ds.move_pointer(17, 9)
 ds.mouseInput(ds.EMouseButton.LEFT) -- defaults to EInputState.CLICK
 ds.mouseInput(ds.EMouseButton.RIGHT, ds.EInputState.DOWN)
 ds.mouseInput(ds.EMouseButton.RIGHT, ds.EInputState.UP)
-ds.mouseInput(ds.EMouseButton.SCROLL_DOWN)
+ds.mouseWheel({direction=ds.EMouseButton.SCROLL_DOWN, steps=4})
 
-ds.get('menu'):move_pointer('center'):click()
+ds.get('menu'):move_pointer(ds.EPointerAnchor.CENTER):click()
 ds.redraw()                         -- waits for a completed render
 ds.get('menu'):redraw()             -- also waits
 ds.redraw(nil, {wait=false})        -- invalidates without waiting
 ```
 
-Absolute pointer coordinates are zero-based DF screen cells and must be inside
-the current window. DwarfSpec restores the pointer and button state captured
-at attachment during cleanup. `ds.viewport()` is intentionally unavailable
-because DwarfSpec does not own or resize the native game window.
+Absolute pointer coordinates must be inside the current UI-grid or screen-pixel
+bounds for their selected space. DwarfSpec restores the paired pointer and
+button state captured at attachment during cleanup. `ds.viewport()` is
+intentionally unavailable because DwarfSpec does not own or resize the native
+game window.
 
-The attached viewscreen and native widget hierarchy are pinned. If game input,
-a script, or another system changes the current viewscreen, subsequent subject
-inspection, input, pointer movement, capture, or redraw fails with an explicit
-stale-screen error. DwarfSpec never follows the transition or navigates back.
-Call `ds.unmount()`, establish the desired game screen, and call `ds.mount()`
-again to create a new attachment.
+The base native viewscreen and widget hierarchy remain pinned for subject
+lookup. Showing or dismissing another screen does not by itself stale the
+mount or its subjects, and later input follows the new current top viewscreen
+without remounting. DwarfSpec does not replay unhandled input or navigate the
+screen stack; normal DFHack handling controls consumption and pass-through.
+A retained subject becomes stale only when its widget is removed or replaced,
+its structural root becomes invalid, or its selected source is disabled,
+removed, or replaced.
 
-Attachment also fails explicitly when there is no current native viewscreen,
+Attachment also fails explicitly when there is no base native viewscreen,
 the viewscreen has no usable widget container, or render observation cannot be
 installed. Invalid source options, unresolved paths, unusable subject bounds,
 and out-of-window pointer coordinates likewise report the rejected operation
@@ -311,6 +488,186 @@ pointer instrumentation and input state, and leaves the borrowed screen,
 DFHack focus, screen stack, and external overlay registry intact. In contrast,
 component mounts own the component and any DwarfSpec-created host screen and
 therefore tear those resources down during unmount.
+
+`subject:getFocusList()` returns a copied list of focus strings for that
+subject's current mounted screen. The focus list belongs to the screen, not to
+the widget itself, but the call uses normal DwarfSpec subject validation:
+
+```lua
+local current_focus = ds.root():getFocusList()
+assert.is_true(#current_focus > 0)
+
+local list = ds.get('menu')
+assert.same(current_focus, list:getFocusList())
+```
+
+`ds.hasFocus(path)` reports whether the current DFHack focus matches a focus
+path. It is read-only and does not require a mount:
+
+```lua
+assert.is_true(ds.hasFocus('dwarfmode/Default'))
+assert.is_false(ds.hasFocus('dwarfmode/Info'))
+```
+
+## Base-screen focus pollution warnings
+
+DwarfSpec observes the current base-game viewscreen and its DFHack focus
+strings at example and file-suite boundaries. If a test leaves either one
+different from the state it inherited, DwarfSpec records a nonfatal diagnostic
+and prints a `WARNING base-screen focus changed ...` line. DwarfSpec does not
+restore arbitrary base-game navigation automatically; tests remain responsible
+for returning the game to the state they inherited.
+
+The example boundary uses two observations:
+
+- `T0` is captured after DwarfSpec's pre-example reset, automatic unmounting,
+  and cleanup settlement, but before project `before_each` hooks.
+- `T1` is captured after the example result, all applicable project
+  `after_each` hooks, DwarfSpec's post-example reset, automatic unmounting, and
+  cleanup settlement.
+
+The `T0/T1` comparison therefore detects pollution attributable to one example,
+including state left by its setup or teardown. Its warning is emitted after the
+example's `SUCCESS`, `FAILURE`, or `ERROR` result. A setup failure that occurs
+before the example starts is attributed to `before_each` without inventing an
+example name.
+
+The file-suite boundary uses two wider observations:
+
+- `S0` is captured at spec-file entry, before the file body and any file or
+  nested setup execute.
+- `S2` is captured after the file body has finished, all file and nested lazy
+  and strict teardown has run, and DwarfSpec's suite cleanup has unmounted and
+  settled its resources.
+
+One suite means one executed spec file in one repeat. Nested `describe`
+contexts affect names and hook order, but do not own independent suite guards.
+Suite setup may intentionally establish a working state for its examples; the
+complete file teardown is still expected to restore the inherited `S0` state.
+The `S0/S2` warning is emitted after that teardown and before the next spec
+file begins. The next file always records the state it actually inherits, so a
+file leak can produce both an example warning and a file-suite warning without
+being hidden from later files.
+
+Explicitly mounted ordinary widgets, overlay widgets, complete screens, and
+native attachments do not count as pollution merely because they existed.
+DwarfSpec removes or releases them before `T1` and `S2`. A mount or native
+attachment that changes the underlying base-game screen or focus can still
+produce a warning when that change remains after cleanup.
+
+Screen and focus capture are independent. If DwarfSpec proves a change in one
+while the other is unavailable, it still emits a change warning with
+`complete=false` and retains the incomplete before/after details in the
+diagnostic record. If no change can be proved because verification is
+incomplete, it records an informational
+`base_screen_focus_verification_incomplete` diagnostic without a warning line.
+An observed absence of a base-game screen is a valid state and is distinct from
+an unavailable observation.
+
+Focus diagnostics never alter assertions, test counts, run state, cleanup, or
+process exit status. They are intended to expose inter-test and inter-suite
+pollution while preserving the test result that produced them.
+
+## World time
+
+`ds.isGamePaused()` returns the current Dwarf Fortress simulation pause state.
+It is a read-only top-level command and does not require a mount:
+
+```lua
+if ds.isGamePaused() then
+    error('this test requires the simulation to be running')
+end
+```
+
+`ds.setGamePaused(paused)` accepts a boolean and immediately returns the
+requested state. The first call in each example captures the inherited pause
+state. After project teardown, DwarfSpec automatically restores that exact
+state during example cleanup, even when the example fails:
+
+```lua
+ds.setGamePaused(false)
+assert.is_false(ds.isGamePaused())
+```
+
+Repeated calls within the same example retain the original cleanup baseline;
+they do not replace it with an intermediate state.
+
+`ds.getGameSpeed()` returns the current game-speed target as an integer number
+of ticks per second. It is read-only, does not require a mount, and does not
+register cleanup:
+
+```lua
+local inherited_tps = ds.getGameSpeed()
+```
+
+`ds.setGameSpeed(tps)` accepts a positive integer game-speed target in ticks
+per second and returns the applied TPS value. It updates the same native
+`df.global.enabler.fps` and
+`fps_per_gfps` fields as DFHack's `setfps` command:
+
+```lua
+assert.equals(100, ds.setGameSpeed(100))
+```
+
+The first call in an example captures the exact inherited speed state. Repeated
+calls retain that baseline, and DwarfSpec automatically restores it during
+example cleanup. The command does not change the pause state.
+
+The value is a target, not a guarantee that the computer can achieve the
+requested tick rate. A low target can cause a `ds.wait_ticks()` wall-clock
+timeout, so tests that deliberately run slowly should provide a suitable
+`timeout_ms`.
+
+`ds.getTick()` returns the current in-year Dwarf Fortress simulation tick from
+`df.global.cur_year_tick`. It is a read-only top-level command and does not
+require a mount:
+
+```lua
+local tick = ds.getTick()
+assert.is_true(tick >= 0)
+```
+
+It fails explicitly when no loaded world exposes a valid tick counter.
+
+`ds.getTime()` returns DFHack's current millisecond clock value from
+`dfhack.getTickCount()`. It is also read-only and independent of mounting:
+
+```lua
+local milliseconds = ds.getTime()
+assert.is_true(milliseconds >= 0)
+```
+
+`ds.wait_ticks(count, options)` suspends the test until exactly `count`
+unpaused Dwarf Fortress simulation ticks have passed:
+
+```lua
+local elapsed_ticks = ds.wait_ticks(10)
+assert.equals(10, elapsed_ticks)
+```
+
+This uses DFHack's simulation-tick timer rather than the in-year calendar
+counter returned by `ds.getTick()`. Simulation ticks stop while the game is
+paused. Scheduling requires a loaded world.
+
+The optional table accepts:
+
+| Field | Meaning |
+| --- | --- |
+| `timeout_ms` | Maximum wall-clock wait in milliseconds. It defaults to `settings.wait.timeout_ms`, or 10,000 when that setting is absent. |
+| `description` | Operation name shown in timeout diagnostics. It defaults to `wait_ticks(count)`. |
+
+For example:
+
+```lua
+ds.wait_ticks(10, {
+    timeout_ms=20000,
+    description='citizen completes scheduled work',
+})
+```
+
+The raw-frame watchdog uses `timeout_ms` to expire the operation if the game
+remains paused or stops advancing. `frame_budget` is not a `wait_ticks` option:
+raw frames do not determine when the requested simulation-tick wait completes.
 
 ## Condition waits
 
@@ -328,7 +685,8 @@ end)
 The truthy query result is returned to the test. Optional `frame_budget` and
 `timeout_ms` values override the project-wide wait settings for one operation.
 Use `ds.wait_frames(count)` only when the number of raw DFHack frames is itself
-part of the contract.
+part of the contract. Use `ds.wait_ticks(count)` when the test requires the
+unpaused simulation itself to advance.
 
 ## Isolated overlay components
 
@@ -414,8 +772,8 @@ current mount.
 ## Real overlay registration integration
 
 Normal overlay behavior belongs in isolated component specs named distinctly,
-such as `tooltip_overlay_component_spec.ds.lua`. These specs use `ds.mount()`
-and never copy scripts into `hack/scripts/gui`.
+such as `tooltip_overlay_component_spec.ds.lua`. These specs use
+`ds.mount(component, options)` and never copy scripts into `hack/scripts/gui`.
 
 DwarfSpec retains a separately selected registration integration for the real
 DFHack boundary. It proves `OVERLAY_WIDGETS` discovery, registration, rescan,
@@ -427,24 +785,34 @@ overlay script, not a component mount or fixture-definition protocol.
 
 The integration support refuses to replace an existing destination or remove
 a staged script whose contents changed. It snapshots `dfhack-config/overlay.json`
-before registration, disables the staged widgets during cleanup, restores the
-configuration artifact byte for byte, removes only its unchanged run-owned
-script, performs a final rescan, and verifies that no staged registration
-remains. The integration spec is excluded from the normal component-test glob
-and must be selected explicitly when validating the DFHack overlay boundary.
+before registration. During lifecycle cleanup, DwarfSpec automatically
+disables the staged widgets, restores the configuration artifact byte for
+byte, removes only its unchanged run-owned script, performs a final rescan,
+and verifies that no staged registration remains. The integration spec is
+excluded from the normal component-test glob and must be selected explicitly
+when validating the DFHack overlay boundary.
 
 ## Public commands
 
 The first-release surface is intentionally small:
 
-- synchronization: `await`, `wait_frames`;
+- synchronization: `await`, `wait_frames`, `wait_ticks`;
 - components: `mount`, `root`, `get`, `unmount`, `viewport`;
-- subjects: `click`, `hover`, `move_pointer`, `input`, `type`, `inspect`,
+- subjects: `click`, `hover`, `move_pointer`, `mouseWheel`, `input`, `type`, `inspect`,
   `text`, and the exceptional `raw` escape hatch;
-- positioned mouse input: `mouseInput` with `EMouseButton` and
-  `EInputState`;
+- positioned mouse input: `mouseInput` with `EMouseButton` and `EInputState`,
+  plus batched discrete wheel input through `mouseWheel`;
 - evidence: `capture_view_tree`, `capture_screen`; and
 - real registration integration: `stage_overlay_registration`.
+
+Automatic cleanup applies explicitly to `mount`, `mountNativeScreen`,
+`setGamePaused`, `setGameSpeed`, `setViewPos`, `move_pointer`, `hover`,
+`click`, persistent `mouseInput` button state, and
+`stage_overlay_registration`. The fluent subject forms of `move_pointer`,
+`hover`, and `click` have the same pointer-restoration guarantee. `viewport`
+is mount-scoped and ends with automatic unmount cleanup. DwarfSpec restores
+only the state it owns; it does not reverse gameplay or UI effects caused by
+input or clicks.
 
 Input commands perform their own required render or frame synchronization.
 Cleanup and render-generation waiting are internal lifecycle details rather

@@ -2,6 +2,8 @@
 
 local subject_paths = require('dwarfspec.subject_paths')
 local ESubjectSource = require('dwarfspec.subject_sources')
+local EResolutionStage =
+    require('dwarfspec.native_resolution_stages')
 local identity_labels = require('dwarfspec.identity_labels')
 
 local M = {}
@@ -401,7 +403,8 @@ function M.new(options)
                 type(adapter.format_resolution_failure) == 'function' then
             assert(false, ('DwarfSpec get failed: mount=%s %s')
                 :format(tostring(mount.id),
-                    adapter:format_resolution_failure(failure, segments)))
+                    adapter:format_resolution_failure(
+                        failure, segments, diagnostic_path)))
         end
         local resolved = {}
         for index = 1, failure.index - 1 do
@@ -446,8 +449,9 @@ function M.new(options)
         assert(type(operation) == 'string' and operation ~= '',
             'mount operation name must be a nonempty string')
         assert(self.current and self.current.alive,
-            ('DwarfSpec %s requires a mounted component; call ' ..
-                'ds.mount(component, options) first'):format(operation))
+            ('DwarfSpec %s requires a current mount; call ' ..
+                'ds.mount(component, options) or ' ..
+                    'ds.mountNativeScreen() first'):format(operation))
         return self.current
     end
 
@@ -484,7 +488,22 @@ function M.new(options)
         local mount = self:require_current('subject source selection')
         assert(type(source) == 'table',
             'subject source selection requires a source table')
-        subject_adapter(mount, source)
+        local candidate_adapter = subject_adapter(mount, source)
+        if source.kind == ESubjectSource.NATIVE and
+                type(candidate_adapter.same_located_root) == 'function' then
+            for registered in pairs(mount.subject_sources) do
+                local registered_adapter = subject_adapter(mount, registered)
+                if registered ~= source and
+                        registered.kind == ESubjectSource.NATIVE and
+                        candidate_adapter:same_located_root(
+                            registered_adapter) then
+                    if type(candidate_adapter.cleanup) == 'function' then
+                        candidate_adapter:cleanup()
+                    end
+                    return registered
+                end
+            end
+        end
         mount.subject_sources[source] = true
         return source
     end
@@ -530,21 +549,28 @@ function M.new(options)
     function context:resolve_subject(subject, operation)
         local mount = self.current
         assert(mount and mount.alive,
-            ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
-                'no component is currently mounted'):format(operation,
-                    subject.control_path, tostring(subject.mount_id)))
+            ('stage=%s DwarfSpec %s rejected stale subject ' ..
+                'control_path=%q from mount %s; no current mount exists')
+                :format(
+                    EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                    operation, subject.control_path,
+                    tostring(subject.mount_id)))
         assert(self.subject_mounts[subject] == mount.id and
             subject.mount_id == mount.id,
-            ('DwarfSpec %s rejected stale subject control_path=%q from mount %s; ' ..
-                'current mount is %s'):format(operation, subject.control_path,
+            ('stage=%s DwarfSpec %s rejected stale subject ' ..
+                'control_path=%q from mount %s; current mount is %s')
+                :format(
+                    EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                    operation, subject.control_path,
                     tostring(subject.mount_id), tostring(mount.id)))
         local descriptor = subject._descriptor
         assert(descriptor and mount.subject_sources[descriptor.source] and
             descriptor.adapter == subject_adapter(
                 mount, descriptor.source),
-            ('DwarfSpec %s subject control_path=%q mount=%s descriptor ' ..
-            'is no longer available'):format(operation,
-                subject.control_path, tostring(subject.mount_id)))
+            ('stage=%s DwarfSpec %s subject control_path=%q mount=%s ' ..
+            'descriptor is no longer available'):format(
+                EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                operation, subject.control_path, tostring(subject.mount_id)))
         if mount.category == 'native' then
             mount.interaction_target:assert_current(operation, {
                 mount_kind=mount.category,
@@ -556,11 +582,14 @@ function M.new(options)
         local view = descriptor.adapter:resolve(descriptor.path_segments)
         if uses_native_subjects(mount, descriptor.source) then
             if not view then
-                error(('DwarfSpec %s rejected stale native subject path=%s ' ..
+                error(('stage=%s DwarfSpec %s rejected stale native ' ..
+                    'subject path=%s ' ..
                     'mount=%s because the widget no longer resolves; call ' ..
                     'ds.get(path) to select it again; mount_kind=%q ' ..
                     'source=%q captured_identity=%s current_identity=%s')
-                    :format(operation, subject.control_path,
+                    :format(
+                        EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                        operation, subject.control_path,
                         tostring(subject.mount_id), mount.category,
                         source_kind(descriptor.source),
                         identity_labels.of(descriptor.captured_identity),
@@ -568,22 +597,28 @@ function M.new(options)
             end
             local current_identity = descriptor.adapter:identity(view)
             if current_identity ~= descriptor.captured_identity then
-                error(('DwarfSpec %s rejected stale native subject path=%s ' ..
+                error(('stage=%s DwarfSpec %s rejected stale native ' ..
+                    'subject path=%s ' ..
                     'mount=%s because the widget was replaced; call ' ..
                     'ds.get(path) to select the replacement; mount_kind=%q ' ..
                     'source=%q captured_identity=%s current_identity=%s')
-                    :format(operation, subject.control_path,
+                    :format(
+                        EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                        operation, subject.control_path,
                         tostring(subject.mount_id), mount.category,
                         source_kind(descriptor.source),
                         identity_labels.of(descriptor.captured_identity),
                         identity_labels.of(current_identity)), 0)
             end
             if not descriptor.adapter:contains(view) then
-                error(('DwarfSpec %s rejected native subject path=%s ' ..
+                error(('stage=%s DwarfSpec %s rejected native subject ' ..
+                    'path=%s ' ..
                     'mount=%s because the widget is outside the pinned ' ..
                     'hierarchy; mount_kind=%q source=%q captured_identity=%s ' ..
-                    'current_identity=%s'):format(operation,
-                        subject.control_path, tostring(subject.mount_id),
+                    'current_identity=%s'):format(
+                        EResolutionStage.RETAINED_SUBJECT_REACQUISITION,
+                        operation, subject.control_path,
+                        tostring(subject.mount_id),
                         mount.category, source_kind(descriptor.source),
                         identity_labels.of(descriptor.captured_identity),
                         identity_labels.of(current_identity)), 0)
@@ -753,13 +788,13 @@ function M.new(options)
     ---Attaches a validated borrowed native screen as the implicit mount.
     ---@param attach function
     ---@return table
-    function context:mount_native(attach)
+    function context:mount_native_screen(attach)
         assert(not self.current,
             ('DwarfSpec mount rejected because mount %d is still current; ' ..
-                'call ds.unmount() before mounting another component')
+                'call ds.unmount() before creating another mount')
                 :format(self.current and self.current.id or -1))
         assert(type(attach) == 'function',
-            'native mount requires an attachment factory')
+            'native-screen mount requires an attachment factory')
 
         local attach_ok, attachment = xpcall(attach, debug.traceback)
         if not attach_ok then error(attachment, 2) end
@@ -809,8 +844,9 @@ function M.new(options)
             local cleanup_ok, cleanup_failure =
                 xpcall(function() cleanup_mount(self, mount) end,
                     debug.traceback)
-            local message = 'DwarfSpec native mount failed to initialize ' ..
-                'run-scoped state: ' .. tostring(setup_failure)
+            local message =
+                'DwarfSpec native-screen mount failed to initialize ' ..
+                    'run-scoped state: ' .. tostring(setup_failure)
             if not cleanup_ok then
                 message = message .. '; direct cleanup failed: ' ..
                     tostring(cleanup_failure)
@@ -827,8 +863,9 @@ function M.new(options)
             local cleanup_ok, cleanup_failure =
                 xpcall(function() cleanup_mount(self, mount) end,
                     debug.traceback)
-            local message = 'DwarfSpec native mount failed to register ' ..
-                'cleanup: ' .. tostring(cleanup_entry)
+            local message =
+                'DwarfSpec native-screen mount failed to register ' ..
+                    'cleanup: ' .. tostring(cleanup_entry)
             if not cleanup_ok then
                 message = message .. '; direct cleanup failed: ' ..
                     tostring(cleanup_failure)
@@ -851,8 +888,9 @@ function M.new(options)
             local cleanup_ok, failures = self.cleanup_module.run_from(
                 self.cleanup_registry, mount.cleanup_marker,
                 'failed native subject cleanup registration')
-            local message = 'DwarfSpec native mount failed to register ' ..
-                'subject cleanup: ' .. tostring(descriptor_entry)
+            local message =
+                'DwarfSpec native-screen mount failed to register ' ..
+                    'subject cleanup: ' .. tostring(descriptor_entry)
             if not cleanup_ok then
                 message = message .. '; cleanup failed: ' ..
                     format_cleanup_failures(failures)
@@ -903,11 +941,12 @@ function M.new(options)
             local capability_ok, capability_failure = xpcall(function()
                 mount.interaction_target:invalidate()
                 return mount.render_tracker:wait_after(
-                    captured, 'native mount render capability check')
+                    captured, 'native-screen mount render capability check')
             end, debug.traceback)
             if not capability_ok then
-                error('DwarfSpec native render capability check failed: ' ..
-                    tostring(capability_failure), 0)
+                error(
+                    'DwarfSpec native-screen mount render capability check ' ..
+                        'failed: ' .. tostring(capability_failure), 0)
             end
             return self:root()
         end, debug.traceback)
@@ -915,8 +954,9 @@ function M.new(options)
             local cleanup_ok, failures = self.cleanup_module.run_from(
                 self.cleanup_registry, mount.cleanup_marker,
                 'failed native attachment')
-            local message = 'DwarfSpec native mount failed while attaching: ' ..
-                tostring(root_subject)
+            local message =
+                'DwarfSpec native-screen mount failed while attaching: ' ..
+                    tostring(root_subject)
             if not cleanup_ok then
                 message = message .. '; cleanup failed: ' ..
                     format_cleanup_failures(failures)
@@ -933,7 +973,7 @@ function M.new(options)
     function context:mount(component, mount_options)
         assert(not self.current,
             ('DwarfSpec mount rejected because mount %d is still current; ' ..
-                'call ds.unmount() before mounting another component')
+                'call ds.unmount() before creating another mount')
                 :format(self.current and self.current.id or -1))
 
         local classification = self.boundary:classify(component)

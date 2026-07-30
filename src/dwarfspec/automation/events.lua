@@ -1,6 +1,8 @@
 -- Structured, bounded, append-only event journals for automation runs.
 
 local EventType = require('dwarfspec.automation.event_types')
+local focus_diagnostics =
+    require('dwarfspec.automation.focus_diagnostics')
 local RunState = require('dwarfspec.automation.run_states')
 local SchedulerFailureKind =
     require('dwarfspec.automation.scheduler_failure_kinds')
@@ -324,6 +326,11 @@ function M.validate_payload(event_type, payload)
     end
     if event_type == EventType.PROBLEM_RECORDED then
         M.validate_problem(payload, 'event payload problem.recorded')
+    elseif event_type == EventType.DIAGNOSTIC_RECORDED and
+            (payload.kind == focus_diagnostics.CHANGE_KIND or
+                payload.kind == focus_diagnostics.INCOMPLETE_KIND) then
+        focus_diagnostics.validate(
+            payload, 'event payload diagnostic.recorded')
     end
     if event_type == EventType.REPEAT_FINISHED then
         validate_counts(payload.counts,

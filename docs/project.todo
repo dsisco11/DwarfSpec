@@ -1,6 +1,3 @@
-✔ Complete the deterministic DF-cell viewport work in `docs/viewport.todo`, including the mount option, 128 by 64 default, and `ds.viewport(width, height)` command. @done(26-07-21 04:57)
-✔ Update `ds.get(...)` to accept and parse hierarchy paths for nested components. @done(26-07-21 04:57)
-✘ Add new `ds.screenshot(...)` method to allow taking screenshots of mounted components under test. @cancelled(26-07-21 05:12)
 
 Documentation:
     ☐ Create a `wiki/usage.md` document for describing how to setup a project to use the test runner.
@@ -8,18 +5,19 @@ Documentation:
     ☐ Create a `wiki/commands.md` document to describe the available commands for the test runner.
     ☐ Create a `wiki/writing-tests.md` document to describe how to write DwarfSpec tests.
 
-Backend:
-    ✔ Evaluate migrating to an RPC server for the test runner. The accepted design keeps `dfhack-run`, introduces a multi-project in-process automation service and structured events consumable by external tools and a future in-game UI, supports concurrent project submissions through a deterministic queue, serializes live execution per DFHack process, and defers remote execution. Service implementation is separate from the runner UI work listed below. See `docs/test-runner-service-design.md`. @done(26-07-22 02:49)
-    ✔ Implement the multi-project test runner service according to `docs/test-runner-service-implementation.todo`. @done(26-07-24 09:06)
-
 Frontend:
     ☐ Create a test-runner UI for running and debugging tests, including a test results panel and test command logs.
+        - Detailed design and verification task list: `docs/test-runner-ui.todo`.
     ☐ test-runner UI should have the ability to re-run failed tests.
     ☐ test-runner UI should have the ability to filter tests by tags or categories.
     ☐ test-runner UI should have the ability to click through command log items and see the snapshots of the component tree at that point in time.
 
 Testing Features:
-    ☐ Need a `ds.getFocusList()` method to return the current focus list of the subject.
+    ☑ Warn when a test or file-level suite leaves a different base-game screen or focus than it inherited.
+        - Detailed implementation and verification plan: `docs/base-screen-focus-warning.todo`.
+        - One suite is one spec file in one repeat; nested contexts do not own independent suite guards.
+        - Explicitly mounted components do not count; comparisons occur after the applicable example or file teardown, automatic unmounting, and cleanup settlement.
+    ☐ Explore possible ways to prevent user keyboard/mouse input from interfering with the test runner, such as a "lock" mode that prevents user input while tests are running.
     ☐ Refactor `ds.get()` so it is more like a Cypress get assertion, returning a `DSQuery` object that can be chained with `.should(...)` and `.find(...)` methods.
         - get method will become more of an async query with a timeout.
         - get method acts as an implicit assertion.

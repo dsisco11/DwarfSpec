@@ -1,11 +1,13 @@
 ---@meta
 
----@alias dwarfspec.PointerAnchor
+---@alias dwarfspec.EPointerAnchor
 ---| 'center'
 ---| 'top_left'
 ---| 'top_right'
 ---| 'bottom_left'
 ---| 'bottom_right'
+
+---@alias dwarfspec.PointerAnchor dwarfspec.EPointerAnchor
 
 ---@alias dwarfspec.MouseButton
 ---| 'left'
@@ -24,13 +26,36 @@
 ---| 'down'
 ---| 'up'
 
+---The `ds.EPointerSpace.GRID` coordinate-space value.
+---@alias dwarfspec.GridPointerSpace 1
+
+---The `ds.EPointerSpace.PIXELS` coordinate-space value.
+---@alias dwarfspec.PixelPointerSpace 2
+
+---The `ds.EPointerSpace.WORLD_TILE` coordinate-space value.
+---@alias dwarfspec.WorldTilePointerSpace 3
+
+---A pointer coordinate space obtained from `ds.EPointerSpace`.
+---@alias dwarfspec.EPointerSpace dwarfspec.GridPointerSpace|dwarfspec.PixelPointerSpace|dwarfspec.WorldTilePointerSpace
+
+---@alias dwarfspec.EScreenOrigin
+---| 'top_left'
+---| 'top'
+---| 'top_right'
+---| 'left'
+---| 'center'
+---| 'right'
+---| 'bottom_left'
+---| 'bottom'
+---| 'bottom_right'
+
 ---@alias dwarfspec.ESubjectSource
 ---| 'native'
 ---| 'overlay'
 
----An exact nonempty native widget name or zero-based direct-child index.
+---A declared game-UI field, exact widget name, or zero-based widget index.
 ---@alias dwarfspec.NativePathSegment string|integer
----A nonempty sequence of exact native widget path segments.
+---A nonempty native path. Declared fields may precede exact widget segments.
 ---@alias dwarfspec.NativePath dwarfspec.NativePathSegment[]
 
 ---@class dwarfspec.EMouseButtonEnum
@@ -45,20 +70,50 @@
 ---@field DOWN `down`
 ---@field UP `up`
 
+---Immutable pointer coordinate spaces. Use these members instead of backing
+---values: `GRID` addresses UI-grid cells, `PIXELS` addresses screen pixels,
+---and `WORLD_TILE` addresses map tiles.
+---@class dwarfspec.EPointerSpaceEnum
+---@field GRID dwarfspec.GridPointerSpace Zero-based UI-grid cells; the default.
+---@field PIXELS dwarfspec.PixelPointerSpace Exact zero-based screen pixels.
+---@field WORLD_TILE dwarfspec.WorldTilePointerSpace Zero-based world-map tiles.
+
+---Immutable anchors for pointer placement within subject bounds.
+---@class dwarfspec.EPointerAnchorEnum
+---@field CENTER `center`
+---@field TOP_LEFT `top_left`
+---@field TOP_RIGHT `top_right`
+---@field BOTTOM_LEFT `bottom_left`
+---@field BOTTOM_RIGHT `bottom_right`
+
+---Immutable map viewport anchors used by `getViewPos()` and `setViewPos()`.
+---@class dwarfspec.EScreenOriginEnum
+---@field TOP_LEFT `top_left`
+---@field TOP `top`
+---@field TOP_RIGHT `top_right`
+---@field LEFT `left`
+---@field CENTER `center`
+---@field RIGHT `right`
+---@field BOTTOM_LEFT `bottom_left`
+---@field BOTTOM `bottom`
+---@field BOTTOM_RIGHT `bottom_right`
+
 ---Immutable identifiers for inspectable native and registered-overlay sources.
 ---@class dwarfspec.ESubjectSourceEnum
 ---@field NATIVE `native`
 ---@field OVERLAY `overlay`
 
----Selects the borrowed native widget hierarchy, which is the default source.
+---Selects the borrowed native hierarchy, which is the default source.
 ---@class dwarfspec.NativeSubjectSourceOptions
 ---@field source? `native`
 ---@field overlay? nil
+---@field native_root? userdata Advanced exact-root bypass for ambiguity or unsupported DF structures.
 
 ---Selects one externally owned widget from DFHack's live overlay registry.
 ---@class dwarfspec.OverlaySubjectSourceOptions
 ---@field source `overlay`
 ---@field overlay string Exact enabled overlay registry name.
+---@field native_root? nil
 
 ---@alias dwarfspec.SubjectSourceOptions dwarfspec.NativeSubjectSourceOptions|dwarfspec.OverlaySubjectSourceOptions
 ---@alias dwarfspec.RootSourceOptions dwarfspec.SubjectSourceOptions
@@ -70,12 +125,24 @@
 ---@field frame_budget? integer
 ---@field description? string
 
+---@class dwarfspec.TickWaitOptions
+---@field timeout_ms? integer Maximum wall-clock time in milliseconds before the wait fails; defaults to settings.wait.timeout_ms or 10000.
+---@field description? string Operation name included in timeout diagnostics; defaults to `wait_ticks(count)`.
+
 ---@class dwarfspec.RedrawOptions
 ---@field wait? boolean Wait for the resulting completed render; defaults to true.
+
+---@class dwarfspec.WorldTilePointerOptions
+---@field recenter? boolean Recenter the map view on the tile before moving; defaults to true.
 
 ---@class dwarfspec.Viewport
 ---@field width integer
 ---@field height integer
+
+---@class dwarfspec.MapViewPosition
+---@field x integer Map-tile x coordinate at the selected screen origin.
+---@field y integer Map-tile y coordinate at the selected screen origin.
+---@field z integer Zero-based map z-level.
 
 ---@class dwarfspec.OverlayPosition
 ---@field x integer
@@ -136,20 +203,35 @@
 ---@class dwarfspec.Subject
 local Subject = {}
 
+---@class dwarfspec.MouseWheelOptions
+---@field direction dwarfspec.EMouseButton
+---@field steps? integer Defaults to one discrete wheel input.
+---@field anchor? dwarfspec.EPointerAnchor
+
 ---Clicks this subject and preserves it for fluent chaining.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---It does not reverse game or UI effects caused by the click.
 ---@param button? dwarfspec.MouseButton
 ---@return dwarfspec.Subject
 function Subject:click(button) end
 
----Moves the pointer over this subject and preserves it for fluent chaining.
----@param anchor? dwarfspec.PointerAnchor
+---Moves the pointer over this subject in UI-grid cells and preserves it.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---@param anchor? dwarfspec.EPointerAnchor
 ---@return dwarfspec.Subject
 function Subject:hover(anchor) end
 
----Moves the pointer to this subject and preserves it for fluent chaining.
----@param anchor? dwarfspec.PointerAnchor
+---Moves the pointer to this subject in UI-grid cells and preserves it.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---@param anchor? dwarfspec.EPointerAnchor
 ---@return dwarfspec.Subject
 function Subject:move_pointer(anchor) end
+
+---Sends a discrete wheel-input batch over this subject and preserves it.
+---Only the render after the complete batch is awaited.
+---@param options dwarfspec.MouseWheelOptions
+---@return dwarfspec.Subject
+function Subject:mouseWheel(options) end
 
 ---Sends native input through this subject's mounted screen.
 ---@param keys string|string[]|table
@@ -170,6 +252,10 @@ function Subject:redraw(options) end
 ---@return dwarfspec.SubjectInspectState
 function Subject:inspect() end
 
+---Returns a copied focus-string list for this subject's current mounted screen.
+---@return string[]
+function Subject:getFocusList() end
+
 ---Returns the stable inspected text value for this subject.
 ---@return string|nil
 function Subject:text() end
@@ -183,6 +269,9 @@ function Subject:raw() end
 ---@field protocol_version integer
 ---@field EMouseButton dwarfspec.EMouseButtonEnum
 ---@field EInputState dwarfspec.EInputStateEnum
+---@field EPointerSpace dwarfspec.EPointerSpaceEnum
+---@field EPointerAnchor dwarfspec.EPointerAnchorEnum
+---@field EScreenOrigin dwarfspec.EScreenOriginEnum
 ---@field ESubjectSource dwarfspec.ESubjectSourceEnum
 local DS = {}
 
@@ -192,6 +281,12 @@ local DS = {}
 ---@return integer
 function DS.wait_frames(count, options) end
 
+---Waits for unpaused Dwarf Fortress simulation ticks without blocking.
+---@param count integer
+---@param options? dwarfspec.TickWaitOptions
+---@return integer
+function DS.wait_ticks(count, options) end
+
 ---Polls a read-only condition once per frame until it becomes ready.
 ---@generic T
 ---@param description string
@@ -200,16 +295,70 @@ function DS.wait_frames(count, options) end
 ---@return T
 function DS.await(description, query, options) end
 
----Attaches non-owningly to the current native screen when called with no arguments.
----The no-argument form neither creates nor shows a ZScreen.
----@overload fun(): dwarfspec.Subject
+---Returns whether the Dwarf Fortress simulation is currently paused.
+---@return boolean
+function DS.isGamePaused() end
+
+---Sets the game pause state for the current example.
+---DwarfSpec automatically restores the inherited state during cleanup.
+---@param paused boolean
+---@return boolean
+function DS.setGamePaused(paused) end
+
+---Returns the current game ticks-per-second target.
+---@return integer
+function DS.getGameSpeed() end
+
+---Sets the game ticks-per-second target for the current example.
+---DwarfSpec automatically restores the inherited state during cleanup.
+---@param tps integer
+---@return integer
+function DS.setGameSpeed(tps) end
+
+---Returns the current in-year simulation tick for the loaded DF world.
+---@return integer
+function DS.getTick() end
+
+---Returns DFHack's current millisecond clock value.
+---@return integer
+function DS.getTime() end
+
+---Returns whether the current DFHack focus matches one focus path.
+---@param path string
+---@return boolean
+function DS.hasFocus(path) end
+
+---Returns the map tile aligned with the selected screen origin.
+---The origin defaults to `EScreenOrigin.CENTER`.
+---@param origin? dwarfspec.EScreenOrigin
+---@return dwarfspec.MapViewPosition
+function DS.getViewPos(origin) end
+
+---Aligns one map tile with the selected screen origin for the current example.
+---The origin defaults to `EScreenOrigin.CENTER`.
+---DwarfSpec automatically restores the inherited position during cleanup.
+---@param position dwarfspec.MapViewPosition
+---@param origin? dwarfspec.EScreenOrigin
+---@return dwarfspec.MapViewPosition
+function DS.setViewPos(position, origin) end
+
+---Mounts one owned component or complete screen.
+---DwarfSpec automatically unmounts it during example cleanup.
 ---@param component any
 ---@param options? dwarfspec.MountOptions
 ---@return dwarfspec.Subject
 function DS.mount(component, options) end
 
+---Mounts the current native DF screen without taking ownership of it.
+---The mount creates, shows, resizes, and dismisses no screen.
+---DwarfSpec automatically detaches the mount during example cleanup.
+---@return dwarfspec.Subject
+function DS.mountNativeScreen() end
+
 ---Returns a subject for the selected current-mount root.
----Source options are accepted only by a borrowed native-screen mount.
+---With no options, a native mount returns the exact borrowed
+---`viewscreen.widgets` container. Source options are accepted only by a
+---borrowed native-screen mount.
 ---@param options? dwarfspec.RootSourceOptions
 ---@return dwarfspec.Subject
 function DS.root(options) end
@@ -217,9 +366,14 @@ function DS.root(options) end
 ---Releases the current native attachment or mounted component.
 function DS.unmount() end
 
----Selects one strict direct-child path from the implicit current mount.
----Native strings select one named child; arrays support nested names, zero-based
----indices, and names containing "/". Source options require a native mount.
+---Selects one exact path from the implicit current mount.
+---On a borrowed native-screen mount without `native_root`, DwarfSpec checks
+---both `viewscreen.widgets` and `df.global.game.main_interface`. Declared
+---game-UI fields form a structural prefix; traversal switches permanently to
+---exact widget names or zero-based indices at the first non-field segment on a
+---widget container. Equal results are deduplicated and different results are
+---reported as ambiguous. `native_root` bypasses this dual-root resolution.
+---Component paths retain their strict direct-`subviews` behavior.
 ---@param control_path string|dwarfspec.NativePath
 ---@param options? dwarfspec.GetSourceOptions
 ---@return dwarfspec.Subject
@@ -244,17 +398,33 @@ function DS.redraw(view, options) end
 ---@return table
 function DS.capture_view_tree(name, options) end
 
----Moves the virtual pointer to an anchor inside a subject or exact screen cells.
+---Moves the pointer by subject anchor, UI-grid cell, exact screen pixel, or
+---world tile.
+---Numeric calls default to `EPointerSpace.GRID`. Explicit pixel calls preserve
+---the requested pixel exactly and expose its derived UI-grid cell. World-tile
+---calls recenter the map view by default; pass `{recenter=false}` to require
+---the tile to already be visible. DwarfSpec reads current effective renderer
+---geometry for each move and restores pointer and camera state automatically
+---during cleanup.
 ---@overload fun(x: integer, y: integer): integer, integer
+---@overload fun(x: integer, y: integer, space: dwarfspec.GridPointerSpace): integer, integer
+---@overload fun(x: integer, y: integer, space: dwarfspec.PixelPointerSpace): integer, integer
+---@overload fun(position: dwarfspec.MapViewPosition, space: dwarfspec.WorldTilePointerSpace, options?: dwarfspec.WorldTilePointerOptions): integer, integer, integer
 ---@param view? dwarfspec.Subject Defaults to the current source root.
----@param anchor? dwarfspec.PointerAnchor
+---@param anchor? dwarfspec.EPointerAnchor Subject anchors use UI-grid cells.
 ---@return integer x
 ---@return integer y
 function DS.move_pointer(view, anchor) end
 
----Moves the virtual pointer over a subject and waits for its render.
+---Moves the pointer over a subject or numeric coordinate and waits for render.
+---Subject anchors use UI-grid cells. Numeric calls use the same coordinate
+---space and return rules as `move_pointer`.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---@overload fun(x: integer, y: integer): integer, integer
+---@overload fun(x: integer, y: integer, space: dwarfspec.GridPointerSpace): integer, integer
+---@overload fun(x: integer, y: integer, space: dwarfspec.PixelPointerSpace): integer, integer
 ---@param view? dwarfspec.Subject
----@param anchor? dwarfspec.PointerAnchor
+---@param anchor? dwarfspec.EPointerAnchor
 ---@return integer x
 ---@return integer y
 function DS.hover(view, anchor) end
@@ -267,12 +437,24 @@ function DS.input(keys, subject) end
 
 ---Sends one mouse action at the current virtual pointer position.
 ---Physical mouse buttons default to the click input state.
+---DwarfSpec automatically restores state owned by persistent `DOWN` or `UP`
+---actions during cleanup.
 ---@param button dwarfspec.EMouseButton
 ---@param action? dwarfspec.EInputState
 ---@return integer
 function DS.mouseInput(button, action) end
 
+---Sends discrete wheel inputs at the current pointer or over a subject.
+---Steps are inputs, not pixels or guaranteed scroll rows; only the final
+---render is awaited.
+---@param options dwarfspec.MouseWheelOptions
+---@param subject? dwarfspec.Subject
+---@return integer
+function DS.mouseWheel(options, subject) end
+
 ---Clicks a view with a supported native mouse button and waits for render.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---It does not reverse game or UI effects caused by the click.
 ---@param view dwarfspec.Subject
 ---@param button? dwarfspec.MouseButton
 ---@return integer
@@ -285,6 +467,8 @@ function DS.click(view, button) end
 function DS.type(text, subject) end
 
 ---Changes the current mounted component viewport and waits for its render.
+---The viewport remains mount-scoped and ends with DwarfSpec's automatic
+---unmount cleanup.
 ---@param width integer
 ---@param height integer
 ---@return any
@@ -297,6 +481,8 @@ function DS.viewport(width, height) end
 function DS.capture_screen(name, options) end
 
 ---Stages a real overlay source for a registration integration test.
+---DwarfSpec automatically disables its overlays, restores configuration, and
+---removes its unchanged staged script during lifecycle cleanup.
 ---@param source_path string
 ---@param logical_name string
 ---@return table

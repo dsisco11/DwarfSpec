@@ -7,7 +7,9 @@ describe('automation scheduler', function()
     local now
     local current
     local callbacks
+    local tick_callbacks
     local active
+    local next_timeout_id
     local completion
     local run
     local scheduler
@@ -16,15 +18,28 @@ describe('automation scheduler', function()
         now = 0
         current = true
         callbacks = {}
+        tick_callbacks = {}
         active = {}
+        next_timeout_id = 0
         completion = nil
         run = {suspended=false, outstanding_wait=nil}
         scheduler = scheduler_module.new(run, {
             is_current=function() return current end,
             schedule_timeout=function(delay, callback)
                 assert.equals(1, delay)
-                local id = #callbacks + 1
+                next_timeout_id = next_timeout_id + 1
+                local id = next_timeout_id
                 callbacks[id] = callback
+                active[id] = callback
+                return id
+            end,
+            schedule_tick_timeout=function(delay, callback)
+                next_timeout_id = next_timeout_id + 1
+                local id = next_timeout_id
+                tick_callbacks[id] = {
+                    delay=delay,
+                    callback=callback,
+                }
                 active[id] = callback
                 return id
             end,
@@ -65,6 +80,43 @@ describe('automation scheduler', function()
         assert.equals(2, result)
         assert.same({ok=true, value=nil}, completion)
         assert.is_nil(run.outstanding_wait)
+    end)
+
+    it('resumes after the requested unpaused simulation ticks', function()
+        local result
+        local owner, yielded = start(function()
+            result = scheduler_module.wait_ticks(
+                scheduler, 3, {timeout_ms=100})
+        end)
+        assert.is_true(scheduler_module.owns_yield(scheduler, yielded))
+        assert.equals(3, tick_callbacks[1].delay)
+
+        callbacks[2]()
+        assert.equals('suspended', coroutine.status(owner))
+        assert.is_not_nil(active[3])
+        tick_callbacks[1].callback()
+
+        assert.equals('dead', coroutine.status(owner))
+        assert.equals(3, result)
+        assert.is_nil(active[3])
+        assert.is_nil(run.outstanding_wait)
+    end)
+
+    it('times out a simulation-tick wait while the game is paused', function()
+        local wait_ok
+        local wait_error
+        start(function()
+            wait_ok, wait_error = pcall(scheduler_module.wait_ticks,
+                scheduler, 1, {timeout_ms=5})
+        end)
+        now = 6
+
+        callbacks[2]()
+
+        assert.is_false(wait_ok)
+        assert.matches('operation="wait_ticks%(1%)"', wait_error)
+        assert.matches('frame_budget=unlimited', wait_error, 1, true)
+        assert.is_nil(active[1])
     end)
 
     it('returns the truthy value observed by wait_until', function()
@@ -183,5 +235,18 @@ describe('automation scheduler', function()
         assert.matches('nested automation waits are not supported',
             wait_error, 1, true)
         assert.equals(0, #callbacks)
+    end)
+
+    it('validates simulation tick counts before scheduling', function()
+        local owner = coroutine.create(function() end)
+        scheduler_module.bind(scheduler, owner)
+
+        assert.has_error(function()
+            scheduler_module.wait_ticks(scheduler, 0)
+        end, 'simulation tick count must be a positive integer')
+        assert.has_error(function()
+            scheduler_module.wait_ticks(scheduler, 1.5)
+        end, 'simulation tick count must be a positive integer')
+        assert.equals(0, next_timeout_id)
     end)
 end)

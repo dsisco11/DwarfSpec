@@ -1,6 +1,8 @@
 -- Unit contracts for multi-project admission and global FIFO scheduling.
 
 local service = require('dwarfspec.automation.service')
+local EComparison =
+    require('dwarfspec.automation.base_screen_focus_comparisons')
 local EventType = require('dwarfspec.automation.event_types')
 local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
@@ -627,6 +629,27 @@ describe('multi-project automation service scheduler', function()
             submission('quarantine-beta'), dependencies)
         clock.advance(5)
         local active = service.activate_next(dependencies)
+        local details = {
+            screen={status='present', type='viewscreen_dwarfmodest'},
+            focus={status='available', values={'dwarfmode/Default'}},
+        }
+        service.publish_active_event(active.identity.run_id,
+            active.identity.generation, EventType.DIAGNOSTIC_RECORDED, {
+                kind='base_screen_focus_changed',
+                content={
+                    severity='warning',
+                    scope='suite',
+                    attribution='file',
+                    suite_name='tests/focus_spec.lua',
+                    source_identity='tests/focus_spec.lua',
+                    repeat_index=1,
+                    screen_comparison=EComparison.CHANGED,
+                    focus_comparison=EComparison.SAME,
+                    details_complete=true,
+                    before=details,
+                    after=details,
+                },
+            }, dependencies)
         clock.advance(5)
         service.complete_active(active.identity.run_id,
             active.identity.generation, RunState.FAILED, false,
@@ -710,6 +733,9 @@ describe('multi-project automation service scheduler', function()
         }, dependencies)
         assert.is_true(recovered.recovered)
         assert.is_false(recovered.scheduler.quarantine.active)
+        assert.equals('base_screen_focus_changed',
+            service.events(first.identity.run_id, 0,
+                dependencies).events[3].payload.kind)
         assert.is_true(service.activate_next(dependencies).activated)
         assert_executor_invariant(dependencies)
         assert.equals(first.identity.run_id,

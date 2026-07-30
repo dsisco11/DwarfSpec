@@ -61,3 +61,26 @@ describe('automation scheduler', function()
             1, true)
     end)
 end)
+
+describe('simulation tick scheduling', function()
+    local original_pause_state
+
+    before_each(function()
+        original_pause_state = df.global.pause_state
+        df.global.pause_state = false
+    end)
+
+    after_each(function()
+        df.global.pause_state = original_pause_state
+    end)
+
+    it('resumes after real unpaused simulation ticks', function()
+        local started_tick = ds.getTick()
+
+        local elapsed_ticks = ds.wait_ticks(3, {timeout_ms=2000})
+
+        assert.equals(3, elapsed_ticks)
+        assert.not_equals(started_tick, ds.getTick())
+        assert.is_nil(ds.current_run().outstanding_wait)
+    end)
+end)

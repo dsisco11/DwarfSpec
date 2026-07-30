@@ -84,6 +84,9 @@ describe('automation framework live resilience', function()
                 stale_callback = callback
                 return 'stale-callback'
             end,
+            schedule_tick_timeout=function()
+                error('stale frame proof must not schedule simulation ticks')
+            end,
             cancel_timeout=function(timeout_id)
                 assert.equals('stale-callback', timeout_id)
             end,

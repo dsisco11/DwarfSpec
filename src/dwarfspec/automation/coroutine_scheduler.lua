@@ -41,11 +41,13 @@ end
 local function wait_error(scheduler, wait, kind, cause)
     local diagnostics = diagnostic_context(scheduler)
     local elapsed_ms = scheduler.callbacks.now_ms() - wait.started_ms
+    local frame_budget = wait.frame_budget == nil and
+        'unlimited' or tostring(wait.frame_budget)
     local message = ('automation %s: operation=%q focus=%s screen=%s ' ..
-        'elapsed_frames=%d elapsed_ms=%d frame_budget=%d ' ..
+        'elapsed_frames=%d elapsed_ms=%d frame_budget=%s ' ..
         'wall_timeout_ms=%d last_observed=%s')
         :format(kind, wait.operation, diagnostics.focus, diagnostics.screen,
-            wait.elapsed_frames, elapsed_ms, wait.frame_budget,
+            wait.elapsed_frames, elapsed_ms, frame_budget,
             wait.wall_timeout_ms, observed_text(wait.last_observed))
     if cause ~= nil then message = message .. ' cause=' .. tostring(cause) end
     return message
@@ -58,6 +60,16 @@ local function cancel_timeout(scheduler, timeout_id)
     if timeout_id ~= nil then
         scheduler.callbacks.cancel_timeout(timeout_id)
     end
+end
+
+---Cancels every callback owned by one wait.
+---@param scheduler table
+---@param wait table
+local function cancel_wait_timeouts(scheduler, wait)
+    cancel_timeout(scheduler, wait.timeout_id)
+    wait.timeout_id = nil
+    cancel_timeout(scheduler, wait.tick_timeout_id)
+    wait.tick_timeout_id = nil
 end
 
 ---Records one callback that no longer owns the active wait.
@@ -125,7 +137,7 @@ local function schedule_observation(scheduler, wait)
             wait.last_observed = wait.elapsed_frames
             done = wait.elapsed_frames >= wait.target_frames
             result = wait.elapsed_frames
-        else
+        elseif wait.kind == 'query' then
             local query_ok, observed = pcall(wait.query)
             if not query_ok then
                 resume_owner(scheduler, wait, false,
@@ -143,8 +155,11 @@ local function schedule_observation(scheduler, wait)
         end
 
         local elapsed_ms = scheduler.callbacks.now_ms() - wait.started_ms
-        if wait.elapsed_frames >= wait.frame_budget or
+        if (wait.frame_budget ~= nil and
+                wait.elapsed_frames >= wait.frame_budget) or
                 elapsed_ms >= wait.wall_timeout_ms then
+            cancel_timeout(scheduler, wait.tick_timeout_id)
+            wait.tick_timeout_id = nil
             resume_owner(scheduler, wait, false,
                 wait_error(scheduler, wait, 'wait timed out'))
             return
@@ -161,6 +176,37 @@ local function schedule_observation(scheduler, wait)
         return false, message
     end
     wait.timeout_id = timeout_id
+    return true
+end
+
+---Schedules completion after an exact number of unpaused simulation ticks.
+---@param scheduler table
+---@param wait table
+---@return boolean, string|nil
+local function schedule_tick_completion(scheduler, wait)
+    local timeout_id
+    timeout_id = scheduler.callbacks.schedule_tick_timeout(
+        wait.target_ticks, function()
+            if scheduler.outstanding ~= wait or
+                    not scheduler.callbacks.is_current() then
+                reject_stale_callback(scheduler)
+                return
+            end
+            if wait.tick_timeout_id ~= timeout_id then
+                reject_stale_callback(scheduler)
+                return
+            end
+            wait.tick_timeout_id = nil
+            wait.last_observed = wait.target_ticks
+            cancel_timeout(scheduler, wait.timeout_id)
+            wait.timeout_id = nil
+            resume_owner(scheduler, wait, true, wait.target_ticks)
+        end)
+    if timeout_id == nil then
+        return false, wait_error(scheduler, wait, 'scheduler error',
+            'DFHack rejected the simulation-tick timeout')
+    end
+    wait.tick_timeout_id = timeout_id
     return true
 end
 
@@ -190,8 +236,20 @@ local function suspend(scheduler, wait)
     scheduler.run.suspended = true
     scheduler.run.scheduler_state.operation = wait.operation
     scheduler.run.scheduler_state.elapsed_frames = 0
+    if wait.kind == 'ticks' then
+        local tick_scheduled, tick_error =
+            schedule_tick_completion(scheduler, wait)
+        if not tick_scheduled then
+            scheduler.outstanding = nil
+            scheduler.run.outstanding_wait = nil
+            scheduler.run.suspended = false
+            wait.state = 'failed'
+            error(tick_error, 3)
+        end
+    end
     local scheduled, schedule_error = schedule_observation(scheduler, wait)
     if not scheduled then
+        cancel_wait_timeouts(scheduler, wait)
         scheduler.outstanding = nil
         scheduler.run.outstanding_wait = nil
         scheduler.run.suspended = false
@@ -213,6 +271,8 @@ function M.new(run, callbacks)
         'scheduler requires an ownership callback')
     assert(type(callbacks.schedule_timeout) == 'function',
         'scheduler requires a timeout callback')
+    assert(type(callbacks.schedule_tick_timeout) == 'function',
+        'scheduler requires a simulation-tick timeout callback')
     assert(type(callbacks.cancel_timeout) == 'function',
         'scheduler requires a timeout cancellation callback')
     assert(type(callbacks.now_ms) == 'function',
@@ -276,6 +336,26 @@ function M.wait_frames(scheduler, count, options)
     })
 end
 
+---Waits for an exact number of unpaused Dwarf Fortress simulation ticks.
+---@param scheduler table
+---@param count integer
+---@param options table|nil
+---@return integer
+function M.wait_ticks(scheduler, count, options)
+    options = options or {}
+    assert(type(count) == 'number' and count >= 1 and count % 1 == 0,
+        'simulation tick count must be a positive integer')
+    local wall_timeout_ms = options.timeout_ms or DEFAULT_WALL_TIMEOUT_MS
+    assert(type(wall_timeout_ms) == 'number' and wall_timeout_ms >= 1,
+        'wall timeout must be positive')
+    return suspend(scheduler, {
+        kind='ticks',
+        operation=options.description or ('wait_ticks(' .. count .. ')'),
+        target_ticks=count,
+        wall_timeout_ms=wall_timeout_ms,
+    })
+end
+
 ---Polls a read-only query between frames until it returns a truthy value.
 ---@param scheduler table
 ---@param description string
@@ -315,8 +395,7 @@ function M.cancel(scheduler, reason)
     scheduler.run.suspended = false
     wait.state = 'cancelled'
     wait.cancellation_reason = reason
-    cancel_timeout(scheduler, wait.timeout_id)
-    wait.timeout_id = nil
+    cancel_wait_timeouts(scheduler, wait)
     return true
 end
 

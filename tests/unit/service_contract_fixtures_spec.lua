@@ -155,7 +155,15 @@ describe('multi-project service contract fixtures', function()
             assert.is_string(fixture.project_root)
             assert.is_nil(contents:lower():find('"ui"', 1, true))
             assert.is_nil(contents:lower():find('"widget"', 1, true))
+            assert.is_nil(contents:find('0x', 1, true))
             assert_no_owner_capability(fixture)
+            if name == 'result_passed' then
+                local diagnostic = fixture.events[1].payload
+                assert.equals('base_screen_focus_changed',
+                    diagnostic.kind)
+                assert.equals(2,
+                    diagnostic.content.screen_comparison)
+            end
         end
     end)
 

@@ -168,12 +168,13 @@ local SearchScreen = defclass(nil, gui.ZScreen)
 ds.mount(SearchScreen, {initial_pause=false})
 ```
 
-Calling `ds.mount()` without a component instead borrows the current native DF
-viewscreen. Native widget controls exposed by DFHack can then be selected
-without creating, showing, or dismissing a DwarfSpec screen:
+Call `ds.mountNativeScreen()` to borrow the base native DF viewscreen without
+creating, showing, or dismissing a DwarfSpec screen. Native widget lookup stays
+rooted in that borrowed screen, while simulated player input is dispatched
+through whichever viewscreen is current when the input is sent:
 
 ```lua
-ds.mount()
+ds.mountNativeScreen()
 local menu = ds.get('menu')
 assert.is_table(menu:inspect().body)
 ```
@@ -207,7 +208,9 @@ end, {frame_budget=600, timeout_ms=20000})
 
 Input commands perform their required render or frame synchronization
 automatically. Use `ds.wait_frames(count)` only when the number of elapsed game
-frames is itself part of the behavior being tested.
+frames is itself part of the behavior being tested. Use
+`ds.wait_ticks(count)` when the test instead requires the simulation to advance;
+simulation ticks stop while the game is paused.
 
 ## The `ds` commands
 
@@ -215,29 +218,101 @@ frames is itself part of the behavior being tested.
 |---|---|
 | `ds.await(description, query, options)` | Poll a condition between live frames. |
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
-| `ds.mount()` | Attach non-owningly to the current native DF viewscreen and return its widget-root subject. |
-| `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject. |
+| `ds.wait_ticks(count, options)` | Wait for unpaused simulation ticks; options are `timeout_ms` and diagnostic `description`. |
+| `ds.isGamePaused()` | Return whether the Dwarf Fortress simulation is paused. |
+| `ds.setGamePaused(paused)` | Set the simulation pause state; DwarfSpec automatically restores the inherited state during example cleanup. |
+| `ds.getGameSpeed()` | Return the current game-speed target in ticks per second. |
+| `ds.setGameSpeed(tps)` | Set the target game speed in ticks per second; DwarfSpec automatically restores the inherited state during example cleanup. |
+| `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
+| `ds.getTime()` | Return DFHack's current millisecond clock value. |
+| `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
+| `ds.getViewPos(origin)` | Return the map tile aligned with an `EScreenOrigin`; defaults to `CENTER`. |
+| `ds.setViewPos({x=..., y=..., z=...}, origin)` | Align a map tile with an `EScreenOrigin`, defaulting to `CENTER`; DwarfSpec automatically restores the inherited view during example cleanup. |
+| `ds.mount(component, options)` | Mount a widget, overlay widget, or complete screen and return its root subject; DwarfSpec automatically unmounts it during example cleanup. |
+| `ds.mountNativeScreen()` | Attach non-owningly to the base native DF viewscreen and return its widget-root subject; DwarfSpec automatically detaches without dismissing it during example cleanup. |
 | `ds.root(options)` | Return the selected native, registered-overlay, or component root subject. |
-| `ds.get(control_path, options)` | Select one strict direct-child path from the chosen subject source. |
+| `ds.get(control_path, options)` | Select one exact source-specific path from the current mount. |
 | `ds.unmount()` | Cleanly remove and settle the implicit current mount. |
-| `ds.viewport(width, height)` | Change the mounted viewport in DF cells and wait for its render. |
+| `ds.viewport(width, height)` | Change the mount-scoped viewport in DF cells; automatic unmount cleanup ends the override. |
+| `ds.inspect(subject)` | Return stable, read-only information about a subject or the selected root. |
 | `subject:inspect()` | Return stable, read-only information about the selected view. |
+| `subject:getFocusList()` | Return a copied focus-string list for the subject's mounted screen. |
 | `subject:text()` | Return the selected view's inspected text value. |
-| `subject:raw()` | Access the native object as an exceptional escape hatch. |
-| `ds.move_pointer(x, y)` | Move the pointer to exact zero-based native screen coordinates. |
-| `subject:move_pointer(anchor)` | Move the pointer into the selected view. |
-| `subject:hover(anchor)` | Hover the selected view and preserve the subject. |
-| `subject:click(button)` | Click the selected view and preserve the subject. |
+| `subject:raw()` | Access the borrowed Lua view or native DF widget as an exceptional escape hatch. |
+| `ds.move_pointer(x, y, space)` | Move by zero-based grid cell by default or exact pixel with `PIXELS`; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `ds.move_pointer(position, ds.EPointerSpace.WORLD_TILE, options)` | Move to a world tile, recentering the camera by default; use `{recenter=false}` to require the tile to already be visible. |
+| `ds.hover(x, y, space)` | Move to a numeric pointer coordinate and wait for render; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `subject:move_pointer(anchor)` | Move into the selected view; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `subject:hover(anchor)` | Hover the selected view and preserve the subject; DwarfSpec automatically restores inherited pointer state during cleanup. |
+| `ds.click(subject, button)` | Move to and click a subject; DwarfSpec automatically restores pointer state, but not the click's UI effects. |
+| `subject:click(button)` | Click the selected view; DwarfSpec automatically restores pointer state, but not the click's UI effects. |
+| `ds.input(keys, subject)` | Send native DFHack input through the subject's mount. |
 | `subject:input(keys)` | Send native DFHack input through the mounted screen. |
+| `ds.type(text, subject)` | Type ASCII text through the subject's mount. |
 | `subject:type(text)` | Type ASCII text through the mounted screen. |
-| `ds.mouseInput(button, action)` | Send an `EMouseButton` action at the current pointer position; physical buttons default to `EInputState.CLICK`. |
+| `ds.mouseInput(button, action)` | Send an `EMouseButton` action, defaulting physical buttons to `CLICK`; DwarfSpec automatically restores persistent button state during cleanup. |
+| `ds.mouseWheel({direction=..., steps=...}, subject)` | Send one or more discrete wheel inputs at the current pointer or a subject; only the final render is awaited. |
+| `subject:mouseWheel({direction=..., steps=..., anchor=...})` | Position over the subject, settle, and send a discrete wheel-input batch. |
 | `ds.redraw(subject, options)` | Invalidate the mounted screen and wait by default; use `{wait=false}` to skip the wait. |
+| `subject:redraw(options)` | Redraw the subject's mounted screen, preserve the subject, and wait by default. |
 | `ds.capture_view_tree(name, options)` | Retain the selected source's structured view tree. |
 | `ds.capture_screen(name, options)` | Retain a bounded screen-cell capture. |
-| `ds.stage_overlay_registration(source, name)` | Stage a run-owned script only for separately selected real-registration integration coverage. |
+| `ds.stage_overlay_registration(source, name)` | Stage a run-owned script for selected registration integration coverage; DwarfSpec automatically restores its owned external artifacts during cleanup. |
+
+### Pointer coordinate spaces
+
+Use `ds.EPointerSpace.GRID` for UI-grid cells and
+`ds.EPointerSpace.PIXELS` for exact screen pixels. Use
+`ds.EPointerSpace.WORLD_TILE` with an `{x, y, z}` position for a map tile:
+
+```lua
+ds.move_pointer(12, 8) -- GRID is the backward-compatible default
+ds.move_pointer(12, 8, ds.EPointerSpace.GRID)
+ds.move_pointer(420, 260, ds.EPointerSpace.PIXELS)
+ds.move_pointer({x=120, y=85, z=42}, ds.EPointerSpace.WORLD_TILE)
+```
+
+`ds.hover()` accepts the same numeric coordinate-space overloads.
+
+UI widgets and subjects use UI-grid cells. Subject placement accepts immutable
+`ds.EPointerAnchor.CENTER`, `TOP_LEFT`, `TOP_RIGHT`, `BOTTOM_LEFT`, and
+`BOTTOM_RIGHT` values:
+
+```lua
+ds.get('slider'):move_pointer(ds.EPointerAnchor.TOP_LEFT)
+```
+
+Premium map mouse interaction uses screen pixels, so use `PIXELS` when a test
+must target an exact rendered map location. `WORLD_TILE` positions use map
+coordinates such as those returned by `ds.getViewPos()`. DwarfSpec recenters
+the camera on the requested tile by default and automatically restores the
+inherited camera position during cleanup. Pass `{recenter=false}` as the third
+argument to leave the camera unchanged; the command then fails unless the tile
+is already visible.
+
+DwarfSpec reads the effective renderer geometry on every move, so conversion
+tracks the current runtime UI scale. Configured scaling preferences are not
+used as a substitute for that live geometry. DwarfSpec keeps the UI-grid and
+pixel positions paired for input and automatically restores both during
+cleanup.
 
 See [Writing live tests](docs/writing-tests.md) for owned-component, borrowed
 native-screen, and external-overlay contracts.
+
+### Map-view screen origins
+
+`ds.getViewPos()` and `ds.setViewPos()` default to `CENTER`. Pass a
+`ds.EScreenOrigin` value to address another point in the visible map viewport:
+
+```lua
+local center = ds.getViewPos()
+ds.setViewPos({x=120, y=85, z=14})
+ds.setViewPos({x=0, y=0, z=14}, ds.EScreenOrigin.TOP_LEFT)
+```
+
+The enum exposes `TOP_LEFT`, `TOP`, `TOP_RIGHT`, `LEFT`, `CENTER`, `RIGHT`,
+`BOTTOM_LEFT`, `BOTTOM`, and `BOTTOM_RIGHT`. Center offsets match DFHack's
+viewport convention: `floor(width/2)` and `floor(height/2)`.
 
 ## Project configuration and custom commands
 

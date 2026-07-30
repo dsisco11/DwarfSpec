@@ -3,6 +3,8 @@
 local gui = require('gui')
 local guidm = require('gui.dwarfmode')
 local overlay = require('plugins.overlay')
+local command_conformance = require(
+    'tests.automation.support.command_conformance')
 
 local BUTTON_FIELDS = {
     'mouse_focus',
@@ -20,6 +22,10 @@ local overlay_name
 local overlay_config_path
 local overlay_config_existed
 local overlay_config_contents
+local fixture_unit_list
+local fixture_unit_cursor
+local fixture_hauling
+local fixture_hauling_scroll
 
 ---Reads one complete binary file for exact cleanup comparison.
 ---@param path string
@@ -30,15 +36,6 @@ local function read_file(path)
     local contents = file:read('*a')
     file:close()
     return contents
-end
-
----Copies one array without retaining the caller's mutable table.
----@param values any[]
----@return any[]
-local function copy_array(values)
-    local copy = {}
-    for index, value in ipairs(values) do copy[index] = value end
-    return copy
 end
 
 ---Captures the exact native viewscreen child chain.
@@ -62,8 +59,11 @@ end
 local function pointer_state()
     local state = {
         get_mouse_pos=dfhack.screen.getMousePos,
+        get_mouse_pixels=dfhack.screen.getMousePixels,
         mouse_x=df.global.gps.mouse_x,
         mouse_y=df.global.gps.mouse_y,
+        precise_mouse_x=df.global.gps.precise_mouse_x,
+        precise_mouse_y=df.global.gps.precise_mouse_y,
     }
     for _, field in ipairs(BUTTON_FIELDS) do
         state[field] = df.global.enabler[field]
@@ -83,6 +83,35 @@ local function same_pointer_state(expected, actual)
         if expected[name] ~= value then return false end
     end
     return true
+end
+
+---Copies one live native widget rectangle into an ordinary Lua table.
+---@param widget userdata
+---@return table
+local function widget_bounds(widget)
+    local rect = assert(widget.rect, 'native widget has no live rectangle')
+    return {
+        x1=rect.x1,
+        y1=rect.y1,
+        x2=rect.x2,
+        y2=rect.y2,
+    }
+end
+
+---Asserts that a completed borrowed mount retained no owned runtime state.
+---@param cleanup table
+---@param expected_attachment_count integer
+local function assert_mount_released(cleanup, expected_attachment_count)
+    assert.equals(0, cleanup.active_screen_count)
+    assert.equals(0, cleanup.tracked_screen_count)
+    assert.equals(0, cleanup.owned_screen_count)
+    assert.equals(0, cleanup.borrowed_native_screen_count)
+    assert.equals(expected_attachment_count, cleanup.native_attachment_count)
+    assert.equals(0, cleanup.native_screen_dismissal_count)
+    assert.equals(0, cleanup.subject_count)
+    assert.is_false(cleanup.pointer_active)
+    assert.is_false(cleanup.button_state_active)
+    assert.is_false(cleanup.render_observer_active)
 end
 
 ---Returns whether one screen cell belongs to a native graphics panel.
@@ -157,7 +186,67 @@ local function slash_names(root)
     return names
 end
 
+---Finds one directly addressable native child of the supplied root.
+---@param root userdata
+---@return table|nil
+local function named_native_child(root)
+    for index, child in ipairs(dfhack.gui.getWidgetChildren(root)) do
+        local name_ok, name = pcall(function() return child.name end)
+        if name_ok and type(name) == 'string' and name ~= '' and
+                not name:find('/', 1, true) then
+            return {name=name, index=index - 1, raw=child}
+        end
+    end
+    return nil
+end
+
 describe('non-owning native-screen attachment', function()
+    local file_base_screen
+
+    setup(function()
+        file_base_screen = dfhack.gui.getDFViewscreen(true)
+        assert.equals(
+            file_base_screen, dfhack.gui.getCurViewscreen(true),
+            'native attachment file requires the base screen to be current')
+    end)
+
+    teardown(function()
+        local base = assert(file_base_screen)
+        assert.equals(base, dfhack.gui.getDFViewscreen(true),
+            'native attachment file changed the base-screen identity')
+        local current = dfhack.gui.getCurViewscreen(true)
+        while current and current ~= base do
+            assert.is_true(df.viewscreen:is_instance(current))
+            assert.matches('^<viewscreen:', tostring(current))
+            current.breakdown_level =
+                df.interface_breakdown_types.STOPSCREEN
+            current = current.parent
+        end
+        assert.equals(base, current,
+            'native attachment cleanup lost the base-screen ancestor')
+        ds.wait_frames(2)
+    end)
+
+    after_each(function()
+        if fixture_unit_list and fixture_unit_cursor ~= nil then
+            fixture_unit_list.cursor_idx = fixture_unit_cursor
+        end
+        if fixture_hauling and fixture_hauling_scroll ~= nil then
+            fixture_hauling.scroll_position = fixture_hauling_scroll
+        end
+        fixture_unit_list = nil
+        fixture_unit_cursor = nil
+        fixture_hauling = nil
+        fixture_hauling_scroll = nil
+
+        local screen = dfhack.gui.getDFViewscreen(true)
+        if dfhack.gui.matchFocusString('dwarfmode/Info', screen) or
+                dfhack.gui.matchFocusString('dwarfmode/Hauling', screen) then
+            gui.simulateInput(screen, 'LEAVESCREEN')
+        end
+        pcall(ds.unmount)
+    end)
+
     it('proves native and overlay behavior with exact mount cleanup',
             function()
         assert.is_true(dfhack.world.isFortressMode(),
@@ -165,8 +254,15 @@ describe('non-owning native-screen attachment', function()
         assert.is_true(dfhack.gui.matchFocusString(
             'dwarfmode/Default', dfhack.gui.getDFViewscreen(true)),
             'native acceptance must start at dwarfmode/Default')
+        assert.is_true(ds.hasFocus('dwarfmode/Default'),
+            'DwarfSpec must match the current native focus')
+        assert.is_false(ds.hasFocus('dwarfmode/Info'),
+            'DwarfSpec must reject an inactive native focus')
         assert.is_true(#df.global.plotinfo.hauling.routes > 10,
             'native acceptance requires a scrollable Hauling route list')
+        assert.equals(df.global.cur_year_tick, ds.getTick())
+        assert.is_true(ds.getTime() >= 0)
+        assert.equals(df.global.pause_state, ds.isGamePaused())
 
         local run = ds.current_run()
         run.native_overlay_events = {}
@@ -188,14 +284,18 @@ describe('non-owning native-screen attachment', function()
         local native_screen = dfhack.gui.getDFViewscreen(true)
         local native_root = native_screen.widgets
         local original_current = dfhack.gui.getCurViewscreen(true)
-        local original_focus = copy_array(dfhack.gui.getCurFocus(true))
+        local original_focus = dfhack.gui.getCurFocus(true)
         local original_stack = screen_stack()
         local original_pointer = pointer_state()
         local original_dispatcher = overlay.render_viewscreen_widgets
+        local expected_attachment_count =
+            run.mount_cleanup_probe().native_attachment_count + 1
         local hauling = df.global.plotinfo.hauling
         local original_scroll = hauling.scroll_position
+        fixture_hauling = hauling
+        fixture_hauling_scroll = original_scroll
 
-        local root = ds.mount()
+        local root = ds.mountNativeScreen()
         assert.equals(native_root, root:raw())
         assert.equals(native_root, ds.root():raw())
         assert.equals(native_screen, dfhack.gui.getDFViewscreen(true))
@@ -204,26 +304,57 @@ describe('non-owning native-screen attachment', function()
         assert.same(original_stack, screen_stack())
         assert.not_equals(original_dispatcher,
             overlay.render_viewscreen_widgets)
+        assert.same(dfhack.gui.getFocusStrings(native_screen),
+            root:getFocusList())
 
-        local named = ds.get('Tooltip')
-        local numeric = ds.get({0})
-        local mixed = ds.get({'Tooltip', 1})
+        local explicit_native = {source=ds.ESubjectSource.NATIVE}
+        local explicit_root = ds.root(explicit_native)
+        assert.equals(native_root, explicit_root:raw())
+
+        local native_tree = ds.capture_view_tree('native-widget-tree',
+            explicit_native)
+        assert.is_table(native_tree)
+        assert.is_table(native_tree.children)
+        assert.is_true(#native_tree.children > 0)
+        assert.is_string(native_tree.native_type)
+        command_conformance.assert_bounded_tree(native_tree,
+            native_tree.class, 128, 8)
+
+        local window_width, window_height = dfhack.screen.getWindowSize()
+        local viewport_ok, viewport_failure = pcall(ds.viewport, 61, 29)
+        assert.is_false(viewport_ok)
+        assert.matches('viewport is unavailable for a non%-owning ' ..
+            'native%-screen mount', viewport_failure)
+        assert.same({window_width, window_height},
+            {dfhack.screen.getWindowSize()})
+
+        local target = assert(named_native_child(native_root),
+            'native root has no named direct child for lookup acceptance')
+        local named = ds.get(target.name)
+        local numeric = ds.get({target.index})
         assert.equals(named:raw(), numeric:raw())
-        assert.equals(
-            dfhack.gui.getWidget(native_root, 'Tooltip'), named:raw())
-        assert.equals(
-            dfhack.gui.getWidget(named:raw(), 1), mixed:raw())
+        assert.equals(target.raw, named:raw())
+        assert.equals(dfhack.gui.getWidget(native_root, target.name),
+            named:raw())
+        assert.equals(target.raw, ds.get(target.name, explicit_native):raw())
+        assert.same(dfhack.gui.getFocusStrings(native_screen),
+            named:getFocusList())
+
+        local explicit_root_options = {
+            source=ds.ESubjectSource.NATIVE,
+            native_root=native_root,
+        }
+        local bypass_root = ds.root(explicit_root_options)
+        local bypass_target = ds.get({target.index}, explicit_root_options)
+        assert.equals(native_root, bypass_root:raw())
+        assert.equals(target.raw, bypass_target:raw())
+        assert.is_string(bypass_root:inspect().native_type)
 
         local named_state = named:inspect()
-        local mixed_state = mixed:inspect()
         assert.is_table(named_state.body)
         assert.is_boolean(named_state.visible)
         assert.is_boolean(named_state.active)
         assert.is_string(named_state.native_type)
-        assert.is_table(mixed_state.body)
-        assert.is_string(mixed_state.native_type)
-        assert.is_string(mixed_state.text)
-        assert.equals(mixed:raw().str, mixed_state.text)
         assert.same({}, slash_names(native_root),
             'current dwarfmode widget hierarchy unexpectedly gained a ' ..
                 'stable slash-bearing name')
@@ -234,10 +365,22 @@ describe('non-owning native-screen attachment', function()
         }
         local overlay_root = ds.root(source)
         local overlay_button = ds.get('accept', source)
+        local overlay_editor = ds.get('editor', source)
         local probe = overlay_root:raw()
         assert.equals(
             overlay.get_state().db[overlay_name].widget, probe)
         assert.is_true(probe.render_count > 0)
+        local overlay_tree = ds.capture_view_tree('native-overlay-tree', source)
+        assert.is_table(overlay_tree)
+        assert.is_table(overlay_tree.children)
+        assert.is_true(#overlay_tree.children >= 3)
+        command_conformance.assert_bounded_tree(overlay_tree,
+            overlay_tree.class, 32, 4)
+        local overlay_state = overlay_button:inspect()
+        assert.equals('accept', overlay_state.view_id)
+        assert.is_true(overlay_state.visible)
+        assert.is_true(overlay_state.active)
+        assert.is_truthy(overlay_state.body)
 
         local renders = probe.render_count
         ds.redraw()
@@ -255,19 +398,138 @@ describe('non-owning native-screen attachment', function()
             return probe.render_count > renders
         end)
 
-        overlay_button:move_pointer('center')
+        ds.input('D_UNITLIST')
+        ds.await('native creatures screen opens', function()
+            return dfhack.gui.matchFocusString(
+                'dwarfmode/Info/CREATURES', native_screen)
+        end)
+        ds.redraw()
+
+        local creatures = df.global.game.main_interface.info.creatures
+        local unit_list = assert(dfhack.gui.getWidget(
+            creatures, 'Tabs', 'Residents', 0))
+        local scroll_rows = assert(dfhack.gui.getWidget(
+            unit_list, 'Unit List', 1))
+        local scroll_subject = ds.get({
+            'info', 'creatures', 'Tabs', 'Residents', 0, 'Unit List', 1,
+        })
+        local scroll_state = scroll_subject:inspect()
+        assert.equals(scroll_rows.scroll, scroll_state.scroll_position)
+        assert.equals(scroll_rows.num_visible,
+            scroll_state.visible_row_count)
+        local rows = dfhack.gui.getWidgetChildren(scroll_rows)
+        assert.is_true(#rows > 1,
+            'native acceptance requires multiple resident rows')
+        local original_cursor = unit_list.cursor_idx
+        fixture_unit_list = unit_list
+        fixture_unit_cursor = original_cursor
+        local target_index = math.max(0, math.min(
+            original_cursor, #rows - 1))
+        local direct_row = assert(dfhack.gui.getWidget(
+            scroll_rows, target_index))
+        local direct_job_text = assert(dfhack.gui.getWidget(
+            direct_row, 'Job', 0))
+        assert.is_string(direct_job_text.str)
+        assert.is_true(#direct_job_text.str > 0,
+            'resident row must expose nonempty live job text')
+
+        local query_current = dfhack.gui.getCurViewscreen(true)
+        local query_focus = dfhack.gui.getCurFocus(true)
+        local query_stack = screen_stack()
+        local row = ds.get({
+            'info',
+            'creatures',
+            'Tabs',
+            'Residents',
+            0,
+            'Unit List',
+            1,
+            target_index,
+        })
+        assert.equals(direct_row, row:raw(),
+            'full game-UI path must preserve native row identity')
+        assert.equals(direct_row, dfhack.gui.getWidget(
+            creatures, 'Tabs', 'Residents', 0, 'Unit List', 1,
+            target_index))
+        assert.equals(query_current, dfhack.gui.getCurViewscreen(true))
+        assert.same(query_focus, dfhack.gui.getCurFocus(true))
+        assert.same(query_stack, screen_stack())
+
+        local row_state = row:inspect()
+        assert.same(widget_bounds(direct_row), row_state.body)
+        assert.is_string(row:text())
+        assert.matches(direct_job_text.str, row:text(), 1, true)
+        assert.equals(query_current, dfhack.gui.getCurViewscreen(true))
+        assert.same(query_focus, dfhack.gui.getCurFocus(true))
+        assert.same(query_stack, screen_stack())
+
+        row:move_pointer('center')
+        local row_x, row_y = dfhack.screen.getMousePos()
+        assert.is_true(row_x >= row_state.body.x1 and
+            row_x <= row_state.body.x2 and
+            row_y >= row_state.body.y1 and
+            row_y <= row_state.body.y2,
+            'pointer must be within the resolved native row bounds')
+        assert.same({row_x, row_y}, {dfhack.screen.getMousePos()})
+
+        row:hover('center')
+        assert.same({row_x, row_y}, {dfhack.screen.getMousePos()})
+
+        scroll_subject:click()
+        assert.is_true(unit_list.cursor_idx >= 0 and
+            unit_list.cursor_idx < #rows,
+            'native logical click must retain a valid resident-list selection')
+        unit_list.cursor_idx = original_cursor
+
+        local input_key
+        local expected_cursor
+        if original_cursor < #rows - 1 then
+            input_key = 'STANDARDSCROLL_DOWN'
+            expected_cursor = original_cursor + 1
+        else
+            input_key = 'STANDARDSCROLL_UP'
+            expected_cursor = original_cursor - 1
+        end
+        row:input(input_key)
+        assert.equals(expected_cursor, unit_list.cursor_idx,
+            'subject input must update the native resident-list cursor')
+        unit_list.cursor_idx = original_cursor
+        assert.equals(original_cursor, unit_list.cursor_idx)
+        fixture_unit_list = nil
+        fixture_unit_cursor = nil
+
+        renders = probe.render_count
+        row:redraw()
+        assert.is_true(probe.render_count > renders,
+            'game-UI subject redraw must wait for native observer dispatch')
+        assert.equals(query_current, dfhack.gui.getCurViewscreen(true))
+        assert.same(query_focus, dfhack.gui.getCurFocus(true))
+        assert.same(query_stack, screen_stack())
+
+        ds.input('LEAVESCREEN')
+        ds.await('native creatures screen closes', function()
+            return dfhack.gui.matchFocusString(
+                'dwarfmode/Default', native_screen)
+        end)
+
+        overlay_button:hover('center')
         local button_x, button_y = dfhack.screen.getMousePos()
         local button_body = assert(overlay_button:inspect().body)
         assert.is_true(button_x >= button_body.x1 and
             button_x <= button_body.x2 and button_y >= button_body.y1 and
             button_y <= button_body.y2,
             'pointer must be over the rendered overlay button')
-        ds.mouseInput(ds.EMouseButton.LEFT)
+        overlay_button:click()
         assert.equals(1, probe.click_count)
         assert.equals('clicks: 1', ds.get('status', source):text())
+        ds.mouseInput(ds.EMouseButton.LEFT)
+        assert.equals(2, probe.click_count)
+        assert.equals('clicks: 2', ds.get('status', source):text())
         assert.is_true(probe.input_count > 0)
         ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.DOWN)
         ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.UP)
+        overlay_editor:click():type('native')
+        assert.equals('native', overlay_editor:text())
 
         ds.input('D_HAULING')
         ds.await('native Hauling screen opens', function()
@@ -293,6 +555,8 @@ describe('non-owning native-screen attachment', function()
             'wheel input over the native route list must scroll it')
 
         hauling.scroll_position = original_scroll
+        fixture_hauling = nil
+        fixture_hauling_scroll = nil
         ds.input('LEAVESCREEN')
         ds.await('native Hauling screen closes', function()
             return dfhack.gui.matchFocusString(
@@ -310,16 +574,7 @@ describe('non-owning native-screen attachment', function()
         assert.is_true(same_pointer_state(
             original_pointer, pointer_state()))
         assert.equals(original_scroll, hauling.scroll_position)
-        assert.equals(0, cleanup.active_screen_count)
-        assert.equals(0, cleanup.tracked_screen_count)
-        assert.equals(0, cleanup.owned_screen_count)
-        assert.equals(0, cleanup.borrowed_native_screen_count)
-        assert.equals(1, cleanup.native_attachment_count)
-        assert.equals(0, cleanup.native_screen_dismissal_count)
-        assert.equals(0, cleanup.subject_count)
-        assert.is_false(cleanup.pointer_active)
-        assert.is_false(cleanup.button_state_active)
-        assert.is_false(cleanup.render_observer_active)
+        assert_mount_released(cleanup, expected_attachment_count)
 
         local state = overlay.get_state()
         assert.is_table(state.db[overlay_name],
@@ -348,5 +603,49 @@ describe('non-owning native-screen attachment', function()
             assert.equals(overlay_config_contents,
                 read_file(overlay_config_path))
         end
+    end)
+
+    it('restores a borrowed mount after an injected game-UI lookup failure',
+            function()
+        assert.is_true(dfhack.gui.matchFocusString(
+            'dwarfmode/Default', dfhack.gui.getDFViewscreen(true)),
+            'cleanup acceptance must start at dwarfmode/Default')
+        local run = ds.current_run()
+        local native_screen = dfhack.gui.getDFViewscreen(true)
+        local original_current = dfhack.gui.getCurViewscreen(true)
+        local original_focus = dfhack.gui.getCurFocus(true)
+        local original_stack = screen_stack()
+        local original_pointer = pointer_state()
+        local original_dispatcher = overlay.render_viewscreen_widgets
+        local expected_attachment_count =
+            run.mount_cleanup_probe().native_attachment_count + 1
+
+        ds.mountNativeScreen()
+        ds.move_pointer(0, 0)
+        local lookup_ok, lookup_failure = pcall(ds.get, {
+            'info',
+            'creatures',
+            'Tabs',
+            'Residents',
+            0,
+            'Unit List',
+            1,
+            'injected-missing-row',
+        })
+        local unmount_ok, unmount_failure = pcall(ds.unmount)
+        local cleanup = run.mount_cleanup_probe()
+
+        assert.is_true(unmount_ok, unmount_failure)
+        assert.is_false(lookup_ok)
+        assert.matches('injected%-missing%-row', lookup_failure)
+        assert.equals(original_dispatcher,
+            overlay.render_viewscreen_widgets)
+        assert.equals(native_screen, dfhack.gui.getDFViewscreen(true))
+        assert.equals(original_current, dfhack.gui.getCurViewscreen(true))
+        assert.same(original_focus, dfhack.gui.getCurFocus(true))
+        assert.same(original_stack, screen_stack())
+        assert.is_true(same_pointer_state(
+            original_pointer, pointer_state()))
+        assert_mount_released(cleanup, expected_attachment_count)
     end)
 end)
