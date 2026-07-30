@@ -15,6 +15,7 @@ local EventType = require('dwarfspec.automation.event_types')
 local EMouseButton = require('dwarfspec.mouse_buttons')
 local EInputState = require('dwarfspec.input_states')
 local EPointerSpace = require('dwarfspec.pointer_spaces')
+local EPointerAnchor = require('dwarfspec.pointer_anchors')
 local EScreenOrigin = require('dwarfspec.screen_origins')
 local EFieldMode =
     require('dwarfspec.native_game_ui_path').EFieldMode
@@ -2136,11 +2137,11 @@ describe('DwarfSpec public mount commands', function()
         ds.mountNativeScreen()
         local subject = ds.get('Target')
         local expected = {
-            center={12, 15},
-            top_left={10, 12},
-            top_right={14, 12},
-            bottom_left={10, 18},
-            bottom_right={14, 18},
+            [EPointerAnchor.CENTER]={12, 15},
+            [EPointerAnchor.TOP_LEFT]={10, 12},
+            [EPointerAnchor.TOP_RIGHT]={14, 12},
+            [EPointerAnchor.BOTTOM_LEFT]={10, 18},
+            [EPointerAnchor.BOTTOM_RIGHT]={14, 18},
         }
 
         for anchor, coordinates in pairs(expected) do
@@ -2489,6 +2490,10 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(EInputState.CLICK, ds.EInputState.CLICK)
         assert.equals(EPointerSpace.GRID, ds.EPointerSpace.GRID)
         assert.equals(EPointerSpace.PIXELS, ds.EPointerSpace.PIXELS)
+        assert.equals(EPointerAnchor.CENTER, ds.EPointerAnchor.CENTER)
+        assert.equals(EPointerAnchor.TOP_LEFT, ds.EPointerAnchor.TOP_LEFT)
+        assert.equals(EPointerAnchor.BOTTOM_RIGHT,
+            ds.EPointerAnchor.BOTTOM_RIGHT)
         assert.equals(EScreenOrigin.TOP_LEFT, ds.EScreenOrigin.TOP_LEFT)
         assert.equals(EScreenOrigin.CENTER, ds.EScreenOrigin.CENTER)
         assert.equals(EScreenOrigin.BOTTOM_RIGHT,
@@ -2499,7 +2504,7 @@ describe('DwarfSpec public mount commands', function()
         end, 'mouse input requires a pointer position; call ' ..
             'ds.move_pointer() or subject:hover() first')
 
-        mounted:hover('top_left')
+        mounted:hover(EPointerAnchor.TOP_LEFT)
         for _, input in ipairs({
                 {EMouseButton.LEFT},
                 {EMouseButton.RIGHT},

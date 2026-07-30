@@ -1,11 +1,13 @@
 ---@meta
 
----@alias dwarfspec.PointerAnchor
+---@alias dwarfspec.EPointerAnchor
 ---| 'center'
 ---| 'top_left'
 ---| 'top_right'
 ---| 'bottom_left'
 ---| 'bottom_right'
+
+---@alias dwarfspec.PointerAnchor dwarfspec.EPointerAnchor
 
 ---@alias dwarfspec.MouseButton
 ---| 'left'
@@ -75,6 +77,14 @@
 ---@field GRID dwarfspec.GridPointerSpace Zero-based UI-grid cells; the default.
 ---@field PIXELS dwarfspec.PixelPointerSpace Exact zero-based screen pixels.
 ---@field WORLD_TILE dwarfspec.WorldTilePointerSpace Zero-based world-map tiles.
+
+---Immutable anchors for pointer placement within subject bounds.
+---@class dwarfspec.EPointerAnchorEnum
+---@field CENTER `center`
+---@field TOP_LEFT `top_left`
+---@field TOP_RIGHT `top_right`
+---@field BOTTOM_LEFT `bottom_left`
+---@field BOTTOM_RIGHT `bottom_right`
 
 ---Immutable map viewport anchors used by `getViewPos()` and `setViewPos()`.
 ---@class dwarfspec.EScreenOriginEnum
@@ -196,7 +206,7 @@ local Subject = {}
 ---@class dwarfspec.MouseWheelOptions
 ---@field direction dwarfspec.EMouseButton
 ---@field steps? integer Defaults to one discrete wheel input.
----@field anchor? dwarfspec.PointerAnchor
+---@field anchor? dwarfspec.EPointerAnchor
 
 ---Clicks this subject and preserves it for fluent chaining.
 ---DwarfSpec automatically restores inherited pointer state during cleanup.
@@ -207,13 +217,13 @@ function Subject:click(button) end
 
 ---Moves the pointer over this subject in UI-grid cells and preserves it.
 ---DwarfSpec automatically restores inherited pointer state during cleanup.
----@param anchor? dwarfspec.PointerAnchor
+---@param anchor? dwarfspec.EPointerAnchor
 ---@return dwarfspec.Subject
 function Subject:hover(anchor) end
 
 ---Moves the pointer to this subject in UI-grid cells and preserves it.
 ---DwarfSpec automatically restores inherited pointer state during cleanup.
----@param anchor? dwarfspec.PointerAnchor
+---@param anchor? dwarfspec.EPointerAnchor
 ---@return dwarfspec.Subject
 function Subject:move_pointer(anchor) end
 
@@ -260,6 +270,7 @@ function Subject:raw() end
 ---@field EMouseButton dwarfspec.EMouseButtonEnum
 ---@field EInputState dwarfspec.EInputStateEnum
 ---@field EPointerSpace dwarfspec.EPointerSpaceEnum
+---@field EPointerAnchor dwarfspec.EPointerAnchorEnum
 ---@field EScreenOrigin dwarfspec.EScreenOriginEnum
 ---@field ESubjectSource dwarfspec.ESubjectSourceEnum
 local DS = {}
@@ -400,7 +411,7 @@ function DS.capture_view_tree(name, options) end
 ---@overload fun(x: integer, y: integer, space: dwarfspec.PixelPointerSpace): integer, integer
 ---@overload fun(position: dwarfspec.MapViewPosition, space: dwarfspec.WorldTilePointerSpace, options?: dwarfspec.WorldTilePointerOptions): integer, integer, integer
 ---@param view? dwarfspec.Subject Defaults to the current source root.
----@param anchor? dwarfspec.PointerAnchor Subject anchors use UI-grid cells.
+---@param anchor? dwarfspec.EPointerAnchor Subject anchors use UI-grid cells.
 ---@return integer x
 ---@return integer y
 function DS.move_pointer(view, anchor) end
@@ -413,7 +424,7 @@ function DS.move_pointer(view, anchor) end
 ---@overload fun(x: integer, y: integer, space: dwarfspec.GridPointerSpace): integer, integer
 ---@overload fun(x: integer, y: integer, space: dwarfspec.PixelPointerSpace): integer, integer
 ---@param view? dwarfspec.Subject
----@param anchor? dwarfspec.PointerAnchor
+---@param anchor? dwarfspec.EPointerAnchor
 ---@return integer x
 ---@return integer y
 function DS.hover(view, anchor) end

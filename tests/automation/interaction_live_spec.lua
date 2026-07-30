@@ -200,7 +200,7 @@ describe('automation live interactions', function()
         assert.equals('interaction_root', tree.view_id)
         assert.equals(0, component.click_count)
 
-        target:move_pointer()
+        target:move_pointer(ds.EPointerAnchor.CENTER)
         assert.matches('^Automation hover %d+,%d+$', target:raw().tooltip)
         target:click()
         assert.equals(1, component.click_count)

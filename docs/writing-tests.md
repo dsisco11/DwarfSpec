@@ -193,9 +193,9 @@ automatically restores the exact inherited persistent button state during
 example cleanup:
 
 ```lua
-ds.get('slider'):move_pointer('top_left')
+ds.get('slider'):move_pointer(ds.EPointerAnchor.TOP_LEFT)
 ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.DOWN)
-ds.get('slider'):move_pointer('top_right')
+ds.get('slider'):move_pointer(ds.EPointerAnchor.TOP_RIGHT)
 ds.mouseInput(ds.EMouseButton.LEFT, ds.EInputState.UP)
 ```
 
@@ -211,7 +211,7 @@ guaranteed number of rows. The command awaits only the completed batch render:
 ds.get('route_list'):mouseWheel({
     direction=ds.EMouseButton.SCROLL_DOWN,
     steps=16,
-    anchor='center',
+    anchor=ds.EPointerAnchor.CENTER,
 })
 ```
 
@@ -456,7 +456,7 @@ ds.mouseInput(ds.EMouseButton.RIGHT, ds.EInputState.DOWN)
 ds.mouseInput(ds.EMouseButton.RIGHT, ds.EInputState.UP)
 ds.mouseWheel({direction=ds.EMouseButton.SCROLL_DOWN, steps=4})
 
-ds.get('menu'):move_pointer('center'):click()
+ds.get('menu'):move_pointer(ds.EPointerAnchor.CENTER):click()
 ds.redraw()                         -- waits for a completed render
 ds.get('menu'):redraw()             -- also waits
 ds.redraw(nil, {wait=false})        -- invalidates without waiting

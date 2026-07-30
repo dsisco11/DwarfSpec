@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `ds.EPointerAnchor` provides immutable `CENTER`, `TOP_LEFT`, `TOP_RIGHT`,
+  `BOTTOM_LEFT`, and `BOTTOM_RIGHT` values for subject pointer placement.
+- `ds.EPointerSpace.WORLD_TILE` lets
+  `ds.move_pointer({x=..., y=..., z=...}, space, options)` target a map tile.
+  The camera recenters on the tile by default and is restored during cleanup;
+  `{recenter=false}` requires the tile to already be visible.
 - `ds.mouseWheel({direction=..., steps=...}, subject)` and
   `Subject:mouseWheel(options)` dispatch a batch of discrete wheel inputs with
   one final render wait while resolving the current input viewscreen for each

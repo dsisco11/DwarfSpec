@@ -121,6 +121,8 @@ local EInputState = load_automation_module(package_root,
     'dwarfspec.input_states', '/src/dwarfspec/input_states.lua')
 local EPointerSpace = load_automation_module(package_root,
     'dwarfspec.pointer_spaces', '/src/dwarfspec/pointer_spaces.lua')
+local EPointerAnchor = load_automation_module(package_root,
+    'dwarfspec.pointer_anchors', '/src/dwarfspec/pointer_anchors.lua')
 local EScreenOrigin = load_automation_module(package_root,
     'dwarfspec.screen_origins', '/src/dwarfspec/screen_origins.lua')
 local ESubjectSource = load_automation_module(package_root,
@@ -525,6 +527,7 @@ local TestStatus = load_automation_module(package_root,
         EMouseButton=EMouseButton,
         EInputState=EInputState,
         EPointerSpace=EPointerSpace,
+        EPointerAnchor=EPointerAnchor,
         EScreenOrigin=EScreenOrigin,
         ESubjectSource=ESubjectSource,
     }
@@ -1526,30 +1529,31 @@ local TestStatus = load_automation_module(package_root,
 
     ---Returns the UI-grid coordinate selected by one subject anchor.
     ---@param bounds table
-    ---@param anchor string|nil
+    ---@param anchor DwarfSpecEPointerAnchor|nil
     ---@return integer, integer
     local function pointer_anchor_coordinates(bounds, anchor)
-        anchor = anchor or 'center'
-        if anchor == 'top_left' then
+        anchor = anchor or EPointerAnchor.CENTER
+        if anchor == EPointerAnchor.TOP_LEFT then
             return bounds.x1, bounds.y1
         end
-        if anchor == 'top_right' then
+        if anchor == EPointerAnchor.TOP_RIGHT then
             return bounds.x2, bounds.y1
         end
-        if anchor == 'bottom_left' then
+        if anchor == EPointerAnchor.BOTTOM_LEFT then
             return bounds.x1, bounds.y2
         end
-        if anchor == 'bottom_right' then
+        if anchor == EPointerAnchor.BOTTOM_RIGHT then
             return bounds.x2, bounds.y2
         end
-        assert(anchor == 'center', 'unsupported pointer anchor: ' .. anchor)
+        assert(anchor == EPointerAnchor.CENTER,
+            'unsupported pointer anchor: ' .. anchor)
         return math.floor((bounds.x1 + bounds.x2) / 2),
             math.floor((bounds.y1 + bounds.y2) / 2)
     end
 
     ---Moves the virtual pointer to one anchor within a live subject.
     ---@param requested_subject table|nil
-    ---@param anchor string|nil
+    ---@param anchor DwarfSpecEPointerAnchor|nil
     ---@return integer, integer
     local function move_pointer_to_subject(requested_subject, anchor)
         local view
@@ -1586,7 +1590,7 @@ local TestStatus = load_automation_module(package_root,
     ---@overload fun(x: integer, y: integer, space: DwarfSpecEPointerSpace|nil): integer, integer
     ---@overload fun(position: table, space: DwarfSpecEPointerSpace, options: table|nil): integer, integer, integer
     ---@param view table|integer|nil
-    ---@param anchor string|integer|DwarfSpecEPointerSpace|nil
+    ---@param anchor DwarfSpecEPointerAnchor|integer|DwarfSpecEPointerSpace|nil
     ---@param space DwarfSpecEPointerSpace|table|nil
     ---@return integer, integer
     function ds.move_pointer(view, anchor, space)
@@ -1619,7 +1623,7 @@ local TestStatus = load_automation_module(package_root,
     ---Moves the virtual pointer over a subject and waits for its render.
     ---DwarfSpec automatically restores inherited pointer state during cleanup.
     ---@param view table|integer|nil
-    ---@param anchor string|integer|nil
+    ---@param anchor DwarfSpecEPointerAnchor|integer|nil
     ---@param space DwarfSpecEPointerSpace|nil
     ---@return integer, integer
     function ds.hover(view, anchor, space)
