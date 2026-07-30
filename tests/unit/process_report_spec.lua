@@ -2,6 +2,8 @@
 
 local process = require('dwarfspec.process')
 local report = require('dwarfspec.report')
+local EComparison =
+    require('dwarfspec.automation.base_screen_focus_comparisons')
 local RunState = require('dwarfspec.automation.run_states')
 
 ---Reads one version 2 checked-in contract fixture.
@@ -121,6 +123,55 @@ describe('DwarfSpec process bridge', function()
 end)
 
 describe('DwarfSpec native reports', function()
+    ---Returns one detached observation for report-format fixtures.
+    ---@param available boolean
+    ---@return table
+    local function focus_details(available)
+        return {
+            screen={status='present', type='viewscreen_dwarfmodest'},
+            focus=available and {
+                status='available',
+                values={'dwarfmode/Default'},
+            } or {
+                status='unavailable',
+                values={},
+                error='focus capture failed',
+            },
+        }
+    end
+
+    ---Returns one diagnostic event for report-format fixtures.
+    ---@param scope 'example'|'suite'
+    ---@param incomplete boolean
+    ---@param kind string|nil
+    ---@return table
+    local function focus_event(scope, incomplete, kind)
+        kind = kind or 'base_screen_focus_changed'
+        local changed = kind == 'base_screen_focus_changed'
+        local content = {
+            severity=changed and 'warning' or 'info',
+            scope=scope,
+            attribution=scope == 'suite' and 'file' or 'test',
+            suite_name='tests/focus_spec.lua',
+            source_identity='tests/focus_spec.lua',
+            repeat_index=1,
+            screen_comparison=changed and EComparison.CHANGED or
+                EComparison.SAME,
+            focus_comparison=incomplete and EComparison.UNAVAILABLE or
+                EComparison.SAME,
+            details_complete=not incomplete,
+            before=focus_details(not incomplete),
+            after=focus_details(not incomplete),
+        }
+        if scope == 'example' then
+            content.example_name='focus suite changes focus'
+        end
+        return {
+            type='diagnostic.recorded',
+            payload={kind=kind, content=content},
+        }
+    end
+
     it('formats an unloaded service status without requiring a scheduler',
             function()
         local status = report.parse_status({'DWARFSPEC_JSON ignored'},
@@ -152,6 +203,50 @@ describe('DwarfSpec native reports', function()
                     blocking_generation=6,
                 },
             },
+        }))
+    end)
+
+    it('formats example warnings after their test result', function()
+        local lines = report.format_events({
+            {
+                type='test.finished',
+                payload={
+                    name='focus suite changes focus',
+                    status='success',
+                    duration_ms=4,
+                },
+            },
+            focus_event('example', false),
+        })
+
+        assert.same({
+            'SUCCESS focus suite changes focus (4 ms)',
+            'WARNING base-screen focus changed after example focus suite ' ..
+                'changes focus in tests/focus_spec.lua (repeat=1 ' ..
+                'attribution=test screen=changed focus=same complete=true)',
+        }, lines)
+    end)
+
+    it('formats suite warnings after file activity with incomplete details',
+            function()
+        local lines = report.format_events({
+            {type='repeat.started', payload={
+                repeat_index=1, repeat_count=1}},
+            focus_event('suite', true),
+        })
+
+        assert.same({
+            'RUN 1/1',
+            'WARNING base-screen focus changed after suite ' ..
+                'tests/focus_spec.lua (repeat=1 attribution=file ' ..
+                'screen=changed focus=unavailable complete=false)',
+        }, lines)
+    end)
+
+    it('does not format incomplete verification as a warning', function()
+        assert.same({}, report.format_events({
+            focus_event('example', true,
+                'base_screen_focus_verification_incomplete'),
         }))
     end)
 
@@ -259,6 +354,9 @@ describe('DwarfSpec native reports', function()
         local value, _, decode_error = require('dkjson').decode(contents)
         assert(value, decode_error)
         assert.equals(value, report.validate_result(value))
+        assert.equals('base_screen_focus_changed',
+            value.events[1].payload.kind)
+        assert.is_nil(contents:find('0x', 1, true))
     end)
 
     it('formats every inspected event with its sequence and payload',

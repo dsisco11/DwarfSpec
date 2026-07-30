@@ -2,7 +2,10 @@
 
 local json = require('dkjson')
 local runner = require('dwarfspec.runner')
+local EComparison =
+    require('dwarfspec.automation.base_screen_focus_comparisons')
 local EventType = require('dwarfspec.automation.event_types')
+local ErrorFormat = require('dwarfspec.error_formats')
 local ResultState = require('dwarfspec.automation.result_states')
 local RunState = require('dwarfspec.automation.run_states')
 
@@ -134,6 +137,104 @@ local function transport_lines(arguments, run_id, state, cleanup_confirmed,
     return lines
 end
 
+---Builds transport output with caller-supplied event payloads.
+---@param arguments string[]
+---@param run_id string
+---@param state DwarfSpecRunState
+---@param cleanup_confirmed boolean
+---@param event_values table[]
+---@return string[]
+local function transport_with_events(arguments, run_id, state,
+        cleanup_confirmed, event_values)
+    local after_sequence = transport_cursor(arguments)
+    local lines = report_lines(run_id, state, cleanup_confirmed, nil,
+        after_sequence)
+    local encoded = assert(lines[1]:match('^DWARFSPEC_JSON (.+)$'))
+    local transport = assert(json.decode(encoded))
+    transport.events = {}
+    for index, value in ipairs(event_values) do
+        table.insert(transport.events, {
+            schema='dwarfspec.event.v1',
+            service_instance_id=transport.service_instance_id,
+            project_id=transport.project_id,
+            run_id=run_id,
+            generation=transport.generation,
+            sequence=after_sequence + index,
+            type=value.type,
+            elapsed_ms=index,
+            payload=value.payload,
+        })
+    end
+    transport.last_sequence = after_sequence + #transport.events
+    transport.snapshot.last_sequence = transport.last_sequence
+    lines = {'DWARFSPEC_JSON ' .. json.encode(transport)}
+    if arguments[3]:match('bootstrap%.lua$') then
+        table.insert(lines, 1, 'DWARFSPEC_OWNER ' .. OWNER_CAPABILITY)
+    end
+    return lines
+end
+
+---Returns ordered progress events surrounding one assertion failure.
+---@param message string|nil
+---@return table[]
+local function diagnostic_events(message)
+    return {
+        {
+            type=EventType.TEST_STARTED,
+            payload={name='suite example'},
+        },
+        {
+            type=EventType.PROBLEM_RECORDED,
+            payload={
+                kind='failure',
+                name='suite example',
+                message=message or 'expected true',
+                trace='original trace',
+                source_identity='tests/example.ds.lua',
+                line=12,
+                column=4,
+            },
+        },
+        {
+            type=EventType.TEST_FINISHED,
+            payload={
+                name='suite example',
+                status='failure',
+                duration_ms=5,
+            },
+        },
+    }
+end
+
+---Returns one valid example focus-warning event value.
+---@return table
+local function focus_warning_event()
+    local details = {
+        screen={status='present', type='viewscreen_dwarfmodest'},
+        focus={status='available', values={'dwarfmode/Default'}},
+    }
+    return {
+        type=EventType.DIAGNOSTIC_RECORDED,
+        payload={
+            kind='base_screen_focus_changed',
+            content={
+                severity='warning',
+                scope='example',
+                attribution='test',
+                suite_name='tests/focus_spec.lua',
+                example_name='focus suite changes focus',
+                source_identity='tests/focus_spec.lua',
+                repeat_index=1,
+                screen_comparison=EComparison.CHANGED,
+                focus_comparison=EComparison.SAME,
+                details_complete=true,
+                before=details,
+                after=details,
+            },
+        },
+    }
+end
+
 ---Builds one queued bootstrap transport response.
 ---@param run_id string
 ---@return string[]
@@ -222,6 +323,240 @@ describe('DwarfSpec external runner', function()
         assert.is_true(lua_module_root_found)
         assert.is_true(no_results_policy_found)
         assert.is_false(result_path_found)
+    end)
+
+    it('streams and persists a warning without changing a passing result',
+            function()
+        local emitted = {}
+        local persisted
+        local run_options = options('warning-pass-run')
+        run_options.emit = function(line) table.insert(emitted, line) end
+        run_options.result_store = {
+            write=function(_, value) persisted = value end,
+        }
+        run_options.result_path = 'tests/.test-results/warning.json'
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    'warning-pass-run', RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                return {exit_code=0, lines=transport_with_events(arguments,
+                    'warning-pass-run', RunState.PASSED, true,
+                    {focus_warning_event()})}
+            end
+            assert.matches('acknowledge%.lua$', arguments[3])
+            return {exit_code=0, lines=transport_lines(arguments,
+                'warning-pass-run', RunState.PASSED, true)}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(0, outcome.exit_code)
+        assert.equals(RunState.PASSED, outcome.report.state)
+        assert.is_true(outcome.report.cleanup_confirmed)
+        assert.equals(ResultState.PASSED, outcome.result.state)
+        assert.equals(ResultState.PASSED, persisted.state)
+        assert.equals(1, #persisted.events)
+        assert.equals('base_screen_focus_changed',
+            persisted.events[1].payload.kind)
+        assert.same({
+            'WARNING base-screen focus changed after example focus suite ' ..
+                'changes focus in tests/focus_spec.lua (repeat=1 ' ..
+                'attribution=test screen=changed focus=same complete=true)',
+        }, emitted)
+    end)
+
+    it('streams each configured diagnostic format in event order and ' ..
+            'persists the original failed event before acknowledgement',
+            function()
+        local cases = {
+            {
+                error_format=ErrorFormat.MSBUILD,
+                expected='D:\\project\\tests\\example.ds.lua(12,4): ' ..
+                    'error DS1001: suite example: expected true',
+            },
+            {
+                error_format=ErrorFormat.GCC,
+                expected='D:/project/tests/example.ds.lua:12:4: error: ' ..
+                    'suite example: expected true',
+            },
+            {
+                error_format=ErrorFormat.ESLINT,
+                expected='tests/example.ds.lua: line 12, col 4, Error - ' ..
+                    'suite example: expected true (dwarfspec)',
+            },
+        }
+        for _, case in ipairs(cases) do
+            local emitted = {}
+            local persisted
+            local acknowledged = false
+            local run_options = options(
+                'formatted-' .. case.error_format)
+            run_options.project_root = 'D:\\project'
+            run_options.error_format = case.error_format
+            run_options.result_path = 'D:/results/result.json'
+            run_options.result_store = {
+                write=function(_, result) persisted = result end,
+            }
+            run_options.emit = function(line)
+                table.insert(emitted, line)
+            end
+            run_options.invoke = function(_, arguments)
+                if arguments[3]:match('probe%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_PROBE protocol=2 core=true ' ..
+                            'timeout=function'}}
+                elseif arguments[3]:match('bootstrap%.lua$') then
+                    return {exit_code=0,
+                        lines=transport_lines(arguments,
+                            run_options.run_id, RunState.STARTING, false)}
+                elseif arguments[3]:match('status%.lua$') then
+                    return {exit_code=0,
+                        lines=transport_with_events(arguments,
+                            run_options.run_id, RunState.FAILED, true,
+                            diagnostic_events())}
+                end
+                assert.matches('acknowledge%.lua$', arguments[3])
+                acknowledged = true
+                return {exit_code=0,
+                    lines=transport_lines(arguments,
+                        run_options.run_id, RunState.FAILED, true)}
+            end
+
+            local outcome = runner.run(run_options)
+
+            assert.equals(runner.exit_codes[runner.failure_kinds.TEST],
+                outcome.exit_code)
+            assert.same({
+                'START suite example',
+                case.expected,
+                'FAILURE suite example (5 ms)',
+            }, emitted)
+            assert.is_true(acknowledged)
+            assert.equals(ResultState.FAILED, persisted.state)
+            assert.equals(3, #persisted.events)
+            local payload = persisted.events[2].payload
+            assert.equals('expected true', payload.message)
+            assert.equals('original trace', payload.trace)
+            assert.equals('tests/example.ds.lua',
+                payload.source_identity)
+            assert.equals(12, payload.line)
+            assert.equals(4, payload.column)
+        end
+    end)
+
+    it('prints one diagnostic once across successive cursor polls', function()
+        local emitted = {}
+        local status_cursors = {}
+        local status_calls = 0
+        local run_options = options('cursor-diagnostic')
+        run_options.project_root = 'D:\\project'
+        run_options.error_format = ErrorFormat.GCC
+        run_options.emit = function(line) table.insert(emitted, line) end
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0,
+                    lines=transport_lines(arguments,
+                        'cursor-diagnostic', RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                status_calls = status_calls + 1
+                table.insert(status_cursors, transport_cursor(arguments))
+                if status_calls == 1 then
+                    return {exit_code=0,
+                        lines=transport_with_events(arguments,
+                            'cursor-diagnostic', RunState.RUNNING, false,
+                            diagnostic_events())}
+                end
+                return {exit_code=0,
+                    lines=transport_with_events(arguments,
+                        'cursor-diagnostic', RunState.PASSED, true, {})}
+            end
+            return {exit_code=0,
+                lines=transport_lines(arguments,
+                    'cursor-diagnostic', RunState.PASSED, true)}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(0, outcome.exit_code)
+        assert.same({0, 3}, status_cursors)
+        local diagnostic_count = 0
+        for _, line in ipairs(emitted) do
+            if line:find(':12:4: error:', 1, true) then
+                diagnostic_count = diagnostic_count + 1
+            end
+        end
+        assert.equals(1, diagnostic_count)
+        assert.equals(3, #outcome.result.events)
+    end)
+
+    it('classifies formatter failure and recovers active cleanup', function()
+        local recovery_arguments
+        local persisted
+        local run_options = options('formatter-failure')
+        run_options.project_root = 'D:\\project'
+        run_options.error_format = ErrorFormat.MSBUILD
+        run_options.result_path = 'D:/results/result.json'
+        run_options.result_store = {
+            write=function(_, result) persisted = result end,
+        }
+        run_options.diagnostic_formatter = {
+            format=function()
+                error('formatter exploded', 0)
+            end,
+        }
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0,
+                    lines=transport_lines(arguments,
+                        'formatter-failure', RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                return {exit_code=0,
+                    lines=transport_with_events(arguments,
+                        'formatter-failure', RunState.RUNNING, false,
+                        diagnostic_events())}
+            end
+            assert.matches('recover%.lua$', arguments[3])
+            recovery_arguments = arguments
+            return {exit_code=0,
+                lines=transport_with_events(arguments,
+                    'formatter-failure', RunState.ABORTED, true, {
+                        {
+                            type=EventType.CLEANUP_FINISHED,
+                            payload={
+                                cleanup_confirmed=true,
+                                mount_cleanup_verified=true,
+                            },
+                        },
+                    })}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(runner.exit_codes[runner.failure_kinds.HOST],
+            outcome.exit_code)
+        assert.equals(runner.failure_kinds.HOST, outcome.error.kind)
+        assert.matches('DwarfSpec diagnostic formatting failed: ' ..
+            'formatter exploded', outcome.error.message, 1, true)
+        assert.matches('recover%.lua$', recovery_arguments[3])
+        assert.equals('3', recovery_arguments[6])
+        assert.equals(RunState.ABORTED, outcome.report.state)
+        assert.is_true(outcome.report.cleanup_confirmed)
+        assert.equals(ResultState.HOST_ERROR, persisted.state)
+        assert.equals(4, #persisted.events)
+        assert.equals('expected true',
+            persisted.events[2].payload.message)
+        assert.equals(EventType.CLEANUP_FINISHED,
+            persisted.events[4].type)
     end)
 
     it('persists queued, activation, and complete terminal documents in order',

@@ -2,6 +2,9 @@
 
 local RunState = require('dwarfspec.automation.run_states')
 local EventType = require('dwarfspec.automation.event_types')
+local events = require('dwarfspec.automation.events')
+local focus_diagnostics =
+    require('dwarfspec.automation.focus_diagnostics')
 local OwnerKind = require('dwarfspec.automation.owner_kinds')
 local ResultPolicy = require('dwarfspec.automation.result_policies')
 local SchedulerFailureKind =
@@ -187,6 +190,8 @@ local function verify_executor_clean_state(proof)
             mount.subject_count ~= 0 or
             mount.pointer_active == true or
             mount.button_state_active == true or
+            mount.game_pause_state_active == true or
+            mount.game_speed_active == true or
             mount.render_observer_active == true or
             mount.verified ~= true) then
         return false, 'quarantined mount state is not clean'
@@ -447,19 +452,173 @@ function M.discover_tests(project_root, loader, specs)
     })
 end
 
----Installs run-scoped cleanup around every discovered Busted example.
----@param busted table
+---Creates per-example and file-suite focus observations and diagnostics.
+---@param run table
 ---@param reset function
-function M.install_ds_lifecycle(busted, reset)
-    assert(type(busted) == 'table' and type(busted.api) == 'table',
-        'Busted root API is required for automation lifecycle hooks')
-    assert(type(busted.api.before_each) == 'function' and
-        type(busted.api.after_each) == 'function',
-        'Busted before_each and after_each APIs are required')
+---@param guard BaseScreenFocusGuard
+---@return table
+function M.new_focus_lifecycle(run, reset, guard)
+    assert(type(run) == 'table',
+        'focus lifecycle run is required')
     assert(type(reset) == 'function',
-        'automation reset callback is required for lifecycle hooks')
-    busted.api.before_each(function() reset('before example') end)
-    busted.api.after_each(function() reset('after example') end)
+        'focus lifecycle reset callback is required')
+    assert(type(guard) == 'table' and type(guard.capture) == 'function' and
+        type(guard.compare) == 'function',
+        'focus lifecycle guard is required')
+    assert(type(run.event_publisher) == 'table' and
+        type(run.event_publisher.publish) == 'function',
+        'focus lifecycle event publisher is required')
+    run.output_lines = run.output_lines or {}
+    assert(type(run.output_lines) == 'table',
+        'focus lifecycle output lines must be a table')
+
+    local lifecycle = {}
+    local active_suite
+    local active_example
+
+    ---Publishes one comparison with its detached lifecycle attribution.
+    ---@param diagnostic BaseScreenFocusDiagnostic|nil
+    ---@param scope 'example'|'suite'
+    ---@param attribution 'test'|'before_each'|'file'
+    ---@param suite DwarfSpecFileSuiteIdentity
+    ---@param example table|nil
+    local function publish_diagnostic(
+            diagnostic, scope, attribution, suite, example)
+        if diagnostic == nil then return end
+        diagnostic = events.copy_json(
+            diagnostic, 'base-screen focus diagnostic')
+        local content = diagnostic.content
+        content.scope = scope
+        content.attribution = attribution
+        content.suite_name = suite.suite_name
+        content.repeat_index = suite.repeat_index
+        if example ~= nil and example.example_name ~= nil then
+            content.example_name = example.example_name
+        end
+        local source_identity
+        if example ~= nil then
+            source_identity = example.source_identity
+        else
+            source_identity = suite.source_identity
+        end
+        if source_identity ~= nil then
+            content.source_identity = source_identity
+        end
+        run.event_publisher.publish(
+            EventType.DIAGNOSTIC_RECORDED, diagnostic)
+        if diagnostic.kind == focus_diagnostics.CHANGE_KIND then
+            table.insert(run.output_lines,
+                focus_diagnostics.format_warning(diagnostic))
+        end
+    end
+
+    ---Captures S0 for one executed file-suite instance.
+    ---@param identity DwarfSpecFileSuiteIdentity
+    ---@return string
+    function lifecycle.suite_entry(identity)
+        assert(type(identity) == 'table' and
+            type(identity.copy) == 'function',
+            'focus lifecycle requires a file-suite identity')
+        assert(active_suite == nil,
+            'focus lifecycle already has an active file suite')
+        active_example = nil
+        active_suite = {
+            identity=identity:copy(),
+            before=guard:capture(),
+        }
+        return active_suite.identity.suite_id
+    end
+
+    ---Cleans suite resources, captures S2, and publishes one diagnostic.
+    ---@param identity DwarfSpecFileSuiteIdentity
+    ---@param state any
+    function lifecycle.suite_exit(identity, state)
+        local completed = active_suite
+        active_example = nil
+        active_suite = nil
+        if completed == nil then return end
+        assert(type(identity) == 'table' and
+            identity.suite_id == completed.identity.suite_id,
+            'focus lifecycle file-suite exit identity did not match entry')
+        assert(state == nil or state == completed.identity.suite_id,
+            'focus lifecycle file-suite state did not match entry')
+        reset('after suite')
+        publish_diagnostic(guard:compare(
+            completed.before, guard:capture()),
+            'suite', 'file', completed.identity)
+    end
+
+    ---Resets inherited resources and captures the example's T0 state.
+    function lifecycle.example_entry()
+        active_example = nil
+        reset('before example')
+        assert(active_suite ~= nil,
+            'focus lifecycle has no active file suite')
+        active_example = {
+            attribution='before_each',
+            suite=active_suite.identity:copy(),
+            before=guard:capture(),
+        }
+    end
+
+    ---Retains identity after project setup reaches Busted test start.
+    ---@param identity BustedExampleIdentity
+    function lifecycle.test_start(identity)
+        if active_example == nil then return end
+        active_example.attribution = 'test'
+        active_example.example_name = identity.example_name
+        active_example.source_identity = identity.source_identity
+    end
+
+    ---Resets resources, captures T1, and publishes one detached diagnostic.
+    function lifecycle.example_exit()
+        local completed = active_example
+        active_example = nil
+        reset('after example')
+        if completed == nil then return end
+        local diagnostic = guard:compare(
+            completed.before, guard:capture())
+        publish_diagnostic(diagnostic, 'example',
+            completed.attribution, completed.suite, completed)
+    end
+
+    ---Clears every unconsumed private observation and attribution token.
+    function lifecycle.clear()
+        active_example = nil
+        active_suite = nil
+    end
+
+    return lifecycle
+end
+
+---Installs internal entry handling before project example setup.
+---@param lifecycle_adapter table
+---@param busted table
+---@param lifecycle table
+function M.install_ds_example_entry(lifecycle_adapter, busted, lifecycle)
+    assert(type(lifecycle_adapter) == 'table' and
+        type(lifecycle_adapter.install_example_entry) == 'function',
+        'Busted lifecycle adapter is required')
+    assert(type(lifecycle) == 'table' and
+        type(lifecycle.example_entry) == 'function',
+        'example focus lifecycle entry callback is required')
+    lifecycle_adapter.install_example_entry(
+        busted, lifecycle.example_entry)
+end
+
+---Installs internal exit handling after all project example teardown.
+---@param lifecycle_adapter table
+---@param busted table
+---@param lifecycle table
+function M.install_ds_example_exit(lifecycle_adapter, busted, lifecycle)
+    assert(type(lifecycle_adapter) == 'table' and
+        type(lifecycle_adapter.install_example_exit) == 'function',
+        'Busted lifecycle adapter is required')
+    assert(type(lifecycle) == 'table' and
+        type(lifecycle.example_exit) == 'function',
+        'example focus lifecycle exit callback is required')
+    lifecycle_adapter.install_example_exit(
+        busted, lifecycle.example_exit)
 end
 
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
@@ -499,7 +658,25 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local ds, reset = ds_factory.new(package_root, project, scheduler_module,
         scheduler, run.cleanup_module, run.cleanup_registry, extensions)
     busted.export('ds', ds)
-    M.install_ds_lifecycle(busted, reset)
+    local lifecycle_adapter = load_automation_module(package_root,
+        'dwarfspec.automation.busted_lifecycle_adapter',
+        'src/dwarfspec/automation/busted_lifecycle_adapter.lua')
+    local guard_factory = load_automation_module(package_root,
+        'dwarfspec.automation.base_screen_focus_guard',
+        'src/dwarfspec/automation/base_screen_focus_guard.lua')
+    local focus_lifecycle = M.new_focus_lifecycle(
+        run, reset, guard_factory.new(dfhack.gui))
+    run.focus_lifecycle = focus_lifecycle
+    lifecycle_adapter.install(busted, {
+        project_root=project_root,
+        on_suite_entry=focus_lifecycle.suite_entry,
+        on_suite_exit=focus_lifecycle.suite_exit,
+        on_test_start=focus_lifecycle.test_start,
+    })
+    M.install_ds_example_entry(
+        lifecycle_adapter, busted, focus_lifecycle)
+    M.install_ds_example_exit(
+        lifecycle_adapter, busted, focus_lifecycle)
 
     local output_factory = load_automation_module(package_root,
         'dwarfspec.automation.output_handler',
@@ -575,6 +752,10 @@ end
 ---@param reason string
 ---@return boolean
 local function clean_run(run, reason)
+    if run.focus_lifecycle ~= nil then
+        run.focus_lifecycle.clear()
+        run.focus_lifecycle = nil
+    end
     if run.scheduler then
         run.scheduler_module.cancel(run.scheduler, reason)
         run.scheduler.owner = nil
@@ -600,6 +781,8 @@ local function clean_run(run, reason)
                 result.subject_count == 0 and
                 result.pointer_active ~= true and
                 result.button_state_active ~= true and
+                result.game_pause_state_active ~= true and
+                result.game_speed_active ~= true and
                 result.render_observer_active ~= true
         else
             mount_ok = false
@@ -740,6 +923,9 @@ local function begin_queued_run(package_root, project_root, registry, run)
         end,
         schedule_timeout=function(delay, callback)
             return dfhack.timeout(delay, 'frames', callback)
+        end,
+        schedule_tick_timeout=function(delay, callback)
+            return dfhack.timeout(delay, 'ticks', callback)
         end,
         cancel_timeout=cancel_timeout,
         now_ms=dfhack.getTickCount,

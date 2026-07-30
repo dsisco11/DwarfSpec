@@ -14,6 +14,11 @@ local lua_view_adapter = assert(loadfile(
 local EventType = require('dwarfspec.automation.event_types')
 local EMouseButton = require('dwarfspec.mouse_buttons')
 local EInputState = require('dwarfspec.input_states')
+local EPointerSpace = require('dwarfspec.pointer_spaces')
+local EPointerAnchor = require('dwarfspec.pointer_anchors')
+local EScreenOrigin = require('dwarfspec.screen_origins')
+local EFieldMode =
+    require('dwarfspec.native_game_ui_path').EFieldMode
 local TestStatus = require('dwarfspec.automation.test_statuses')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
@@ -45,7 +50,7 @@ end
 local function make_native_widget(name, type_name, children, fields)
     local widget = {
         name=name,
-        _type={_name=type_name},
+        _type={_name=type_name, _fields={}},
         children=children or {},
     }
     for key, value in pairs(fields or {}) do widget[key] = value end
@@ -77,10 +82,75 @@ describe('DwarfSpec public mount commands', function()
     local component_mount_calls
     local native_widget_lookup_calls
     local native_invalidation_count
+    local focus_queries
+    local focus_match_queries
+    local dfhack_time
+    local map_view_position
+    local map_view_dimensions
+    local map_view_dimensions_failure
+    local map_view_get_failure
+    local map_view_set_failure
+    local game_speed_set_failure
+    local game_speed_ratio_override
     local original_native_render_dispatcher
     local native_render_failure
     local suppress_native_render
     local wait_until_failure
+    local wait_until_dispatch
+
+    ---Installs one declared main-interface path ending in a native widget.
+    ---@param final_widget table|nil
+    ---@return table
+    local function install_game_ui(final_widget)
+        final_widget = final_widget or make_native_widget(
+            'Dead/Missing', 'df.widget_text', nil, {
+                str='Deceased citizens',
+                rect={x1=10, y1=5, x2=24, y2=7},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        local tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {final_widget})
+        local creatures = make_native_widget(
+            'creatures', 'df.widget_container', {tabs})
+        local info = make_native_widget(
+            'info', 'df.widget_container', {creatures})
+        info._type._fields.creatures = {
+            name='creatures',
+            mode=EFieldMode.SUBSTRUCT,
+        }
+        info.creatures = creatures
+        local main_interface = {
+            _type={_name='df.main_interface', _fields={
+                info={name='info', mode=EFieldMode.SUBSTRUCT},
+            }},
+            info=info,
+        }
+        df.global.game = {main_interface=main_interface}
+        df.widget = {
+            is_instance=function(_, value)
+                return type(value) == 'table' and
+                    value._type ~= nil and
+                    value ~= main_interface
+            end,
+        }
+        df.widget_container = {
+            is_instance=function(_, value)
+                return type(value) == 'table' and value._type and
+                    value._type._name == 'df.widget_container'
+            end,
+        }
+        return {
+            main_interface=main_interface,
+            info=info,
+            creatures=creatures,
+            tabs=tabs,
+            final_widget=final_widget,
+            path={'info', 'creatures', 'Tabs', 'Dead/Missing'},
+        }
+    end
 
     before_each(function()
         original_dfhack = rawget(_G, 'dfhack')
@@ -104,19 +174,44 @@ describe('DwarfSpec public mount commands', function()
         component_mount_calls = 0
         native_widget_lookup_calls = 0
         native_invalidation_count = 0
+        focus_queries = {}
+        focus_match_queries = {}
+        dfhack_time = 67890
+        map_view_position = {x=12, y=34, z=5}
+        map_view_dimensions = {
+            map_x1=3,
+            map_x2=12,
+            map_y1=4,
+            map_y2=10,
+        }
+        map_view_dimensions_failure = nil
+        map_view_get_failure = nil
+        map_view_set_failure = nil
+        game_speed_set_failure = nil
+        game_speed_ratio_override = nil
         native_render_failure = nil
         suppress_native_render = false
         wait_until_failure = nil
+        wait_until_dispatch = nil
         simulated_inputs = {}
         simulate_input_failure = nil
         simulate_input_dispatch = nil
         wait_until_calls = 0
         rawset(_G, 'dfhack', {
+            getTickCount=function() return dfhack_time end,
             screen={
                 getMousePos=function() return 90, 91 end,
+                getMousePixels=function() return 900, 910 end,
                 getWindowSize=function() return 80, 25 end,
             },
             gui={
+                getMousePos=function(allow_out_of_bounds)
+                    return {
+                        x=df.global.gps.precise_mouse_x,
+                        y=df.global.gps.precise_mouse_y,
+                        z=allow_out_of_bounds and 1 or 0,
+                    }, 'native-map-result'
+                end,
                 getWidget=function(parent, segment)
                     native_widget_lookup_calls =
                         native_widget_lookup_calls + 1
@@ -136,12 +231,36 @@ describe('DwarfSpec public mount commands', function()
                     end
                     return result
                 end,
+                getFocusStrings=function(target)
+                    table.insert(focus_queries, target)
+                    return target.focus_list or {}
+                end,
+                matchFocusString=function(path)
+                    table.insert(focus_match_queries, path)
+                    return path == 'dwarfmode/Default'
+                end,
             },
         })
         rawset(_G, 'df', {
             global={
-                gps={mouse_x=4, mouse_y=5},
+                cur_year_tick=12345,
+                pause_state=false,
+                gps={
+                    mouse_x=4,
+                    mouse_y=5,
+                    precise_mouse_x=40,
+                    precise_mouse_y=50,
+                    dimx=80,
+                    dimy=25,
+                    screen_pixel_x=800,
+                    screen_pixel_y=200,
+                    tile_pixel_x=10,
+                    tile_pixel_y=8,
+                },
                 enabler={
+                    fps=100,
+                    gfps=50,
+                    fps_per_gfps=2,
                     mouse_focus=false,
                     tracking_on=0,
                     mouse_lbut_down=0,
@@ -155,6 +274,8 @@ describe('DwarfSpec public mount commands', function()
         })
         package.loaded.gui = {
             simulateInput=function(native_screen, key)
+                assert(native_screen ~= nil,
+                    'simulated input requires an explicit target screen')
                 if simulate_input_failure then
                     error(simulate_input_failure)
                 end
@@ -163,6 +284,8 @@ describe('DwarfSpec public mount commands', function()
                     key=key,
                     x=df.global.gps.mouse_x,
                     y=df.global.gps.mouse_y,
+                    pixel_x=df.global.gps.precise_mouse_x,
+                    pixel_y=df.global.gps.precise_mouse_y,
                     mouse_focus=df.global.enabler.mouse_focus,
                     tracking_on=df.global.enabler.tracking_on,
                     left_down=df.global.enabler.mouse_lbut_down,
@@ -209,11 +332,13 @@ describe('DwarfSpec public mount commands', function()
         local scheduler = {run=run}
         local scheduler_module = {
             wait_frames=function() return 1 end,
+            wait_ticks=function() return 2 end,
             wait_until=function(_, _, query)
                 wait_until_calls = wait_until_calls + 1
                 if wait_until_failure then
                     error(wait_until_failure, 0)
                 end
+                if wait_until_dispatch then wait_until_dispatch() end
                 local result = query()
                 if not result and current_tracker then
                     current_tracker:completed()
@@ -229,6 +354,7 @@ describe('DwarfSpec public mount commands', function()
         }
         native_screen = {
             name='native-screen',
+            focus_list={'dwarfmode/Default', 'dwarfmode/Info'},
             widgets=native_root,
             show_calls=0,
             dismiss_calls=0,
@@ -253,9 +379,39 @@ describe('DwarfSpec public mount commands', function()
                 current_viewscreen=function()
                     return current_native_screen
                 end,
+                get_map_view_position=function()
+                    if map_view_get_failure then
+                        error(map_view_get_failure, 0)
+                    end
+                    return map_view_position.x, map_view_position.y,
+                        map_view_position.z
+                end,
+                set_map_view_position=function(x, y, z)
+                    if map_view_set_failure then
+                        error(map_view_set_failure, 0)
+                    end
+                    map_view_position = {x=x, y=y, z=z}
+                    return true
+                end,
+                get_map_view_dimensions=function()
+                    if map_view_dimensions_failure then
+                        error(map_view_dimensions_failure, 0)
+                    end
+                    return map_view_dimensions
+                end,
+                set_game_speed=function(enabler, tps, speed_ratio)
+                    if game_speed_set_failure then
+                        error(game_speed_set_failure, 0)
+                    end
+                    enabler.fps = tps
+                    enabler.fps_per_gfps =
+                        game_speed_ratio_override or speed_ratio
+                    return true
+                end,
                 native_viewscreen=function() return native_df_screen end,
                 is_native_widget_root=function(root)
-                    return root == native_root
+                    return root and root._type and
+                        root._type._name == 'df.widget_container'
                 end,
                 is_native_widget_container=function(widget)
                     return widget._type._name == 'df.widget_container'
@@ -331,9 +487,9 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(screen.active)
         assert.equals(0, cleanup.pending_count(registry))
         assert.has_error(function() mounted:raw() end,
+            'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
-            'control_path="<root>" from mount 1; no component is currently ' ..
-                'mounted')
+            'control_path="<root>" from mount 1; no current mount exists')
         reset('before example')
         assert.equals(0, cleanup.pending_count(registry))
     end)
@@ -377,6 +533,245 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('returns the current world tick without requiring a mount', function()
+        assert.equals(12345, ds.getTick())
+        df.global.cur_year_tick = 12346
+        assert.equals(12346, ds.getTick())
+
+        df.global.cur_year_tick = nil
+        assert.has_error(function() ds.getTick() end,
+            'DwarfSpec getTick requires a loaded world with a valid ' ..
+                'df.global.cur_year_tick')
+    end)
+
+    it('waits for simulation ticks without requiring a mount', function()
+        assert.equals(2, ds.wait_ticks(2))
+    end)
+
+    it('returns whether the game is paused without requiring a mount',
+            function()
+        assert.is_false(ds.isGamePaused())
+        df.global.pause_state = true
+        assert.is_true(ds.isGamePaused())
+
+        df.global.pause_state = nil
+        assert.has_error(function() ds.isGamePaused() end,
+            'DwarfSpec isGamePaused requires a valid ' ..
+                'df.global.pause_state')
+    end)
+
+    it('sets and restores the game pause state without requiring a mount',
+            function()
+        assert.is_true(ds.setGamePaused(true))
+        assert.is_true(ds.isGamePaused())
+        assert.is_true(
+            run.mount_cleanup_probe().game_pause_state_active)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        assert.is_false(ds.setGamePaused(false))
+        assert.is_false(ds.isGamePaused())
+        assert.equals(1, cleanup.pending_count(registry))
+
+        assert.is_true(ds.setGamePaused(true))
+        reset('game pause state example cleanup')
+
+        assert.is_false(ds.isGamePaused())
+        assert.is_false(
+            run.mount_cleanup_probe().game_pause_state_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('validates the requested game pause state before scheduling cleanup',
+            function()
+        for _, value in ipairs({0, 'true', {}}) do
+            assert.has_error(function()
+                ds.setGamePaused(value)
+            end, 'game pause state must be a boolean')
+        end
+        assert.is_false(ds.isGamePaused())
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('returns the current game speed without a mount or cleanup',
+            function()
+        local enabler = df.global.enabler
+
+        assert.equals(100, ds.getGameSpeed())
+        enabler.fps = 120
+        assert.equals(120, ds.getGameSpeed())
+        assert.equals(0, cleanup.pending_count(registry))
+        assert.is_false(run.mount_cleanup_probe().game_speed_active)
+    end)
+
+    it('validates native game speed before returning it', function()
+        local enabler = df.global.enabler
+        for _, value in ipairs({
+                0, -1, 1.5, '100', 0 / 0, math.huge, -math.huge}) do
+            enabler.fps = value
+            assert.has_error(function()
+                ds.getGameSpeed()
+            end, 'DwarfSpec getGameSpeed requires a valid positive ' ..
+                'integer df.global.enabler.fps')
+        end
+        assert.equals(0, cleanup.pending_count(registry))
+
+        df.global.enabler = nil
+        assert.has_error(function()
+            ds.getGameSpeed()
+        end, 'DwarfSpec getGameSpeed requires df.global.enabler')
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('sets and restores the native game speed without a mount',
+            function()
+        local enabler = df.global.enabler
+
+        assert.equals(120, ds.setGameSpeed(120))
+        assert.equals(120, enabler.fps)
+        assert.equals(2.4, enabler.fps_per_gfps)
+        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        enabler.gfps = 60
+        assert.equals(180, ds.setGameSpeed(180))
+        assert.equals(180, enabler.fps)
+        assert.equals(3, enabler.fps_per_gfps)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        reset('game speed example cleanup')
+
+        assert.equals(100, enabler.fps)
+        assert.equals(2, enabler.fps_per_gfps)
+        assert.equals(60, enabler.gfps)
+        assert.is_false(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('validates game speed and native state before owning cleanup',
+            function()
+        local nan = 0 / 0
+        for _, value in ipairs({
+                0, -1, 1.5, '100', nan, math.huge, -math.huge}) do
+            assert.has_error(function()
+                ds.setGameSpeed(value)
+            end, 'game speed must be a positive integer TPS target')
+        end
+        assert.equals(0, cleanup.pending_count(registry))
+
+        local enabler = df.global.enabler
+        local cases = {
+            {
+                field='fps',
+                value=0,
+                expected='DwarfSpec setGameSpeed requires a valid positive ' ..
+                    'integer df.global.enabler.fps',
+            },
+            {
+                field='gfps',
+                value=0,
+                expected='DwarfSpec setGameSpeed requires a valid positive ' ..
+                    'df.global.enabler.gfps',
+            },
+            {
+                field='fps_per_gfps',
+                value=nan,
+                expected='DwarfSpec setGameSpeed requires a valid ' ..
+                    'df.global.enabler.fps_per_gfps',
+            },
+        }
+        for _, case in ipairs(cases) do
+            enabler.fps = 100
+            enabler.gfps = 50
+            enabler.fps_per_gfps = 2
+            enabler[case.field] = case.value
+            assert.has_error(function()
+                ds.setGameSpeed(120)
+            end, case.expected)
+            assert.equals(0, cleanup.pending_count(registry))
+        end
+
+        df.global.enabler = nil
+        assert.has_error(function()
+            ds.setGameSpeed(120)
+        end, 'DwarfSpec setGameSpeed requires df.global.enabler')
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('retains restoration after a game-speed setter failure', function()
+        local enabler = df.global.enabler
+        game_speed_set_failure = 'injected game-speed setter failure'
+
+        local ok, failure = pcall(ds.setGameSpeed, 120)
+
+        assert.is_false(ok)
+        assert.matches('injected game-speed setter failure', failure, 1, true)
+        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        game_speed_set_failure = nil
+        reset('failed game speed setter cleanup')
+        assert.equals(100, enabler.fps)
+        assert.equals(2, enabler.fps_per_gfps)
+        assert.is_false(run.mount_cleanup_probe().game_speed_active)
+    end)
+
+    it('restores after game-speed ratio verification fails', function()
+        local enabler = df.global.enabler
+        game_speed_ratio_override = 999
+
+        assert.has_error(function()
+            ds.setGameSpeed(120)
+        end, 'DFHack did not apply the requested game speed ratio')
+        assert.equals(120, enabler.fps)
+        assert.equals(999, enabler.fps_per_gfps)
+        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+
+        game_speed_ratio_override = nil
+        reset('failed game speed verification cleanup')
+        assert.equals(100, enabler.fps)
+        assert.equals(2, enabler.fps_per_gfps)
+    end)
+
+    it('reports game-speed restoration failures through cleanup', function()
+        ds.setGameSpeed(120)
+        game_speed_set_failure = 'injected game-speed restore failure'
+
+        local ok, failure = pcall(
+            reset, 'failed game speed restoration')
+
+        assert.is_false(ok)
+        assert.matches('restore game speed', failure, 1, true)
+        assert.matches('injected game-speed restore failure',
+            failure, 1, true)
+        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('returns the current DFHack time without requiring a mount', function()
+        assert.equals(67890, ds.getTime())
+        dfhack_time = 67891
+        assert.equals(67891, ds.getTime())
+
+        dfhack.getTickCount = nil
+        assert.has_error(function() ds.getTime() end,
+            'DwarfSpec getTime requires dfhack.getTickCount')
+    end)
+
+    it('matches the current DFHack focus without requiring a mount',
+            function()
+        assert.is_true(ds.hasFocus('dwarfmode/Default'))
+        assert.is_false(ds.hasFocus('dwarfmode/Info'))
+        assert.same({'dwarfmode/Default', 'dwarfmode/Info'},
+            focus_match_queries)
+
+        assert.has_error(function() ds.hasFocus('') end,
+            'focus path must be a nonempty string')
+        dfhack.gui.matchFocusString = nil
+        assert.has_error(function()
+            ds.hasFocus('dwarfmode/Default')
+        end, 'DwarfSpec hasFocus requires dfhack.gui.matchFocusString')
+    end)
+
     it('requires explicit unmount before mounting another component',
             function()
         local first = ds.mount(TestWidget, {name='first'})
@@ -385,7 +780,7 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function()
             ds.mount(TestWidget, {name='second'})
         end, 'DwarfSpec mount rejected because mount 1 is still current; ' ..
-            'call ds.unmount() before mounting another component')
+            'call ds.unmount() before creating another mount')
         assert.is_true(first_screen.active)
         assert.equals('first', first:raw().name)
 
@@ -397,12 +792,76 @@ describe('DwarfSpec public mount commands', function()
         assert.equals('second', second:raw().name)
     end)
 
-    it('attaches non-owningly only when the component argument is missing',
+    it('rejects every second mount combination at the shared boundary',
             function()
-        local mounted = ds.mount()
+        local cases = {
+            {
+                first=function() return ds.mount(TestWidget) end,
+                second=function() return ds.mount(TestWidget) end,
+            },
+            {
+                first=function() return ds.mount(TestWidget) end,
+                second=function() return ds.mountNativeScreen() end,
+            },
+            {
+                first=function() return ds.mountNativeScreen() end,
+                second=function() return ds.mount(TestWidget) end,
+            },
+            {
+                first=function() return ds.mountNativeScreen() end,
+                second=function() return ds.mountNativeScreen() end,
+            },
+        }
+
+        for _, case in ipairs(cases) do
+            local first = case.first()
+            local mount_id = run.mount_cleanup_probe().current_mount_id
+            assert.has_error(case.second,
+                ('DwarfSpec mount rejected because mount %d is still ' ..
+                    'current; call ds.unmount() before creating another mount')
+                        :format(mount_id))
+            assert.is_not_nil(first:raw())
+            ds.unmount()
+            assert.is_nil(run.mount_cleanup_probe().current_mount_id)
+        end
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.navigation_calls)
+    end)
+
+    it('switches mount entry points only after explicit unmount', function()
+        local component = ds.mount(TestWidget, {name='before-native'})
+        assert.equals('before-native', component:raw().name)
+
+        ds.unmount()
+        local native = ds.mountNativeScreen()
+        assert.equals(native_root, native:raw())
+        assert.equals(1, component_mount_calls)
+
+        ds.unmount()
+        local replacement = ds.mount(TestWidget, {name='after-native'})
+        assert.equals('after-native', replacement:raw().name)
+        assert.equals(2, component_mount_calls)
+        assert.equals(0, native_screen.dismiss_calls)
+        assert.equals(0, native_screen.navigation_calls)
+    end)
+
+    it('attaches non-owningly only through the explicit native command',
+            function()
+        local mount_error =
+            'DwarfSpec ds.mount() requires a component; use ' ..
+                'ds.mountNativeScreen() to mount the current native DF screen'
+        assert.has_error(function() ds.mount() end, mount_error)
+        assert.has_error(function() ds.mount(nil) end, mount_error)
+        assert.has_error(function()
+            ds.mountNativeScreen({})
+        end, 'DwarfSpec ds.mountNativeScreen() does not accept arguments')
+        assert.is_nil(run.mount_cleanup_probe().current_mount_id)
+
+        local mounted = ds.mountNativeScreen()
 
         assert.equals(native_root, mounted:raw())
-        assert.equals(native_root, ds.root():raw())
+        local root_subject = ds.root()
+        assert.equals(native_root, root_subject:raw())
         ds.input('SELECT')
         assert.equals(native_screen, simulated_inputs[1].screen)
         assert.equals('SELECT', simulated_inputs[1].key)
@@ -422,6 +881,9 @@ describe('DwarfSpec public mount commands', function()
             subject_count=2,
             pointer_active=false,
             button_state_active=false,
+            map_view_position_active=false,
+            game_pause_state_active=false,
+            game_speed_active=false,
             render_observer_active=true,
         }, run.mount_cleanup_probe())
         assert.has_error(function()
@@ -448,18 +910,31 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, run.mount_cleanup_probe().tracked_screen_count)
         assert.equals(0, native_screen.dismiss_calls)
         assert.has_error(function() mounted:raw() end,
+            'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
-            'control_path="<root>" from mount 1; no component is currently ' ..
-                'mounted')
-        assert.has_error(function() ds.mount(nil) end,
-            'unsupported component input (nil); expected a DFHack defclass ' ..
-                'derived from widgets.Widget, overlay.OverlayWidget, or ' ..
-                'gui.ZScreen, or an instance of one of those classes')
+            'control_path="<root>" from mount 1; no current mount exists')
+    end)
+
+    it('returns copied focus strings for the current mounted subject',
+            function()
+        local mounted = ds.mountNativeScreen()
+
+        assert.same({'dwarfmode/Default', 'dwarfmode/Info'},
+            mounted:getFocusList())
+        local focus_list = mounted:getFocusList()
+        assert.same({'dwarfmode/Default', 'dwarfmode/Info'}, focus_list)
+        assert.same({native_screen, native_screen}, focus_queries)
+
+        focus_list[1] = 'mutated-by-test'
+        assert.same({'dwarfmode/Default', 'dwarfmode/Info'},
+            mounted:getFocusList())
+
+        ds.unmount()
     end)
 
     it('waits for observed native redraw and supports explicit wait opt-out',
             function()
-        local mounted = ds.mount()
+        local mounted = ds.mountNativeScreen()
         local baseline_waits = wait_until_calls
         local baseline_invalidations = native_invalidation_count
 
@@ -493,13 +968,22 @@ describe('DwarfSpec public mount commands', function()
         overlay_state.config['gui/example.CleanupOverlay'] = {
             enabled=true,
         }
-        local native_subject = ds.mount()
+        local native_subject = ds.mountNativeScreen()
         local overlay_subject = ds.root({
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.CleanupOverlay',
         })
-        ds.move_pointer(7, 8)
+        ds.move_pointer(75, 68, EPointerSpace.PIXELS)
+        assert.is_true(run.mount_cleanup_probe().pointer_active)
         ds.mouseInput(EMouseButton.LEFT, EInputState.DOWN)
+        assert.same({7, 8}, {dfhack.screen.getMousePos()})
+        assert.same({75, 68}, {dfhack.screen.getMousePixels()})
+        assert.same({7, 8, 75, 68}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
 
         local names = {}
         for _, entry in ipairs(registry.entries) do
@@ -519,6 +1003,13 @@ describe('DwarfSpec public mount commands', function()
         assert.is_nil(native_subject._descriptor)
         assert.is_nil(overlay_subject._descriptor)
         assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+        assert.same({4, 5, 40, 50}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
         assert.equals(0, df.global.enabler.mouse_lbut_down)
         assert.equals(0, df.global.enabler.mouse_lbut_lift)
         assert.is_false(df.global.enabler.mouse_focus)
@@ -583,7 +1074,7 @@ describe('DwarfSpec public mount commands', function()
             },
         }
         for _, scenario in ipairs(scenarios) do
-            local retained = ds.mount()
+            local retained = ds.mountNativeScreen()
             ds.move_pointer(2, 3)
             ds.mouseInput(EMouseButton.LEFT, EInputState.DOWN)
             if scenario.prepare then scenario.prepare() end
@@ -596,6 +1087,13 @@ describe('DwarfSpec public mount commands', function()
             assert.equals(0, cleanup.pending_count(registry),
                 scenario.name)
             assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+            assert.same({4, 5, 40, 50}, {
+                df.global.gps.mouse_x,
+                df.global.gps.mouse_y,
+                df.global.gps.precise_mouse_x,
+                df.global.gps.precise_mouse_y,
+            })
             assert.equals(0, df.global.enabler.mouse_lbut_down,
                 scenario.name)
             assert.equals(original_native_render_dispatcher,
@@ -609,6 +1107,7 @@ describe('DwarfSpec public mount commands', function()
             assert.equals(0, state.subject_count, scenario.name)
             assert.equals(0, state.native_screen_dismissal_count,
                 scenario.name)
+            assert.is_false(state.pointer_active, scenario.name)
             assert.is_false(state.button_state_active, scenario.name)
             assert.is_false(state.render_observer_active, scenario.name)
             simulate_input_failure = nil
@@ -626,7 +1125,7 @@ describe('DwarfSpec public mount commands', function()
                 'scheduler abort',
                 'external runner recovery',
             }) do
-            local retained = ds.mount()
+            local retained = ds.mountNativeScreen()
             ds.move_pointer(4, 6)
             ds.mouseInput(EMouseButton.RIGHT, EInputState.DOWN)
 
@@ -635,6 +1134,13 @@ describe('DwarfSpec public mount commands', function()
             assert.is_nil(retained._descriptor, reason)
             assert.equals(0, cleanup.pending_count(registry), reason)
             assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+            assert.same({4, 5, 40, 50}, {
+                df.global.gps.mouse_x,
+                df.global.gps.mouse_y,
+                df.global.gps.precise_mouse_x,
+                df.global.gps.precise_mouse_y,
+            })
             assert.equals(0, df.global.enabler.mouse_rbut_down,
                 reason)
             assert.equals(original_native_render_dispatcher,
@@ -646,6 +1152,7 @@ describe('DwarfSpec public mount commands', function()
             assert.equals(0, state.borrowed_native_screen_count,
                 reason)
             assert.equals(0, state.subject_count, reason)
+            assert.is_false(state.pointer_active, reason)
             assert.is_false(state.button_state_active, reason)
             assert.is_false(state.render_observer_active, reason)
         end
@@ -656,7 +1163,7 @@ describe('DwarfSpec public mount commands', function()
     it('does not accumulate state across repeated native attachments',
             function()
         for iteration = 1, 5 do
-            local retained = ds.mount()
+            local retained = ds.mountNativeScreen()
             ds.move_pointer(iteration, iteration)
             ds.mouseInput(EMouseButton.MIDDLE, EInputState.DOWN)
 
@@ -665,6 +1172,13 @@ describe('DwarfSpec public mount commands', function()
             assert.is_nil(retained._descriptor)
             assert.equals(0, cleanup.pending_count(registry))
             assert.same({90, 91}, {dfhack.screen.getMousePos()})
+            assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+            assert.same({4, 5, 40, 50}, {
+                df.global.gps.mouse_x,
+                df.global.gps.mouse_y,
+                df.global.gps.precise_mouse_x,
+                df.global.gps.precise_mouse_y,
+            })
             assert.equals(0, df.global.enabler.mouse_mbut_down)
             assert.equals(original_native_render_dispatcher,
                 package.loaded['plugins.overlay']
@@ -685,22 +1199,19 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, native_screen.navigation_calls)
     end)
 
-    it('rejects native subject access immediately after a screen transition',
+    it('retains native subject access across a top-screen transition',
             function()
-        local mounted = ds.mount()
-        current_native_screen = {
+        local mounted = ds.mountNativeScreen()
+        local next_screen = {
             name='next-native-screen',
             widgets={kind='next-widget-root'},
         }
+        current_native_screen = next_screen
 
-        local ok, failure = pcall(mounted.raw, mounted)
-        assert.is_false(ok)
-        assert.matches('DwarfSpec subject raw access rejected stale ' ..
-            'native%-screen mount;', failure)
-        assert.matches('mount_kind="native" source="native" ' ..
-            'path="<root>" mount=1;', failure, 1, true)
-        assert.matches('captured_screen=table#%d+ current_screen=table#%d+',
-            failure)
+        assert.equals(native_root, mounted:raw())
+        ds.input('SELECT')
+        assert.equals(next_screen,
+            simulated_inputs[#simulated_inputs].screen)
         assert.equals(0, native_screen.dismiss_calls)
     end)
 
@@ -720,7 +1231,7 @@ describe('DwarfSpec public mount commands', function()
                 active=false,
             })
         native_root.children = {tabs, hidden, inactive}
-        ds.mount()
+        ds.mountNativeScreen()
 
         local named = ds.get('Tabs')
         local lookup_count = native_widget_lookup_calls
@@ -733,6 +1244,313 @@ describe('DwarfSpec public mount commands', function()
             '{"Tabs", 0, "Right/panel"}', mixed.control_path)
         assert.equals(hidden, ds.get('Hidden'):raw())
         assert.equals(inactive, ds.get('Inactive'):raw())
+    end)
+
+    it('resolves the common complete game-UI path without source options',
+            function()
+        local game_ui = install_game_ui()
+        ds.mountNativeScreen()
+
+        local selected = ds.get(game_ui.path)
+
+        assert.equals(game_ui.final_widget, selected:raw())
+        assert.same(
+            {'Tabs', 'Dead/Missing'},
+            selected._descriptor.path_segments)
+        assert.equals(
+            '{"info", "creatures", "Tabs", "Dead/Missing"}',
+            selected.control_path)
+        assert.is_not.equal(
+            ds.root()._descriptor.source,
+            selected._descriptor.source)
+        assert.equals(native_root, ds.root():raw())
+    end)
+
+    it('deduplicates matching viewscreen and game-UI identities',
+            function()
+        local game_ui = install_game_ui()
+        native_root.children = {game_ui.info}
+        ds.mountNativeScreen()
+
+        local selected = ds.get(game_ui.path)
+
+        assert.equals(game_ui.final_widget, selected:raw())
+        assert.equals(
+            ds.root()._descriptor.source,
+            selected._descriptor.source)
+        assert.same(game_ui.path, selected._descriptor.path_segments)
+    end)
+
+    it('returns the viewscreen result when eligible game-UI lookup fails',
+            function()
+        local game_ui = install_game_ui()
+        game_ui.creatures.children = {}
+        local viewscreen_final = make_native_widget(
+            'Dead/Missing', 'df.widget_text', nil, {
+                str='Viewscreen result',
+            })
+        local viewscreen_tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {viewscreen_final})
+        local viewscreen_creatures = make_native_widget(
+            'creatures', 'df.widget_container', {viewscreen_tabs})
+        local viewscreen_info = make_native_widget(
+            'info', 'df.widget_container', {viewscreen_creatures})
+        native_root.children = {viewscreen_info}
+        ds.mountNativeScreen()
+
+        local selected = ds.get(game_ui.path)
+
+        assert.equals(viewscreen_final, selected:raw())
+        assert.equals('Viewscreen result', selected:text())
+        assert.same(
+            game_ui.path, selected._descriptor.path_segments)
+    end)
+
+    it('rejects different viewscreen and game-UI identities as ambiguous',
+            function()
+        local game_ui = install_game_ui()
+        local viewscreen_final = make_native_widget(
+            'Dead/Missing', 'df.widget_text', nil, {
+                str='Different viewscreen result',
+            })
+        local viewscreen_tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {viewscreen_final})
+        local viewscreen_creatures = make_native_widget(
+            'creatures', 'df.widget_container', {viewscreen_tabs})
+        local viewscreen_info = make_native_widget(
+            'info', 'df.widget_container', {viewscreen_creatures})
+        native_root.children = {viewscreen_info}
+        ds.mountNativeScreen()
+
+        local ok, failure = pcall(ds.get, game_ui.path)
+
+        assert.is_false(ok)
+        assert.matches(
+            'native_path={"info", "creatures", "Tabs", "Dead/Missing"}',
+            failure, 1, true)
+        assert.matches('is ambiguous;', failure, 1, true)
+        assert.matches('stage=ambiguity_check', failure, 1, true)
+        assert.matches(
+            'viewscreen={root_type="df.widget_container" ' ..
+                'root_identity=table#%d+ widget_type="df.widget_text" ' ..
+                'widget_identity=table#%d+}',
+            failure)
+        assert.matches(
+            'game_ui={root_type="df.widget_container" ' ..
+                'root_identity=table#%d+ widget_type="df.widget_text" ' ..
+                'widget_identity=table#%d+}',
+            failure)
+        assert.is_true(#failure < 8192)
+    end)
+
+    it('reports both unavailable roots with the complete original path',
+            function()
+        local game_ui = install_game_ui()
+        game_ui.creatures.children = {}
+        ds.mountNativeScreen()
+
+        local ok, failure = pcall(ds.get, game_ui.path)
+
+        assert.is_false(ok)
+        assert.matches(
+            'native_path={"info", "creatures", "Tabs", "Dead/Missing"}',
+            failure, 1, true)
+        assert.matches(
+            'was unavailable from both native roots',
+            failure, 1, true)
+        assert.matches('viewscreen={', failure, 1, true)
+        assert.matches('stage=ambiguity_check', failure, 1, true)
+        assert.matches(
+            'game_ui={stage=widget_traversal', failure, 1, true)
+        assert.matches(
+            'structural_prefix={"info", "creatures"}',
+            failure, 1, true)
+        assert.matches(
+            'widget_suffix={"Tabs", "Dead/Missing"}',
+            failure, 1, true)
+        assert.matches('kind=missing_widget', failure, 1, true)
+    end)
+
+    it('does not enter unrelated game interfaces after a native miss',
+            function()
+        local mutation_calls = 0
+        local main_interface = {
+            _type={_name='df.main_interface', _fields={
+                unrelated={
+                    name='unrelated',
+                    mode=EFieldMode.SUBSTRUCT,
+                },
+            }},
+            unrelated=setmetatable({}, {
+                __index=function()
+                    mutation_calls = mutation_calls + 1
+                    error('unrelated interface was inspected')
+                end,
+            }),
+        }
+        df.global.game = {main_interface=main_interface}
+        df.widget = {
+            is_instance=function() return false end,
+        }
+        df.widget_container = {
+            is_instance=function() return false end,
+        }
+        ds.mountNativeScreen()
+
+        local ok, failure = pcall(ds.get, 'Missing')
+
+        assert.is_false(ok)
+        assert.matches(
+            'native_path={"Missing"}', failure, 1, true)
+        assert.is_nil(failure:find(
+            'both native roots', 1, true))
+        assert.equals(0, mutation_calls)
+    end)
+
+    it('routes game-UI subjects through native inspection and interaction',
+            function()
+        local game_ui = install_game_ui()
+        ds.mountNativeScreen()
+        local selected = ds.get(game_ui.path)
+        local baseline_invalidations = native_invalidation_count
+
+        local inspection = ds.inspect(selected)
+        local text = selected:text()
+        selected:move_pointer('center')
+        local pointer_position = {dfhack.screen.getMousePos()}
+        selected:input('GAME_UI_INPUT')
+        ds.mouseInput(EMouseButton.LEFT, EInputState.CLICK)
+        selected:redraw()
+        local tree = ds.capture_view_tree('game-ui-tree', {
+            native_root=game_ui.creatures,
+        })
+
+        assert.equals('Deceased citizens', inspection.text)
+        assert.equals('Deceased citizens', text)
+        assert.same(
+            {x1=10, y1=5, x2=24, y2=7}, inspection.body)
+        assert.equals('Tabs', tree.children[1].view_id)
+        assert.equals(tree, run.captures['game-ui-tree'])
+        assert.same({17, 6}, pointer_position)
+        assert.equals('GAME_UI_INPUT',
+            simulated_inputs[#simulated_inputs - 1].key)
+        assert.equals('_MOUSE_L',
+            simulated_inputs[#simulated_inputs].key)
+        assert.equals(native_screen,
+            simulated_inputs[#simulated_inputs].screen)
+        assert.equals(
+            baseline_invalidations + 1,
+            native_invalidation_count)
+    end)
+
+    it('resolves exposed base-game controls from an explicit native root',
+            function()
+        local row = make_native_widget(
+            nil, 'df.widget_container', {
+                make_native_widget(
+                    'Label', 'df.widget_text', nil, {str='Route 1'}),
+            })
+        local rows = make_native_widget(
+            'Rows', 'df.widget_container', {row})
+        local main_interface_root = make_native_widget(
+            nil, 'df.widget_container', {rows})
+        ds.mountNativeScreen()
+
+        local options = {native_root=main_interface_root}
+        local selected_root = ds.root(options)
+        local selected_row = ds.get({'Rows', 0}, options)
+        local selected_label = ds.get({'Rows', 0, 'Label'}, options)
+        local tree = ds.capture_view_tree('main-interface', options)
+
+        assert.equals(main_interface_root, selected_root:raw())
+        assert.equals(row, selected_row:raw())
+        assert.equals('Route 1', selected_label:text())
+        assert.equals('Rows', tree.children[1].view_id)
+        assert.equals(selected_root._descriptor.source,
+            selected_row._descriptor.source)
+        assert.equals(selected_row._descriptor.source,
+            selected_label._descriptor.source)
+        assert.equals(native_root, ds.root():raw())
+    end)
+
+    it('keeps explicit native roots isolated from automatic game-UI lookup',
+            function()
+        local game_ui = install_game_ui()
+        local explicit_final = make_native_widget(
+            'Dead/Missing', 'df.widget_text', nil, {
+                str='Explicit result',
+            })
+        local explicit_tabs = make_native_widget(
+            'Tabs', 'df.widget_container', {explicit_final})
+        local explicit_creatures = make_native_widget(
+            'creatures', 'df.widget_container', {explicit_tabs})
+        local explicit_info = make_native_widget(
+            'info', 'df.widget_container', {explicit_creatures})
+        local explicit_root = make_native_widget(
+            nil, 'df.widget_container', {explicit_info})
+        ds.mountNativeScreen()
+
+        local selected = ds.get(
+            game_ui.path, {native_root=explicit_root})
+
+        assert.equals(explicit_final, selected:raw())
+        assert.is_not.equal(game_ui.final_widget, selected:raw())
+    end)
+
+    it('keeps overlay and component paths outside game-UI resolution',
+            function()
+        install_game_ui()
+        local overlay_final = {
+            view_id='Dead',
+            subviews={},
+            visible=true,
+            active=true,
+        }
+        local overlay_root = {
+            view_id='overlay-root',
+            subviews={{
+                view_id='info',
+                subviews={{view_id='creatures', subviews={{
+                    view_id='Tabs',
+                    subviews={overlay_final},
+                }}}},
+            }},
+            visible=true,
+            active=true,
+        }
+        overlay_state.db['gui/example.GameUIOverlay'] = {
+            widget=overlay_root,
+        }
+        overlay_state.config['gui/example.GameUIOverlay'] = {enabled=true}
+        ds.mountNativeScreen()
+        local overlay = ds.get('info/creatures/Tabs/Dead', {
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.GameUIOverlay',
+        })
+        assert.equals(overlay_final, overlay:raw())
+        ds.unmount()
+
+        local component_child = {
+            view_id='info',
+            subviews={},
+        }
+        ds.mount(TestWidget, {
+            name='component',
+            subviews={component_child},
+        })
+        local component_subject = ds.get('info')
+
+        assert.equals(component_child, component_subject:raw())
+        assert.equals(1, component_mount_calls)
+    end)
+
+    it('rejects a native root that is not an exposed widget container',
+            function()
+        ds.mountNativeScreen()
+
+        assert.has_error(function()
+            ds.get('Rows', {native_root={}})
+        end, 'native_root must be a DF widget_container exposed by DFHack')
     end)
 
     it('keeps default native and explicit overlay path collisions separate',
@@ -762,7 +1580,7 @@ describe('DwarfSpec public mount commands', function()
             widget=overlay_root,
         }
         overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
-        ds.mount()
+        ds.mountNativeScreen()
 
         local native = ds.get('Shared')
         local options = {
@@ -783,7 +1601,7 @@ describe('DwarfSpec public mount commands', function()
     end)
 
     it('rejects missing and disabled explicit overlay selections', function()
-        ds.mount()
+        ds.mountNativeScreen()
         local options = {
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.Missing',
@@ -812,7 +1630,7 @@ describe('DwarfSpec public mount commands', function()
         }
         overlay_state.db['gui/example.ExampleOverlay'] = {widget=original}
         overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
-        ds.mount()
+        ds.mountNativeScreen()
         local options = {
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.ExampleOverlay',
@@ -861,7 +1679,7 @@ describe('DwarfSpec public mount commands', function()
             widget=overlay_root,
         }
         overlay_state.config['gui/example.ExampleOverlay'] = {enabled=true}
-        ds.mount()
+        ds.mountNativeScreen()
 
         local native_tree = ds.capture_view_tree('native-tree')
         local overlay_tree = ds.capture_view_tree('overlay-tree', {
@@ -895,7 +1713,7 @@ describe('DwarfSpec public mount commands', function()
         local config = {enabled=true, x=7, y=9}
         overlay_state.db['gui/example.ExampleOverlay'] = entry
         overlay_state.config['gui/example.ExampleOverlay'] = config
-        ds.mount()
+        ds.mountNativeScreen()
         local selected = ds.root({
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.ExampleOverlay',
@@ -939,7 +1757,7 @@ describe('DwarfSpec public mount commands', function()
                 },
             })
         native_root.children = {partial, invalid, offscreen}
-        ds.mount()
+        ds.mountNativeScreen()
 
         assert.same({0, 4}, {
             ds.move_pointer(ds.get('Partial'), 'top_left'),
@@ -960,16 +1778,242 @@ describe('DwarfSpec public mount commands', function()
             ds.get('Offscreen'):inspect().body)
     end)
 
-    it('supports arbitrary in-window pointer coordinates', function()
-        ds.mount()
+    it('supports default grid, explicit grid, pixels, hover, and repeats',
+            function()
+        ds.mountNativeScreen()
 
         assert.same({0, 0}, {ds.move_pointer(0, 0)})
-        assert.same({79, 24}, {ds.move_pointer(79, 24)})
+        assert.same({0, 0}, {dfhack.screen.getMousePos()})
+        assert.same({5, 4}, {dfhack.screen.getMousePixels()})
+
+        assert.same({79, 24}, {
+            ds.move_pointer(79, 24, EPointerSpace.GRID),
+        })
         assert.same({79, 24}, {dfhack.screen.getMousePos()})
+        assert.same({795, 196}, {dfhack.screen.getMousePixels()})
+
+        assert.same({126, 93}, {
+            ds.move_pointer(126, 93, EPointerSpace.PIXELS),
+        })
+        assert.same({12, 11}, {dfhack.screen.getMousePos()})
+        assert.same({126, 93}, {dfhack.screen.getMousePixels()})
+        assert.same({12, 11, 126, 93}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
+        df.global.gps.mouse_x = -1
+        df.global.gps.mouse_y = -1
+        df.global.gps.precise_mouse_x = -1
+        df.global.gps.precise_mouse_y = -1
+        ds.mouseInput(EMouseButton.SCROLL_DOWN)
+        assert.same({12, 11, 126, 93}, {
+            simulated_inputs[1].x,
+            simulated_inputs[1].y,
+            simulated_inputs[1].pixel_x,
+            simulated_inputs[1].pixel_y,
+        })
+
+        assert.same({799, 199}, {
+            ds.hover(799, 199, EPointerSpace.PIXELS),
+        })
+        assert.same({79, 24}, {dfhack.screen.getMousePos()})
+        assert.same({799, 199}, {dfhack.screen.getMousePixels()})
+        local pointer_entries = 0
+        for _, entry in ipairs(registry.entries) do
+            if entry.name == 'virtual pointer' then
+                pointer_entries = pointer_entries + 1
+            end
+        end
+        assert.equals(1, pointer_entries)
+    end)
+
+    it('reapplies paired raw coordinates after each render wait', function()
+        ds.mountNativeScreen()
+        wait_until_dispatch = function()
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
+        end
+
+        ds.move_pointer(2, 3)
+        assert.same({2, 3, 25, 28}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
+
+        ds.mouseInput(EMouseButton.SCROLL_DOWN)
+        assert.same({2, 3, 25, 28}, {
+            simulated_inputs[1].x,
+            simulated_inputs[1].y,
+            simulated_inputs[1].pixel_x,
+            simulated_inputs[1].pixel_y,
+        })
+        assert.same({2, 3, 25, 28}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
+    end)
+
+    it('repairs paired raw coordinates before a later map-pointer read',
+            function()
+        ds.mountNativeScreen()
+        local sampled_position
+        local sampled_result
+        wait_until_dispatch = function()
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
+            sampled_position, sampled_result =
+                dfhack.gui.getMousePos(true)
+        end
+
+        ds.move_pointer(482, 102, EPointerSpace.PIXELS)
+
+        assert.same({x=482, y=102, z=1}, sampled_position)
+        assert.equals('native-map-result', sampled_result)
+        assert.same({48, 12, 482, 102}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
+    end)
+
+    it('reads fresh effective geometry for every numeric pointer move',
+            function()
+        ds.mountNativeScreen()
+
+        ds.move_pointer(2, 3, EPointerSpace.GRID)
+        assert.same({25, 28}, {dfhack.screen.getMousePixels()})
+
+        df.global.gps.tile_pixel_x = 6
+        df.global.gps.tile_pixel_y = 4
+        df.global.gps.screen_pixel_x = 480
+        df.global.gps.screen_pixel_y = 100
+        ds.move_pointer(2, 3, EPointerSpace.GRID)
+
+        assert.same({2, 3}, {dfhack.screen.getMousePos()})
+        assert.same({15, 14}, {dfhack.screen.getMousePixels()})
+
+        df.global.gps.screen_pixel_x = 483
+        df.global.gps.screen_pixel_y = 103
+        ds.move_pointer(482, 102, EPointerSpace.PIXELS)
+
+        assert.same({79, 24}, {dfhack.screen.getMousePos()})
+        assert.same({482, 102}, {dfhack.screen.getMousePixels()})
+    end)
+
+    it('moves to world tiles and recenters the map view by default',
+            function()
+        ds.mountNativeScreen()
+
+        assert.same({40, 50, 5}, {
+            ds.move_pointer(
+                {x=40, y=50, z=5}, EPointerSpace.WORLD_TILE)
+        })
+
+        assert.same({x=35, y=47, z=5}, map_view_position)
+        assert.same({5, 3}, {dfhack.screen.getMousePos()})
+        assert.same({55, 28}, {dfhack.screen.getMousePixels()})
+
+        assert.is_true(cleanup.run(registry, 'world-tile pointer test'))
+        assert.same({x=12, y=34, z=5}, map_view_position)
+        assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+    end)
+
+    it('moves to an already visible world tile without recentering',
+            function()
+        ds.mountNativeScreen()
+
+        assert.same({14, 36, 5}, {
+            ds.move_pointer({x=14, y=36, z=5},
+                EPointerSpace.WORLD_TILE, {recenter=false})
+        })
+
+        assert.same({x=12, y=34, z=5}, map_view_position)
+        assert.same({2, 2}, {dfhack.screen.getMousePos()})
+        assert.same({25, 20}, {dfhack.screen.getMousePixels()})
+    end)
+
+    it('uses Premium map pixels for world-tile pointer movement', function()
+        ds.mountNativeScreen()
+        dfhack.screen.inGraphicsMode = function() return true end
+        df.global.gps.viewport_zoom_factor = 32
+
+        ds.move_pointer(
+            {x=40, y=50, z=5}, EPointerSpace.WORLD_TILE)
+
+        assert.same({4, 3}, {dfhack.screen.getMousePos()})
+        assert.same({44, 28}, {dfhack.screen.getMousePixels()})
+    end)
+
+    it('rejects invalid or invisible world-tile pointer requests',
+            function()
+        ds.mountNativeScreen()
+        local cases = {
+            {
+                invoke=function()
+                    ds.move_pointer({x=-1, y=36, z=5},
+                        EPointerSpace.WORLD_TILE)
+                end,
+                expected='world-tile x coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer({x=14, y=36},
+                        EPointerSpace.WORLD_TILE)
+                end,
+                expected='world-tile z coordinate must be a nonnegative integer',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer({x=14, y=36, z=5},
+                        EPointerSpace.WORLD_TILE, 'bad')
+                end,
+                expected='world-tile pointer options must be a table',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer({x=14, y=36, z=5},
+                        EPointerSpace.WORLD_TILE, {recenter='yes'})
+                end,
+                expected='world-tile pointer recenter option must be a boolean',
+            },
+        }
+        for _, case in ipairs(cases) do
+            assert.has_error(case.invoke, case.expected)
+        end
+        local invisible_cases = {
+            {
+                position={x=14, y=36, z=6},
+                expected='world tile z coordinate 6 is not on the visible ' ..
+                    'z-level 5',
+            },
+            {
+                position={x=100, y=100, z=5},
+                expected='world tile (100, 100, 5) is outside the current ' ..
+                    'map view',
+            },
+        }
+        for _, case in ipairs(invisible_cases) do
+            local ok, failure = pcall(ds.move_pointer, case.position,
+                EPointerSpace.WORLD_TILE, {recenter=false})
+            assert.is_false(ok)
+            assert.matches(case.expected, failure, 1, true)
+        end
     end)
 
     it('rejects invalid arbitrary pointer coordinates explicitly', function()
-        ds.mount()
+        ds.mountNativeScreen()
         local cases = {
             {
                 invoke=function() ds.move_pointer(-1, 0) end,
@@ -1001,6 +2045,79 @@ describe('DwarfSpec public mount commands', function()
                 expected='pointer y coordinate 25 is outside the current ' ..
                     'window height 25',
             },
+            {
+                invoke=function()
+                    ds.move_pointer(80, 0, EPointerSpace.GRID)
+                end,
+                expected='pointer x coordinate 80 is outside the current ' ..
+                    'window width 80',
+            },
+        }
+        for _, case in ipairs(cases) do
+            assert.has_error(case.invoke, case.expected)
+        end
+    end)
+
+    it('rejects invalid pixel coordinates and pointer spaces explicitly',
+            function()
+        ds.mountNativeScreen()
+        local cases = {
+            {
+                invoke=function()
+                    ds.move_pointer('bad', 0, EPointerSpace.PIXELS)
+                end,
+                expected='pixels x coordinate must be an integer; got bad',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0, nil, EPointerSpace.PIXELS)
+                end,
+                expected='pixels y coordinate must be an integer; got nil',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0, 'bad', EPointerSpace.PIXELS)
+                end,
+                expected='pixels y coordinate must be an integer; got bad',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(-1, 0, EPointerSpace.PIXELS)
+                end,
+                expected='pixels x coordinate -1 is outside [0, 799]',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0, -1, EPointerSpace.PIXELS)
+                end,
+                expected='pixels y coordinate -1 is outside [0, 199]',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0.5, 0, EPointerSpace.PIXELS)
+                end,
+                expected='pixels x coordinate must be an integer; got 0.5',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(800, 0, EPointerSpace.PIXELS)
+                end,
+                expected='pixels x coordinate 800 is outside [0, 799]',
+            },
+            {
+                invoke=function()
+                    ds.move_pointer(0, 200, EPointerSpace.PIXELS)
+                end,
+                expected='pixels y coordinate 200 is outside [0, 199]',
+            },
+            {
+                invoke=function() ds.move_pointer(0, 0, 'pixels') end,
+                expected='unsupported pointer coordinate space: pixels',
+            },
+            {
+                invoke=function() ds.move_pointer(0, 0, 3) end,
+                expected='unsupported pointer coordinate space: 3',
+            },
         }
         for _, case in ipairs(cases) do
             assert.has_error(case.invoke, case.expected)
@@ -1017,26 +2134,42 @@ describe('DwarfSpec public mount commands', function()
                 },
             })
         native_root.children = {target}
-        ds.mount()
+        ds.mountNativeScreen()
         local subject = ds.get('Target')
         local expected = {
-            center={12, 15},
-            top_left={10, 12},
-            top_right={14, 12},
-            bottom_left={10, 18},
-            bottom_right={14, 18},
+            [EPointerAnchor.CENTER]={12, 15},
+            [EPointerAnchor.TOP_LEFT]={10, 12},
+            [EPointerAnchor.TOP_RIGHT]={14, 12},
+            [EPointerAnchor.BOTTOM_LEFT]={10, 18},
+            [EPointerAnchor.BOTTOM_RIGHT]={14, 18},
         }
 
         for anchor, coordinates in pairs(expected) do
             assert.same(coordinates, {ds.move_pointer(subject, anchor)})
+            assert.same(coordinates, {dfhack.screen.getMousePos()})
+            assert.same({
+                coordinates[1] * 10 + 5,
+                coordinates[2] * 8 + 4,
+            }, {dfhack.screen.getMousePixels()})
         end
+        assert.has_error(function()
+            ds.move_pointer(subject, 'center', EPointerSpace.GRID)
+        end, 'pointer coordinate space is only valid with numeric coordinates')
+        assert.has_error(function()
+            subject:move_pointer('center', EPointerSpace.GRID)
+        end, 'subject pointer commands use UI-grid coordinates and do not ' ..
+            'accept a pointer space')
+        assert.has_error(function()
+            subject:hover('center', EPointerSpace.PIXELS)
+        end, 'subject pointer commands use UI-grid coordinates and do not ' ..
+            'accept a pointer space')
     end)
 
     it('makes a retained native subject stale after removal', function()
         local original = make_native_widget(
             'Status', 'df.widget_textst')
         native_root.children = {original}
-        ds.mount()
+        ds.mountNativeScreen()
         local selected = ds.get('Status')
         native_root.children = {}
 
@@ -1048,13 +2181,14 @@ describe('DwarfSpec public mount commands', function()
                 'call ds.get(path) to select it again', failure, 1, true)
         assert.matches('mount_kind="native" source="native" ' ..
             'captured_identity=table#%d+ current_identity=<nil>', failure)
+        assert.is_true(#failure < 8192)
     end)
 
     it('requires a new native subject after same-path replacement', function()
         local original = make_native_widget(
             'Status', 'df.widget_textst')
         native_root.children = {original}
-        ds.mount()
+        ds.mountNativeScreen()
         local selected = ds.get('Status')
         local replacement = make_native_widget(
             'Status', 'df.widget_textst')
@@ -1067,6 +2201,10 @@ describe('DwarfSpec public mount commands', function()
             'path={"Status"} mount=1 because the widget was replaced; call ' ..
                 'ds.get(path) to select the replacement',
             failure, 1, true)
+        assert.matches(
+            'stage=retained_subject_reacquisition',
+            failure, 1, true)
+        assert.is_true(#failure < 8192)
         assert.matches('mount_kind="native" source="native" ' ..
             'captured_identity=table#%d+ current_identity=table#%d+',
             failure)
@@ -1079,7 +2217,7 @@ describe('DwarfSpec public mount commands', function()
             table.insert(native_root.children, make_native_widget(
                 ('Child%02d'):format(index), 'df.widget_textst'))
         end
-        ds.mount()
+        ds.mountNativeScreen()
 
         local ok, failure = pcall(ds.get, 'Missing')
 
@@ -1124,8 +2262,8 @@ describe('DwarfSpec public mount commands', function()
     end)
 
     it('reports public commands clearly without a current mount', function()
-        local suffix = ' requires a mounted component; call ' ..
-            'ds.mount(component, options) first'
+        local suffix = ' requires a current mount; call ' ..
+            'ds.mount(component, options) or ds.mountNativeScreen() first'
         assert.has_error(function() ds.root() end,
             'DwarfSpec root' .. suffix)
         assert.has_error(function() ds.get('missing') end,
@@ -1147,6 +2285,139 @@ describe('DwarfSpec public mount commands', function()
             'DwarfSpec click' .. suffix)
         assert.has_error(function() ds.type('text') end,
             'DwarfSpec type' .. suffix)
+    end)
+
+    it('sets and restores screen-anchored map-view positions without a mount',
+            function()
+        assert.same({x=40, y=50, z=6},
+            ds.setViewPos({x=40, y=50, z=6}))
+        assert.same({x=35, y=47, z=6}, map_view_position)
+        assert.same({x=40, y=50, z=6}, ds.getViewPos())
+        assert.is_true(run.mount_cleanup_probe().map_view_position_active)
+
+        assert.same({x=41, y=52, z=7},
+            ds.setViewPos({x=41, y=52, z=7}, EScreenOrigin.TOP_LEFT))
+        assert.same({x=41, y=52, z=7}, map_view_position)
+        assert.same({x=41, y=52, z=7},
+            ds.getViewPos(EScreenOrigin.TOP_LEFT))
+        assert.equals(1, cleanup.pending_count(registry))
+
+        reset('map-view position example cleanup')
+
+        assert.same({x=12, y=34, z=5}, map_view_position)
+        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('gets every map-view screen origin with DFHack-compatible offsets',
+            function()
+        local expected = {
+            [EScreenOrigin.TOP_LEFT]={x=12, y=34, z=5},
+            [EScreenOrigin.TOP]={x=17, y=34, z=5},
+            [EScreenOrigin.TOP_RIGHT]={x=21, y=34, z=5},
+            [EScreenOrigin.LEFT]={x=12, y=37, z=5},
+            [EScreenOrigin.CENTER]={x=17, y=37, z=5},
+            [EScreenOrigin.RIGHT]={x=21, y=37, z=5},
+            [EScreenOrigin.BOTTOM_LEFT]={x=12, y=40, z=5},
+            [EScreenOrigin.BOTTOM]={x=17, y=40, z=5},
+            [EScreenOrigin.BOTTOM_RIGHT]={x=21, y=40, z=5},
+        }
+
+        for origin, position in pairs(expected) do
+            assert.same(position, ds.getViewPos(origin))
+        end
+        assert.same(expected[EScreenOrigin.CENTER], ds.getViewPos())
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('preserves negative raw origins when anchoring an edge map tile',
+            function()
+        local target = {x=1, y=2, z=3}
+
+        assert.same(target, ds.setViewPos(target, EScreenOrigin.CENTER))
+        assert.same({x=-4, y=-1, z=3}, map_view_position)
+        assert.same(target, ds.getViewPos(EScreenOrigin.CENTER))
+        assert.same(target, ds.getViewPos())
+        assert.same({x=-4, y=-1, z=3},
+            ds.getViewPos(EScreenOrigin.TOP_LEFT))
+
+        reset('edge map-view position example cleanup')
+        assert.same({x=12, y=34, z=5}, map_view_position)
+    end)
+
+    it('gets a copied current map-view position without scheduling cleanup',
+            function()
+        local position = ds.getViewPos()
+
+        assert.same({x=17, y=37, z=5}, position)
+        position.x = 99
+        assert.same({x=17, y=37, z=5}, ds.getViewPos())
+        assert.equals(0, cleanup.pending_count(registry))
+        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
+
+        map_view_get_failure = 'injected map-view getter failure'
+        assert.has_error(function() ds.getViewPos() end,
+            'DwarfSpec could not query the current map-view position: ' ..
+                'injected map-view getter failure')
+    end)
+
+    it('validates map-view coordinates and restores after setter failures',
+            function()
+        for _, case in ipairs({
+                {
+                    position=nil,
+                    expected='map-view position must be a table with x, y, ' ..
+                        'and z coordinates',
+                },
+                {
+                    position={x=-1, y=2, z=3},
+                    expected='map-view x coordinate must be a nonnegative ' ..
+                        'integer',
+                },
+                {
+                    position={x=1, y=2.5, z=3},
+                    expected='map-view y coordinate must be a nonnegative ' ..
+                        'integer',
+                },
+                {
+                    position={x=1, y=2, z='3'},
+                    expected='map-view z coordinate must be a nonnegative ' ..
+                        'integer',
+                },
+            }) do
+            assert.has_error(function()
+                ds.setViewPos(case.position)
+            end, case.expected)
+        end
+        assert.equals(0, cleanup.pending_count(registry))
+
+        assert.has_error(function()
+            ds.getViewPos('middle')
+        end, 'screen origin must be a ds.EScreenOrigin value')
+        assert.has_error(function()
+            ds.setViewPos({x=1, y=2, z=3}, 'middle')
+        end, 'screen origin must be a ds.EScreenOrigin value')
+
+        map_view_dimensions_failure =
+            'injected map-view dimensions failure'
+        assert.has_error(function()
+            ds.getViewPos(EScreenOrigin.CENTER)
+        end, 'DwarfSpec could not query the current map-view dimensions: ' ..
+            'injected map-view dimensions failure')
+        map_view_dimensions_failure = nil
+
+        map_view_set_failure = 'injected map-view setter failure'
+        local ok, failure = pcall(ds.setViewPos,
+            {x=40, y=50, z=6})
+        assert.is_false(ok)
+        assert.matches('injected map-view setter failure',
+            failure, 1, true)
+        assert.is_true(run.mount_cleanup_probe().map_view_position_active)
+
+        map_view_set_failure = nil
+        reset('failed map-view position example cleanup')
+        assert.same({x=12, y=34, z=5}, map_view_position)
+        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
     end)
 
     it('redraws the subject screen and waits by default', function()
@@ -1204,7 +2475,7 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(ok)
         assert.matches('DwarfSpec redraw rejected stale subject',
             failure, 1, true)
-        assert.matches('no component is currently mounted',
+        assert.matches('no current mount exists',
             failure, 1, true)
     end)
 
@@ -1217,19 +2488,33 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(EMouseButton.SCROLL_DOWN,
             ds.EMouseButton.SCROLL_DOWN)
         assert.equals(EInputState.CLICK, ds.EInputState.CLICK)
+        assert.equals(EPointerSpace.GRID, ds.EPointerSpace.GRID)
+        assert.equals(EPointerSpace.PIXELS, ds.EPointerSpace.PIXELS)
+        assert.equals(EPointerAnchor.CENTER, ds.EPointerAnchor.CENTER)
+        assert.equals(EPointerAnchor.TOP_LEFT, ds.EPointerAnchor.TOP_LEFT)
+        assert.equals(EPointerAnchor.BOTTOM_RIGHT,
+            ds.EPointerAnchor.BOTTOM_RIGHT)
+        assert.equals(EScreenOrigin.TOP_LEFT, ds.EScreenOrigin.TOP_LEFT)
+        assert.equals(EScreenOrigin.CENTER, ds.EScreenOrigin.CENTER)
+        assert.equals(EScreenOrigin.BOTTOM_RIGHT,
+            ds.EScreenOrigin.BOTTOM_RIGHT)
         assert.is_nil(ds.EMouseInput)
         assert.has_error(function()
             ds.mouseInput(EMouseButton.LEFT)
         end, 'mouse input requires a pointer position; call ' ..
             'ds.move_pointer() or subject:hover() first')
 
-        mounted:hover('top_left')
+        mounted:hover(EPointerAnchor.TOP_LEFT)
         for _, input in ipairs({
                 {EMouseButton.LEFT},
                 {EMouseButton.RIGHT},
                 {EMouseButton.MIDDLE},
                 {EMouseButton.SCROLL_UP},
                 {EMouseButton.SCROLL_DOWN}}) do
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
             ds.mouseInput(input[1], input[2])
         end
 
@@ -1249,13 +2534,16 @@ describe('DwarfSpec public mount commands', function()
         for _, input in ipairs(simulated_inputs) do
             assert.equals('native-screen', input.screen.name)
             assert.same({10, 20}, {input.x, input.y})
+            assert.same({105, 164}, {input.pixel_x, input.pixel_y})
             assert.is_true(input.mouse_focus)
             assert.equals(1, input.tracking_on)
         end
         assert.same({10, 20}, {dfhack.screen.getMousePos()})
-        assert.same({4, 5}, {
+        assert.same({10, 20, 105, 164}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
         })
         assert.is_false(df.global.enabler.mouse_focus)
         assert.equals(0, df.global.enabler.tracking_on)
@@ -1270,7 +2558,79 @@ describe('DwarfSpec public mount commands', function()
         end, 'mouse wheel input does not accept a button action')
     end)
 
-    it('routes native and overlay subject input through the pinned screen',
+    it('batches wheel input with one render wait and validates its options',
+            function()
+        local mounted = ds.mount(TestWidget, {
+            frame_body={x1=10, y1=20, x2=14, y2=24},
+        })
+        local baseline_waits = wait_until_calls
+
+        assert.equals(mounted, mounted:mouseWheel({
+            direction=EMouseButton.SCROLL_DOWN,
+            steps=3,
+            anchor='top_left',
+        }))
+
+        assert.equals(baseline_waits + 2, wait_until_calls,
+            'subject routing settles pointer movement and then the batch')
+        assert.same({
+            'CONTEXT_SCROLL_DOWN',
+            'CONTEXT_SCROLL_DOWN',
+            'CONTEXT_SCROLL_DOWN',
+        }, {
+            simulated_inputs[1].key,
+            simulated_inputs[2].key,
+            simulated_inputs[3].key,
+        })
+        for _, input in ipairs(simulated_inputs) do
+            assert.same({10, 20}, {input.x, input.y})
+            assert.is_true(input.mouse_focus)
+            assert.equals(1, input.tracking_on)
+        end
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+
+        local cases = {
+            {options=nil, expected='mouseWheel options must be a table'},
+            {options={}, expected='mouseWheel direction must be SCROLL_UP or SCROLL_DOWN'},
+            {options={direction=EMouseButton.LEFT}, expected='mouseWheel direction must be SCROLL_UP or SCROLL_DOWN'},
+            {options={direction=EMouseButton.SCROLL_DOWN, steps=0}, expected='mouseWheel steps must be a positive integer'},
+            {options={direction=EMouseButton.SCROLL_DOWN, steps=1.5}, expected='mouseWheel steps must be a positive integer'},
+            {options={direction=EMouseButton.SCROLL_DOWN, extra=true}, expected='unsupported mouseWheel option: extra'},
+        }
+        for _, case in ipairs(cases) do
+            assert.has_error(function() ds.mouseWheel(case.options) end,
+                case.expected)
+        end
+        assert.has_error(function()
+            ds.mouseWheel({direction=EMouseButton.SCROLL_DOWN, anchor='center'})
+        end, 'mouseWheel anchor requires a subject')
+    end)
+
+    it('restores mouse focus after a mid-batch wheel-input failure',
+            function()
+        local mounted = ds.mount(TestWidget, {
+            frame_body={x1=10, y1=20, x2=14, y2=24},
+        })
+        mounted:move_pointer('top_left')
+        simulate_input_dispatch = function()
+            simulate_input_failure = 'injected second wheel failure'
+        end
+
+        local ok, failure = pcall(ds.mouseWheel, {
+            direction=EMouseButton.SCROLL_DOWN,
+            steps=2,
+        })
+
+        simulate_input_dispatch = nil
+        assert.is_false(ok)
+        assert.matches('injected second wheel failure', failure, 1, true)
+        assert.equals(1, #simulated_inputs)
+        assert.is_false(df.global.enabler.mouse_focus)
+        assert.equals(0, df.global.enabler.tracking_on)
+    end)
+
+    it('routes every subject input family through the live input screen',
             function()
         local native_callback_calls = 0
         local overlay_callback_calls = 0
@@ -1303,18 +2663,46 @@ describe('DwarfSpec public mount commands', function()
             widget=overlay_root,
         }
         overlay_state.config['gui/example.InputOverlay'] = {enabled=true}
-        ds.mount()
+        ds.mountNativeScreen()
         local native_subject = ds.get('NativeControl')
         local overlay_subject = ds.get('OverlayControl', {
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.InputOverlay',
         })
 
+        local top_level_screen = {name='top-level'}
+        local native_subject_screen = {name='native-subject'}
+        local overlay_subject_screen = {name='overlay-subject'}
+        local first_type_screen = {name='type-first'}
+        local second_type_screen = {name='type-second'}
+        local native_click_screen = {name='native-click'}
+        local overlay_click_screen = {name='overlay-click'}
+
+        current_native_screen = top_level_screen
         ds.input('TOP_LEVEL')
+        current_native_screen = native_subject_screen
         native_subject:input('NATIVE_SUBJECT')
+        current_native_screen = overlay_subject_screen
         overlay_subject:input('OVERLAY_SUBJECT')
-        overlay_subject:type('A')
+        current_native_screen = first_type_screen
+        simulate_input_dispatch = function(_, key)
+            if key == 'STRING_A065' then
+                current_native_screen = second_type_screen
+            end
+        end
+        overlay_subject:type('AB')
+        simulate_input_dispatch = nil
+        df.global.gps.mouse_x = -1
+        df.global.gps.mouse_y = -1
+        df.global.gps.precise_mouse_x = -1
+        df.global.gps.precise_mouse_y = -1
+        current_native_screen = native_click_screen
         native_subject:click()
+        df.global.gps.mouse_x = -1
+        df.global.gps.mouse_y = -1
+        df.global.gps.precise_mouse_x = -1
+        df.global.gps.precise_mouse_y = -1
+        current_native_screen = overlay_click_screen
         overlay_subject:click()
 
         assert.same({
@@ -1322,6 +2710,7 @@ describe('DwarfSpec public mount commands', function()
             'NATIVE_SUBJECT',
             'OVERLAY_SUBJECT',
             'STRING_A065',
+            'STRING_A066',
             '_MOUSE_L',
             '_MOUSE_L',
         }, {
@@ -1331,17 +2720,40 @@ describe('DwarfSpec public mount commands', function()
             simulated_inputs[4].key,
             simulated_inputs[5].key,
             simulated_inputs[6].key,
+            simulated_inputs[7].key,
         })
-        for _, input in ipairs(simulated_inputs) do
-            assert.equals(native_screen, input.screen)
-        end
+        assert.same({
+            top_level_screen,
+            native_subject_screen,
+            overlay_subject_screen,
+            first_type_screen,
+            second_type_screen,
+            native_click_screen,
+            overlay_click_screen,
+        }, {
+            simulated_inputs[1].screen,
+            simulated_inputs[2].screen,
+            simulated_inputs[3].screen,
+            simulated_inputs[4].screen,
+            simulated_inputs[5].screen,
+            simulated_inputs[6].screen,
+            simulated_inputs[7].screen,
+        })
         assert.same({3, 4}, {
-            simulated_inputs[5].x,
-            simulated_inputs[5].y,
-        })
-        assert.same({22, 11}, {
             simulated_inputs[6].x,
             simulated_inputs[6].y,
+        })
+        assert.same({35, 36}, {
+            simulated_inputs[6].pixel_x,
+            simulated_inputs[6].pixel_y,
+        })
+        assert.same({22, 11}, {
+            simulated_inputs[7].x,
+            simulated_inputs[7].y,
+        })
+        assert.same({225, 92}, {
+            simulated_inputs[7].pixel_x,
+            simulated_inputs[7].pixel_y,
         })
         assert.equals(0, native_callback_calls)
         assert.equals(0, overlay_callback_calls)
@@ -1373,7 +2785,7 @@ describe('DwarfSpec public mount commands', function()
                 backing_calls = backing_calls + 1
             end
         end
-        ds.mount()
+        ds.mountNativeScreen()
         local subject = ds.root({
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.FallthroughOverlay',
@@ -1422,9 +2834,20 @@ describe('DwarfSpec public mount commands', function()
         }
 
         for _, transition in ipairs(transitions) do
+            mounted:move_pointer('top_left')
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
             ds.mouseInput(transition.button, EInputState.DOWN)
             local down_input = simulated_inputs[#simulated_inputs]
             assert.equals(transition.key, down_input.key)
+            assert.same({10, 20, 105, 164}, {
+                down_input.x,
+                down_input.y,
+                down_input.pixel_x,
+                down_input.pixel_y,
+            })
             assert.equals(1, down_input[transition.record_down])
             assert.equals(0, down_input[transition.record_lift])
             assert.equals(1, df.global.enabler[transition.down_field])
@@ -1434,9 +2857,19 @@ describe('DwarfSpec public mount commands', function()
             mounted:move_pointer('bottom_right')
             assert.equals(1, df.global.enabler[transition.down_field])
 
+            df.global.gps.mouse_x = -1
+            df.global.gps.mouse_y = -1
+            df.global.gps.precise_mouse_x = -1
+            df.global.gps.precise_mouse_y = -1
             ds.mouseInput(transition.button, EInputState.UP)
             local up_input = simulated_inputs[#simulated_inputs]
             assert.is_nil(up_input.key)
+            assert.same({14, 24, 145, 196}, {
+                up_input.x,
+                up_input.y,
+                up_input.pixel_x,
+                up_input.pixel_y,
+            })
             assert.equals(0, up_input[transition.record_down])
             assert.equals(1, up_input[transition.record_lift])
             assert.equals(0, df.global.enabler[transition.down_field])
@@ -1446,7 +2879,7 @@ describe('DwarfSpec public mount commands', function()
         end
     end)
 
-    it('restores temporary pointer and button state after input failures',
+    it('preserves paired pointer ownership and restores input failure flags',
             function()
         local mounted = ds.mount(TestWidget, {
             frame_body={x1=10, y1=20, x2=14, y2=24},
@@ -1459,9 +2892,11 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(click_ok)
         assert.matches('injected simulateInput failure',
             click_failure, 1, true)
-        assert.same({4, 5}, {
+        assert.same({10, 20, 105, 164}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
         })
         assert.is_false(df.global.enabler.mouse_focus)
         assert.equals(0, df.global.enabler.tracking_on)
@@ -1479,37 +2914,58 @@ describe('DwarfSpec public mount commands', function()
         ds.unmount()
 
         assert.same({90, 91}, {dfhack.screen.getMousePos()})
+        assert.same({900, 910}, {dfhack.screen.getMousePixels()})
+        assert.same({4, 5, 40, 50}, {
+            df.global.gps.mouse_x,
+            df.global.gps.mouse_y,
+            df.global.gps.precise_mouse_x,
+            df.global.gps.precise_mouse_y,
+        })
         assert.equals(0, df.global.enabler.mouse_lbut_down)
         assert.equals(0, df.global.enabler.mouse_lbut_lift)
         assert.is_false(df.global.enabler.mouse_focus)
         assert.equals(0, df.global.enabler.tracking_on)
     end)
 
-    it('rejects input and pointer operations after a native screen change',
+    it('routes input after a native screen change without rebinding subjects',
             function()
-        local mounted = ds.mount()
+        local mounted = ds.mountNativeScreen()
         ds.move_pointer(4, 5)
         local lookup_count = native_widget_lookup_calls
-        current_native_screen = {
+        local next_screen = {
             name='replacement-screen',
             widgets={kind='replacement-root'},
         }
+        current_native_screen = next_screen
 
-        for _, operation in ipairs({
-                function() ds.input('SELECT') end,
-                function() ds.mouseInput(EMouseButton.LEFT) end,
-                function() mounted:click() end,
-                function() ds.move_pointer(4, 5) end}) do
-            local ok, failure = pcall(operation)
-            assert.is_false(ok)
-            assert.matches('rejected stale native%-screen mount',
-                failure)
+        ds.input('SELECT')
+        ds.mouseInput(EMouseButton.LEFT)
+        current_native_screen = {
+            name='wheel-screen',
+            widgets={kind='replacement-root'},
+        }
+        local wheel_screen = current_native_screen
+        ds.mouseInput(EMouseButton.SCROLL_DOWN)
+        local wheel_batch_screen = {name='wheel-batch-screen'}
+        simulate_input_dispatch = function(_, key)
+            if key == 'CONTEXT_SCROLL_UP' then
+                current_native_screen = wheel_batch_screen
+            end
         end
+        ds.mouseWheel({direction=EMouseButton.SCROLL_UP, steps=2})
+        simulate_input_dispatch = nil
+        ds.move_pointer(4, 5)
+        assert.equals(native_root, mounted:raw())
+        assert.equals(next_screen, simulated_inputs[1].screen)
+        assert.equals(next_screen, simulated_inputs[2].screen)
+        assert.equals(wheel_screen, simulated_inputs[3].screen)
+        assert.equals(wheel_screen, simulated_inputs[4].screen)
+        assert.equals(wheel_batch_screen, simulated_inputs[5].screen)
         assert.same({4, 5}, {
             df.global.gps.mouse_x,
             df.global.gps.mouse_y,
         })
-        assert.equals(lookup_count, native_widget_lookup_calls)
+        assert.is_true(native_widget_lookup_calls >= lookup_count)
 
         ds.unmount()
 
@@ -1529,13 +2985,26 @@ describe('DwarfSpec public mount commands', function()
         local root_native = {name='root'}
         local child_native = {name='child', parent=root_native}
         local unrelated = {name='unrelated'}
+        local current = child_native
+        local owned_screen = {
+            active=true,
+            _native=root_native,
+        }
+        local target = interaction_target.new_owned_screen(owned_screen, {
+            is_active=function(screen_value)
+                return screen_value.active
+            end,
+            resolve_native_screen=function(screen_value)
+                return ds_factory.resolve_native_screen(
+                    screen_value, function() return current end)
+            end,
+        })
 
-        assert.equals(child_native, ds_factory.resolve_native_screen(
-            {_native=root_native}, function() return child_native end))
-        assert.equals(root_native, ds_factory.resolve_native_screen(
-            {_native=root_native}, function() return unrelated end))
-        assert.equals(root_native, ds_factory.resolve_native_screen(
-            {_native=root_native}, function() error('unavailable') end))
+        assert.equals(child_native, target:input_screen('input'))
+        current = unrelated
+        assert.equals(root_native, target:input_screen('input'))
+        current = nil
+        assert.equals(root_native, target:input_screen('input'))
     end)
 
     it('publishes structured command results and bounded diagnostics',

@@ -147,6 +147,13 @@ describe('DwarfSpec consumer extensions', function()
             'ds.mouseInput')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={mouseWheel=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.mouseWheel')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={EMouseButton=function() end},
         }
         assert.has_error(function() extensions.load(descriptor, loader) end,
@@ -161,11 +168,60 @@ describe('DwarfSpec consumer extensions', function()
             'ds.EInputState')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={EPointerSpace=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.EPointerSpace')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={EScreenOrigin=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.EScreenOrigin')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={redraw=function() end},
         }
         assert.has_error(function() extensions.load(descriptor, loader) end,
             'tests/dwarfspec/config.lua: custom command conflicts with ' ..
             'ds.redraw')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={wait_ticks=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.wait_ticks')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={isGamePaused=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.isGamePaused')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={setGamePaused=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.setGamePaused')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={getGameSpeed=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.getGameSpeed')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={setGameSpeed=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.setGameSpeed')
     end)
 
     it('matches external error-format and unknown-setting validation',

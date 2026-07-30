@@ -36,6 +36,7 @@ describe('owned-screen interaction target', function()
 
         assert.equals(screen, target:assert_current('input'))
         assert.equals(native, target:native_screen('input'))
+        assert.equals(native, target:input_screen('input'))
         assert.equals('invalidated', target:invalidate())
         assert.equals(1, screen.invalidations)
         assert.is_true(target:cleanup())
@@ -61,7 +62,7 @@ describe('owned-screen interaction target', function()
             end,
         })
 
-        assert.has_error(function() target:native_screen('mouse input') end,
+        assert.has_error(function() target:input_screen('mouse input') end,
             'mouse input screen is not currently active')
         assert.has_error(function() target:invalidate() end,
             'redraw screen is not currently active')
@@ -92,43 +93,69 @@ describe('borrowed native-screen interaction target', function()
         })
 
         assert.equals(screen, target:assert_current('input'))
-        assert.equals(screen, target:native_screen('input'))
+        assert.equals(screen, target:native_screen('focus inspection'))
+        assert.equals(screen, target:input_screen('input'))
         assert.equals('invalidated', target:invalidate())
         assert.equals(1, invalidations)
         assert.is_true(target:cleanup())
         assert.is_false(target:cleanup())
         assert.equals(0, screen.dismissals)
-        assert.has_error(function() target:native_screen('input') end,
+        assert.has_error(function() target:input_screen('input') end,
+            'stage=retained_subject_reacquisition ' ..
             'input native screen is no longer available')
     end)
 
-    it('rejects a screen transition before input or invalidation', function()
+    it('routes input through screen transitions without rebinding the mount',
+            function()
         local first = {}
         local current = first
-        local invalidated = false
+        local invalidations = 0
         local target = interaction_target.new_borrowed_native(first, {
             get_current_viewscreen=function() return current end,
             invalidate_screen=function()
-                invalidated = true
+                invalidations = invalidations + 1
             end,
         })
-        current = {}
+        local second = {}
 
-        local input_ok, input_failure =
-            pcall(target.native_screen, target, 'input')
-        assert.is_false(input_ok)
-        assert.matches('DwarfSpec input rejected stale native%-screen ' ..
-            'mount; pinned viewscreen is no longer current;',
-            input_failure)
-        assert.matches('captured_screen=table#%d+ current_screen=table#%d+',
-            input_failure)
-        local redraw_ok, redraw_failure = pcall(target.invalidate, target)
-        assert.is_false(redraw_ok)
-        assert.matches('DwarfSpec redraw rejected stale native%-screen ' ..
-            'mount; pinned viewscreen is no longer current;',
-            redraw_failure)
-        assert.matches('captured_screen=table#%d+ current_screen=table#%d+',
-            redraw_failure)
-        assert.is_false(invalidated)
+        assert.equals(first, target:input_screen('input'))
+        current = second
+        assert.equals(second, target:input_screen('input'))
+        assert.equals(first, target:native_screen('focus inspection'))
+        assert.equals(first, target:assert_current('subject access'))
+        target:invalidate()
+        assert.equals(1, invalidations)
+    end)
+
+    it('reports bounded current-input-screen query failures', function()
+        local screen = {}
+        local query_failure = string.rep('x', 1024)
+        local target = interaction_target.new_borrowed_native(screen, {
+            get_current_viewscreen=function()
+                error(query_failure, 0)
+            end,
+            invalidate_screen=function() end,
+        })
+
+        local ok, failure = pcall(target.input_screen, target, 'input')
+
+        assert.is_false(ok)
+        assert.matches(
+            'DwarfSpec input could not query the current input viewscreen:',
+            failure, 1, true)
+        assert.is_true(#failure < 512)
+    end)
+
+    it('rejects absent current input screens without invalidating the mount',
+            function()
+        local screen = {}
+        local target = interaction_target.new_borrowed_native(screen, {
+            get_current_viewscreen=function() return nil end,
+            invalidate_screen=function() end,
+        })
+
+        assert.has_error(function() target:input_screen('mouse input') end,
+            'DwarfSpec mouse input requires a current input viewscreen')
+        assert.equals(screen, target:assert_current('subject access'))
     end)
 end)

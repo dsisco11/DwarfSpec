@@ -39,7 +39,7 @@
             "group": {
                 "kind": "build"
             },
-            "problemMatcher": []
+            "problemMatcher": "$mscompile"
         },
         {
             "label": "Publish",

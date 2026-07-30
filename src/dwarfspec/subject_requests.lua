@@ -11,10 +11,12 @@ for _, value in pairs(ESubjectSource) do source_members[value] = true end
 ---@class dwarfspec.SubjectSourceOptions
 ---@field source? DwarfSpecESubjectSource
 ---@field overlay? string
+---@field native_root? any
 
 ---@class dwarfspec.SubjectSourceRequest
 ---@field source DwarfSpecESubjectSource
 ---@field overlay string|nil
+---@field native_root any|nil
 
 ---@class dwarfspec.SubjectGetRequest: dwarfspec.SubjectSourceRequest
 ---@field path_segments dwarfspec.NativePath
@@ -27,7 +29,8 @@ local function normalize_options(options)
         'subject source options must be a table')
     options = options or {}
     for name in pairs(options) do
-        assert(name == 'source' or name == 'overlay',
+        assert(name == 'source' or name == 'overlay' or
+            name == 'native_root',
             'unsupported subject source option: ' .. tostring(name))
     end
 
@@ -38,6 +41,8 @@ local function normalize_options(options)
     if source == ESubjectSource.OVERLAY then
         assert(type(options.overlay) == 'string' and options.overlay ~= '',
             'overlay subject source requires an exact nonempty overlay name')
+        assert(options.native_root == nil,
+            'native_root option conflicts with overlay subject source')
     else
         assert(options.overlay == nil,
             'overlay option conflicts with native subject source')
@@ -45,6 +50,7 @@ local function normalize_options(options)
     return {
         source=source,
         overlay=options.overlay,
+        native_root=options.native_root,
     }
 end
 

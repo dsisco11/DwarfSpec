@@ -564,7 +564,7 @@ describe('DwarfSpec mount context', function()
         assert.has_error(function()
             context:mount(NextWidget, {name='second'})
         end, 'DwarfSpec mount rejected because mount 1 is still current; ' ..
-            'call ds.unmount() before mounting another component')
+            'call ds.unmount() before creating another mount')
 
         assert.same({
             'mount:first',
@@ -588,6 +588,7 @@ describe('DwarfSpec mount context', function()
         assert.equals(2, context.current.id)
         assert.equals('second', second_subject:raw().name)
         assert.has_error(function() first_subject:raw() end,
+            'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; current mount is 2')
         local invoked = false
@@ -626,8 +627,9 @@ describe('DwarfSpec mount context', function()
             'unmount:explicit', 'settle:explicit',
         }, events)
         assert.has_error(function() root_subject:raw() end,
+            'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
-            'control_path="<root>" from mount 1; no component is currently mounted')
+            'control_path="<root>" from mount 1; no current mount exists')
         assert.same({
             current_mount_id=nil,
             active_screen_count=0,
@@ -757,7 +759,7 @@ describe('DwarfSpec mount context', function()
             return original_source_cleanup(self)
         end
 
-        local mounted = context:mount_native(function()
+        local mounted = context:mount_native_screen(function()
             return {
                 root=root,
                 pinned_screen=pinned,
@@ -798,6 +800,194 @@ describe('DwarfSpec mount context', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('retains, reuses, and rejects located native sources by identity',
+            function()
+        local first_child = {
+            id='stable-child',
+            name='Status',
+            children={},
+        }
+        local first_root = {
+            id='stable-root',
+            children={first_child},
+            dismissals=0,
+            mutations=0,
+        }
+        local located_root = first_root
+        local pinned = {widgets={}, dismissals=0}
+        local current_screen = pinned
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return current_screen end,
+            invalidate_screen=function()
+                context.current.render_tracker:completed()
+            end,
+        })
+
+        ---Creates a source for the current structural root fixture.
+        ---@return dwarfspec.SubjectSource
+        local function located_source()
+            return native_widget_adapter.new_source(
+                located_root, target, {
+                    root_locator=function() return located_root end,
+                    structural_path={'info', 'creatures'},
+                    get_widget=function(parent, segment)
+                        for _, child in ipairs(parent.children) do
+                            if child.name == segment then return child end
+                        end
+                        return nil
+                    end,
+                    get_children=function(parent)
+                        return parent.children
+                    end,
+                    is_container=function(raw)
+                        return raw.children ~= nil
+                    end,
+                    identity_of=function(raw) return raw.id end,
+                    name_of=function(raw) return raw.name end,
+                    type_of=function() return 'df.widget_container' end,
+                })
+        end
+
+        local source = located_source()
+        context:mount_native_screen(function()
+            return {
+                root=first_root,
+                pinned_screen=pinned,
+                interaction_target=target,
+                subject_source=source,
+            }
+        end)
+        local initial = source.adapter:resolve({'Status'})
+        local retained = context:new_subject(
+            initial, '{"Status"}', {'Status'}, source)
+
+        local duplicate = located_source()
+        local registered = context:register_subject_source(duplicate)
+        local registered_count = 0
+        for _ in pairs(context.current.subject_sources) do
+            registered_count = registered_count + 1
+        end
+        assert.equals(source, registered)
+        assert.equals(1, registered_count)
+        assert.is_true(duplicate.adapter._cleaned)
+
+        local second_child = {
+            id='stable-child',
+            name='Status',
+            children={},
+        }
+        local second_root = {
+            id='stable-root',
+            children={second_child},
+            dismissals=0,
+            mutations=0,
+        }
+        located_root = second_root
+        assert.equals(second_child, retained:raw())
+
+        local replaced_child = {
+            id='replacement-child',
+            name='Status',
+            children={},
+        }
+        located_root = {
+            id='stable-root',
+            children={replaced_child},
+        }
+        local child_ok, child_failure = pcall(retained.raw, retained)
+        assert.is_false(child_ok)
+        assert.matches(
+            'because the widget was replaced', child_failure, 1, true)
+
+        located_root = nil
+        local removed_ok, removed_failure =
+            pcall(retained.raw, retained)
+        assert.is_false(removed_ok)
+        assert.matches(
+            'structural root no longer resolves',
+            removed_failure, 1, true)
+
+        located_root = {
+            id='replacement-root',
+            children={second_child},
+        }
+        local root_ok, root_failure = pcall(retained.raw, retained)
+        assert.is_false(root_ok)
+        assert.matches(
+            'structural root was replaced', root_failure, 1, true)
+
+        located_root = second_root
+        current_screen = {}
+        assert.equals(second_child, retained:raw())
+
+        context:unmount()
+        local unmounted_ok, unmounted_failure =
+            pcall(retained.raw, retained)
+        assert.is_false(unmounted_ok)
+        assert.matches(
+            'no current mount exists', unmounted_failure, 1, true)
+        assert.is_nil(source.adapter._root)
+        assert.is_nil(source.adapter._root_locator)
+        assert.is_nil(source.adapter._root_identity)
+        assert.is_nil(source.adapter._structural_path)
+        assert.equals(0, first_root.dismissals)
+        assert.equals(0, first_root.mutations)
+        assert.equals(0, second_root.dismissals)
+        assert.equals(0, second_root.mutations)
+        assert.equals(0, pinned.dismissals)
+    end)
+
+    it('releases a located source during exceptional native cleanup',
+            function()
+        local root = {
+            id='stable-root',
+            children={},
+            dismissals=0,
+            mutations=0,
+        }
+        local pinned = {widgets=root, dismissals=0}
+        local target = interaction_target.new_borrowed_native(pinned, {
+            get_current_viewscreen=function() return pinned end,
+            invalidate_screen=function()
+                context.current.render_tracker:completed()
+            end,
+        })
+        local source = native_widget_adapter.new_source(root, target, {
+            root_locator=function() return root end,
+            structural_path={'info', 'creatures'},
+            get_widget=function() return nil end,
+            get_children=function() return {} end,
+            is_container=function() return true end,
+            identity_of=function(raw) return raw.id end,
+        })
+        native_observer_restore_failure =
+            'injected observation restoration conflict'
+        context:mount_native_screen(function()
+            return {
+                root=root,
+                pinned_screen=pinned,
+                interaction_target=target,
+                subject_source=source,
+            }
+        end)
+
+        local ok, failure = pcall(context.unmount, context)
+
+        assert.is_false(ok)
+        assert.matches(
+            'injected observation restoration conflict',
+            failure, 1, true)
+        assert.is_true(source.adapter._cleaned)
+        assert.is_nil(source.adapter._root_locator)
+        assert.is_nil(source.adapter._root_identity)
+        assert.is_nil(source.adapter._structural_path)
+        assert.is_true(target._cleaned)
+        assert.equals(0, root.dismissals)
+        assert.equals(0, root.mutations)
+        assert.equals(0, pinned.dismissals)
+        assert.is_nil(context.current)
+    end)
+
     it('restores observation and attachment state after capability timeout',
             function()
         local root = {kind='native-root'}
@@ -826,7 +1016,8 @@ describe('DwarfSpec mount context', function()
             end
         end
 
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             return {
                 root=root,
                 pinned_screen=pinned,
@@ -836,7 +1027,8 @@ describe('DwarfSpec mount context', function()
         end)
 
         assert.is_false(ok)
-        assert.matches('DwarfSpec native render capability check failed:',
+        assert.matches(
+            'DwarfSpec native-screen mount render capability check failed:',
             failure, 1, true)
         assert.matches('render did not complete', failure, 1, true)
         assert.equals(1, native_observer_installs)
@@ -864,7 +1056,8 @@ describe('DwarfSpec mount context', function()
         native_observer_install_failure =
             'overlay render dispatch unavailable'
 
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             return {
                 root=root,
                 pinned_screen=pinned,
@@ -900,7 +1093,7 @@ describe('DwarfSpec mount context', function()
         })
         native_observer_restore_failure =
             'native render dispatcher changed before restoration'
-        context:mount_native(function()
+        context:mount_native_screen(function()
             return {
                 root=root,
                 pinned_screen=pinned,
@@ -946,7 +1139,8 @@ describe('DwarfSpec mount context', function()
             },
         }
 
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             return {
                 root={},
                 pinned_screen={},
@@ -982,7 +1176,8 @@ describe('DwarfSpec mount context', function()
             error('tracker construction exploded')
         end
 
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             return {
                 root={},
                 pinned_screen={},
@@ -1002,7 +1197,7 @@ describe('DwarfSpec mount context', function()
         end)
 
         assert.is_false(ok)
-        assert.matches('DwarfSpec native mount failed to initialize ' ..
+        assert.matches('DwarfSpec native%-screen mount failed to initialize ' ..
             'run%-scoped state:', failure)
         assert.matches('tracker construction exploded', failure, 1, true)
         assert.equals(1, target_cleanups)
@@ -1034,7 +1229,7 @@ describe('DwarfSpec mount context', function()
                 cleanup_push_count + case.failing_push
 
             local ok, failure = pcall(
-                context.mount_native, context, function()
+                context.mount_native_screen, context, function()
                     return {
                         root=root,
                         pinned_screen=pinned,
@@ -1077,7 +1272,7 @@ describe('DwarfSpec mount context', function()
         fail_subject = true
 
         local ok, failure = pcall(
-            context.mount_native, context, function()
+            context.mount_native_screen, context, function()
                 return {
                     root=root,
                     pinned_screen=pinned,
@@ -1112,7 +1307,7 @@ describe('DwarfSpec mount context', function()
         })
 
         local ok, failure = pcall(
-            context.mount_native, context, function()
+            context.mount_native_screen, context, function()
                 return {
                     root=root,
                     pinned_screen=pinned,
@@ -1150,7 +1345,7 @@ describe('DwarfSpec mount context', function()
         })
 
         local ok, failure = pcall(
-            context.mount_native, context, function()
+            context.mount_native_screen, context, function()
                 return {
                     root=root,
                     pinned_screen=pinned,
@@ -1160,7 +1355,7 @@ describe('DwarfSpec mount context', function()
             end)
 
         assert.is_false(ok)
-        assert.matches('native render capability check failed',
+        assert.matches('native-screen mount render capability check failed',
             failure, 1, true)
         assert.matches('cleanup failed:', failure, 1, true)
         assert.matches('borrowed target cleanup exploded',
@@ -1175,7 +1370,8 @@ describe('DwarfSpec mount context', function()
 
     it('does not create mount state when native acquisition fails',
             function()
-        local ok, failure = pcall(context.mount_native, context, function()
+        local ok, failure =
+            pcall(context.mount_native_screen, context, function()
             error('native acquisition exploded')
         end)
 
@@ -1198,8 +1394,8 @@ describe('DwarfSpec mount context', function()
 
     it('reports every command clearly when there is no current mount',
             function()
-        local expected = ' requires a mounted component; call ' ..
-            'ds.mount(component, options) first'
+        local expected = ' requires a current mount; call ' ..
+            'ds.mount(component, options) or ds.mountNativeScreen() first'
         assert.has_error(function() context:root() end,
             'DwarfSpec root' .. expected)
         assert.has_error(function() context:unmount() end,

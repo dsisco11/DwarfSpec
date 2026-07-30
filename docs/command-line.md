@@ -105,12 +105,18 @@ can identify the complete executable path instead of its containing directory.
 ## Live component commands
 
 Every supported component category uses `ds.mount(component, options)` inside
-the live Busted coroutine. `ds.get(control_path)` walks the one implicit current
-mount through direct child IDs and returns a fluent subject; `ds.unmount()`
-removes that mount early when a test needs explicit teardown. Normal interaction
-commands do not take a fixture root, screen, or raw view.
+the live Busted coroutine. Borrowed base-game UI uses the separate
+`ds.mountNativeScreen()` entry point. `ds.get(control_path)` selects an exact
+source-specific path from the one implicit current mount and returns a fluent
+subject; `ds.unmount()` removes that mount early when a test needs explicit
+teardown. Normal interaction commands do not take a fixture root, screen, or
+raw view.
 
 `ds.mount` supports ordinary widgets, overlay widgets, and complete screens.
+It requires a component and does not have a no-argument native-screen
+overload. `ds.mountNativeScreen()` borrows native widgets for lookup while
+input is dispatched through the current top viewscreen at the time of each
+input call.
 `ds.stage_overlay_registration` is reserved for distinctly named and
 explicitly selected tests of real DFHack overlay discovery and persisted
 configuration. See [Writing live tests](writing-tests.md) for the complete
@@ -131,11 +137,33 @@ structured event journal, and cleanup confirmation. Dependency, connection,
 registration, executor-quarantine, timeout, interruption, transport, and host
 failures are written even when no native report is available.
 
+Base-screen focus changes are retained as `diagnostic.recorded` events in the
+event journal and as stable warning lines in retained run output. Example and
+file-suite warnings have this form:
+
+```text
+WARNING base-screen focus changed after example <name> in <suite> (repeat=1 attribution=test screen=same focus=changed complete=true)
+WARNING base-screen focus changed after suite <suite> (repeat=1 attribution=file screen=same focus=changed complete=true)
+```
+
+The warning follows the affected example result or completed file teardown.
+`screen`, `focus`, and `complete` summarize the detached before/after
+observations retained in the diagnostic event. A proven change with incomplete
+screen or focus details remains a warning and reports `complete=false`.
+Incomplete verification without a proven change is retained as an
+informational `base_screen_focus_verification_incomplete` event and does not
+print a `WARNING` line.
+
 `--results PATH` names an exact file. Relative paths resolve beneath the
 project root; absolute paths remain explicit. `--no-results` validates the
 complete terminal result without writing a file. A terminal service generation
 is acknowledged only after its file replacement succeeds, or after successful
 no-results validation.
+
+Focus diagnostics are nonfatal. They do not change test counts, terminal state,
+cleanup confirmation, or the process result. A run whose tests pass and whose
+cleanup is confirmed therefore exits with code 0 even when it retains focus
+warnings.
 
 Exit codes are stable:
 

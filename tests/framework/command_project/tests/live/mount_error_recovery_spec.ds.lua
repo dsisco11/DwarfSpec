@@ -33,11 +33,11 @@ local function assert_previous_mount_cleaned()
     local evidence = assert(ds.current_run().last_mount_diagnostics)
     assert.is_false(failed_screen:isActive())
     assert.has_error(function() ds.root() end,
-        'DwarfSpec root requires a mounted component; call ' ..
-            'ds.mount(component, options) first')
+        'DwarfSpec root requires a current mount; call ' ..
+            'ds.mount(component, options) or ds.mountNativeScreen() first')
     local available, stale_error = pcall(failed_subject.raw, failed_subject)
     assert.is_false(available)
-    assert.matches('no component is currently mounted', stale_error,
+    assert.matches('no current mount exists', stale_error,
         1, true)
     assert.is_true(evidence.tree.capture_bounds.node_count <=
         evidence.tree.capture_bounds.max_nodes)

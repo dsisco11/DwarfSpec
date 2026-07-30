@@ -33,6 +33,8 @@ local function invoke(subject, name, ...)
 end
 
 ---Clicks this subject and preserves it for fluent chaining.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
+---It does not reverse game or UI effects caused by the click.
 ---@param button string|nil
 ---@return dwarfspec.Subject
 function Subject:click(button)
@@ -41,18 +43,36 @@ function Subject:click(button)
 end
 
 ---Moves the pointer over this subject and preserves it for fluent chaining.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---@param anchor string|nil
+---@param space any
 ---@return dwarfspec.Subject
-function Subject:hover(anchor)
+function Subject:hover(anchor, space)
+    assert(space == nil,
+        'subject pointer commands use UI-grid coordinates and do not accept ' ..
+        'a pointer space')
     invoke(self, 'hover', anchor)
     return self
 end
 
 ---Moves the pointer to this subject and preserves it for fluent chaining.
+---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---@param anchor string|nil
+---@param space any
 ---@return dwarfspec.Subject
-function Subject:move_pointer(anchor)
+function Subject:move_pointer(anchor, space)
+    assert(space == nil,
+        'subject pointer commands use UI-grid coordinates and do not accept ' ..
+        'a pointer space')
     invoke(self, 'move_pointer', anchor)
+    return self
+end
+
+---Sends a batch of wheel inputs over this subject and preserves fluent chaining.
+---@param options table
+---@return dwarfspec.Subject
+function Subject:mouseWheel(options)
+    invoke(self, 'mouseWheel', options)
     return self
 end
 
@@ -84,6 +104,12 @@ end
 ---@return table
 function Subject:inspect()
     return invoke(self, 'inspect')
+end
+
+---Returns a copied focus-string list for this subject's current mounted screen.
+---@return string[]
+function Subject:getFocusList()
+    return invoke(self, 'getFocusList')
 end
 
 ---Returns the stable inspected text value for this subject.

@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `ds.EPointerAnchor` provides immutable `CENTER`, `TOP_LEFT`, `TOP_RIGHT`,
+  `BOTTOM_LEFT`, and `BOTTOM_RIGHT` values for subject pointer placement.
+- `ds.EPointerSpace.WORLD_TILE` lets
+  `ds.move_pointer({x=..., y=..., z=...}, space, options)` target a map tile.
+  The camera recenters on the tile by default and is restored during cleanup;
+  `{recenter=false}` requires the tile to already be visible.
+- `ds.mouseWheel({direction=..., steps=...}, subject)` and
+  `Subject:mouseWheel(options)` dispatch a batch of discrete wheel inputs with
+  one final render wait while resolving the current input viewscreen for each
+  individual input.
+- Automatic example and file-suite guards warn when a test leaves a different
+  base-game viewscreen or DFHack focus than it inherited. Comparisons occur
+  after project teardown and DwarfSpec cleanup, exclude explicitly mounted
+  components, retain detached diagnostics and stable warning lines, and do not
+  change test results or exit status.
+- `ds.mountNativeScreen()` explicitly creates a non-owning native-screen mount;
+  `ds.mount(component, options)` remains component-only.
+- `ds.redraw(subject, options)` and `Subject:redraw(options)` invalidate the
+  mounted screen and wait for a completed render by default.
+- `Subject:getFocusList()` returns a defensive copy of the mounted screen's
+  DFHack focus strings.
+- `ds.getTick()` returns the current in-year simulation tick, while
+  `ds.getTime()` returns DFHack's millisecond clock.
+- `ds.isGamePaused()` reports whether the Dwarf Fortress simulation is
+  currently paused without requiring a mount.
+- `ds.setGamePaused(paused)` sets the simulation pause state for an example
+  and automatically restores the exact inherited state during cleanup.
+- `ds.getGameSpeed()` returns the current game-speed target in ticks per
+  second without requiring a mount.
+- `ds.setGameSpeed(tps)` sets the target game speed in ticks per second,
+  updates DF's derived speed ratio, and restores the inherited state during
+  cleanup.
+- `ds.wait_ticks(count, options)` waits asynchronously for an exact number of
+  unpaused Dwarf Fortress simulation ticks, with a raw-frame wall-timeout
+  watchdog for paused games.
+- `ds.hasFocus(path)` reports whether the current DFHack focus matches a focus
+  path without requiring a mount.
+- `ds.EScreenOrigin` lets `ds.getViewPos(origin)` and
+  `ds.setViewPos(position, origin)` address the top, center, bottom, left,
+  right, and corner anchors of the visible map viewport. Omitting the origin
+  selects `CENTER`, and cleanup restores the exact original raw view.
+- `ds.EPointerSpace` and the optional `ds.move_pointer(x, y, space)` and
+  `ds.hover(x, y, space)` overloads support exact screen-pixel positioning
+  while preserving existing UI-grid calls.
+- Native-screen `ds.get()` accepts complete paths rooted at
+  `df.global.game.main_interface`. It traverses exact declared DF data fields,
+  switches once to exact native-widget traversal, and retains the structural
+  and widget path for subject reacquisition.
+- Native lookup remains compatible with direct `viewscreen.widgets` paths.
+  Equal results from both automatic roots are deduplicated, different
+  identities fail explicitly as ambiguous, and `ds.root()` remains the exact
+  borrowed viewscreen widget root.
+- Native-screen subject commands can use `native_root` as an advanced
+  single-root bypass for genuine ambiguity or unsupported DF structures while
+  retaining the borrowed base viewscreen as their subject and redraw context.
+- Native-screen mounts can select enabled registered overlays through
+  `ds.ESubjectSource`, without taking ownership of the overlay.
+- Live failure output supports `msbuild`, `gcc`, and `eslint` problem formats
+  through `settings.error_format`.
+
+### Changed
+
+- Native subject lookup stays rooted in the borrowed base viewscreen, while
+  keyboard, text, click, physical-button, and wheel input resolves the current
+  top viewscreen immediately before each dispatch.
+- Top-screen transitions no longer stale a native mount or retained subjects
+  by themselves. Widget replacement, structural-root invalidation, and source
+  removal or replacement remain explicit stale-subject failures.
+
+### Fixed
+
+- Expose normalized `scroll_position` and `visible_row_count` when inspecting
+  DFHack Lua lists and native `widget_radio_rows` and `widget_table` controls,
+  as well as direct native `widget_scroll_rows` controls.
+- Keep DwarfSpec's UI-grid and screen-pixel pointer positions synchronized for
+  moves and native mouse input, and restore both representations during
+  cleanup.
+- Keep supported screen and map pointer reads at DwarfSpec's virtual position
+  across later frames by repairing raw pointer state before each accessor read.
+
 ## [0.2.0] - 2026-07-24
 
 ### Added
