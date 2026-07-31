@@ -399,14 +399,32 @@ Phase 6 evidence:
       `cleanup_confirmed=true`.
 
 Phase 7 - Prove overlay behavior and spatial ownership limits:
-    ☐ Add a uniquely identifiable label to a focused mounted-overlay fixture.
-    ☐ Prove root-default overlay search returns the exact rendered label bounds.
-    ☐ Prove subject-scoped overlay search clips to the subject's current body.
-    ☐ Prove overlay relocation or layout change changes the returned bounds after the existing render wait.
-    ☐ Add an overlap fixture showing that search observes the final visible cells, not the identity of the painter.
-    ☐ Document the overlap result as the intentional spatial-scoping contract.
-    ☐ Confirm overlay disable, host dismissal, adapter cleanup, pointer cleanup, and render-instrumentation restoration remain successful.
-    ☐ Record focused overlay-live evidence independently from ordinary component and native-screen evidence.
+    ☒ Add a uniquely identifiable label to a focused mounted-overlay fixture.
+    ☒ Prove root-default overlay search returns the exact rendered label bounds.
+    ☒ Prove subject-scoped overlay search clips to the subject's current body.
+    ☒ Prove overlay relocation or layout change changes the returned bounds after the existing render wait.
+    ☒ Add an overlap fixture showing that search observes the final visible cells, not the identity of the painter.
+    ☒ Document the overlap result as the intentional spatial-scoping contract.
+    ☒ Confirm overlay disable, host dismissal, adapter cleanup, pointer cleanup, and render-instrumentation restoration remain successful.
+    ☒ Record focused overlay-live evidence independently from ordinary component and native-screen evidence.
+
+Phase 7 evidence:
+    - `overlay_widget_mount_live_spec.lua` renders a unique overlay label and
+      overlapping hidden/final labels through a real mounted
+      `overlay.OverlayWidget`. Root and subject searches derive their expected
+      rectangles from visible label bodies.
+    - The final label overwrites the hidden label at identical coordinates.
+      Searching through the hidden label's subject bounds finds the final text,
+      while the hidden text is absent. This establishes the intentional
+      contract: subject bounds are spatial filters over final rendered cells,
+      not component or painter ownership filters.
+    - Moving the mounted overlay and waiting through `redraw()` changes the
+      searched label rectangle. Searches add neither a render nor a capture.
+      Explicit unmount confirms disable, backing-host revelation and dismissal,
+      zero current mount, owned screens, and retained subjects, no active
+      render observer or pointer patch, and restored pointer state.
+    - Focused overlay live result: 6 successes, zero failures, zero errors,
+      zero pending; `cleanup_confirmed=true`.
 
 Phase 8 - Prove borrowed native-screen behavior:
     ☐ Select stable unique visible native text in a controlled DF screen or create a reversible native-screen fixture that renders through supported DFHack mechanisms.
@@ -500,8 +518,9 @@ Execution evidence ledger:
     ☒ Focused complete-screen live search:
         - 3 successes, zero failures, zero errors, zero pending;
           `cleanup_confirmed=true`.
-    ☐ Focused overlay live search:
-        - Not run.
+    ☒ Focused overlay live search:
+        - 6 successes, zero failures, zero errors, zero pending;
+          `cleanup_confirmed=true`.
     ☐ Focused borrowed-native live search:
         - Not run.
     ☐ Full live automation suite:
