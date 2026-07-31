@@ -40,6 +40,13 @@ The following decisions are accepted unless later discussion revises them:
   own optional `WorldIsolation` argument independently.
 - Managed fixture manifests and recovery snapshots live beneath
   `<project-root>/.dwarfspec/worlds`.
+- `<project-root>/.dwarfspec/worlds/project.json` retains a random persistent
+  project UUID. Each fixture manifest retains its own random fixture UUID.
+- Every managed save directory contains `.dwarfspec-world.json`; its project
+  UUID, fixture UUID, and fixture name must match the project-local manifest.
+- `mountWorld()` refuses unmanaged, orphaned, mismatched, foreign, or
+  ambiguously located save-name collisions. Adoption, deletion, and relocation
+  are separate administrative operations.
 - `WorldDefinition` contains a `MapDefinition` describing the desired embark
   map.
 - The default generated world is deliberately small.
@@ -540,6 +547,7 @@ One fixture conceptually contains:
 
 ```text
 <project-root>/.dwarfspec/worlds/
+  project.json
   <fixture-name>/
     manifest.json
     operation-journal.json
@@ -552,9 +560,41 @@ Dwarf Fortress loads the managed save image beneath its active save root.
 manifest maps it to the resolved save root without accepting a path from test
 code.
 
+`project.json` uses schema `dwarfspec.world-project.v1` and stores a random
+persistent project UUID. This identity is distinct from the process-local
+scheduler project ID. Moving the project with its `.dwarfspec` directory
+preserves fixture ownership; a fresh clone without generated storage receives
+a new identity.
+
+Each fixture receives a random persistent fixture UUID. Its managed save
+directory contains:
+
+```text
+<resolved-save-root>/<fixture-name>/
+  .dwarfspec-world.json
+  world.sav
+  ...
+```
+
+The marker uses schema `dwarfspec.managed-world.v1` and contains only:
+
+```json
+{
+  "schema": "dwarfspec.managed-world.v1",
+  "project_id": "<project UUID>",
+  "fixture_id": "<fixture UUID>",
+  "name": "<fixture name>"
+}
+```
+
+The marker deliberately excludes the dirty ledger, `world.sav` sentinel, and
+other mutable operational state. It must remain readable while the world is
+unloaded, before DwarfSpec performs any filesystem repair.
+
 The manifest should record:
 
 - fixture and save-game name;
+- persistent project and fixture UUIDs;
 - requested definition and fingerprint;
 - realized definition and fingerprint;
 - four resolved native seeds;
@@ -574,9 +614,58 @@ starts without trusted in-memory reuse history. Before its first load of an
 existing fixture, it compares `world.sav` with the sentinel recorded
 immediately after provisioning or repair.
 
-The ownership marker must be independently verifiable from both the external
-manifest and the managed save. A matching directory name alone is not proof of
-ownership.
+The managed save is owned only when:
+
+- `project.json`, the fixture manifest, and `.dwarfspec-world.json` are valid;
+- their project UUIDs match;
+- the manifest and marker fixture UUIDs and names match exactly;
+- the directory name exactly matches `WorldDefinition.name`;
+- the requested definition fingerprint matches the manifest;
+- the resolved save directory is an immediate child of the recorded save
+  root; and
+- exactly one DF-visible save root contains the requested directory name.
+
+The marker prevents accidental destruction; it is not a security boundary. A
+matching directory name alone is never proof of ownership.
+
+Name collisions follow this contract:
+
+| Project manifest | Save directory | Marker | Result |
+|---|---|---|---|
+| Missing | Missing | Not applicable | Provision a new fixture |
+| Present | Present | Matches | Verify and mount |
+| Present | Missing | Not applicable | Recreate from the recovery snapshot |
+| Missing | Present | Missing | Refuse an unmanaged player save |
+| Missing | Present | Present | Refuse an orphaned or foreign fixture |
+| Present | Present | Missing | Refuse because ownership evidence is incomplete |
+| Present | Present | Mismatched | Refuse an ownership conflict |
+| Present | Present | Matches, but definition differs | Refuse with a definition diff |
+
+Ordinary `mountWorld()` never adopts, renames, deletes, relocates, or
+overwrites a conflicting save.
+
+Fixture names may contain ordinary characters and spaces, as in
+`"TestWorld 01"`, but must be one portable directory component. Validation
+rejects:
+
+- empty names, `.` and `..`;
+- `/`, `\`, absolute paths, and control characters;
+- trailing spaces or periods;
+- platform-reserved device names;
+- `current`, which Dwarf Fortress reserves; and
+- case-insensitive collisions on a case-insensitive filesystem.
+
+DwarfSpec never silently sanitizes a fixture name.
+
+The manifest records the canonical absolute save root selected during
+provisioning. Before mounting, DwarfSpec locates every DF-visible save
+directory with the requested name:
+
+- exactly one at the recorded root permits evaluation;
+- none, with a valid manifest and recovery snapshot, permits recreation;
+- more than one is an ambiguous collision and is refused; and
+- one at an unexpected root is refused until an explicit relocation operation
+  is defined.
 
 Ordinary isolation reloads the unchanged managed save image without copying
 files. If the `world.sav` sentinel changed, exceptional repair restores the
@@ -1199,9 +1288,14 @@ Reference:
 
 ## Ownership and safety rules
 
-- Validate logical names before filesystem work.
-- Never interpret a logical name as a relative or absolute path.
+- Validate fixture names before filesystem work.
+- Never interpret a fixture name as a relative or absolute path.
 - Never accept `regionN` alone as proof of ownership.
+- Require matching persistent project and fixture UUIDs in the project-local
+  manifest and managed-save marker.
+- Require exactly one matching fixture name across all DF-visible save roots.
+- Refuse every unmanaged, orphaned, foreign, mismatched, or ambiguous
+  collision.
 - Refuse to transition away from an unmanaged loaded world.
 - Refuse a fixture whose external manifest and internal marker disagree.
 - Refuse a definition mismatch rather than silently rebuilding.
@@ -1441,7 +1535,6 @@ and should not be inferred complete from isolated unit tests.
 
 ### Storage and compatibility
 
-- How should project identity be derived and moved safely?
 - What raw/mod fingerprint is both stable and affordable?
 - Which Dwarf Fortress or DFHack upgrades invalidate a fixture?
 - Which file-copy or rename strategy is safe while the game process is
@@ -1460,17 +1553,17 @@ and should not be inferred complete from isolated unit tests.
 
 ## Next discussion
 
-The fixture root and `world.sav` sentinel are settled. The next useful design
-discussion should settle ownership evidence and name collisions:
+Fixture storage, save sentinels, ownership evidence, collision behavior, and
+save-root containment are settled. The next useful design discussion should
+settle compatibility fingerprints:
 
-1. how the project and fixture ownership tokens are created and retained;
-2. the exact marker stored in the managed save directory;
-3. the evidence required to associate that marker with the project-local
-   manifest;
-4. behavior when `WorldDefinition.name` already names an unmanaged player
-   save;
-5. exact active-save-root resolution and containment checks.
+1. the effective raw and mod identity recorded at generation;
+2. whether raw identity uses object metadata, source-file content hashes, or
+   both;
+3. which Dwarf Fortress version or save-format changes invalidate a fixture;
+4. whether DFHack version is fixture identity, controller compatibility, or
+   diagnostic information only;
+5. the exact refusal and explicit-recreation behavior on incompatibility.
 
-These decisions determine whether DwarfSpec may safely load, repair, or reject
-a named save. No destructive save operation should be implemented until
-ownership and path containment can be proven independently.
+These decisions determine whether an owned fixture produced by an earlier
+installation remains safe and semantically equivalent to the world definition.
