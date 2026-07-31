@@ -194,6 +194,10 @@ function M.new(dependencies)
             return dfhack_api.world.ReadWorldFolder()
         end,
         get_title_state=get_native_title_state,
+        is_load_screen_visible=function()
+            return df_api.viewscreen_loadgamest:is_instance(
+                current_viewscreen())
+        end,
         reach_main_menu=function()
             for _ = 1, 3 do
                 local state = get_native_title_state()

@@ -99,6 +99,8 @@ describe('save-game load command binding', function()
             savegame_header_game={second_header},
             selected_r=-1,
         }
+        local load_screen = {}
+        local current_screen = screen
         local simulated = {}
         local gui = {
             simulateInput=function(actual_screen, key)
@@ -136,6 +138,11 @@ describe('save-game load command binding', function()
                     return candidate == screen
                 end,
             },
+            viewscreen_loadgamest={
+                is_instance=function(_, candidate)
+                    return candidate == load_screen
+                end,
+            },
             title_mode_type=modes,
             main_choice_type={Continue=200},
         }
@@ -147,7 +154,7 @@ describe('save-game load command binding', function()
             wait_settings={timeout_ms=123, frame_budget=456},
             dfhack=dfhack_api,
             df=df_api,
-            current_viewscreen=function() return screen end,
+            current_viewscreen=function() return current_screen end,
             get_window_size=function() return 80, 25 end,
             pointer_adapter=pointer_adapter,
             pointer=pointer,
@@ -161,6 +168,10 @@ describe('save-game load command binding', function()
         assert.equals('region2', captured.read_world_folder())
         assert.equals('title/Default', captured.get_focus())
         assert.equals('title-screen-type', captured.get_viewscreen())
+        assert.is_false(captured.is_load_screen_visible())
+        current_screen = load_screen
+        assert.is_true(captured.is_load_screen_visible())
+        current_screen = screen
 
         local title = captured.get_title_state()
         assert.equals('main', title.mode)

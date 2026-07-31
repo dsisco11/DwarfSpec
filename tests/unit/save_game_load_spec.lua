@@ -11,6 +11,7 @@ describe('save-game load adapter', function()
     local waits
     local restored_input_state
     local requested_world
+    local load_screen_visible
     local loader
 
     ---Builds one normalized title state.
@@ -41,6 +42,7 @@ describe('save-game load adapter', function()
             is_world_loaded=function() return world_loaded end,
             read_world_folder=function() return loaded_directory end,
             get_title_state=function() return title end,
+            is_load_screen_visible=function() return load_screen_visible end,
             get_focus=function() return 'title/Default' end,
             get_viewscreen=function() return 'df.viewscreen_titlest' end,
             capture_input_state=function()
@@ -62,6 +64,8 @@ describe('save-game load adapter', function()
                 table.insert(inputs, 'SAVE:' .. tostring(index))
                 world_loaded = true
                 loaded_directory = 'region2'
+                title = nil
+                load_screen_visible = false
             end,
             await_map_loaded=function(description, action)
                 table.insert(waits, description)
@@ -85,6 +89,7 @@ describe('save-game load adapter', function()
         waits = {}
         restored_input_state = false
         requested_world = 'world-b'
+        load_screen_visible = true
         loader = save_game_load.new(make_dependencies())
     end)
 
@@ -100,9 +105,11 @@ describe('save-game load adapter', function()
         }, inputs)
         assert.equals('region2', loaded_directory)
         assert.is_true(restored_input_state)
-        assert.equals(4, #waits)
+        assert.equals(5, #waits)
         assert.matches('wait for save%-game load requested=region2',
             waits[4])
+        assert.matches('dismiss save%-game load screen requested=region2',
+            waits[5])
     end)
 
     it('waits for every deferred native title transition', function()
@@ -121,6 +128,8 @@ describe('save-game load adapter', function()
             pending = function()
                 world_loaded = true
                 loaded_directory = 'region2'
+                title = nil
+                pending = function() load_screen_visible = false end
             end
         end
         dependencies.await_map_loaded = function(description, action)
@@ -147,6 +156,10 @@ describe('save-game load adapter', function()
 
         assert.is_true(loader:load('region2'))
         assert.equals('region2', loaded_directory)
+        assert.is_nil(title)
+        assert.is_false(load_screen_visible)
+        assert.matches('dismiss save%-game load screen requested=region2',
+            waits[#waits])
     end)
 
     it('reports a missing save before sending selection input', function()

@@ -106,6 +106,8 @@ function M.new(dependencies)
         'DwarfSpec save-game load requires dfhack.world.ReadWorldFolder')
     assert(type(dependencies.get_title_state) == 'function',
         'DwarfSpec save-game load requires native title inspection')
+    assert(type(dependencies.is_load_screen_visible) == 'function',
+        'DwarfSpec save-game load requires load-screen inspection')
     assert(type(dependencies.reach_main_menu) == 'function',
         'DwarfSpec save-game load requires title navigation')
     assert(type(dependencies.select_continue) == 'function',
@@ -189,6 +191,10 @@ function M.new(dependencies)
                 ('DwarfSpec loaded the wrong save: requested=%s observed=%s')
                     :format(bounded_field(requested_directory),
                         bounded_field(observed_directory)))
+            wait_for(dependencies, 'dismiss save-game load screen',
+                requested_directory, function()
+                    return not dependencies.is_load_screen_visible()
+                end)
             return true
         end, debug.traceback)
 

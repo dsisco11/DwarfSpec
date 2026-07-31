@@ -66,6 +66,8 @@ describe('awaitEvent destructive world transition', function()
             assert.equals(save_a, ds.getSaveDirectoryName())
             assert.equals(save_b, ds.mountSaveGame(save_b))
             assert.equals(save_b, ds.getSaveDirectoryName())
+            assert.is_false(df.viewscreen_loadgamest:is_instance(
+                dfhack.gui.getCurViewscreen()))
         end, debug.traceback)
         dfhack.onStateChange[listener_key] = nil
         assert.is_nil(dfhack.onStateChange[listener_key])
