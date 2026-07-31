@@ -38,6 +38,8 @@ The following decisions are accepted unless later discussion revises them:
   save-game name. It must be one safe directory name, never a path.
 - World definitions are reusable project-level values. Each test passes its
   own optional `WorldIsolation` argument independently.
+- Managed fixture manifests and recovery snapshots live beneath
+  `<project-root>/.dwarfspec/worlds`.
 - `WorldDefinition` contains a `MapDefinition` describing the desired embark
   map.
 - The default generated world is deliberately small.
@@ -523,17 +525,26 @@ When a fixture name already exists:
 
 ## Manifest and storage model
 
-The exact root remains open, but managed fixture storage should be scoped by
-consumer project and should remain separate from arbitrary player saves.
+Managed fixture storage is project-local beneath:
+
+```text
+<project-root>/.dwarfspec/worlds/
+```
+
+This directory contains generated test artifacts and should normally be
+excluded from source control. It remains separate from arbitrary player saves,
+while the project root provides the authoritative scope already used by the
+DwarfSpec runner.
 
 One fixture conceptually contains:
 
 ```text
-<fixture-root>/
-  manifest.json
-  operation-journal.json
-  recovery/
-    <whole save directory>
+<project-root>/.dwarfspec/worlds/
+  <fixture-name>/
+    manifest.json
+    operation-journal.json
+    recovery/
+      <whole save directory>
 ```
 
 Dwarf Fortress loads the managed save image beneath its active save root.
@@ -1430,7 +1441,6 @@ and should not be inferred complete from isolated unit tests.
 
 ### Storage and compatibility
 
-- Where should project-scoped immutable recovery snapshots live?
 - How should project identity be derived and moved safely?
 - What raw/mod fingerprint is both stable and affordable?
 - Which Dwarf Fortress or DFHack upgrades invalidate a fixture?
@@ -1450,18 +1460,17 @@ and should not be inferred complete from isolated unit tests.
 
 ## Next discussion
 
-The accepted first-version definition and isolation contracts are now
-sufficiently precise for reuse decisions. The next useful design discussion
-should settle managed fixture storage and ownership:
+The fixture root and `world.sav` sentinel are settled. The next useful design
+discussion should settle ownership evidence and name collisions:
 
-1. the project-scoped fixture root;
-2. fixture-name validation and save-root mapping;
-3. manifest and in-save ownership evidence;
-4. managed save-image `world.sav` sentinels and exceptional
-   recovery-snapshot repair;
-5. raw/mod and version compatibility fingerprints;
-6. atomic replacement and interrupted filesystem-operation recovery.
+1. how the project and fixture ownership tokens are created and retained;
+2. the exact marker stored in the managed save directory;
+3. the evidence required to associate that marker with the project-local
+   manifest;
+4. behavior when `WorldDefinition.name` already names an unmanaged player
+   save;
+5. exact active-save-root resolution and containment checks.
 
-Those decisions determine which files DwarfSpec may safely create, replace, or
-reject. No destructive save operation should be implemented until ownership
-and path containment can be proven independently.
+These decisions determine whether DwarfSpec may safely load, repair, or reject
+a named save. No destructive save operation should be implemented until
+ownership and path containment can be proven independently.
