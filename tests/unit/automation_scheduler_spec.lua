@@ -294,6 +294,8 @@ describe('automation scheduler', function()
 
         callbacks[1]()
         assert.equals('suspended', coroutine.status(owner))
+        assert.is_false(scheduler_module.signal_event(
+            scheduler, identities[1], occurrence('unpaused', 3)))
         callbacks[2]()
 
         assert.equals('dead', coroutine.status(owner))

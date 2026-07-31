@@ -125,22 +125,22 @@ Phase 4 - Export the command and migrate map loading:
     ☒ Add export, delegation, and save-game-loader migration coverage.
 
 Phase 5 - Verify focused and full unit behavior:
-    ☐ Prove that `awaitEvent()` waits for a new occurrence when the corresponding state is already true.
-    ☐ Prove that the listener is armed before `trigger`.
-    ☐ Prove that a synchronous trigger event is not lost.
-    ☐ Prove that unrelated events do not resume the wait.
-    ☐ Prove that only the first matching event is returned.
-    ☐ Prove that every success and failure path removes the listener exactly once.
-    ☐ Prove that canceled or stale listeners cannot resume a later example.
-    ☐ Prove that returned payloads contain snapshots rather than native pointers.
-    ☐ Prove all seven public event-to-state-change mappings.
-    ☐ Prove that `ds.mountSaveGame()` uses the shared map-loaded event wait.
-    ☐ Run and record focused scheduler tests.
-    ☐ Run and record focused command-module tests.
-    ☐ Run and record focused save-game mount tests.
-    ☐ Run and record the full standalone unit suite separately.
-    ☐ Run and record Lua syntax and formatting checks separately.
-    ☐ Run and record `git diff --check`.
+    ☒ Prove that `awaitEvent()` waits for a new occurrence when the corresponding state is already true.
+    ☒ Prove that the listener is armed before `trigger`.
+    ☒ Prove that a synchronous trigger event is not lost.
+    ☒ Prove that unrelated events do not resume the wait.
+    ☒ Prove that only the first matching event is returned.
+    ☒ Prove that every success and failure path removes the listener exactly once.
+    ☒ Prove that canceled or stale listeners cannot resume a later example.
+    ☒ Prove that returned payloads contain snapshots rather than native pointers.
+    ☒ Prove all seven public event-to-state-change mappings.
+    ☒ Prove that `ds.mountSaveGame()` uses the shared map-loaded event wait.
+    ☒ Run and record focused scheduler tests.
+    ☒ Run and record focused command-module tests.
+    ☒ Run and record focused save-game mount tests.
+    ☒ Run and record the full standalone unit suite separately.
+    ☒ Run and record Lua syntax and formatting checks separately.
+    ☒ Run and record `git diff --check`.
 
 Phase 6 - Verify live DFHack behavior:
     ☐ Add focused live coverage for `PAUSED` and `UNPAUSED` using DFHack's built-in simulated input.
@@ -249,12 +249,15 @@ Completion evidence:
         - Evidence: `src/dwarfspec/commands/save_game_load.lua` now delegates map loading to the shared `MAP_LOADED` event wait with the save-selection action as its trigger. Its private listener counter, handler registration, observation boolean, query polling, and cleanup path were removed.
         - Evidence: Focused namespace coverage proves all seven exported values, rejected mutation, exact option delegation, and return propagation. Focused loader coverage proves `MAP_LOADED` delegation, trigger propagation, occurrence return, omitted command-local timeout, and no additional query wait.
         - Evidence: Existing mount coverage preserves the same-directory no-op, unload-before-load transition, unloaded-world load, requested-directory return value, and zero example-owned cleanup. The full standalone suite completed with 591 successes, 0 failures, 0 errors, and 0 pending; Lua 5.4.6 syntax and formatting checks passed for 269 files.
-    ☐ Focused unit tests:
-        - Evidence:
-    ☐ Full standalone unit suite:
-        - Evidence:
-    ☐ Lua syntax and formatting:
-        - Evidence:
+    ☒ Focused unit tests:
+        - Evidence: Command coverage now explicitly proves that an already-true pause state does not complete the wait; a new post-arm `SC_PAUSED` occurrence is still required. The same group proves listener-before-trigger ordering, synchronous delivery, unrelated-event filtering, pointer-free immutable snapshots, and all seven public mappings.
+        - Evidence: Scheduler coverage proves first-occurrence retention, deferred safe resumption, exactly-once cleanup after success, timeout, cancellation, and arming failure, rejection of stale callbacks and signals, and rejection of a completed wait's identity while its successor wait is outstanding.
+        - Evidence: Save-game coverage proves that loading delegates `MAP_LOADED` to the shared command with selection as the post-arm trigger, without adding query polling or cleanup ownership.
+        - Evidence: Focused scheduler coverage completed with 23 successes, focused command-module coverage with 18 successes, and focused save-game coverage with 28 successes; all groups reported 0 failures, 0 errors, and 0 pending.
+    ☒ Full standalone unit suite:
+        - Evidence: The full standalone suite was run separately and completed with 592 successes, 0 failures, 0 errors, and 0 pending. A subsequent `git diff --check` completed without errors.
+    ☒ Lua syntax and formatting:
+        - Evidence: The separate Lua 5.4.6 syntax and formatting gate passed for 269 files.
     ☐ Selected live event coverage:
         - Evidence:
     ☐ Save-game mount live coverage:

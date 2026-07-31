@@ -258,6 +258,23 @@ describe('awaitEvent command binding', function()
         assert.same({}, handlers)
     end)
 
+    it('requires a new occurrence when the native state is already true',
+            function()
+        local native_pause_state = true
+        local result = command(EEvent.PAUSED, {
+            trigger=function()
+                assert.is_true(native_pause_state)
+                assert.is_nil(accepted_occurrence)
+                installed_listener()(constants.PAUSED)
+            end,
+        })
+
+        assert.equals(EEvent.PAUSED, result.event)
+        assert.is_true(result.payload.paused)
+        assert.equals(1, wait_event_calls)
+        assert.same({}, handlers)
+    end)
+
     it('ignores unrelated native state changes', function()
         local signal_count = 0
         local original_signal = scheduler_module.signal_event
