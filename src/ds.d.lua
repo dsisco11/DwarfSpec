@@ -26,6 +26,16 @@
 ---| 'down'
 ---| 'up'
 
+---A supported DFHack state-change event identifier.
+---@alias dwarfspec.EEvent
+---| 'world_loaded'
+---| 'world_unloaded'
+---| 'map_loaded'
+---| 'map_unloaded'
+---| 'viewscreen_changed'
+---| 'paused'
+---| 'unpaused'
+
 ---The `ds.EPointerSpace.GRID` coordinate-space value.
 ---@alias dwarfspec.GridPointerSpace 1
 
@@ -69,6 +79,16 @@
 ---@field CLICK `click`
 ---@field DOWN `down`
 ---@field UP `up`
+
+---Immutable identifiers for state-change events supported by `awaitEvent()`.
+---@class dwarfspec.EEventEnum
+---@field WORLD_LOADED `world_loaded`
+---@field WORLD_UNLOADED `world_unloaded`
+---@field MAP_LOADED `map_loaded`
+---@field MAP_UNLOADED `map_unloaded`
+---@field VIEWSCREEN_CHANGED `viewscreen_changed`
+---@field PAUSED `paused`
+---@field UNPAUSED `unpaused`
 
 ---Immutable pointer coordinate spaces. Use these members instead of backing
 ---values: `GRID` addresses UI-grid cells, `PIXELS` addresses screen pixels,
@@ -128,6 +148,26 @@
 ---@class dwarfspec.TickWaitOptions
 ---@field timeout_ms? integer Maximum wall-clock time in milliseconds before the wait fails; defaults to settings.wait.timeout_ms or 10000.
 ---@field description? string Operation name included in timeout diagnostics; defaults to `wait_ticks(count)`.
+
+---Options for awaiting the next supported DFHack state-change event.
+---@class dwarfspec.EventWaitOptions
+---@field trigger? fun() Invoked after the native listener is armed; a matching synchronous event is captured.
+---@field description? string Nonempty operation name included in diagnostics.
+---@field timeout_ms? integer|false Positive command-local timeout in milliseconds; `false` or omission disables it.
+
+---Normalized immutable payload captured while native event data is valid.
+---Unavailable fields are omitted.
+---@class dwarfspec.EventPayload
+---@field save_directory? string Loaded or previously loaded save-directory name for world and map events.
+---@field focus? string Current native focus for a viewscreen change.
+---@field native_screen_type? string Current native screen type for a viewscreen change.
+---@field paused? boolean Current pause state for pause and unpause events.
+
+---Immutable snapshot of one supported DFHack event occurrence.
+---@class dwarfspec.EventOccurrence
+---@field event dwarfspec.EEvent Public event identifier that matched the wait.
+---@field source `state_change` Fixed native event source.
+---@field payload dwarfspec.EventPayload Normalized payload without transient native pointers.
 
 ---@class dwarfspec.RedrawOptions
 ---@field wait? boolean Wait for the resulting completed render; defaults to true.
@@ -267,6 +307,7 @@ function Subject:raw() end
 
 ---@class dwarfspec.DS
 ---@field protocol_version integer
+---@field EEvent dwarfspec.EEventEnum
 ---@field EMouseButton dwarfspec.EMouseButtonEnum
 ---@field EInputState dwarfspec.EInputStateEnum
 ---@field EPointerSpace dwarfspec.EPointerSpaceEnum
@@ -294,6 +335,15 @@ function DS.wait_ticks(count, options) end
 ---@param options? dwarfspec.WaitOptions
 ---@return T
 function DS.await(description, query, options) end
+
+---Waits for the next matching event, even when its associated state is already
+---true. The native listener is armed before an optional trigger runs, so an
+---event raised synchronously by the trigger is captured. No command-local
+---timeout is imposed unless `timeout_ms` is explicitly provided.
+---@param event dwarfspec.EEvent
+---@param options? dwarfspec.EventWaitOptions
+---@return dwarfspec.EventOccurrence
+function DS.awaitEvent(event, options) end
 
 ---Returns whether the Dwarf Fortress simulation is currently paused.
 ---@return boolean

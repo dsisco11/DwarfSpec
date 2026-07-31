@@ -5,11 +5,13 @@ local settings_validator = require('dwarfspec.settings')
 local M = {}
 
 local RESERVED_COMMANDS = {
+    EEvent=true,
     EInputState=true,
     EMouseButton=true,
     EPointerSpace=true,
     EScreenOrigin=true,
     await=true,
+    awaitEvent=true,
     capture_screen=true,
     capture_view_tree=true,
     click=true,

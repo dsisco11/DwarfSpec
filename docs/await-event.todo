@@ -61,22 +61,22 @@ Phase 0 - Freeze the runtime contract and baseline:
     ☒ Stop and revise this checklist if the active runtime does not expose the seven contracted events.
 
 Phase 1 - Add the public event types:
-    ☐ Define the public `dwarfspec.EEvent` enum in `src/ds.d.lua`.
-    ☐ Define `dwarfspec.EventWaitOptions`.
-        ☐ Type the optional `trigger` callback.
-        ☐ Type the optional `description`.
-        ☐ Type `timeout_ms` as a positive integer or `false`.
-    ☐ Define the immutable `dwarfspec.EventOccurrence` record.
-        ☐ Type the public `event`.
-        ☐ Type the fixed `state_change` source.
-        ☐ Type the normalized payload.
-    ☐ Declare `ds.awaitEvent(event, options)`.
-    ☐ Document next-occurrence semantics at the declaration.
-    ☐ Document listener-before-trigger ordering at the declaration.
-    ☐ Document the absence of a default command-local timeout.
-    ☐ Add language-appropriate documentation comments for every new production method and type.
-    ☐ Add `EEvent` and `awaitEvent` to the reserved DwarfSpec command names.
-    ☐ Add declaration fixtures or declaration checks for valid and invalid calls if the current declaration test harness supports them.
+    ☒ Define the public `dwarfspec.EEvent` enum in `src/ds.d.lua`.
+    ☒ Define `dwarfspec.EventWaitOptions`.
+        ☒ Type the optional `trigger` callback.
+        ☒ Type the optional `description`.
+        ☒ Type `timeout_ms` as a positive integer or `false`.
+    ☒ Define the immutable `dwarfspec.EventOccurrence` record.
+        ☒ Type the public `event`.
+        ☒ Type the fixed `state_change` source.
+        ☒ Type the normalized payload.
+    ☒ Declare `ds.awaitEvent(event, options)`.
+    ☒ Document next-occurrence semantics at the declaration.
+    ☒ Document listener-before-trigger ordering at the declaration.
+    ☒ Document the absence of a default command-local timeout.
+    ☒ Add language-appropriate documentation comments for every new production method and type.
+    ☒ Add `EEvent` and `awaitEvent` to the reserved DwarfSpec command names.
+    ☒ Add declaration fixtures or declaration checks for valid and invalid calls if the current declaration test harness supports them.
 
 Phase 2 - Implement scheduler event suspension:
     ☐ Add a dedicated event wait kind to the coroutine scheduler.
@@ -211,8 +211,16 @@ Completion evidence:
         - Evidence: Full standalone baseline: `tools/Run-UnitTests.ps1` completed with 562 successes, 0 failures, 0 errors, and 0 pending.
         - Evidence: Pre-change syntax and formatting baseline: `tools/Check-Lua.ps1` passed under Lua 5.4.6 for 267 files.
         - Evidence: All seven contracted runtime constants are present, so no checklist revision was required.
-    ☐ Public declarations and reserved names:
-        - Evidence:
+    ☒ Public declarations and reserved names:
+        - Evidence: `src/ds.d.lua` defines the seven-value `dwarfspec.EEvent` alias and documented immutable `dwarfspec.EEventEnum`, including `WORLD_LOADED`, `WORLD_UNLOADED`, `MAP_LOADED`, `MAP_UNLOADED`, `VIEWSCREEN_CHANGED`, `PAUSED`, and `UNPAUSED`.
+        - Evidence: `src/dwarfspec/state_change_events.lua` defines the authoritative immutable string enum using the existing `dwarfspec.immutable_enum` contract. Runtime export remains intentionally deferred to Phase 4.
+        - Evidence: `dwarfspec.EventWaitOptions` types the optional post-arm `trigger`, nonempty diagnostic `description`, and positive integer or `false` `timeout_ms`.
+        - Evidence: `dwarfspec.EventPayload` documents normalized optional save-directory, focus, native-screen-type, and pause-state fields, including omission when a valid field is unavailable. `dwarfspec.EventOccurrence` types the public event, fixed `state_change` source, and normalized pointer-free payload as an immutable snapshot.
+        - Evidence: The `ds.awaitEvent(event, options)` declaration documents next-occurrence semantics, listener-before-trigger ordering, synchronous trigger capture, and the absence of a default command-local timeout.
+        - Evidence: `src/dwarfspec/config_schema.lua` reserves both `EEvent` and `awaitEvent`; focused configuration coverage rejects consumer command collisions for both names.
+        - Evidence: The current repository has no executable Lua declaration type-check fixture harness, so valid/invalid call fixtures were not applicable. The declaration shape is covered by source review while runtime argument validation remains assigned to Phase 3.
+        - Evidence: Focused immutable-enum tests completed with 5 successes, 0 failures, 0 errors, and 0 pending. Focused configuration tests completed with 19 successes, 0 failures, 0 errors, and 0 pending.
+        - Evidence: The full standalone suite completed with 562 successes, 0 failures, 0 errors, and 0 pending. Lua 5.4.6 syntax and formatting checks passed for 267 files.
     ☐ Scheduler event-wait primitive:
         - Evidence:
     ☐ Core state-change command:
