@@ -339,17 +339,34 @@ Phase 4 evidence:
       and zero pending. Lua 5.4.6 syntax and formatting passed all 275 Lua
       files. DFHack's embedded Lua 5.3 parser accepted both changed production
       files and both focused unit files; the temporary probe was removed.
-    - `Subject:search()` and live component, overlay, complete-screen, and
-      borrowed-native proofs remain assigned to their later checklist work.
+    - Live component, overlay, complete-screen, and borrowed-native proofs
+      remain assigned to their later checklist work.
 
 Phase 5 - Add fluent subject search and public inventory coverage:
-    ☐ Implement `Subject:search(query)` through the subject command-dispatch path.
-    ☐ Preserve the subject object and descriptor without retaining search results.
-    ☐ Register the search handler in `context.mount_context.subject_commands`.
-    ☐ Add `search` to the public subject inventory in `src/dwarfspec/component.lua`.
-    ☐ Reconcile every command applicability or conformance inventory that enumerates DS and Subject methods.
-    ☐ Add focused `subject_spec.lua` coverage for delegation, result passthrough, nil passthrough, lifecycle failure, and argument validation ownership.
-    ☐ Add focused conformance coverage proving `ds.search(query, subject)` and `subject:search(query)` use the same effective area and result.
+    ☒ Implement `Subject:search(query)` through the subject command-dispatch path.
+    ☒ Preserve the subject object and descriptor without retaining search results.
+    ☒ Register the search handler in `context.mount_context.subject_commands`.
+    ☒ Add `search` to the public subject inventory in `src/dwarfspec/component.lua`.
+    ☒ Reconcile every command applicability or conformance inventory that enumerates DS and Subject methods.
+    ☒ Add focused `subject_spec.lua` coverage for delegation, result passthrough, nil passthrough, lifecycle failure, and argument validation ownership.
+    ☒ Add focused conformance coverage proving `ds.search(query, subject)` and `subject:search(query)` use the same effective area and result.
+
+Phase 5 evidence:
+    - `Subject:search(query)` delegates through `invoke_subject_command()` to
+      the `search` entry in `mount_context.subject_commands`, which calls
+      `ds.search(query, subject)`. It returns the result directly and retains
+      neither result nor altered subject descriptor state.
+    - The public subject inventory, component-boundary regression, and custom
+      command-reservation schema include `search`; `src/ds.d.lua` exposes the
+      matching `Subject:search(query)` declaration.
+    - Focused subject coverage proves result and nil passthrough, descriptor
+      preservation, run-context lifecycle rejection, and dispatch ownership.
+      Mount-command coverage proves direct and fluent subject forms use the
+      same bounds and that malformed fluent queries retain subject-failure
+      context with the underlying search validation cause.
+    - Full standalone unit suite: 637 successes, zero failures, zero errors,
+      and zero pending. Lua 5.4.6 syntax and formatting passed 275 Lua files;
+      `git diff --check` passed.
 
 Phase 6 - Prove ordinary component and complete-screen behavior:
     ☐ Add a uniquely identifiable single-line label to a focused ordinary-widget live fixture without coupling the production algorithm to widget fields.
@@ -444,11 +461,12 @@ Execution evidence ledger:
     ☒ Focused query and matching unit tests:
         - 37 successes, zero failures, zero errors, zero pending.
     ☒ Focused subject and mount-command unit tests:
-        - Public mount-command coverage completed with 93 successes, zero
-          failures, zero errors, and zero pending. Subject command dispatch is
-          reserved for the next checklist section.
-    ☐ Declaration and conformance tests:
-        - Not run.
+        - Includes fluent subject-search dispatch, result parity, lifecycle,
+          and validation-context coverage.
+    ☒ Declaration and conformance tests:
+        - The subject declaration, public inventory, reserved-command schema,
+          and direct/fluent result-parity regressions are covered by the
+          standalone unit suite.
     ☒ Full standalone unit suite:
         - 637 successes, zero failures, zero errors, zero pending.
     ☐ Lua 5.3 syntax and formatting:

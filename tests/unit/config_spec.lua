@@ -209,6 +209,11 @@ describe('DwarfSpec external project configuration', function()
                 expected='tests/dwarfspec/config.lua: ' ..
                     'custom command conflicts with ds.awaitEvent',
             },
+            {
+                module={commands={search=function() end}},
+                expected='tests/dwarfspec/config.lua: ' ..
+                    'custom command conflicts with ds.search',
+            },
         }
         for _, case in ipairs(cases) do
             modules[path] = case.module

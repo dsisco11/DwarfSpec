@@ -31,6 +31,7 @@ local RESERVED_COMMANDS = {
     protocol_version=true,
     redraw=true,
     root=true,
+    search=true,
     setGamePaused=true,
     setGameSpeed=true,
     setViewPos=true,

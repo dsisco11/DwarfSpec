@@ -2016,6 +2016,7 @@ local text_search_command = load_automation_module(package_root,
             return ds.redraw(subject, options)
         end,
         inspect=function(subject) return ds.inspect(subject) end,
+        search=function(subject, query) return ds.search(query, subject) end,
         getFocusList=get_focus_list,
     }
 

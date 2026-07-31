@@ -3209,6 +3209,8 @@ describe('DwarfSpec public mount commands', function()
         assert.same({x1=8, y1=6, x2=12, y2=6},
             ds.search({text='Child'}, subject))
         assert.same({x1=8, y1=6, x2=12, y2=6},
+            subject:search({text='Child'}))
+        assert.same({x1=8, y1=6, x2=12, y2=6},
             ds.search(
                 {text='Child'}, {x1=8, y1=6, x2=12, y2=6}))
         local reads_before = #screen_read_calls
@@ -3219,6 +3221,12 @@ describe('DwarfSpec public mount commands', function()
             ds.search({}, {x1=30, y1=20, x2=35, y2=22})
         end, 'text search query.text must be a nonempty string')
         assert.equals(reads_before, #screen_read_calls)
+        local subject_ok, subject_failure = pcall(subject.search, subject, {})
+        assert.is_false(subject_ok)
+        assert.matches('DwarfSpec subject failure: operation="search"',
+            subject_failure, 1, true)
+        assert.matches('text search query.text must be a nonempty string',
+            subject_failure, 1, true)
     end)
 
     it('uses clipped native and registered-overlay subject scopes',

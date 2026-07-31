@@ -106,6 +106,13 @@ function Subject:inspect()
     return invoke(self, 'inspect')
 end
 
+---Searches final rendered screen cells within this subject's visible body.
+---@param query dwarfspec.TextSearchQuery
+---@return dwarfspec.ScreenRect|nil
+function Subject:search(query)
+    return invoke(self, 'search', query)
+end
+
 ---Returns a copied focus-string list for this subject's current mounted screen.
 ---@return string[]
 function Subject:getFocusList()
