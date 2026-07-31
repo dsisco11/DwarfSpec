@@ -11,13 +11,13 @@ behavior.
 The proposed entry point is:
 
 ```lua
-ds.mountWorld(name, config)
+ds.mountWorld(definition, isolation)
 ```
 
 The system would provision, load, reuse, and restore DwarfSpec-owned worlds for
 live tests. Provisioning includes world generation, deterministic embark-site
 selection, entering fortress mode, making an initial save, and capturing a
-pristine baseline.
+recovery snapshot.
 
 Related documents:
 
@@ -33,11 +33,11 @@ Related documents:
 
 The following decisions are accepted unless later discussion revises them:
 
-- The public entry point is `ds.mountWorld(name, config)`.
-- `name` is a logical fixture name, not a save-directory name or filesystem
-  path.
-- `WorldConfig` separates immutable fixture definition from per-test isolation
-  requirements.
+- The public entry point is `ds.mountWorld(definition, isolation)`.
+- `WorldDefinition.name` is the fixture identity and requested Dwarf Fortress
+  save-game name. It must be one safe directory name, never a path.
+- World definitions are reusable project-level values. Each test passes its
+  own optional `WorldIsolation` argument independently.
 - `WorldDefinition` contains a `MapDefinition` describing the desired embark
   map.
 - The default generated world is deliberately small.
@@ -71,8 +71,9 @@ The following decisions are accepted unless later discussion revises them:
   implementation.
 - The dirty ledger is run-scoped in memory and is never persisted across a
   Dwarf Fortress process restart.
-- The first managed-world mount in a new DwarfSpec run restores the baseline
-  before granting access to an existing fixture.
+- The first managed-world mount in a new DwarfSpec run verifies the managed
+  save's recorded disk signature before loading it. It restores the recovery
+  snapshot only when that save has actually changed.
 - Reuse is an optimization. Uncertain state must cause restoration or a
   bounded failure, never optimistic reuse.
 - DwarfSpec must never discard, overwrite, or silently save an unmanaged
@@ -85,7 +86,7 @@ The following decisions are accepted unless later discussion revises them:
 - Make the common fixture small enough for practical live-test iteration.
 - Reuse an already loaded compatible fixture without unnecessary unloading or
   loading.
-- Restore an immutable baseline when a test requires state that an earlier
+- Reload the initially saved state when a test requires facets that an earlier
   test may have changed.
 - Make generation and site selection repeatable by default.
 - Preserve the realized seeds and site selection for diagnostics.
@@ -117,26 +118,28 @@ The following decisions are accepted unless later discussion revises them:
 
 ## Terminology
 
-- **Logical fixture name:** The project-facing name passed to
-  `ds.mountWorld()`, such as `"stockpile-fixture"`. It is mapped to
-  DwarfSpec-owned storage through a manifest.
+- **Fixture name:** `WorldDefinition.name`, such as `"stockpile-fixture"`.
+  It identifies the fixture and is used as its Dwarf Fortress save-game
+  directory name after validation.
 - **Definition:** The immutable requested properties used to identify a
   fixture. Generation, embark-map, and initial-embark settings belong to the
   definition.
 - **Realization:** The concrete generated world associated with a definition.
   It includes the four native Dwarf Fortress seeds, world identity,
   civilization, site, local embark rectangle, and save directory.
-- **Working save:** The save directory Dwarf Fortress loads and may mutate
-  while tests execute.
-- **Pristine baseline:** An immutable whole-save snapshot made immediately
-  after a successful initial embark and durable save.
+- **Managed save image:** The DwarfSpec-owned save directory that Dwarf
+  Fortress loads. Ordinary play mutates the world in memory without changing
+  this image unless a save occurs.
+- **Recovery snapshot:** An immutable whole-save copy made immediately after
+  successful initial embark and durable save. It is used only to repair a
+  managed save image that was changed on disk.
 - **Facet:** A coarse category of world state used to decide whether a working
   world is compatible with a later test.
 - **Dirty ledger:** The run-scoped in-memory set of facets that may differ from
-  the pristine baseline.
+  the fixture's initially saved state.
 - **Managed world:** A world whose manifest, ownership marker, definition,
-  realization, working save, and baseline have all been verified by
-  DwarfSpec.
+  realization, managed save image, and recovery snapshot have all been
+  verified by DwarfSpec.
 - **Unmanaged world:** Any loaded or stored world that DwarfSpec cannot prove
   it owns.
 
@@ -145,67 +148,72 @@ The following decisions are accepted unless later discussion revises them:
 ### Basic deterministic fixture
 
 ```lua
-local world = ds.mountWorld('default-fixture')
+local default_world = {
+    name='default-fixture',
+}
+
+local world = ds.mountWorld(default_world)
 
 assert.equals('default-fixture', world.name)
 assert.equals(2, world.map.size.width)
 assert.equals(2, world.map.size.height)
 ```
 
-Omitting `config` uses the complete default definition and conservative
-isolation policy.
+Omitting `isolation` uses the conservative isolation policy. All definition
+fields other than `name` receive their documented defaults.
 
 ### Defined fixture
 
 ```lua
----@type dwarfspec.WorldConfig
-local config = {
-    definition={
-        generation={
-            seed=0,
-            world_size='pocket',
-            history_years=2,
-        },
-        map={
-            size={
-                width=2,
-                height=2,
-            },
-            site={
-                aquifer='none',
-                flux=true,
-                metals={
-                    ds.ECanonicalMetal.IRON,
-                },
-            },
-        },
+---@type dwarfspec.WorldDefinition
+local stockpile_world = {
+    name='stockpile-fixture',
+    generation={
+        seed=0,
+        world_size='pocket',
+        history_years=2,
     },
-    isolation={
-        requires={
-            ds.EWorldFacet.MAP_TILES,
-            ds.EWorldFacet.UNITS,
-            ds.EWorldFacet.ITEMS,
+    map={
+        size={
+            width=2,
+            height=2,
         },
-        dirties={
-            ds.EWorldFacet.JOBS_ORDERS,
-            ds.EWorldFacet.ITEMS,
+        site={
+            aquifer='none',
+            flux=true,
+            metals={
+                ds.ECanonicalMetal.IRON,
+            },
         },
     },
 }
 
-local world = ds.mountWorld('stockpile-fixture', config)
+local isolation = {
+    requires={
+        ds.EWorldFacet.MAP_TILES,
+        ds.EWorldFacet.UNITS,
+        ds.EWorldFacet.ITEMS,
+    },
+    dirties={
+        ds.EWorldFacet.JOBS_ORDERS,
+        ds.EWorldFacet.ITEMS,
+    },
+}
+
+local world = ds.mountWorld(stockpile_world, isolation)
 ```
 
 ### Random initial generation
 
 ```lua
-local world = ds.mountWorld('exploratory-fixture', {
-    definition={
-        generation={
-            seed='random',
-        },
+local exploratory_world = {
+    name='exploratory-fixture',
+    generation={
+        seed='random',
     },
-})
+}
+
+local world = ds.mountWorld(exploratory_world)
 ```
 
 `"random"` means random when the fixture is first provisioned. It does not
@@ -339,6 +347,7 @@ eventually use these canonical types rather than parallel copies.
 
 ---Defines the immutable properties of one managed world fixture.
 ---@class dwarfspec.WorldDefinition
+---@field name string Fixture identity and safe Dwarf Fortress save-game name.
 ---@field generation? dwarfspec.WorldGenerationDefinition
 ---@field map? dwarfspec.MapDefinition
 
@@ -346,11 +355,6 @@ eventually use these canonical types rather than parallel copies.
 ---@class dwarfspec.WorldIsolation
 ---@field requires? dwarfspec.WorldFacet[] Defaults to `{"all"}`.
 ---@field dirties? dwarfspec.WorldFacet[] Defaults to `{"all"}`.
-
----Configures one managed-world request.
----@class dwarfspec.WorldConfig
----@field definition? dwarfspec.WorldDefinition
----@field isolation? dwarfspec.WorldIsolation
 
 ---Records the four native seeds resolved from one requested master seed.
 ---@class dwarfspec.ResolvedWorldSeeds
@@ -383,10 +387,10 @@ DS.ECanonicalMetal = nil
 DS.EWorldFacet = nil
 
 ---Mounts a managed world fixture for the current example.
----@param name string
----@param config? dwarfspec.WorldConfig
+---@param definition dwarfspec.WorldDefinition
+---@param isolation? dwarfspec.WorldIsolation
 ---@return dwarfspec.WorldMount
-function DS.mountWorld(name, config) end
+function DS.mountWorld(definition, isolation) end
 ```
 
 The criteria fields above are an initial vocabulary, not an accepted complete
@@ -486,7 +490,7 @@ Lua cannot distinguish an omitted table field from a field explicitly assigned
 
 Before consulting storage or changing game state, `ds.mountWorld()` should:
 
-1. Validate the logical name and configuration types.
+1. Validate `WorldDefinition.name`, the definition, and the isolation argument.
 2. Apply all documented defaults.
 3. Canonicalize maps, arrays, enums, integers, and absent optional fields.
 4. Reject unknown fields unless the compatibility policy later permits them.
@@ -505,11 +509,11 @@ The fingerprint should include at least:
 - ordered raw and mod identity;
 - provisioning-backend contract version.
 
-The per-test isolation declaration must not participate in fixture identity.
-Two tests can use the same realization while declaring different required and
-mutated facets.
+The separate per-test isolation argument must not participate in fixture
+identity. Tests can reuse the same `WorldDefinition` value while independently
+declaring different required and dirtied facets.
 
-When a logical name already exists:
+When a fixture name already exists:
 
 - an identical requested definition may reuse its realization;
 - a different requested definition must fail with a bounded definition diff;
@@ -528,19 +532,18 @@ One fixture conceptually contains:
 <fixture-root>/
   manifest.json
   operation-journal.json
-  baseline/
+  recovery/
     <whole save directory>
-  working/
-    <whole save directory or mapping metadata>
 ```
 
-Dwarf Fortress ultimately needs the working save beneath its active save root.
-The manifest must map the logical fixture name to that concrete directory
-without exposing directory selection through the public API.
+Dwarf Fortress loads the managed save image beneath its active save root.
+`WorldDefinition.name` supplies that save-game directory name directly. The
+manifest maps it to the resolved save root without accepting a path from test
+code.
 
 The manifest should record:
 
-- logical fixture name;
+- fixture and save-game name;
 - requested definition and fingerprint;
 - realized definition and fingerprint;
 - four resolved native seeds;
@@ -548,23 +551,25 @@ The manifest should record:
 - selected civilization;
 - region and local embark coordinates;
 - embark rectangle;
-- managed working-save directory;
-- baseline identity and integrity information;
+- managed save-image directory and recorded disk signature;
+- recovery-snapshot identity and integrity information;
 - Dwarf Fortress and DFHack compatibility information;
 - last completed operation;
 - interrupted filesystem-operation state.
 
 The manifest does not persist per-test facet dirtiness. Every new DwarfSpec run
-starts without trusted in-memory reuse history and restores the pristine
-baseline before granting its first mount of an existing fixture.
+starts without trusted in-memory reuse history. Before its first load of an
+existing fixture, it compares the managed save image with the disk signature
+recorded immediately after provisioning or repair.
 
 The ownership marker must be independently verifiable from both the external
 manifest and the managed save. A matching directory name alone is not proof of
 ownership.
 
-Whole save directories must be restored by replacement, never by merging
-baseline files over a possibly dirty directory. Residual files from a later
-save can otherwise survive and corrupt the restored state.
+Ordinary isolation reloads the unchanged managed save image without copying
+files. If its disk signature changed, exceptional repair restores the whole
+directory by replacement, never by merging recovery files over it. Residual
+files from a later save can otherwise survive and corrupt the restored state.
 
 All renames, copies, and removals need:
 
@@ -617,14 +622,15 @@ or amendments, but it does not retroactively alter that checklist.
 
 Before a transition, the command should:
 
-- require a nonempty safe logical name;
+- require `WorldDefinition.name` to be one nonempty safe save-directory name;
 - normalize and fingerprint the definition;
 - normalize isolation independently;
 - acquire the one process-wide world-transition lease;
 - inspect current world, map, viewscreen, and managed ownership;
 - reject incompatible example-owned stateful resources;
 - reject an unmanaged loaded world;
-- inspect the fixture manifest, journal, baseline, and working-save status;
+- inspect the fixture manifest, journal, recovery snapshot, managed save-image
+  signature, and status;
 - choose one explicit mount action.
 
 The initial contract should require `mountWorld()` to be the first stateful
@@ -637,13 +643,13 @@ world transition.
 | Current state | Requested state | Action |
 |---|---|---|
 | Same managed realization loaded and compatible | Existing fixture | Reuse |
-| Same managed realization loaded but incompatible | Existing fixture | Discard, restore baseline if needed, and reload |
+| Same managed realization loaded but incompatible | Existing fixture | Discard without saving and reload the same managed save image; repair first only if its disk signature changed |
 | Different managed realization loaded | Existing fixture | Discard current managed world and load target |
 | No world loaded | Existing pristine fixture | Load target |
-| No completed fixture exists | Valid missing fixture | Provision, save, snapshot, and mount |
+| No completed fixture exists | Valid missing fixture | Provision, save, capture recovery snapshot, and mount |
 | Incomplete operation exists | Recoverable fixture | Recover, then reevaluate |
 | Unmanaged world loaded | Any fixture | Refuse without changing it |
-| Definition fingerprint differs | Existing logical name | Refuse with a definition diff |
+| Definition fingerprint differs | Existing fixture name | Refuse with a definition diff |
 
 ### Example cleanup
 
@@ -678,9 +684,10 @@ make ownership and crash recovery more visible to the user. This tradeoff
 requires an explicit decision.
 
 Regardless of final run-state policy, a later DwarfSpec run does not inherit
-the prior run's dirty ledger. Its first mount restores the requested fixture
-baseline before use. A Dwarf Fortress process crash needs no special facet
-recovery because both DwarfSpec and the in-memory world disappear together.
+the prior run's dirty ledger. Its first mount verifies the requested fixture's
+disk signature and loads the managed save image directly when it is unchanged.
+A Dwarf Fortress process crash needs no special facet recovery because both
+DwarfSpec and the in-memory world disappear together.
 
 ## Isolation and reuse model
 
@@ -706,7 +713,7 @@ Tests opt into reuse by declaring narrower facets.
 
 ### Normalization
 
-`requires` describes facets that must match the pristine baseline before the
+`requires` describes facets that must match the initially saved state before the
 test. `dirties` describes facets that the test may mutate and that DwarfSpec
 must conservatively mark dirty after cleanup.
 
@@ -741,8 +748,9 @@ D intersect R = empty
 `unknown_native` in `D` blocks every reuse because its effect cannot be bounded
 to an accepted narrower facet.
 
-Otherwise, the pristine baseline must be restored and loaded before the test
-continues.
+Otherwise, DwarfSpec must discard without saving and reload the unchanged
+managed save image before the test continues. A recovery copy is required only
+if the image's disk signature changed.
 
 After the example:
 
@@ -786,18 +794,19 @@ test need, restorer, and live proof justify it.
 The dirty ledger exists only for one DwarfSpec run in the live Dwarf Fortress
 process. It is not stored in the fixture manifest.
 
-On the first mount of an existing fixture in a new run, DwarfSpec restores the
-pristine baseline before granting access. Subsequent examples in that run may
-reuse the in-memory realization through the facet decision rule.
+On the first mount of an existing fixture in a new run, DwarfSpec verifies its
+managed save-image disk signature and loads it directly when unchanged.
+Subsequent examples in that run may reuse the in-memory realization through
+the facet decision rule.
 
 If Dwarf Fortress exits or crashes, the ledger and in-memory mutations vanish
-with the process. The next process again restores the baseline on first mount.
-If autosave, manual save, or an interrupted file operation may have changed the
-working save, baseline replacement occurs before loading it.
+with the process. The next process verifies and loads the same managed save
+image. If its disk signature changed, recovery-snapshot replacement occurs
+before loading it.
 
 ### What a reload does not restore
 
-Restoring a world baseline does not necessarily restore:
+Reloading a managed save image does not necessarily restore:
 
 - Lua globals or `package.loaded`;
 - TestBed module graphs;
@@ -822,7 +831,7 @@ A future extension could clear facets only through:
 - a DwarfSpec-owned mutation helper with a verified inverse;
 - a facet-specific verifier;
 - a registered restorer that completes during cleanup;
-- an explicit baseline fingerprint supported by live evidence.
+- an explicit saved-state fingerprint supported by live evidence.
 
 A generic `world:confirmRestored()` method should not be added unless it can
 provide stronger assurance than an unchecked author claim.
@@ -847,10 +856,10 @@ A missing fixture requires this conceptual transaction:
 14. Request an explicit save.
 15. Wait for durable save completion.
 16. Return to a safe unloaded state if required for snapshot consistency.
-17. Capture and validate the immutable whole-save baseline.
-18. Create or refresh the working save from that baseline.
+17. Record the complete managed save-image disk signature.
+18. Capture and validate the immutable whole-save recovery snapshot.
 19. Complete the manifest and clear the operation journal.
-20. Load or retain the working realization as the mounted fixture.
+20. Load or retain the managed realization as the mounted fixture.
 
 The transaction must distinguish:
 
@@ -860,7 +869,7 @@ The transaction must distinguish:
 - failed embark;
 - world loaded but map not loaded;
 - save requested but not durable;
-- baseline copy failure;
+- recovery-snapshot copy failure;
 - manifest finalization failure.
 
 Each failure after storage reservation needs a recoverable journal state. A
@@ -911,7 +920,7 @@ Risks:
 - cleanup after aborted processes.
 
 The public API should depend on a private provisioner interface so the backend
-can change without altering `WorldConfig`. The in-process backend is the
+can change without altering `WorldDefinition`. The in-process backend is the
 recommended first implementation; the external backend remains a later
 optimization or pre-provisioning tool.
 
@@ -1072,7 +1081,7 @@ Reference:
 
 - [DFHack embark-assistant](https://docs.dfhack.org/en/stable/docs/tools/embark-assistant.html)
 
-## Save and baseline semantics
+## Save-image and recovery semantics
 
 The initial fortress must be explicitly saved. The installation's
 `INITIAL_SAVE` preference cannot be treated as part of the fixture contract.
@@ -1081,7 +1090,8 @@ A save request is not itself proof that every file is durable. The provisioner
 must wait for an authoritative post-save boundary selected during live
 characterization.
 
-The pristine baseline should be captured only when:
+The managed save-image disk signature and recovery snapshot should be captured
+only when:
 
 - the expected managed world and site were loaded;
 - the exact configured embark rectangle was verified;
@@ -1092,16 +1102,46 @@ The pristine baseline should be captured only when:
 - no open game process was still mutating the files being copied, or a
   demonstrated safe snapshot mechanism was used.
 
-Autosaves and test-triggered saves can dirty the working directory even when
+There is no need to intercept save events. Before loading a managed save image
+for the first time in a run, and before reloading it after an incompatible
+test, DwarfSpec compares its current disk metadata with the signature recorded
+after provisioning or the last repair. When a world is currently loaded, this
+check occurs only after DwarfSpec has discarded it without saving and reached
+a filesystem-safe unloaded state.
+
+The signature covers the complete save-directory tree, not only `world.sav`.
+For every relative file it records at least:
+
+- relative path;
+- file size;
+- highest-resolution available modification time.
+
+It also detects added and removed files. A directory modification time alone
+is insufficient because rewriting an existing file need not update its parent
+directory.
+
+An unchanged complete signature is the fast path and permits a direct load.
+A changed signature conservatively treats the managed save image as changed
+on disk and restores it from the recovery snapshot before loading. The first
+implementation need not determine whether the changed bytes happen to equal
+the original.
+
+Filesystem capability characterization must establish whether available
+modification-time precision is reliable for this use. On a filesystem with
+coarse or unavailable file times, DwarfSpec must strengthen the signature with
+content hashes rather than silently accepting weak evidence.
+
+Autosaves and test-triggered saves can change the managed save image even when
 the in-memory world is later discarded. The dirty ledger therefore cannot be
-the only restore signal. The design needs separate knowledge of:
+the only restore signal. The design keeps separate knowledge of:
 
 - in-memory facet dirtiness;
-- possible working-save disk dirtiness;
-- baseline integrity.
+- managed save-image disk identity;
+- recovery-snapshot integrity.
 
-When disk cleanliness is uncertain, restoration must replace the working save
-from the baseline before loading.
+Ordinary facet restoration discards without saving and reloads the unchanged
+managed save image. Only a changed disk signature causes whole-directory
+replacement from the recovery snapshot.
 
 DFHack's `quicksave` command can request an autosave, but its rolling autosave
 behavior is not an immutable fixture store.
@@ -1155,8 +1195,8 @@ Reference:
 - Verify exact target world after every load action.
 - Never save an unmanaged world as a side effect of fixture mounting.
 - Never discard an unrelated world encountered during cleanup or recovery.
-- Never merge a baseline into a dirty save directory.
-- Journal every destructive working-save replacement.
+- Never merge a recovery snapshot into a changed managed save directory.
+- Journal every destructive managed-save replacement.
 - Quarantine the fixture and executor when safe recovery cannot be proven.
 - Keep failure diagnostics bounded and avoid leaking unrelated filesystem
   contents.
@@ -1168,7 +1208,7 @@ should not be hidden inside `mountWorld()`.
 
 A successful result should report:
 
-- logical fixture name;
+- fixture name;
 - action: generated, loaded, restored, or reused;
 - save directory;
 - requested-definition fingerprint;
@@ -1182,7 +1222,7 @@ A successful result should report:
 A failure should include the relevant bounded subset of:
 
 - operation and transition state;
-- logical fixture name;
+- fixture name;
 - expected and observed save directories;
 - expected and observed world identity;
 - requested and stored definition fingerprints;
@@ -1231,10 +1271,11 @@ The operation journal should make at least these states distinguishable:
 - fortress entered;
 - initial save requested;
 - initial save verified;
-- baseline capture started;
-- baseline verified;
-- working restore started;
-- working save verified;
+- save-image signature recorded;
+- recovery-snapshot capture started;
+- recovery snapshot verified;
+- managed-save repair started, when required;
+- managed save verified;
 - manifest completion started;
 - complete.
 
@@ -1244,7 +1285,7 @@ On startup or first fixture access:
 - an interrupted non-destructive operation may resume;
 - an interrupted destructive replacement must verify both source and target
   before continuing;
-- an ambiguous baseline must quarantine the fixture;
+- an ambiguous recovery snapshot must quarantine the fixture;
 - an unowned target must never be removed during recovery.
 
 Recovery policy should prefer leaving an incomplete fixture unavailable over
@@ -1268,7 +1309,7 @@ Use injected adapters to test:
 - simulation and unknown-native observed-dirtiness escalation;
 - dirty-set intersection decisions;
 - example cleanup ledger updates;
-- first-mount baseline restoration in a new run;
+- first-mount disk-signature verification in a new run;
 - same-world reuse;
 - conflicting-world restore;
 - different-managed-world transitions;
@@ -1288,7 +1329,7 @@ Selected live probes should establish:
 - stable title and load-screen identities;
 - exact active-save selection;
 - authoritative save-completion detection;
-- safe whole-directory baseline capture;
+- safe whole-directory recovery-snapshot capture;
 - deterministic embark rectangle and site application.
 
 Characterization probes must remain separately selected from ordinary live
@@ -1301,9 +1342,9 @@ Use explicitly disposable managed fixtures to prove:
 - default deterministic generation from a missing fixture;
 - realized seed recording;
 - default 2 by 2 embark;
-- durable initial save and baseline creation;
+- durable initial save, disk signature, and recovery-snapshot creation;
 - a second compatible example reuses without world events;
-- a conflicting example restores the baseline;
+- a conflicting example discards without saving and reloads the managed save;
 - disjoint dirty and read facets permit reuse;
 - an undeclared example leaves all facets dirty;
 - an unavailable site fails without relaxing constraints;
@@ -1338,13 +1379,14 @@ embarked, saved, restored, or loaded a world.
 5. In-process world-generation driver.
 6. Embark survey, matching, and deterministic site selection.
 7. Quickstart embark, initial save, and durable-save verification.
-8. Baseline capture, working-save replacement, and recovery journal.
+8. Save-image signature, exceptional recovery replacement, and recovery
+   journal.
 9. Run-scoped world fixture lifecycle and example cleanup integration.
 10. Focused tests, selected live probes, documentation, and packaging.
 
 Each workstream should receive its own refined contract before implementation.
-The generation and baseline workstreams are expensive live boundaries and
-should not be inferred complete from isolated unit tests.
+The generation and recovery-snapshot workstreams are expensive live boundaries
+and should not be inferred complete from isolated unit tests.
 
 ## Open questions
 
@@ -1378,13 +1420,14 @@ should not be inferred complete from isolated unit tests.
 - May a run begin with an already loaded managed fixture and borrow it?
 - Should every `mountWorld()` call be the first stateful command, even when the
   fixture can be reused without a transition?
-- When should a loaded but disk-dirty working save be replaced from baseline?
+- At which safe transition boundaries should the managed save-image signature
+  be checked?
 - Should a compatible world remain loaded between separate test-runner
   invocations?
 
 ### Storage and compatibility
 
-- Where should project-scoped immutable baselines live?
+- Where should project-scoped immutable recovery snapshots live?
 - How should project identity be derived and moved safely?
 - What raw/mod fingerprint is both stable and affordable?
 - Which Dwarf Fortress or DFHack upgrades invalidate a fixture?
@@ -1409,9 +1452,9 @@ sufficiently precise for reuse decisions. The next useful design discussion
 should settle managed fixture storage and ownership:
 
 1. the project-scoped fixture root;
-2. logical-name to working-save mapping;
+2. fixture-name validation and save-root mapping;
 3. manifest and in-save ownership evidence;
-4. immutable baseline and replaceable working-save layout;
+4. managed save-image signatures and exceptional recovery-snapshot repair;
 5. raw/mod and version compatibility fingerprints;
 6. atomic replacement and interrupted filesystem-operation recovery.
 
