@@ -141,6 +141,8 @@ function M.new(dependencies)
         'DwarfSpec save-game unload requires virtual pointer movement')
     assert(type(dependencies.click_left) == 'function',
         'DwarfSpec save-game unload requires native left-click input')
+    assert(type(dependencies.wait_frames) == 'function',
+        'DwarfSpec save-game unload requires raw-frame settling')
     local adapter = {}
 
     ---Discards the expected currently loaded save without saving it.
@@ -207,6 +209,7 @@ function M.new(dependencies)
                 requested_directory), function()
                 return not dependencies.is_world_loaded()
             end)
+            dependencies.wait_frames(2)
             return true
         end, debug.traceback)
         local restored, restore_error = xpcall(restore_input_state,

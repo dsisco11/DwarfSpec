@@ -1,6 +1,7 @@
 -- Production live-game namespace exported into isolated Busted specs.
 
 local M = {}
+local next_save_game_listener_id = 0
 
 ---Loads an installed DwarfSpec module or its source-tree equivalent.
 ---@param package_root string
@@ -365,33 +366,80 @@ local save_game_load_module = load_automation_module(package_root,
         }
     end
 
-    ---Returns the center of the first native title button.
+    ---Returns the center of the generated Continue title button.
+    ---@param title table
     ---@return integer, integer
-    local function top_title_button_position()
+    local function continue_title_button_position(title)
+        local choices = assert(df and df.main_choice_type,
+            'DwarfSpec save-game load requires df.main_choice_type')
+        local continue_choice = assert(choices.Continue,
+            'DwarfSpec save-game load requires the Continue title choice')
+        local ordinal = 0
+        local found = false
+        for _, choice in ipairs(title.screen.menu_line_id) do
+            if choice == continue_choice then
+                found = true
+                break
+            end
+            ordinal = ordinal + 1
+        end
+        assert(found,
+            'DwarfSpec save-game load could not find the Continue title choice')
         local width, height = context.get_window_size()
         return math.floor(width / 2),
-            height < 60 and 25 or math.floor(height / 2) + 3
+            math.floor(height / 2) + ordinal * 3
     end
 
-    ---Selects the hovered native title-list item by zero-based field value.
+    ---Returns the center of one generated native title-list button.
+    ---@param one_based_index integer
+    ---@return integer, integer
+    local function native_title_list_item_position(one_based_index)
+        local width, height = context.get_window_size()
+        return math.floor(width / 2),
+            math.floor(height / 2) + 1 + (one_based_index - 1) * 3
+    end
+
+    ---Selects one native title-list item with DFHack-simulated input.
     ---@param title table
     ---@param one_based_index integer
     local function select_native_title_list_item(title, one_based_index)
         assert(type(one_based_index) == 'number' and
                 one_based_index % 1 == 0 and one_based_index >= 1,
             'DwarfSpec save-game selection requires a positive item index')
-        local width, height = context.get_window_size()
-        local target = one_based_index - 1
-        for y = 0, height - 1 do
-            move_native_pointer(math.floor(width / 2), y)
-            scheduler_module.wait_frames(scheduler, 1)
-            if title.screen.selected_r == target then
-                simulate_native_input(title.screen, '_MOUSE_L')
-                return
-            end
+        local x, y = native_title_list_item_position(one_based_index)
+        move_native_pointer(x, y)
+        title.screen.selected_r = one_based_index - 1
+        simulate_native_input(title.screen, '_MOUSE_L')
+    end
+
+    ---Runs one action and awaits DFHack's map-loaded state-change event.
+    ---@param description string
+    ---@param action function
+    ---@return any
+    local function await_native_map_loaded(description, action)
+        assert(type(description) == 'string' and description ~= '',
+            'DwarfSpec map-loaded wait requires a description')
+        assert(type(action) == 'function',
+            'DwarfSpec map-loaded wait requires an action')
+        next_save_game_listener_id = next_save_game_listener_id + 1
+        local listener_id = ('dwarfspec.mountSaveGame.mapLoaded.%d')
+            :format(next_save_game_listener_id)
+        local observed = false
+        dfhack.onStateChange[listener_id] = function(state)
+            if state == SC_MAP_LOADED then observed = true end
         end
-        error(('DwarfSpec could not locate native save-game list item %d')
-            :format(one_based_index), 2)
+
+        local ok, result = xpcall(function()
+            action()
+            return scheduler_module.wait_until(scheduler, description,
+                function() return observed end, {
+                    frame_budget=false,
+                    timeout_ms=false,
+                })
+        end, debug.traceback)
+        dfhack.onStateChange[listener_id] = nil
+        if not ok then error(result, 0) end
+        return result
     end
 
     ---Returns the current native focus string for diagnostics.
@@ -422,6 +470,9 @@ local save_game_load_module = load_automation_module(package_root,
             end,
             capture_input_state=capture_native_input_state,
             wait_until=wait_for_save_game_state,
+            wait_frames=function(count)
+                return scheduler_module.wait_frames(scheduler, count)
+            end,
             get_focus=current_native_focus,
             get_viewscreen=function()
                 local screen = context.current_viewscreen()
@@ -453,13 +504,14 @@ local save_game_load_module = load_automation_module(package_root,
                 error('DwarfSpec could not reach the title main menu', 2)
             end,
             select_continue=function(title)
-                local x, y = top_title_button_position()
+                local x, y = continue_title_button_position(title)
                 move_native_pointer(x, y)
                 scheduler_module.wait_frames(scheduler, 1)
                 simulate_native_input(title.screen, '_MOUSE_L')
             end,
             select_world=select_native_title_list_item,
             select_save=select_native_title_list_item,
+            await_map_loaded=await_native_map_loaded,
             capture_input_state=capture_native_input_state,
             wait_until=wait_for_save_game_state,
             get_focus=current_native_focus,

@@ -43,12 +43,14 @@ local function wait_error(scheduler, wait, kind, cause)
     local elapsed_ms = scheduler.callbacks.now_ms() - wait.started_ms
     local frame_budget = wait.frame_budget == nil and
         'unlimited' or tostring(wait.frame_budget)
+    local wall_timeout_ms = wait.wall_timeout_ms == nil and
+        'unlimited' or tostring(wait.wall_timeout_ms)
     local message = ('automation %s: operation=%q focus=%s screen=%s ' ..
         'elapsed_frames=%d elapsed_ms=%d frame_budget=%s ' ..
-        'wall_timeout_ms=%d last_observed=%s')
+        'wall_timeout_ms=%s last_observed=%s')
         :format(kind, wait.operation, diagnostics.focus, diagnostics.screen,
             wait.elapsed_frames, elapsed_ms, frame_budget,
-            wait.wall_timeout_ms, observed_text(wait.last_observed))
+            wall_timeout_ms, observed_text(wait.last_observed))
     if cause ~= nil then message = message .. ' cause=' .. tostring(cause) end
     return message
 end
@@ -157,7 +159,8 @@ local function schedule_observation(scheduler, wait)
         local elapsed_ms = scheduler.callbacks.now_ms() - wait.started_ms
         if (wait.frame_budget ~= nil and
                 wait.elapsed_frames >= wait.frame_budget) or
-                elapsed_ms >= wait.wall_timeout_ms then
+                (wait.wall_timeout_ms ~= nil and
+                    elapsed_ms >= wait.wall_timeout_ms) then
             cancel_timeout(scheduler, wait.tick_timeout_id)
             wait.tick_timeout_id = nil
             resume_owner(scheduler, wait, false,
@@ -367,12 +370,25 @@ function M.wait_until(scheduler, description, query, options)
     assert(type(description) == 'string' and description ~= '',
         'wait description must be a nonempty string')
     assert(type(query) == 'function', 'wait query must be a function')
-    local frame_budget = options.frame_budget or DEFAULT_FRAME_BUDGET
-    local wall_timeout_ms = options.timeout_ms or DEFAULT_WALL_TIMEOUT_MS
-    assert(type(frame_budget) == 'number' and frame_budget >= 1 and
-        frame_budget % 1 == 0, 'frame budget must be a positive integer')
-    assert(type(wall_timeout_ms) == 'number' and wall_timeout_ms >= 1,
-        'wall timeout must be positive')
+    local frame_budget = options.frame_budget
+    if frame_budget == nil then
+        frame_budget = DEFAULT_FRAME_BUDGET
+    elseif frame_budget == false then
+        frame_budget = nil
+    end
+    local wall_timeout_ms = options.timeout_ms
+    if wall_timeout_ms == nil then
+        wall_timeout_ms = DEFAULT_WALL_TIMEOUT_MS
+    elseif wall_timeout_ms == false then
+        wall_timeout_ms = nil
+    end
+    assert(frame_budget == nil or
+            (type(frame_budget) == 'number' and frame_budget >= 1 and
+                frame_budget % 1 == 0),
+        'frame budget must be false or a positive integer')
+    assert(wall_timeout_ms == nil or
+            (type(wall_timeout_ms) == 'number' and wall_timeout_ms >= 1),
+        'wall timeout must be false or positive')
     return suspend(scheduler, {
         kind='query',
         operation=description,

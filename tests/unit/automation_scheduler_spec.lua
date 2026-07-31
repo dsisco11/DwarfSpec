@@ -194,6 +194,26 @@ describe('automation scheduler', function()
         assert.matches('elapsed_frames=1', wait_error, 1, true)
     end)
 
+    it('supports event waits without an arbitrary frame budget', function()
+        local observed = false
+        local result
+        start(function()
+            result = scheduler_module.wait_until(scheduler, 'map-loaded event',
+                function() return observed end,
+                {frame_budget=false, timeout_ms=false})
+        end)
+
+        callbacks[1]()
+        assert.is_nil(completion)
+        assert.is_nil(run.outstanding_wait.frame_budget)
+        assert.is_nil(run.outstanding_wait.wall_timeout_ms)
+        observed = 'loaded'
+        callbacks[2]()
+
+        assert.equals('loaded', result)
+        assert.is_true(completion.ok)
+    end)
+
     it('cancels a wait and rejects its stale callback', function()
         local owner = start(function()
             scheduler_module.wait_frames(scheduler, 3)

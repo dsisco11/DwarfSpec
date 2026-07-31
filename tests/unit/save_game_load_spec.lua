@@ -63,6 +63,12 @@ describe('save-game load adapter', function()
                 world_loaded = true
                 loaded_directory = 'region2'
             end,
+            await_map_loaded=function(description, action)
+                table.insert(waits, description)
+                action()
+                return assert(world_loaded,
+                    'map-loaded event did not occur: ' .. description)
+            end,
             wait_until=function(description, query)
                 table.insert(waits, description)
                 return assert(query(),
@@ -116,6 +122,15 @@ describe('save-game load adapter', function()
                 world_loaded = true
                 loaded_directory = 'region2'
             end
+        end
+        dependencies.await_map_loaded = function(description, action)
+            table.insert(waits, description)
+            action()
+            assert(pending, 'map-loaded event was not scheduled')
+            local callback = pending
+            pending = nil
+            callback()
+            return true
         end
         dependencies.wait_until = function(description, query)
             table.insert(waits, description)
@@ -200,6 +215,11 @@ describe('save-game load adapter', function()
         dependencies.select_save = function(_, index)
             table.insert(inputs, 'SAVE:' .. tostring(index))
         end
+        dependencies.await_map_loaded = function(description, action)
+            table.insert(waits, description)
+            action()
+            error('map-loaded event did not occur: ' .. description)
+        end
         loader = save_game_load.new(dependencies)
 
         local ok, error_message = pcall(function()
@@ -207,7 +227,7 @@ describe('save-game load adapter', function()
         end)
 
         assert.is_false(ok)
-        assert.matches('wait query did not complete: wait for save%-game load',
+        assert.matches('map%-loaded event did not occur: wait for save%-game load',
             error_message)
         assert.matches('observed=<unloaded>', error_message, 1, true)
         assert.matches('focus=title/Default', error_message, 1, true)

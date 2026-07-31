@@ -9,6 +9,7 @@ describe('save-game unload adapter', function()
     local options
     local inputs
     local waits
+    local settled_frames
     local restored_input_state
     local selection_error
     local selection_confirms
@@ -56,6 +57,9 @@ describe('save-game unload adapter', function()
                 return assert(query(), 'wait query did not complete: ' ..
                     description)
             end,
+            wait_frames=function(count)
+                settled_frames = settled_frames + count
+            end,
         }
     end
 
@@ -78,6 +82,7 @@ describe('save-game unload adapter', function()
         }
         inputs = {}
         waits = {}
+        settled_frames = 0
         restored_input_state = false
         selection_error = nil
         selection_confirms = true
@@ -104,6 +109,7 @@ describe('save-game unload adapter', function()
         assert.matches('wait for save game unload expected=region1 requested=region2',
             waits[3], 1, true)
         assert.is_false(world_loaded)
+        assert.equals(2, settled_frames)
         assert.is_true(restored_input_state)
     end)
 

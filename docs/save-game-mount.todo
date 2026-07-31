@@ -104,23 +104,37 @@ Phase 4 - Export and document the command:
         - Evidence: focused public-command coverage reports 84 successes, 0 failures, and 0 errors. It proves the exported function, same-save no-op, unload-before-load ordering, unloaded direct-load path, exact argument validation, resulting directory, and absence of cleanup ownership. The complete standalone unit suite reports 557 successes, 0 failures, and 0 errors. Lua 5.4.6 syntax and formatting checks pass for 259 files.
 
 Phase 5 - Verify unit and live behavior:
-    ☐ Prove with focused unit tests that a matching save performs no unload or load.
-    ☐ Prove with focused unit tests that a differing save performs unload before load.
-    ☐ Prove with focused unit tests that an unloaded game performs only the load path.
-    ☐ Prove with focused unit tests that the command confirms the resulting directory before returning.
-    ☐ Define two explicitly disposable active automation saves, A and B, outside the public command.
-    ☐ Add a safe live test for mounting the already-loaded save.
-    ☐ Add a separately selected destructive live test that mounts B while A is loaded.
-    ☐ Confirm that A is discarded without saving and B is loaded.
-    ☐ Confirm that B remains loaded after the example finishes.
-    ☐ Run the command again for B and confirm that it is a no-op.
-    ☐ Run and record focused unit tests.
-    ☐ Run and record the full standalone unit suite separately.
-    ☐ Run and record Lua syntax and formatting checks separately.
-    ☐ Run and record selected live tests separately from the complete live suite.
-    ☐ Run and record `git diff --check`.
+    ☒ Prove with focused unit tests that a matching save performs no unload or load.
+    ☒ Prove with focused unit tests that a differing save performs unload before load.
+    ☒ Prove with focused unit tests that an unloaded game performs only the load path.
+    ☒ Prove with focused unit tests that the command confirms the resulting directory before returning.
+    ☒ Define A as the currently loaded save, or dynamically mount the smallest selectable save when no world is loaded; select B as the smallest different save belonging to an active, selectable world, outside the public command.
+    ☒ Define save-directory size as the byte size of its `world.sav` file and use directory name as the deterministic tie-breaker.
+    ☒ Add a safe live test for mounting the already-loaded save.
+    ☒ Add a separately selected destructive live test that mounts B while A is loaded.
+    ☒ Confirm that A is discarded without saving and B is loaded.
+    ☒ Confirm that B remains loaded after the example finishes.
+    ☒ Run the command again for B and confirm that it is a no-op.
+    ☒ Run and record focused unit tests.
+    ☒ Run and record the full standalone unit suite separately.
+    ☒ Run and record Lua syntax and formatting checks separately.
+    ☒ Run and record selected live tests separately from the complete live suite.
+    ☒ Run and record `git diff --check`.
+        - Evidence: the current standalone suite reports 558 successes, 0 failures, and 0 errors; Lua syntax and formatting checks pass for 262 files; the same-save live test reports 1 success; repeated selected A-to-B runs report 2 successes with `cleanup_confirmed=true`, leave B loaded, and prove the second B mount is a no-op. `git diff --check` reports no whitespace errors.
 
-Phase 6 - Verify packaging and final acceptance:
+Phase 6 - Extract command-specific native bindings:
+    ☐ Create `src/dwarfspec/commands/` as the home for command-specific live DFHack bindings.
+    ☐ Move the `save_game_unloader` construction and its native dependency callbacks out of `src/dwarfspec/ds.lua` into `src/dwarfspec/commands/save_game_unload.lua`.
+    ☐ Move the `save_game_loader` construction and its native dependency callbacks out of `src/dwarfspec/ds.lua` into `src/dwarfspec/commands/save_game_load.lua`.
+    ☐ Keep the existing `dwarfspec.automation.save_game_unload` and `dwarfspec.automation.save_game_load` modules focused on workflow logic and injected interfaces.
+    ☐ Make each command binding expose a concise construction function with language-appropriate documentation comments.
+    ☐ Move native pointer-state capture, simulated-input dispatch, title-state normalization, and save-header normalization into the command binding that owns them.
+    ☐ Keep `ds.mountSaveGame()` limited to preflight, no-op selection, unload-before-load orchestration, and its public return value.
+    ☐ Preserve the existing mount-dependency injection seam for unit tests without duplicating production command behavior in test fixtures.
+    ☐ Add focused unit coverage for each command binding's dependency construction and `ds.mountSaveGame()` delegation after extraction.
+    ☐ Confirm that no unrelated `ds` command implementation moved or changed behavior.
+
+Phase 7 - Verify packaging and final acceptance:
     ☐ Update the LuaRocks package manifest for every new production module and declaration artifact.
     ☐ Build the release rock through the repository publish tooling.
     ☐ Inspect the archive contents directly.

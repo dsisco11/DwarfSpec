@@ -82,6 +82,18 @@ local function wait_for(dependencies, operation, requested_directory,
         predicate)
 end
 
+---Runs one selection action and awaits DFHack's map-loaded event.
+---@param dependencies table
+---@param requested_directory string
+---@param action function
+---@return any
+local function await_map_loaded(dependencies, requested_directory, action)
+    return dependencies.await_map_loaded(
+        wait_description(dependencies, 'wait for save-game load',
+            requested_directory),
+        action)
+end
+
 ---Creates one requested-save loader with injected native DFHack operations.
 ---@param dependencies table
 ---@return table
@@ -104,6 +116,8 @@ function M.new(dependencies)
         'DwarfSpec save-game load requires simulated save input')
     assert(type(dependencies.wait_until) == 'function',
         'DwarfSpec save-game load requires raw-frame waiting')
+    assert(type(dependencies.await_map_loaded) == 'function',
+        'DwarfSpec save-game load requires map-loaded event waiting')
 
     local loader = {}
 
@@ -165,12 +179,11 @@ function M.new(dependencies)
                 ('DwarfSpec save is unavailable in its active world: ' ..
                     'requested=%s'):format(
                         bounded_field(requested_directory)))
-            dependencies.select_save(title, save_index)
-
-            wait_for(dependencies, 'wait for save-game load',
-                requested_directory, function()
-                    return dependencies.is_world_loaded()
-                end)
+            await_map_loaded(dependencies, requested_directory, function()
+                dependencies.select_save(title, save_index)
+            end)
+            assert(dependencies.is_world_loaded(),
+                'DFHack reported map loaded without a loaded world')
             local observed_directory = read_loaded_directory(dependencies)
             assert(observed_directory == requested_directory,
                 ('DwarfSpec loaded the wrong save: requested=%s observed=%s')
