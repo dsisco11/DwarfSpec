@@ -72,8 +72,8 @@ The following decisions are accepted unless later discussion revises them:
 - The dirty ledger is run-scoped in memory and is never persisted across a
   Dwarf Fortress process restart.
 - The first managed-world mount in a new DwarfSpec run verifies the managed
-  save's recorded disk signature before loading it. It restores the recovery
-  snapshot only when that save has actually changed.
+  save's recorded `world.sav` sentinel before loading it. It restores the
+  recovery snapshot only when that file indicates the save has changed.
 - Reuse is an optimization. Uncertain state must cause restoration or a
   bounded failure, never optimistic reuse.
 - DwarfSpec must never discard, overwrite, or silently save an unmanaged
@@ -551,7 +551,8 @@ The manifest should record:
 - selected civilization;
 - region and local embark coordinates;
 - embark rectangle;
-- managed save-image directory and recorded disk signature;
+- managed save-image directory and recorded `world.sav` last-write time and
+  size;
 - recovery-snapshot identity and integrity information;
 - Dwarf Fortress and DFHack compatibility information;
 - last completed operation;
@@ -559,17 +560,18 @@ The manifest should record:
 
 The manifest does not persist per-test facet dirtiness. Every new DwarfSpec run
 starts without trusted in-memory reuse history. Before its first load of an
-existing fixture, it compares the managed save image with the disk signature
-recorded immediately after provisioning or repair.
+existing fixture, it compares `world.sav` with the sentinel recorded
+immediately after provisioning or repair.
 
 The ownership marker must be independently verifiable from both the external
 manifest and the managed save. A matching directory name alone is not proof of
 ownership.
 
 Ordinary isolation reloads the unchanged managed save image without copying
-files. If its disk signature changed, exceptional repair restores the whole
-directory by replacement, never by merging recovery files over it. Residual
-files from a later save can otherwise survive and corrupt the restored state.
+files. If the `world.sav` sentinel changed, exceptional repair restores the
+whole directory by replacement, never by merging recovery files over it.
+Residual files from a later save can otherwise survive and corrupt the
+restored state.
 
 All renames, copies, and removals need:
 
@@ -630,7 +632,7 @@ Before a transition, the command should:
 - reject incompatible example-owned stateful resources;
 - reject an unmanaged loaded world;
 - inspect the fixture manifest, journal, recovery snapshot, managed save-image
-  signature, and status;
+  `world.sav` sentinel, and status;
 - choose one explicit mount action.
 
 The initial contract should require `mountWorld()` to be the first stateful
@@ -643,7 +645,7 @@ world transition.
 | Current state | Requested state | Action |
 |---|---|---|
 | Same managed realization loaded and compatible | Existing fixture | Reuse |
-| Same managed realization loaded but incompatible | Existing fixture | Discard without saving and reload the same managed save image; repair first only if its disk signature changed |
+| Same managed realization loaded but incompatible | Existing fixture | Discard without saving and reload the same managed save image; repair first only if its `world.sav` sentinel changed |
 | Different managed realization loaded | Existing fixture | Discard current managed world and load target |
 | No world loaded | Existing pristine fixture | Load target |
 | No completed fixture exists | Valid missing fixture | Provision, save, capture recovery snapshot, and mount |
@@ -685,9 +687,9 @@ requires an explicit decision.
 
 Regardless of final run-state policy, a later DwarfSpec run does not inherit
 the prior run's dirty ledger. Its first mount verifies the requested fixture's
-disk signature and loads the managed save image directly when it is unchanged.
-A Dwarf Fortress process crash needs no special facet recovery because both
-DwarfSpec and the in-memory world disappear together.
+`world.sav` sentinel and loads the managed save image directly when it is
+unchanged. A Dwarf Fortress process crash needs no special facet recovery
+because both DwarfSpec and the in-memory world disappear together.
 
 ## Isolation and reuse model
 
@@ -750,7 +752,7 @@ to an accepted narrower facet.
 
 Otherwise, DwarfSpec must discard without saving and reload the unchanged
 managed save image before the test continues. A recovery copy is required only
-if the image's disk signature changed.
+if the image's `world.sav` sentinel changed.
 
 After the example:
 
@@ -795,14 +797,14 @@ The dirty ledger exists only for one DwarfSpec run in the live Dwarf Fortress
 process. It is not stored in the fixture manifest.
 
 On the first mount of an existing fixture in a new run, DwarfSpec verifies its
-managed save-image disk signature and loads it directly when unchanged.
+managed save-image `world.sav` sentinel and loads it directly when unchanged.
 Subsequent examples in that run may reuse the in-memory realization through
 the facet decision rule.
 
 If Dwarf Fortress exits or crashes, the ledger and in-memory mutations vanish
 with the process. The next process verifies and loads the same managed save
-image. If its disk signature changed, recovery-snapshot replacement occurs
-before loading it.
+image. If its `world.sav` sentinel changed, recovery-snapshot replacement
+occurs before loading it.
 
 ### What a reload does not restore
 
@@ -856,7 +858,7 @@ A missing fixture requires this conceptual transaction:
 14. Request an explicit save.
 15. Wait for durable save completion.
 16. Return to a safe unloaded state if required for snapshot consistency.
-17. Record the complete managed save-image disk signature.
+17. Record the managed save image's `world.sav` last-write time and size.
 18. Capture and validate the immutable whole-save recovery snapshot.
 19. Complete the manifest and clear the operation journal.
 20. Load or retain the managed realization as the mounted fixture.
@@ -1090,8 +1092,8 @@ A save request is not itself proof that every file is durable. The provisioner
 must wait for an authoritative post-save boundary selected during live
 characterization.
 
-The managed save-image disk signature and recovery snapshot should be captured
-only when:
+The managed save-image `world.sav` sentinel and recovery snapshot should be
+captured only when:
 
 - the expected managed world and site were loaded;
 - the exact configured embark rectangle was verified;
@@ -1104,43 +1106,44 @@ only when:
 
 There is no need to intercept save events. Before loading a managed save image
 for the first time in a run, and before reloading it after an incompatible
-test, DwarfSpec compares its current disk metadata with the signature recorded
-after provisioning or the last repair. When a world is currently loaded, this
-check occurs only after DwarfSpec has discarded it without saving and reached
-a filesystem-safe unloaded state.
+test, DwarfSpec compares the current `world.sav` last-write time and size with
+the sentinel recorded after provisioning or the last repair. When a world is
+currently loaded, this check occurs only after DwarfSpec has discarded it
+without saving and reached a filesystem-safe unloaded state.
 
-The signature covers the complete save-directory tree, not only `world.sav`.
-For every relative file it records at least:
+`world.sav` is the save-event sentinel. DwarfSpec does not scan the companion
+files for change detection. If `world.sav` is present and both recorded
+attributes are unchanged, DwarfSpec treats the managed save image as unchanged
+and loads it directly. A missing file or changed attribute conservatively
+treats the image as changed on disk and causes recovery before loading.
 
-- relative path;
-- file size;
-- highest-resolution available modification time.
+This narrow sentinel depends on a native invariant: every fortress save that
+can alter the managed save image rewrites `world.sav`. A controlled live
+characterization must prove that invariant for manual save, autosave, and
+DFHack-triggered save paths before implementation relies on it.
 
-It also detects added and removed files. A directory modification time alone
-is insufficient because rewriting an existing file need not update its parent
-directory.
+The local `TestWorld 01` save supports this design. It contains 16 files and
+2,244,752 bytes. `world.sav` contains 2,178,034 bytes, or 97.03 percent of the
+directory, and is the only vanilla file whose last-write time matches the
+completed save. The `unit-*.dat`, `feature-*.dat`, `art_image-*.dat`, and
+`region_snapshot-*.dat` files retain earlier timestamps. The three
+`dfhack-*.dat` files changed shortly before `world.sav` and are unsuitable as
+vanilla save sentinels because DFHack can manage them independently.
 
-An unchanged complete signature is the fast path and permits a direct load.
-A changed signature conservatively treats the managed save image as changed
-on disk and restores it from the recovery snapshot before loading. The first
-implementation need not determine whether the changed bytes happen to equal
-the original.
-
-Filesystem capability characterization must establish whether available
-modification-time precision is reliable for this use. On a filesystem with
-coarse or unavailable file times, DwarfSpec must strengthen the signature with
-content hashes rather than silently accepting weak evidence.
+The companion vanilla files are still part of a valid save. A detected change
+therefore causes whole-directory replacement from the recovery snapshot rather
+than replacement of `world.sav` alone.
 
 Autosaves and test-triggered saves can change the managed save image even when
 the in-memory world is later discarded. The dirty ledger therefore cannot be
 the only restore signal. The design keeps separate knowledge of:
 
 - in-memory facet dirtiness;
-- managed save-image disk identity;
+- managed save-image `world.sav` sentinel;
 - recovery-snapshot integrity.
 
 Ordinary facet restoration discards without saving and reloads the unchanged
-managed save image. Only a changed disk signature causes whole-directory
+managed save image. Only a changed `world.sav` sentinel causes whole-directory
 replacement from the recovery snapshot.
 
 DFHack's `quicksave` command can request an autosave, but its rolling autosave
@@ -1271,7 +1274,7 @@ The operation journal should make at least these states distinguishable:
 - fortress entered;
 - initial save requested;
 - initial save verified;
-- save-image signature recorded;
+- `world.sav` sentinel recorded;
 - recovery-snapshot capture started;
 - recovery snapshot verified;
 - managed-save repair started, when required;
@@ -1309,7 +1312,7 @@ Use injected adapters to test:
 - simulation and unknown-native observed-dirtiness escalation;
 - dirty-set intersection decisions;
 - example cleanup ledger updates;
-- first-mount disk-signature verification in a new run;
+- first-mount `world.sav` sentinel verification in a new run;
 - same-world reuse;
 - conflicting-world restore;
 - different-managed-world transitions;
@@ -1342,7 +1345,7 @@ Use explicitly disposable managed fixtures to prove:
 - default deterministic generation from a missing fixture;
 - realized seed recording;
 - default 2 by 2 embark;
-- durable initial save, disk signature, and recovery-snapshot creation;
+- durable initial save, `world.sav` sentinel, and recovery-snapshot creation;
 - a second compatible example reuses without world events;
 - a conflicting example discards without saving and reloads the managed save;
 - disjoint dirty and read facets permit reuse;
@@ -1379,7 +1382,7 @@ embarked, saved, restored, or loaded a world.
 5. In-process world-generation driver.
 6. Embark survey, matching, and deterministic site selection.
 7. Quickstart embark, initial save, and durable-save verification.
-8. Save-image signature, exceptional recovery replacement, and recovery
+8. `world.sav` sentinel, exceptional recovery replacement, and recovery
    journal.
 9. Run-scoped world fixture lifecycle and example cleanup integration.
 10. Focused tests, selected live probes, documentation, and packaging.
@@ -1420,8 +1423,8 @@ and should not be inferred complete from isolated unit tests.
 - May a run begin with an already loaded managed fixture and borrow it?
 - Should every `mountWorld()` call be the first stateful command, even when the
   fixture can be reused without a transition?
-- At which safe transition boundaries should the managed save-image signature
-  be checked?
+- At which safe transition boundaries should the managed save image's
+  `world.sav` sentinel be checked?
 - Should a compatible world remain loaded between separate test-runner
   invocations?
 
@@ -1454,7 +1457,8 @@ should settle managed fixture storage and ownership:
 1. the project-scoped fixture root;
 2. fixture-name validation and save-root mapping;
 3. manifest and in-save ownership evidence;
-4. managed save-image signatures and exceptional recovery-snapshot repair;
+4. managed save-image `world.sav` sentinels and exceptional
+   recovery-snapshot repair;
 5. raw/mod and version compatibility fingerprints;
 6. atomic replacement and interrupted filesystem-operation recovery.
 
