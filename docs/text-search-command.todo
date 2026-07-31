@@ -1,0 +1,276 @@
+DwarfSpec Rendered Text Search Command
+======================================
+
+Purpose:
+    ☐ Implement `ds.search({text="..."}, search_area?)` as a read-only query over the final rendered DFHack screen-cell buffer.
+    ☐ Support borrowed native screens, ordinary mounted widgets, mounted overlays, and complete mounted screens through one public contract.
+    ☐ Return the exact zero-based inclusive bounds of the selected visible text occurrence.
+    ☐ Add `Subject:search(query)` as the fluent subject-scoped form of the same command.
+    ☐ Keep text search spatial and render-observational; do not claim that final screen cells retain component or overlay ownership.
+
+Completion contract:
+    ☐ Complete every applicable runtime, declaration, focused-test, full-test, documentation, package, cleanup, and live-evidence item below.
+    ☐ Treat this checklist as the source of truth for implementation status.
+    ☐ Preserve unrelated worktree and index changes; do not stash or commit user changes.
+    ☐ Record every deferred or rejected item with its rationale and the evidence that made it unnecessary or unsafe.
+    ☐ Keep search read-only: do not invalidate the screen, force a render, move the pointer, send input, mutate a component, or add a named capture.
+    ☐ Keep `nil` as the ordinary no-match result so `ds.search()` can be used directly as a `ds.await()` query.
+    ☐ Distinguish a readable screen with no match from a region for which DFHack exposes no readable screen cells.
+    ☐ Keep exact literal CP437 or byte-string matching as the initial public text model.
+    ☐ Keep multiline, pattern, fuzzy, Unicode-normalized, style-aware, and render-ownership-aware search outside the initial contract.
+    ☐ Distinguish focused unit, full unit, Lua syntax, package, cleanup, component-live, overlay-live, complete-screen-live, and native-live evidence in the final handoff.
+    ☐ Never treat tree inspection, unit tests, package contents, or component-host rendering as proof that borrowed native-screen search works.
+
+Locked public contract:
+    ☐ Declare `dwarfspec.TextSearchQuery`.
+        ☐ Require one nonempty `text` string.
+        ☐ Allow `occurrence` as an optional positive integer with a default of `1`.
+        ☐ Reject unknown fields.
+        ☐ Match `text` literally and case-sensitively.
+        ☐ Reject NUL, carriage-return, and newline bytes.
+    ☐ Declare `dwarfspec.ScreenRect` as `{x1: integer, y1: integer, x2: integer, y2: integer}` using zero-based inclusive UI-grid coordinates.
+    ☐ Declare `dwarfspec.TextSearchArea` as `dwarfspec.Subject|dwarfspec.ScreenRect`.
+    ☐ Declare `DS.search(query, search_area?) -> dwarfspec.ScreenRect|nil`.
+    ☐ Declare `Subject:search(query) -> dwarfspec.ScreenRect|nil`.
+    ☐ Require a current live mount for both forms.
+    ☐ Use the current mount's default search scope when `search_area` is omitted.
+        ☐ Use the full current DF window for a borrowed native-screen mount.
+        ☐ Use the mounted root's visible body bounds for an owned widget, overlay, or complete screen.
+    ☐ Use an explicit subject's current visible body bounds as its search scope.
+    ☐ Interpret an explicit rectangle in absolute UI-grid coordinates and intersect it with the current mount's default scope and current window.
+    ☐ Reject stale, cleaned, foreign-mount, invisible, or unusably bounded subject areas through the existing subject-resolution and ownership contracts.
+    ☐ Return occurrences in deterministic top-to-bottom, then left-to-right order.
+    ☐ Return the selected occurrence's exact single-row text bounds, with `x2 = x1 + #query.text - 1` and `y2 = y1`.
+    ☐ Return `nil` when the requested occurrence is absent from an otherwise readable region.
+    ☐ Treat nil or unreadable cells as match-breaking sentinels.
+    ☐ Fail with a stable actionable error when the entire effective region is unreadable.
+    ☐ Observe the currently rendered buffer without waiting; callers that need eventual state use `ds.await()` and callers that need a new render use existing redraw or mutation commands.
+
+Explicit exclusions:
+    ☐ Do not search adapted `text` fields or aggregate component-tree text as the source of truth.
+    ☐ Do not return a component, subject, widget path, render source, pen, color, tile, or capture record.
+    ☐ Do not infer which component or overlay painted a matching cell.
+    ☐ Do not match across row boundaries.
+    ☐ Do not add Lua patterns, regular expressions, case folding, fuzzy matching, whitespace normalization, or locale behavior.
+    ☐ Do not add implicit retries, timeouts, assertions, or Cypress-style query objects.
+    ☐ Do not redesign `ds.get()`, `DSQuery`, selectors, or assertion chaining as part of this command.
+    ☐ Do not cache screen contents until profiling shows that uncached bounded searches are inadequate.
+    ☐ Do not broaden `ds.capture_screen()` or persist transient search buffers in run evidence.
+
+Phase 0 - Reconcile the active contract and baseline:
+    ☐ Re-read this checklist and the roadmap entry in `docs/project.todo` before editing runtime code.
+    ☐ Inventory the active checkout, branch, worktree state, index state, installed rock version, and current package archive contents.
+    ☐ Confirm the current runtime and declaration signatures for `ds.root`, `ds.get`, `ds.inspect`, `ds.capture_screen`, and every `Subject` query method.
+    ☐ Confirm the current mount categories and how each category exposes its root, subject adapter, interaction target, window size, and render tracker.
+    ☐ Confirm zero-based inclusive bounds for Lua views, native widgets, pointer commands, and screen captures.
+    ☐ Confirm the locally installed DFHack contract for `dfhack.screen.getWindowSize()` and `dfhack.screen.readTile(x, y)`.
+    ☐ Reproduce and record `readTile()` behavior for ordinary text cells, blank cells, graphical cells, invalid cells, and TrueType mode where available.
+    ☐ Record the pre-change focused unit-test baseline for subject, mount-command, adapter, and diagnostic coverage.
+    ☐ Record the pre-change full standalone unit-suite result.
+    ☐ Record the pre-change Lua 5.3 and Lua 5.4 syntax and formatting results.
+    ☐ Record focused pre-change live results separately for ordinary widget, overlay widget, complete screen, and borrowed native screen mounts.
+    ☐ Stop and update this checklist if current DFHack cannot expose rendered character bytes consistently enough to support the locked contract.
+
+Phase 1 - Add canonical authoring types and API declarations:
+    ☐ Add the canonical `dwarfspec.ScreenRect` declaration without duplicating or drifting from existing inspected-rectangle types.
+    ☐ Add the canonical `dwarfspec.TextSearchQuery` declaration.
+    ☐ Add the canonical `dwarfspec.TextSearchArea` declaration.
+    ☐ Add the `DS.search(query, search_area?)` declaration.
+    ☐ Add the `Subject:search(query)` declaration.
+    ☐ Document literal case-sensitive matching, row-major occurrence ordering, nil-on-miss behavior, coordinate conventions, and unreadable-region failure behavior at the declarations.
+    ☐ Document that subject scoping is spatial and cannot prove render ownership.
+    ☐ Add language-appropriate documentation comments for every new public and internal class and method.
+    ☐ Extend declaration fixtures with valid root, subject, and rectangle searches.
+    ☐ Add negative declaration fixtures for missing text, invalid text, invalid occurrence, malformed rectangles, and unsupported search-area types.
+    ☐ Verify that an installed-rock consumer discovers all search types without adding the source checkout to the LuaLS library path.
+
+Phase 2 - Implement pure query and rectangle normalization:
+    ☐ Add `src/dwarfspec/text_search.lua` as the focused framework-neutral module for text-search validation and matching.
+    ☐ Add `tests/unit/text_search_spec.lua` as its focused standalone unit-test file.
+    ☐ Validate that the query is a table before reading fields.
+    ☐ Reject unknown query fields with a stable error that names the field.
+    ☐ Validate `text` as a nonempty string.
+    ☐ Reject NUL, carriage-return, and newline bytes explicitly.
+    ☐ Validate `occurrence` as a positive integer and apply the default of `1`.
+    ☐ Copy normalized query values so caller mutation cannot alter an in-progress search.
+    ☐ Validate all rectangle coordinates as integers.
+    ☐ Reject inverted rectangles.
+    ☐ Implement inclusive rectangle intersection.
+    ☐ Return a distinct empty-intersection result so invalid input, an empty effective area, and an unreadable area cannot be conflated.
+    ☐ Add focused unit tests for every validation branch, boundary coordinate, clipping case, and caller-mutation case.
+
+Phase 3 - Implement deterministic rendered-cell matching:
+    ☐ Inject window-size and tile-reading functions into the pure search module so its algorithm is unit-testable without DFHack globals.
+    ☐ Capture the current window dimensions once per search.
+    ☐ Intersect the requested scope with the captured window rectangle before reading cells.
+    ☐ Read only the effective rectangle.
+    ☐ Convert readable `pen.ch` values into exact one-byte row strings without consulting colors, tiles, or adapted component text.
+    ☐ Treat nil pens, missing `ch`, nonintegral `ch`, and out-of-byte-range `ch` as unreadable match-breaking sentinels.
+    ☐ Preserve readable NUL-valued blank cells as readable nonmatching bytes.
+    ☐ Search each row with plain literal matching.
+    ☐ Count matches in deterministic top-to-bottom, then left-to-right order.
+    ☐ Count overlapping occurrences by advancing one cell after each match start.
+    ☐ Stop after the requested occurrence is found.
+    ☐ Return a fresh plain rectangle with exact text-cell bounds.
+    ☐ Return `nil` when at least one cell was readable but the requested occurrence was absent.
+    ☐ Fail with a bounded error when no cell in the effective region was readable.
+    ☐ Avoid allocating pen copies or a full `ds.capture_screen()` evidence record.
+    ☐ Add unit tests for left and right edges, single-cell text, repeated text, overlapping text, occurrence selection, clipped matches, unreadable gaps, fully unreadable regions, and no-match readable regions.
+    ☐ Add a bounded performance characterization for the default 128 by 64 component viewport without establishing an unstable wall-clock gate.
+
+Phase 4 - Resolve mount and search-area scopes:
+    ☐ Add a small `ds.search()` command body that delegates validation, scope resolution, and matching to named helpers.
+    ☐ Require the current mount through the existing mount-context lifecycle guard.
+    ☐ Resolve a borrowed native default to the full captured DF window.
+    ☐ Resolve an owned mount default from the root adapter's visible body bounds.
+    ☐ Resolve an explicit subject through the existing current-mount subject descriptor and adapter.
+    ☐ Require effective subject visibility where the adapter exposes it.
+    ☐ Use current clipped interaction bounds when they are available; otherwise normalize and clip the adapter's body bounds.
+    ☐ Resolve an explicit rectangle without interpreting it as a component option or subject descriptor.
+    ☐ Intersect every explicit area with both the mount default scope and current window.
+    ☐ Return `nil` without reading cells when a valid explicit rectangle has an empty effective intersection.
+    ☐ Preserve existing stale-subject, replaced-native-root, cleaned-mount, foreign-mount, and inactive-screen errors.
+    ☐ Ensure source-selected native and registered-overlay subjects retain their existing adapter and ownership validation.
+    ☐ Ensure searching does not change `mount.command_subject`, render generation, pointer state, cleanup state, or retained capture state.
+    ☐ Add focused mount-command tests for every mount category and search-area form.
+    ☐ Add focused failures for missing mount, stale subject, foreign subject, hidden subject, missing bounds, inverted rectangle, and unreadable effective region.
+
+Phase 5 - Add fluent subject search and public inventory coverage:
+    ☐ Implement `Subject:search(query)` through the subject command-dispatch path.
+    ☐ Preserve the subject object and descriptor without retaining search results.
+    ☐ Register the search handler in `context.mount_context.subject_commands`.
+    ☐ Add `search` to the public subject inventory in `src/dwarfspec/component.lua`.
+    ☐ Reconcile every command applicability or conformance inventory that enumerates DS and Subject methods.
+    ☐ Add focused `subject_spec.lua` coverage for delegation, result passthrough, nil passthrough, lifecycle failure, and argument validation ownership.
+    ☐ Add focused conformance coverage proving `ds.search(query, subject)` and `subject:search(query)` use the same effective area and result.
+
+Phase 6 - Prove ordinary component and complete-screen behavior:
+    ☐ Add a uniquely identifiable single-line label to a focused ordinary-widget live fixture without coupling the production algorithm to widget fields.
+    ☐ Prove root-default search returns the exact rendered label bounds.
+    ☐ Prove subject-scoped search excludes an identical label outside the selected subject bounds.
+    ☐ Prove explicit-rectangle search selects the requested duplicate occurrence.
+    ☐ Prove nil is returned after the visible label is removed or replaced and a render completes.
+    ☐ Prove `ds.await()` can poll `ds.search()` until asynchronously rendered text appears.
+    ☐ Add equivalent focused complete-screen coverage using a label rendered by the complete screen.
+    ☐ Confirm the search command does not increment render generation or create a named capture.
+    ☐ Confirm cleanup reports zero active owned screens and zero retained subjects after each focused run.
+
+Phase 7 - Prove overlay behavior and spatial ownership limits:
+    ☐ Add a uniquely identifiable label to a focused mounted-overlay fixture.
+    ☐ Prove root-default overlay search returns the exact rendered label bounds.
+    ☐ Prove subject-scoped overlay search clips to the subject's current body.
+    ☐ Prove overlay relocation or layout change changes the returned bounds after the existing render wait.
+    ☐ Add an overlap fixture showing that search observes the final visible cells, not the identity of the painter.
+    ☐ Document the overlap result as the intentional spatial-scoping contract.
+    ☐ Confirm overlay disable, host dismissal, adapter cleanup, pointer cleanup, and render-instrumentation restoration remain successful.
+    ☐ Record focused overlay-live evidence independently from ordinary component and native-screen evidence.
+
+Phase 8 - Prove borrowed native-screen behavior:
+    ☐ Select stable unique visible native text in a controlled DF screen or create a reversible native-screen fixture that renders through supported DFHack mechanisms.
+    ☐ Mount the current screen with `ds.mountNativeScreen()` and prove root-default search returns exact bounds for the native text.
+    ☐ Prove a narrowed explicit rectangle can exclude and include the same native match deterministically.
+    ☐ Prove native subject bounds can scope a search where the active DF version exposes suitable native widget geometry.
+    ☐ Prove ordinary no-match returns nil on a readable native screen.
+    ☐ Probe graphical and TrueType configurations separately and record readable-cell counts and behavior.
+    ☐ If TrueType text is unreadable, retain the explicit unreadable-region error and document the limitation instead of reporting an ordinary miss.
+    ☐ Confirm native attachment cleanup does not dismiss or mutate the borrowed screen.
+    ☐ Confirm native render observer restoration, borrowed-screen count, retained-subject count, pointer state, and `cleanup_confirmed=true`.
+    ☐ Repeat the focused native proof enough times to expose stale screen buffers or render-order races.
+
+Phase 9 - Complete documentation and compatibility review:
+    ☐ Add `ds.search()` to the README command table.
+    ☐ Add root, subject, rectangle, occurrence, no-match, and `ds.await()` examples to `docs/writing-tests.md`.
+    ☐ Explain exact literal CP437 or byte matching and the lack of multiline or Unicode-normalized matching.
+    ☐ Explain zero-based inclusive returned bounds.
+    ☐ Explain that subject and rectangle areas are spatial filters over final rendered cells.
+    ☐ Explain that callers should use existing render-waiting mutations, `redraw()`, or `ds.await()` when text may not yet be present.
+    ☐ Explain unreadable-region behavior and any verified TrueType limitation.
+    ☐ Update the public API inventory and release notes if the active release process requires them.
+    ☐ Keep the separate `ds.get()` query-object and selector roadmap items unchanged.
+    ☐ Audit examples for accidental claims that search identifies component ownership or searches hidden tree text.
+
+Phase 10 - Verify package and installed-runtime inclusion:
+    ☐ Confirm the current rockspec automatically discovers the new module beneath `src/`.
+    ☐ Run the release rockspec lint and package build through `Tools/Publish.ps1`.
+    ☐ Inspect the resulting `.rock` archive and confirm it includes the search module, declarations, and intended documentation.
+    ☐ Confirm the archive does not include tests, temporary probes, local environment files, or native libraries.
+    ☐ Install the built rock into a clean LuaRocks tree.
+    ☐ Require the new module and declaration surface from the clean tree without the source checkout on `LUA_PATH`.
+    ☐ Run command and module smoke checks from the clean tree.
+    ☐ Run the focused live component and borrowed-native search proofs through the installed DwarfSpec package.
+    ☐ Record source-checkout and installed-package evidence separately.
+
+Phase 11 - Full verification, cleanup, and handoff:
+    ☐ Run focused pure search-module unit tests.
+    ☐ Run focused subject, mount-command, adapter, declaration, and conformance unit tests.
+    ☐ Run the full standalone unit suite with `Tools/Run-UnitTests.ps1`.
+    ☐ Run Lua 5.3 syntax and formatting checks with `Tools/Check-Lua.ps1`.
+    ☐ Run the equivalent Lua 5.4 syntax and formatting gate.
+    ☐ Run focused ordinary-widget live search coverage.
+    ☐ Run focused complete-screen live search coverage.
+    ☐ Run focused overlay live search coverage.
+    ☐ Run focused borrowed-native live search coverage.
+    ☐ Run the full live automation suite and report unrelated baseline failures separately.
+    ☐ Require `cleanup_confirmed=true` for every successful focused live run.
+    ☐ Confirm zero leaked owned screens, borrowed attachments, subjects, render wrappers, pointer patches, captures, and staged registrations.
+    ☐ Run `git diff --check`.
+    ☐ Review the final diff against this checklist and the explicit exclusions.
+    ☐ Record every command, result, environment, package artifact, archive inspection, cleanup result, and unresolved limitation in the evidence ledger.
+    ☐ Mark a checklist item complete only when its required implementation and evidence both exist.
+
+Execution evidence ledger:
+    ☐ Baseline checkout, branch, worktree, index, installed rock, and archive:
+        - Not run.
+    ☐ Pre-change focused unit tests:
+        - Not run.
+    ☐ Pre-change full unit suite:
+        - Not run.
+    ☐ Pre-change Lua 5.3 and Lua 5.4 syntax and formatting:
+        - Not run.
+    ☐ Pre-change focused component, overlay, complete-screen, and native live tests:
+        - Not run.
+    ☐ DFHack `readTile()` CP437, graphical, blank-cell, invalid-cell, and TrueType probes:
+        - Not run.
+    ☐ Focused query and matching unit tests:
+        - Not run.
+    ☐ Focused subject and mount-command unit tests:
+        - Not run.
+    ☐ Declaration and conformance tests:
+        - Not run.
+    ☐ Full standalone unit suite:
+        - Not run.
+    ☐ Lua 5.3 syntax and formatting:
+        - Not run.
+    ☐ Lua 5.4 syntax and formatting:
+        - Not run.
+    ☐ Focused ordinary-widget live search:
+        - Not run.
+    ☐ Focused complete-screen live search:
+        - Not run.
+    ☐ Focused overlay live search:
+        - Not run.
+    ☐ Focused borrowed-native live search:
+        - Not run.
+    ☐ Full live automation suite:
+        - Not run.
+    ☐ Package lint and build:
+        - Not run.
+    ☐ Archive inspection:
+        - Not run.
+    ☐ Clean-tree installed-package smoke:
+        - Not run.
+    ☐ Installed-package live proof:
+        - Not run.
+    ☐ Cleanup and repeatability:
+        - Not run.
+    ☐ `git diff --check`:
+        - Not run.
+
+Definition of done:
+    ☐ `ds.search({text="..."}, search_area?)` and `Subject:search(query)` implement the locked contract.
+    ☐ Borrowed native screens, ordinary widgets, overlays, and complete screens have separate focused live proof.
+    ☐ Returned rectangles identify exact visible single-row text cells in zero-based inclusive coordinates.
+    ☐ Nil-on-miss, occurrence ordering, clipping, unreadable-region failures, and spatial ownership limits are tested and documented.
+    ☐ Runtime, declarations, public inventories, documentation, package contents, and installed behavior agree.
+    ☐ Focused, full, syntax, package, cleanup, component-live, overlay-live, complete-screen-live, and native-live evidence are recorded separately.
+    ☐ No unrelated user changes are modified, stashed, committed, or incorporated into completion claims.
