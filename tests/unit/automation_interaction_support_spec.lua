@@ -37,6 +37,12 @@ local function pointer_fixture(original_raw)
         mouse_y=original_raw.mouse_y or 5,
         precise_mouse_x=original_raw.precise_mouse_x or 40,
         precise_mouse_y=original_raw.precise_mouse_y or 50,
+        dimx=80,
+        dimy=25,
+        screen_pixel_x=800,
+        screen_pixel_y=250,
+        tile_pixel_x=10,
+        tile_pixel_y=10,
     }
     local gui_calls = {}
     local original_gui_get_mouse_pos = function(allow_out_of_bounds)
@@ -72,6 +78,16 @@ local function pointer_fixture(original_raw)
         original_get_mouse_pixels=original_get_mouse_pixels,
         original_gui_get_mouse_pos=original_gui_get_mouse_pos,
         adapter=pointer_adapter.new(cleanup, registry, {
+            get_geometry=function()
+                return {
+                    grid_width=gps.dimx,
+                    grid_height=gps.dimy,
+                    pixel_width=gps.screen_pixel_x,
+                    pixel_height=gps.screen_pixel_y,
+                    cell_pixel_width=gps.tile_pixel_x,
+                    cell_pixel_height=gps.tile_pixel_y,
+                }
+            end,
             screen=screen,
             gui=gui,
             gps=gps,
@@ -440,6 +456,66 @@ describe('automation interaction support', function()
         assert.is_nil(adapter.current_position)
         assert.is_nil(adapter.original_raw_position)
         assert.equals(0, cleanup.pending_count(fixture.registry))
+    end)
+
+    it('restores a transient pointer and native input state idempotently',
+            function()
+        local fixture = pointer_fixture()
+        local restore = pointer_adapter.begin_transient(fixture.adapter)
+
+        pointer_adapter.set_grid(fixture.adapter, 7, 8)
+        fixture.enabler.mouse_focus = true
+        fixture.enabler.tracking_on = 1
+        fixture.enabler.mouse_lbut_down = 1
+        assert.is_true(pointer_adapter.is_active(fixture.adapter))
+        assert.same({7, 8, 75, 85}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+
+        restore()
+        assert.is_false(pointer_adapter.is_active(fixture.adapter))
+        assert.same({4, 5, 40, 50}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        assert.is_false(fixture.enabler.mouse_focus)
+        assert.equals(0, fixture.enabler.tracking_on)
+        assert.equals(0, fixture.enabler.mouse_lbut_down)
+        assert.equals(0, #fixture.registry.entries)
+
+        restore()
+        assert.same({4, 5, 40, 50}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+    end)
+
+    it('preserves pre-existing pointer ownership after a transient move',
+            function()
+        local fixture = pointer_fixture()
+        local initial = paired_position(10, 11, 105, 115)
+        pointer_adapter.set(fixture.adapter, initial)
+        local restore = pointer_adapter.begin_transient(fixture.adapter)
+
+        pointer_adapter.set_grid(fixture.adapter, 7, 8)
+        restore()
+
+        assert.is_true(pointer_adapter.is_active(fixture.adapter))
+        assert.same(initial, pointer_adapter.position(fixture.adapter))
+        assert.same({10, 11, 105, 115}, {
+            fixture.gps.mouse_x,
+            fixture.gps.mouse_y,
+            fixture.gps.precise_mouse_x,
+            fixture.gps.precise_mouse_y,
+        })
+        assert.equals(1, #fixture.registry.entries)
     end)
 
     it('restores exact invalid raw sentinel coordinates during cleanup',

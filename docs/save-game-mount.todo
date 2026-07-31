@@ -123,16 +123,17 @@ Phase 5 - Verify unit and live behavior:
         - Evidence: the current standalone suite reports 558 successes, 0 failures, and 0 errors; Lua syntax and formatting checks pass for 262 files; the same-save live test reports 1 success; repeated selected A-to-B runs report 2 successes with `cleanup_confirmed=true`, leave B loaded, and prove the second B mount is a no-op. `git diff --check` reports no whitespace errors.
 
 Phase 6 - Extract command-specific native bindings:
-    ☐ Create `src/dwarfspec/commands/` as the home for command-specific live DFHack bindings.
-    ☐ Move the `save_game_unloader` construction and its native dependency callbacks out of `src/dwarfspec/ds.lua` into `src/dwarfspec/commands/save_game_unload.lua`.
-    ☐ Move the `save_game_loader` construction and its native dependency callbacks out of `src/dwarfspec/ds.lua` into `src/dwarfspec/commands/save_game_load.lua`.
-    ☐ Keep the existing `dwarfspec.automation.save_game_unload` and `dwarfspec.automation.save_game_load` modules focused on workflow logic and injected interfaces.
-    ☐ Make each command binding expose a concise construction function with language-appropriate documentation comments.
-    ☐ Move native pointer-state capture, simulated-input dispatch, title-state normalization, and save-header normalization into the command binding that owns them.
-    ☐ Keep `ds.mountSaveGame()` limited to preflight, no-op selection, unload-before-load orchestration, and its public return value.
-    ☐ Preserve the existing mount-dependency injection seam for unit tests without duplicating production command behavior in test fixtures.
-    ☐ Add focused unit coverage for each command binding's dependency construction and `ds.mountSaveGame()` delegation after extraction.
-    ☐ Confirm that no unrelated `ds` command implementation moved or changed behavior.
+    ☒ Create `src/dwarfspec/commands/` as the home for command-specific live DFHack bindings.
+    ☒ Move the `save_game_unloader` construction and its native dependency callbacks out of `src/dwarfspec/ds.lua` into `src/dwarfspec/commands/save_game_unload.lua`.
+    ☒ Move the `save_game_loader` construction and its native dependency callbacks out of `src/dwarfspec/ds.lua` into `src/dwarfspec/commands/save_game_load.lua`.
+    ☒ Keep the existing `dwarfspec.automation.save_game_unload` and `dwarfspec.automation.save_game_load` modules focused on workflow logic and injected interfaces.
+    ☒ Make each command binding expose a concise construction function with language-appropriate documentation comments.
+    ☒ Move native pointer-state capture, simulated-input dispatch, title-state normalization, and save-header normalization into the command binding that owns them.
+    ☒ Keep `ds.mountSaveGame()` limited to preflight, no-op selection, unload-before-load orchestration, and its public return value.
+    ☒ Preserve the existing mount-dependency injection seam for unit tests without duplicating production command behavior in test fixtures.
+    ☒ Add focused unit coverage for each command binding's dependency construction and `ds.mountSaveGame()` delegation after extraction.
+    ☒ Confirm that no unrelated `ds` command implementation moved or changed behavior.
+        - Evidence: `src/dwarfspec/commands/save_game_unload.lua` and `save_game_load.lua` now own their native dependency construction while the automation modules remain unchanged. `src/dwarfspec/ds.lua` retains only command-factory binding and `mountSaveGame()` orchestration, and its existing injected loader/unloader seam remains intact. Focused command-binding coverage reports 2 successes, 0 failures, and 0 errors; the complete standalone unit suite reports 560 successes, 0 failures, and 0 errors; Lua 5.4.6 syntax and formatting checks pass for 266 files; `git diff --check` reports no whitespace errors.
 
 Phase 7 - Verify packaging and final acceptance:
     ☐ Update the LuaRocks package manifest for every new production module and declaration artifact.
