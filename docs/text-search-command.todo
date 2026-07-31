@@ -485,15 +485,35 @@ Phase 9 evidence:
       that search establishes painter ownership or examines hidden tree text.
 
 Phase 10 - Verify package and installed-runtime inclusion:
-    ☐ Confirm the current rockspec automatically discovers the new module beneath `src/`.
-    ☐ Run the release rockspec lint and package build through `Tools/Publish.ps1`.
-    ☐ Inspect the resulting `.rock` archive and confirm it includes the search module, declarations, and intended documentation.
-    ☐ Confirm the archive does not include tests, temporary probes, local environment files, or native libraries.
-    ☐ Install the built rock into a clean LuaRocks tree.
-    ☐ Require the new module and declaration surface from the clean tree without the source checkout on `LUA_PATH`.
-    ☐ Run command and module smoke checks from the clean tree.
-    ☐ Run the focused live component and borrowed-native search proofs through the installed DwarfSpec package.
-    ☐ Record source-checkout and installed-package evidence separately.
+    ☒ Confirm the current rockspec automatically discovers the new module beneath `src/`.
+    ☒ Run the release rockspec lint and package build through `Tools/Publish.ps1`.
+    ☒ Inspect the resulting `.rock` archive and confirm it includes the search module, declarations, and intended documentation.
+    ☒ Confirm the archive does not include tests, temporary probes, local environment files, or native libraries.
+    ☒ Install the built rock into a clean LuaRocks tree.
+    ☒ Require the new module and declaration surface from the clean tree without the source checkout on `LUA_PATH`.
+    ☒ Run command and module smoke checks from the clean tree.
+    ☒ Run the focused live component and borrowed-native search proofs through the installed DwarfSpec package.
+    ☒ Record source-checkout and installed-package evidence separately.
+
+Phase 10 evidence:
+    - `dwarfspec-0.2.1-1.rockspec` uses the LuaRocks builtin installer to
+      discover modules below `src/`; `copy_directories = {}` prevents
+      repository directories from entering the artifact. The command module is
+      `src/dwarfspec/commands/text_search.lua`.
+    - `Tools/Publish.ps1` linted the rockspec and built
+      `dist/dwarfspec-0.2.1-1.all.rock`. Archive inspection found 100 entries,
+      including the search command, `ds/d.lua` declaration surface, README,
+      and changelog, with no tests, native probe, `.env`, or native-library
+      entries.
+    - The built artifact was installed into the isolated
+      `.tmp-luarocks/text-search-package` tree. With source paths excluded,
+      clean Lua required `dwarfspec.commands.text_search` and `ds.d`; a matcher
+      smoke found `ABC` at `{x1=0, y1=0, x2=2, y2=0}` and returned nil for
+      `XYZ`.
+    - Installed-package live evidence is separate from source-checkout proof:
+      the isolated launcher passed ordinary widget search (8 successes) and
+      borrowed native search (3 successes), both with
+      `cleanup_confirmed=true`.
 
 Phase 11 - Full verification, cleanup, and handoff:
     ☐ Run focused pure search-module unit tests.
@@ -560,14 +580,18 @@ Execution evidence ledger:
           pending; `cleanup_confirmed=true`.
     ☐ Full live automation suite:
         - Not run.
-    ☐ Package lint and build:
-        - Not run.
-    ☐ Archive inspection:
-        - Not run.
-    ☐ Clean-tree installed-package smoke:
-        - Not run.
-    ☐ Installed-package live proof:
-        - Not run.
+    ☒ Package lint and build:
+        - `Tools/Publish.ps1` built `dist/dwarfspec-0.2.1-1.all.rock`.
+    ☒ Archive inspection:
+        - 100 entries; required command, declaration, README, and changelog
+          entries present; tests, probes, local environment, and native
+          libraries absent.
+    ☒ Clean-tree installed-package smoke:
+        - Required the command and declaration modules without source paths;
+          matcher smoke passed.
+    ☒ Installed-package live proof:
+        - Isolated launcher: ordinary widget 8 successes and borrowed native
+          3 successes; both `cleanup_confirmed=true`.
     ☐ Cleanup and repeatability:
         - Not run.
     ☒ `git diff --check`:
