@@ -22,6 +22,7 @@ local RESERVED_COMMANDS = {
     inspect=true,
     isGamePaused=true,
     mount=true,
+    mountSaveGame=true,
     mouseInput=true,
     mouseWheel=true,
     move_pointer=true,

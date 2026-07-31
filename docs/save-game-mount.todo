@@ -92,15 +92,16 @@ Phase 3 - Implement requested-save loading:
         - Evidence: the native adapter performs explicit main-menu, active-world, and exact-save transitions, restoring temporary virtual-pointer state on success or failure. A live `gui.simulateInput`-only probe selected TestWorld's active-world row and the `TestWorld 01` save row, traversed `viewscreen_loadgamest`, reached `dwarfmode/Default`, and confirmed `dfhack.world.ReadWorldFolder()` returned `TestWorld 01`. Focused `save-game load adapter` coverage reports 8 successes, 0 failures, and 0 errors. The complete standalone unit suite reports 555 successes, 0 failures, and 0 errors. Lua 5.4.6 syntax and formatting checks pass for 259 files.
 
 Phase 4 - Export and document the command:
-    ☐ Wire the implementation into the run-scoped `ds` namespace.
-    ☐ Implement `ds.mountSaveGame(directory_name)` with a language-appropriate documentation comment.
-    ☐ Add language-appropriate documentation comments for every new production class and method.
-    ☐ Keep `ds.getSaveDirectoryName()` unchanged.
-    ☐ Add the public declaration to `src/ds.d.lua`.
-    ☐ Document the no-op behavior when the requested save is already loaded.
-    ☐ Document that a different loaded world is discarded without saving.
-    ☐ Document that the requested save remains loaded after the example and becomes the starting state for subsequent examples or runs.
-    ☐ Add export and command-delegation coverage.
+    ☒ Wire the implementation into the run-scoped `ds` namespace.
+    ☒ Implement `ds.mountSaveGame(directory_name)` with a language-appropriate documentation comment.
+    ☒ Add language-appropriate documentation comments for every new production class and method.
+    ☒ Keep `ds.getSaveDirectoryName()` unchanged.
+    ☒ Add the public declaration to `src/ds.d.lua`.
+    ☒ Document the no-op behavior when the requested save is already loaded.
+    ☒ Document that a different loaded world is discarded without saving.
+    ☒ Document that the requested save remains loaded after the example and becomes the starting state for subsequent examples or runs.
+    ☒ Add export and command-delegation coverage.
+        - Evidence: focused public-command coverage reports 84 successes, 0 failures, and 0 errors. It proves the exported function, same-save no-op, unload-before-load ordering, unloaded direct-load path, exact argument validation, resulting directory, and absence of cleanup ownership. The complete standalone unit suite reports 557 successes, 0 failures, and 0 errors. Lua 5.4.6 syntax and formatting checks pass for 259 files.
 
 Phase 5 - Verify unit and live behavior:
     ☐ Prove with focused unit tests that a matching save performs no unload or load.

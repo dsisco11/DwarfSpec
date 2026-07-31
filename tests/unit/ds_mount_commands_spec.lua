@@ -87,6 +87,8 @@ describe('DwarfSpec public mount commands', function()
     local dfhack_time
     local save_directory_name
     local world_loaded
+    local save_game_unload_calls
+    local save_game_load_calls
     local map_view_position
     local map_view_dimensions
     local map_view_dimensions_failure
@@ -181,6 +183,8 @@ describe('DwarfSpec public mount commands', function()
         dfhack_time = 67890
         save_directory_name = 'region1'
         world_loaded = true
+        save_game_unload_calls = {}
+        save_game_load_calls = {}
         map_view_position = {x=12, y=34, z=5}
         map_view_dimensions = {
             map_x1=3,
@@ -416,6 +420,24 @@ describe('DwarfSpec public mount commands', function()
                         game_speed_ratio_override or speed_ratio
                     return true
                 end,
+                save_game_unloader={
+                    unload=function(_, loaded_directory,
+                            requested_directory)
+                        table.insert(save_game_unload_calls, {
+                            loaded_directory=loaded_directory,
+                            requested_directory=requested_directory,
+                        })
+                        world_loaded = false
+                    end,
+                },
+                save_game_loader={
+                    load=function(_, requested_directory)
+                        table.insert(save_game_load_calls,
+                            requested_directory)
+                        world_loaded = true
+                        save_directory_name = requested_directory
+                    end,
+                },
                 native_viewscreen=function() return native_df_screen end,
                 is_native_widget_root=function(root)
                     return root and root._type and
@@ -785,6 +807,46 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function() ds.getSaveDirectoryName() end,
             'DwarfSpec getSaveDirectoryName requires ' ..
                 'dfhack.world.ReadWorldFolder')
+    end)
+
+    it('exports and delegates save-game mounting without cleanup ownership',
+            function()
+        assert.equals('function', type(ds.mountSaveGame))
+
+        assert.equals('region1', ds.mountSaveGame('region1'))
+        assert.same({}, save_game_unload_calls)
+        assert.same({}, save_game_load_calls)
+        assert.equals(0, cleanup.pending_count(registry))
+
+        assert.equals('region2', ds.mountSaveGame('region2'))
+        assert.same({
+            {
+                loaded_directory='region1',
+                requested_directory='region2',
+            },
+        }, save_game_unload_calls)
+        assert.same({'region2'}, save_game_load_calls)
+        assert.equals('region2', ds.getSaveDirectoryName())
+        assert.equals(0, cleanup.pending_count(registry))
+
+        world_loaded = false
+        assert.equals('region3', ds.mountSaveGame('region3'))
+        assert.equals(1, #save_game_unload_calls)
+        assert.same({'region2', 'region3'}, save_game_load_calls)
+        assert.equals('region3', ds.getSaveDirectoryName())
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('validates mountSaveGame arguments before adapter delegation',
+            function()
+        assert.has_error(function() ds.mountSaveGame() end,
+            'DwarfSpec mountSaveGame requires exactly one save directory name')
+        assert.has_error(function() ds.mountSaveGame('region1', 'extra') end,
+            'DwarfSpec mountSaveGame requires exactly one save directory name')
+        assert.has_error(function() ds.mountSaveGame('../region1') end,
+            'DwarfSpec mountSaveGame requires one directory name, not a path')
+        assert.same({}, save_game_unload_calls)
+        assert.same({}, save_game_load_calls)
     end)
 
     it('matches the current DFHack focus without requiring a mount',

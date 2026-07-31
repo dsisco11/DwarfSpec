@@ -327,6 +327,14 @@ function DS.getTime() end
 ---@return string
 function DS.getSaveDirectoryName() end
 
+---Ensures that one exact save directory is loaded.
+---If another world is loaded, it is discarded without saving first. The
+---requested world remains loaded for subsequent examples and is not restored
+---or unloaded by example cleanup.
+---@param directory_name string
+---@return string
+function DS.mountSaveGame(directory_name) end
+
 ---Returns whether the current DFHack focus matches one focus path.
 ---@param path string
 ---@return boolean

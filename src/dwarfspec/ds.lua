@@ -133,6 +133,15 @@ local EventType = load_automation_module(package_root,
 local TestStatus = load_automation_module(package_root,
     'dwarfspec.automation.test_statuses',
     '/src/dwarfspec/automation/test_statuses.lua')
+local save_game_mount_module = load_automation_module(package_root,
+    'dwarfspec.automation.save_game_mount',
+    '/src/dwarfspec/automation/save_game_mount.lua')
+local save_game_unload_module = load_automation_module(package_root,
+    'dwarfspec.automation.save_game_unload',
+    '/src/dwarfspec/automation/save_game_unload.lua')
+local save_game_load_module = load_automation_module(package_root,
+    'dwarfspec.automation.save_game_load',
+    '/src/dwarfspec/automation/save_game_load.lua')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
@@ -215,6 +224,250 @@ local TestStatus = load_automation_module(package_root,
         game_pause_cleanup_entry=nil,
         game_speed_cleanup_entry=nil,
     }
+
+    ---Reads one optional userdata field without raising for absent fields.
+    ---@param container any
+    ---@param field string
+    ---@return boolean, any
+    local function read_optional_field(container, field)
+        return pcall(function() return container[field] end)
+    end
+
+    ---Captures native pointer and mouse-button state for exact restoration.
+    ---@return function
+    local function capture_native_input_state()
+        local gps = assert(pointer_gps,
+            'DwarfSpec save-game input requires df.global.gps')
+        local enabler = assert(pointer_enabler,
+            'DwarfSpec save-game input requires df.global.enabler')
+        local gps_fields = {
+            'mouse_x',
+            'mouse_y',
+            'precise_mouse_x',
+            'precise_mouse_y',
+        }
+        local enabler_fields = {
+            'mouse_focus',
+            'tracking_on',
+            'mouse_lbut',
+            'mouse_rbut',
+            'mouse_mbut',
+            'mouse_lbut_down',
+            'mouse_rbut_down',
+            'mouse_mbut_down',
+            'mouse_lbut_lift',
+            'mouse_rbut_lift',
+            'mouse_mbut_lift',
+        }
+        local captured = {}
+        for _, field in ipairs(gps_fields) do
+            local readable, value = read_optional_field(gps, field)
+            if readable then captured[#captured + 1] = {gps, field, value} end
+        end
+        for _, field in ipairs(enabler_fields) do
+            local readable, value = read_optional_field(enabler, field)
+            if readable then
+                captured[#captured + 1] = {enabler, field, value}
+            end
+        end
+        return function()
+            for _, entry in ipairs(captured) do
+                entry[1][entry[2]] = entry[3]
+            end
+        end
+    end
+
+    ---Moves DFHack's virtual native pointer to one UI-grid cell.
+    ---@param x integer
+    ---@param y integer
+    local function move_native_pointer(x, y)
+        local width, height = context.get_window_size()
+        assert(type(x) == 'number' and x % 1 == 0 and x >= 0 and
+                x < width and type(y) == 'number' and y % 1 == 0 and
+                y >= 0 and y < height,
+            'DwarfSpec save-game pointer target is outside the window')
+        pointer_gps.mouse_x = x
+        pointer_gps.mouse_y = y
+        pointer_gps.precise_mouse_x = x * pointer_gps.tile_pixel_x
+        pointer_gps.precise_mouse_y = y * pointer_gps.tile_pixel_y
+        pointer_enabler.mouse_focus = true
+        pointer_enabler.tracking_on = 1
+    end
+
+    ---Dispatches one built-in DFHack input key to a native viewscreen.
+    ---@param screen any
+    ---@param key string
+    local function simulate_native_input(screen, key)
+        assert(screen ~= nil,
+            'DwarfSpec save-game input requires a native viewscreen')
+        return require('gui').simulateInput(screen, key)
+    end
+
+    ---Waits for a save-game transition using the run's raw-frame scheduler.
+    ---@param description string
+    ---@param query function
+    ---@return any
+    local function wait_for_save_game_state(description, query)
+        return scheduler_module.wait_until(scheduler, description, query, {
+            timeout_ms=wait_settings.timeout_ms,
+            frame_budget=wait_settings.frame_budget,
+        })
+    end
+
+    ---Returns a stable identity for one native save header's world.
+    ---@param header any
+    ---@return string
+    local function save_world_identity(header)
+        local world_header = assert(header and header.world_header,
+            'DwarfSpec native save header has no world header')
+        return ('%s:%s'):format(tostring(world_header.id1),
+            tostring(world_header.id2))
+    end
+
+    ---Normalizes one native save-header vector for the loading adapter.
+    ---@param headers any
+    ---@return table
+    local function normalize_save_headers(headers)
+        local normalized = {}
+        for _, header in ipairs(headers or {}) do
+            normalized[#normalized + 1] = {
+                directory_name=header.filename_noext,
+                world_id=save_world_identity(header),
+            }
+        end
+        return normalized
+    end
+
+    ---Returns the current normalized native title state.
+    ---@return table|nil
+    local function get_native_title_state()
+        local screen = context.current_viewscreen()
+        local title_type = df and df.viewscreen_titlest
+        if not title_type or not title_type:is_instance(screen) then return nil end
+        local modes = assert(df.title_mode_type,
+            'DwarfSpec save-game load requires df.title_mode_type')
+        local mode
+        if screen.mode == modes.MAIN_MENU then
+            mode = 'main'
+        elseif screen.mode == modes.CONTINUE_ACTIVE_WORLD then
+            mode = 'world-list'
+        elseif screen.mode == modes.CONTINUE_ACTIVE then
+            mode = 'save-list'
+        else
+            mode = tostring(screen.mode)
+        end
+        return {
+            mode=mode,
+            screen=screen,
+            all_saves=normalize_save_headers(screen.savegame_header),
+            world_saves=normalize_save_headers(screen.savegame_header_world),
+            game_saves=normalize_save_headers(screen.savegame_header_game),
+        }
+    end
+
+    ---Returns the center of the first native title button.
+    ---@return integer, integer
+    local function top_title_button_position()
+        local width, height = context.get_window_size()
+        return math.floor(width / 2),
+            height < 60 and 25 or math.floor(height / 2) + 3
+    end
+
+    ---Selects the hovered native title-list item by zero-based field value.
+    ---@param title table
+    ---@param one_based_index integer
+    local function select_native_title_list_item(title, one_based_index)
+        assert(type(one_based_index) == 'number' and
+                one_based_index % 1 == 0 and one_based_index >= 1,
+            'DwarfSpec save-game selection requires a positive item index')
+        local width, height = context.get_window_size()
+        local target = one_based_index - 1
+        for y = 0, height - 1 do
+            move_native_pointer(math.floor(width / 2), y)
+            scheduler_module.wait_frames(scheduler, 1)
+            if title.screen.selected_r == target then
+                simulate_native_input(title.screen, '_MOUSE_L')
+                return
+            end
+        end
+        error(('DwarfSpec could not locate native save-game list item %d')
+            :format(one_based_index), 2)
+    end
+
+    ---Returns the current native focus string for diagnostics.
+    ---@return string
+    local function current_native_focus()
+        local focus = dfhack.gui.getCurFocus()
+        return type(focus) == 'table' and focus[1] or tostring(focus)
+    end
+
+    local save_game_unloader =
+        mount_dependencies.save_game_unloader or save_game_unload_module.new({
+            is_world_loaded=function() return dfhack.isWorldLoaded() end,
+            read_world_folder=function()
+                return dfhack.world.ReadWorldFolder()
+            end,
+            get_options=function()
+                return df.global.game.main_interface.options
+            end,
+            get_screen=context.current_viewscreen,
+            main_menu_option_type=df and df.main_menu_option_type,
+            open_options=function(screen)
+                simulate_native_input(screen, 'OPTIONS')
+            end,
+            get_window_size=context.get_window_size,
+            move_pointer=move_native_pointer,
+            click_left=function(screen)
+                simulate_native_input(screen, '_MOUSE_L')
+            end,
+            capture_input_state=capture_native_input_state,
+            wait_until=wait_for_save_game_state,
+            get_focus=current_native_focus,
+            get_viewscreen=function()
+                local screen = context.current_viewscreen()
+                return screen and screen._type
+            end,
+        })
+
+    local save_game_loader =
+        mount_dependencies.save_game_loader or save_game_load_module.new({
+            is_world_loaded=function() return dfhack.isWorldLoaded() end,
+            read_world_folder=function()
+                return dfhack.world.ReadWorldFolder()
+            end,
+            get_title_state=get_native_title_state,
+            reach_main_menu=function()
+                for _ = 1, 3 do
+                    local state = get_native_title_state()
+                    assert(state,
+                        'DwarfSpec save-game load requires the title screen')
+                    if state.mode == 'main' then return end
+                    local previous_mode = state.mode
+                    simulate_native_input(state.screen, 'LEAVESCREEN')
+                    wait_for_save_game_state('return to title main menu',
+                        function()
+                            local current = get_native_title_state()
+                            return current and current.mode ~= previous_mode
+                        end)
+                end
+                error('DwarfSpec could not reach the title main menu', 2)
+            end,
+            select_continue=function(title)
+                local x, y = top_title_button_position()
+                move_native_pointer(x, y)
+                scheduler_module.wait_frames(scheduler, 1)
+                simulate_native_input(title.screen, '_MOUSE_L')
+            end,
+            select_world=select_native_title_list_item,
+            select_save=select_native_title_list_item,
+            capture_input_state=capture_native_input_state,
+            wait_until=wait_for_save_game_state,
+            get_focus=current_native_focus,
+            get_viewscreen=function()
+                local screen = context.current_viewscreen()
+                return screen and screen._type
+            end,
+        })
     local publisher = context.run.event_publisher
 
     ---Publishes one command boundary through the active run generation.
@@ -1025,6 +1278,29 @@ local TestStatus = load_automation_module(package_root,
         assert(type(name) == 'string' and name ~= '',
             'DFHack ReadWorldFolder did not return a valid save directory name')
         return name
+    end
+
+    ---Ensures that one exact save directory is loaded.
+    ---A different loaded world is discarded without saving. The requested
+    ---world remains loaded for subsequent examples and is not cleanup-owned.
+    ---@param ... any
+    ---@return string
+    function ds.mountSaveGame(...)
+        local arguments = table.pack(...)
+        local world = dfhack and dfhack.world
+        local preflight = save_game_mount_module.preflight({
+            is_world_loaded=dfhack and dfhack.isWorldLoaded,
+            read_world_folder=world and world.ReadWorldFolder,
+        }, arguments.n, arguments[1])
+        if not preflight.transition_required then
+            return preflight.requested_directory
+        end
+        if preflight.loaded_directory then
+            save_game_unloader:unload(preflight.loaded_directory,
+                preflight.requested_directory)
+        end
+        save_game_loader:load(preflight.requested_directory)
+        return preflight.requested_directory
     end
 
     ---Returns whether the current DFHack focus matches one focus path.

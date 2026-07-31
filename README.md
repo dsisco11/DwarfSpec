@@ -226,6 +226,7 @@ simulation ticks stop while the game is paused.
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
 | `ds.getSaveDirectoryName()` | Return the directory name of the currently loaded save game. |
+| `ds.mountSaveGame(directory_name)` | Ensure the exact save directory is loaded. A matching loaded save is left untouched; a different loaded world is discarded without saving first. The requested save remains loaded for subsequent examples and is not restored or unloaded during example cleanup. |
 | `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
 | `ds.getViewPos(origin)` | Return the map tile aligned with an `EScreenOrigin`; defaults to `CENTER`. |
 | `ds.setViewPos({x=..., y=..., z=...}, origin)` | Align a map tile with an `EScreenOrigin`, defaulting to `CENTER`; DwarfSpec automatically restores the inherited view during example cleanup. |
