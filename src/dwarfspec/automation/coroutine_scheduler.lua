@@ -566,8 +566,16 @@ function M.signal_event(scheduler, wait_identity, occurrence)
     wait.signaled = true
     wait.occurrence = occurrence
     wait.last_observed = occurrence
-    local scheduled = schedule_event_pump(scheduler, wait)
-    return scheduled
+    local scheduled, schedule_error =
+        schedule_event_pump(scheduler, wait)
+    if not scheduled then
+        wait.signaled = false
+        wait.occurrence = nil
+        wait.last_observed = nil
+        wait.signal_error = schedule_error
+        return false
+    end
+    return true
 end
 
 ---Cancels the outstanding wait without resuming the discarded owner.

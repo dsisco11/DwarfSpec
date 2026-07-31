@@ -9,6 +9,7 @@ describe('automation scheduler', function()
     local callbacks
     local tick_callbacks
     local active
+    local reject_frame_timeout
     local next_timeout_id
     local completion
     local run
@@ -20,6 +21,7 @@ describe('automation scheduler', function()
         callbacks = {}
         tick_callbacks = {}
         active = {}
+        reject_frame_timeout = false
         next_timeout_id = 0
         completion = nil
         run = {suspended=false, outstanding_wait=nil}
@@ -27,6 +29,7 @@ describe('automation scheduler', function()
             is_current=function() return current end,
             schedule_timeout=function(delay, callback)
                 assert.equals(1, delay)
+                if reject_frame_timeout then return nil end
                 next_timeout_id = next_timeout_id + 1
                 local id = next_timeout_id
                 callbacks[id] = callback
@@ -321,6 +324,35 @@ describe('automation scheduler', function()
         callbacks[1]()
 
         assert.equals(first, result)
+        assert.is_true(completion.ok)
+    end)
+
+    it('does not consume a signal when its safe pump is rejected',
+            function()
+        local identity
+        local result
+        local first = occurrence('paused', 1)
+        local second = occurrence('paused', 2)
+        reject_frame_timeout = true
+        start(function()
+            result = scheduler_module.wait_event(scheduler, 'paused', {
+                arm=function(value)
+                    identity = value
+                    assert.is_false(scheduler_module.signal_event(
+                        scheduler, identity, first))
+                end,
+                cleanup=function() end,
+            })
+        end)
+
+        assert.is_false(run.outstanding_wait.signaled)
+        assert.is_nil(run.outstanding_wait.occurrence)
+        reject_frame_timeout = false
+        assert.is_true(scheduler_module.signal_event(
+            scheduler, identity, second))
+        callbacks[1]()
+
+        assert.equals(second, result)
         assert.is_true(completion.ok)
     end)
 

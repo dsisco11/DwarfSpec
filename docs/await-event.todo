@@ -95,22 +95,22 @@ Phase 2 - Implement scheduler event suspension:
     ☒ Add focused scheduler tests for synchronous signaling, deferred resumption, unrelated signals, duplicate signals, timeout, cancellation, stale signals, and exactly-once cleanup.
 
 Phase 3 - Implement the core state-change command:
-    ☐ Add `src/dwarfspec/commands/await_event.lua`.
-    ☐ Keep DFHack listener registration and payload normalization in the command module.
-    ☐ Map each public enum value to its exact DFHack state-change constant.
-    ☐ Validate the event and option record before installing a listener.
-    ☐ Install one uniquely keyed `dfhack.onStateChange` listener for the wait.
-    ☐ Capture the currently loaded save-directory name before unload events can erase it.
-    ☐ Snapshot payload data while it is valid.
-    ☐ Arm the native listener before invoking `trigger`.
-    ☐ Forward a matching normalized occurrence to the scheduler event signal path.
-    ☐ Remove the listener after the first accepted occurrence.
-    ☐ Remove the listener when `trigger` raises an error.
-    ☐ Preserve the original trigger error after listener cleanup.
-    ☐ Expose a concise documented construction function for run-scoped dependency binding.
-    ☐ Keep dependency injection available for focused tests without redefining unrelated `ds` commands.
-    ☐ Add focused command-module tests for all seven mappings and payloads.
-    ☐ Add focused command-module tests for validation, listener ordering, synchronous events, unrelated events, trigger failure, unavailable payload fields, and listener cleanup.
+    ☒ Add `src/dwarfspec/commands/await_event.lua`.
+    ☒ Keep DFHack listener registration and payload normalization in the command module.
+    ☒ Map each public enum value to its exact DFHack state-change constant.
+    ☒ Validate the event and option record before installing a listener.
+    ☒ Install one uniquely keyed `dfhack.onStateChange` listener for the wait.
+    ☒ Capture the currently loaded save-directory name before unload events can erase it.
+    ☒ Snapshot payload data while it is valid.
+    ☒ Arm the native listener before invoking `trigger`.
+    ☒ Forward a matching normalized occurrence to the scheduler event signal path.
+    ☒ Remove the listener after the first accepted occurrence.
+    ☒ Remove the listener when `trigger` raises an error.
+    ☒ Preserve the original trigger error after listener cleanup.
+    ☒ Expose a concise documented construction function for run-scoped dependency binding.
+    ☒ Keep dependency injection available for focused tests without redefining unrelated `ds` commands.
+    ☒ Add focused command-module tests for all seven mappings and payloads.
+    ☒ Add focused command-module tests for validation, listener ordering, synchronous events, unrelated events, trigger failure, unavailable payload fields, and listener cleanup.
 
 Phase 4 - Export the command and migrate map loading:
     ☐ Construct the event-awaiting command with the current run's scheduler and native DFHack dependencies.
@@ -231,8 +231,18 @@ Completion evidence:
         - Evidence: Event success, timeout, arm failure, and scheduler cancellation share an idempotent cleanup guard. Cancellation removes the pending pump and invokes listener cleanup once; a stale callback cannot invoke cleanup again.
         - Evidence: Focused scheduler coverage completed with 22 successes, 0 failures, 0 errors, and 0 pending. It covers synchronous signaling, deferred resumption, distinct identities, unrelated and duplicate signals, omitted, disabled, invalid, and positive timeouts, timeout diagnostics, cancellation, stale signals and callbacks, arm failure, and exactly-once cleanup.
         - Evidence: The full standalone suite completed with 572 successes, 0 failures, 0 errors, and 0 pending. Lua 5.4.6 syntax and formatting checks passed for 267 files.
-    ☐ Core state-change command:
-        - Evidence:
+    ☒ Core state-change command:
+        - Evidence: Added `src/dwarfspec/commands/await_event.lua` with one documented `new(dependencies)` constructor that returns a run-scoped command function without loading or redefining the `ds` namespace.
+        - Evidence: The module maps all seven immutable public event values to injected exact `SC_*` constants and owns all `dfhack.onStateChange` registration, unique `dwarfspec.awaitEvent.N` listener keys, filtering, payload normalization, and removal.
+        - Evidence: Public event and option validation completes before listener installation. Unsupported events, non-table options, unknown fields, invalid triggers and descriptions, and nonpositive or fractional timeouts produce bounded diagnostics.
+        - Evidence: World and map unload waits snapshot the current save-directory name before arming. Load callbacks snapshot the newly available directory; viewscreen callbacks snapshot the first focus string and normalized DF type name; pause events return fixed boolean state.
+        - Evidence: Missing, empty, or failing optional native payload readers omit their otherwise valid field instead of failing the event wait. Occurrences and payloads are immutable proxy records containing only detached scalar fields and the immutable payload, never the current native screen.
+        - Evidence: The scheduler marks the wait outstanding before the command arm callback installs its listener and invokes the optional trigger. A synchronous matching trigger signal is forwarded through `signal_event()` and the listener is removed immediately after the scheduler accepts it.
+        - Evidence: A signal is accepted only after its safe scheduler pump is queued. If DFHack rejects that pump, the scheduler rolls back the pending occurrence so the listener remains armed and a later matching event can retry safely.
+        - Evidence: Unrelated native state changes do not signal or remove the listener. The first accepted occurrence removes it; scheduler cleanup is idempotent after success, cancellation, timeout, or trigger failure.
+        - Evidence: Trigger failure retains the original trigger error after listener cleanup. Focused coverage also proves immediate removal, unique listener keys, pre-unload capture, post-callback snapshot independence, and unavailable-field behavior.
+        - Evidence: Focused command-module coverage completed with 17 successes, 0 failures, 0 errors, and 0 pending. Focused scheduler coverage completed with 23 successes, 0 failures, 0 errors, and 0 pending. The full standalone suite completed with 590 successes, 0 failures, 0 errors, and 0 pending.
+        - Evidence: Lua 5.4.6 syntax and formatting checks passed for 269 files.
     ☐ Save-game mount migration:
         - Evidence:
     ☐ Focused unit tests:
