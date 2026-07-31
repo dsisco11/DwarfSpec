@@ -154,6 +154,9 @@ local save_game_load_command = load_automation_module(package_root,
 local await_event_command = load_automation_module(package_root,
     'dwarfspec.commands.await_event',
     '/src/dwarfspec/commands/await_event.lua')
+local text_search_command = load_automation_module(package_root,
+    'dwarfspec.commands.text_search',
+    '/src/dwarfspec/commands/text_search.lua')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
@@ -200,6 +203,8 @@ local await_event_command = load_automation_module(package_root,
             function() return dfhack.gui.getCurViewscreen(true) end,
         get_window_size=mount_dependencies.get_window_size or
             function() return dfhack.screen.getWindowSize() end,
+        read_tile=mount_dependencies.read_tile or
+            function(x, y) return dfhack.screen.readTile(x, y) end,
         get_map_view_position=mount_dependencies.get_map_view_position or
             function()
                 local global = assert(df and df.global,
@@ -249,6 +254,12 @@ local await_event_command = load_automation_module(package_root,
             get_window_size=context.get_window_size,
             pointer_adapter=pointer_adapter_module,
             pointer=context.pointer,
+        })
+
+    local rendered_text_search = mount_dependencies.text_search or
+        text_search_command.new({
+            get_window_size=context.get_window_size,
+            read_tile=context.read_tile,
         })
 
     local await_event = mount_dependencies.await_event or
@@ -568,6 +579,10 @@ local await_event_command = load_automation_module(package_root,
         native_render_observer_factory=native_render_observer_factory,
         subject_module=mount_dependencies.subject_module or subject_module,
         command_observer=command_observer,
+    })
+    local search_command = text_search_command.new_command({
+        mount_context=context.mount_context,
+        matcher=rendered_text_search,
     })
     context.run.mount_cleanup_probe = function()
         local state = context.mount_context:cleanup_state()
@@ -1381,6 +1396,14 @@ local await_event_command = load_automation_module(package_root,
         local adapter
         view, _, _, adapter = resolve_interaction_target(view, 'inspect')
         return diagnostics.inspect_view(view, adapter)
+    end
+
+    ---Searches final rendered screen cells within the current mount scope.
+    ---@param query table
+    ---@param search_area table|nil
+    ---@return table|nil
+    function ds.search(query, search_area)
+        return search_command(query, search_area)
     end
 
     ---Returns a copied focus-string list for one current mounted subject.

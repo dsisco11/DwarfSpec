@@ -135,12 +135,10 @@ function M.new(dependencies)
 
     ---Searches one normalized screen scope in row-major order.
     ---@param query any
-    ---@param scope any
+    ---@param scope any|nil Defaults to the captured current window.
     ---@return table|nil
     local function search(query, scope)
         local normalized_query = M.normalize_query(query)
-        local normalized_scope =
-            M.normalize_rectangle(scope, 'text search scope')
 
         local width, height = get_window_size()
         assert(is_integer(width) and width > 0 and
@@ -148,12 +146,18 @@ function M.new(dependencies)
             ('text search received invalid window dimensions: ' ..
                 'width=%s height=%s'):format(
                     tostring(width), tostring(height)))
-        local effective = M.intersect_rectangles(normalized_scope, {
+        local window = {
             x1=0,
             y1=0,
             x2=width - 1,
             y2=height - 1,
-        })
+        }
+        local effective = window
+        if scope ~= nil then
+            local normalized_scope =
+                M.normalize_rectangle(scope, 'text search scope')
+            effective = M.intersect_rectangles(normalized_scope, window)
+        end
         if M.is_empty_intersection(effective) then
             return EMPTY_INTERSECTION
         end
@@ -196,6 +200,126 @@ function M.new(dependencies)
             'text search effective region has no readable screen cells: ' ..
                 format_rectangle(effective))
         return nil
+    end
+
+    return search
+end
+
+---Returns whether a value carries a retained Subject identity.
+---@param mount_context table
+---@param value any
+---@return boolean
+local function is_search_subject(mount_context, value)
+    return type(value) == 'table' and
+        (mount_context.subject_mounts[value] ~= nil or
+            (type(value.mount_id) == 'number' and
+                type(value.control_path) == 'string' and
+                type(value._references) == 'table'))
+end
+
+---Returns validated visible body bounds for one resolved search subject.
+---@param view any
+---@param adapter dwarfspec.SubjectAdapter
+---@param control_path string
+---@return table
+local function search_subject_scope(view, adapter, control_path)
+    local visible = true
+    if type(adapter.effective_visible) == 'function' then
+        visible = adapter:effective_visible(view)
+    elseif type(adapter.visible) == 'function' then
+        visible = adapter:visible(view)
+    end
+    assert(visible,
+        ('DwarfSpec search requires an effectively visible subject: ' ..
+            'control_path=%q'):format(control_path))
+
+    local bounds
+    if type(adapter.interaction_bounds) == 'function' then
+        bounds = adapter:interaction_bounds(view)
+    end
+    if bounds == nil then bounds = adapter:bounds(view) end
+    assert(type(bounds) == 'table',
+        ('DwarfSpec search subject has no visible body bounds: ' ..
+            'control_path=%q'):format(control_path))
+    return M.normalize_rectangle(bounds, 'text search subject bounds')
+end
+
+---Returns the current mount's default rendered-text search scope.
+---@param mount table
+---@return table|nil, boolean
+local function default_search_scope(mount)
+    if mount.category == 'native' then return nil, false end
+    local adapter = mount.subject_source.adapter
+    return search_subject_scope(
+        adapter:root(), adapter, '<root>'), true
+end
+
+---Resolves an explicit subject or rectangle against the mount default.
+---@param mount_context table
+---@param default_scope table|nil
+---@param search_area any
+---@return table, boolean
+local function explicit_search_scope(
+        mount_context, default_scope, search_area)
+    local requested
+    local subject_scoped = false
+    if is_search_subject(mount_context, search_area) then
+        local view = mount_context:resolve_subject(search_area, 'search')
+        requested = search_subject_scope(
+            view, search_area._descriptor.adapter,
+            search_area.control_path)
+        subject_scoped = true
+    else
+        requested = M.normalize_rectangle(
+            search_area, 'text search area')
+    end
+    if default_scope ~= nil then
+        requested = M.intersect_rectangles(default_scope, requested)
+    end
+    if M.is_empty_intersection(requested) then
+        assert(not subject_scoped,
+            ('DwarfSpec search subject has no usable visible body ' ..
+                'bounds within the current mount: control_path=%q')
+                :format(search_area.control_path))
+    end
+    return requested, subject_scoped
+end
+
+---Constructs the public rendered-text search command.
+---@param dependencies table
+---@return fun(query:any, search_area:any|nil):table|nil
+function M.new_command(dependencies)
+    assert(type(dependencies) == 'table',
+        'text search command requires dependencies')
+    local mount_context = assert(dependencies.mount_context,
+        'text search command requires mount-context access')
+    local matcher = assert(dependencies.matcher,
+        'text search command requires rendered matching')
+    assert(type(matcher) == 'function',
+        'text search rendered matching must be a function')
+
+    ---Searches final rendered screen cells within the current mount scope.
+    ---@param query any
+    ---@param search_area any|nil
+    ---@return table|nil
+    local function search(query, search_area)
+        local mount = mount_context:require_current('search')
+        mount.interaction_target:assert_current('search')
+        local normalized_query = M.normalize_query(query)
+        local scope, subject_scoped = default_search_scope(mount)
+        if search_area ~= nil then
+            scope, subject_scoped = explicit_search_scope(
+                mount_context, scope, search_area)
+            if M.is_empty_intersection(scope) then return nil end
+        end
+        local result = matcher(normalized_query, scope)
+        if M.is_empty_intersection(result) then
+            assert(not subject_scoped,
+                'DwarfSpec search subject has no usable visible body ' ..
+                    'bounds within the current window')
+            return nil
+        end
+        return result
     end
 
     return search

@@ -353,6 +353,15 @@ describe('rendered text search command primitives', function()
             end
         end)
 
+        it('uses the full captured window when scope is omitted', function()
+            local command, observations =
+                text_screen({'ABC', 'DEF'})
+            assert.same({x1=1, y1=1, x2=1, y2=1},
+                command({text='E'}))
+            assert.equals(1, observations.window_calls)
+            assert.equals(6, #observations.reads)
+        end)
+
         it('rejects invalid captured window dimensions before reading',
                 function()
             local reads = 0

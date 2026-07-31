@@ -287,21 +287,60 @@ Phase 3 evidence:
       and focused unit file. The temporary parser probe was removed.
 
 Phase 4 - Resolve mount and search-area scopes:
-    ☐ Add a small `ds.search()` command body that delegates validation, scope resolution, and matching to named helpers.
-    ☐ Require the current mount through the existing mount-context lifecycle guard.
-    ☐ Resolve a borrowed native default to the full captured DF window.
-    ☐ Resolve an owned mount default from the root adapter's visible body bounds.
-    ☐ Resolve an explicit subject through the existing current-mount subject descriptor and adapter.
-    ☐ Require effective subject visibility where the adapter exposes it.
-    ☐ Use current clipped interaction bounds when they are available; otherwise normalize and clip the adapter's body bounds.
-    ☐ Resolve an explicit rectangle without interpreting it as a component option or subject descriptor.
-    ☐ Intersect every explicit area with both the mount default scope and current window.
-    ☐ Return `nil` without reading cells when a valid explicit rectangle has an empty effective intersection.
-    ☐ Preserve existing stale-subject, replaced-native-root, cleaned-mount, foreign-mount, and inactive-screen errors.
-    ☐ Ensure source-selected native and registered-overlay subjects retain their existing adapter and ownership validation.
-    ☐ Ensure searching does not change `mount.command_subject`, render generation, pointer state, cleanup state, or retained capture state.
-    ☐ Add focused mount-command tests for every mount category and search-area form.
-    ☐ Add focused failures for missing mount, stale subject, foreign subject, hidden subject, missing bounds, inverted rectangle, and unreadable effective region.
+    ☒ Add a small `ds.search()` command body that delegates validation, scope resolution, and matching to the text-search command module.
+    ☒ Require the current mount through the existing mount-context lifecycle guard.
+    ☒ Resolve a borrowed native default to the full captured DF window.
+    ☒ Resolve an owned mount default from the root adapter's visible body bounds.
+    ☒ Resolve an explicit subject through the existing current-mount subject descriptor and adapter.
+    ☒ Require effective subject visibility where the adapter exposes it.
+    ☒ Use current clipped interaction bounds when they are available; otherwise normalize and clip the adapter's body bounds.
+    ☒ Resolve an explicit rectangle without interpreting it as a component option or subject descriptor.
+    ☒ Intersect every explicit area with both the mount default scope and current window.
+    ☒ Return `nil` without reading cells when a valid explicit rectangle has an empty effective intersection.
+    ☒ Preserve existing stale-subject, replaced-native-root, cleaned-mount, foreign-mount, and inactive-screen errors.
+    ☒ Ensure source-selected native and registered-overlay subjects retain their existing adapter and ownership validation.
+    ☒ Ensure searching does not change `mount.command_subject`, render generation, pointer state, cleanup state, or retained capture state.
+    ☒ Add focused mount-command tests for every mount category and search-area form.
+    ☒ Add focused failures for missing mount, stale subject, foreign subject, hidden subject, missing bounds, inverted rectangle, and unreadable effective region.
+
+Phase 4 evidence:
+    - `ds.search()` is a thin public entry point that delegates to the
+      constructed text-search command. The command module requires the current
+      mount and active interaction target, copies and validates the query, and
+      owns default-scope resolution, explicit-area resolution, rectangle
+      intersection, and rendered matching.
+    - Borrowed native mounts pass an omitted scope so the matcher uses its one
+      captured full-window rectangle. Widget, overlay, and complete-screen
+      mounts use the visible root body. Explicit rectangles are intersected
+      with that mount default and then with the matcher's captured window.
+      Empty explicit intersections return nil before any tile read while still
+      validating the query.
+    - Explicit subjects re-enter `resolve_subject()` and retain its mount,
+      source, adapter, identity, and native-screen validation. Search requires
+      inherited native visibility where available, otherwise direct adapter
+      visibility. It prefers current clipped interaction bounds and falls back
+      to normalized body bounds for Lua views and adapters without that API.
+    - Focused coverage proves native and registered-overlay sources, clipped
+      native bounds, inherited native invisibility, Lua child bounds, all four
+      mount categories, default and explicit scopes, and exact returned
+      rectangles. It also preserves stale or foreign mounts, replaced native
+      widgets, missing mount, inactive screen, hidden subject, missing or
+      offscreen bounds, inverted or unsupported rectangles, and wholly
+      unreadable-region errors.
+    - The read-only state test observed unchanged render generation, pointer
+      coordinates and ownership, cleanup count, capture table and contents,
+      invalidation count, and command-event count. A following root redraw was
+      still attributed to `<root>`, proving search did not leave
+      `mount.command_subject` set.
+    - Focused public mount-command result: 93 successes, zero failures, zero
+      errors, and zero pending. Focused command-module result: 37 successes,
+      zero failures, zero errors, and zero pending.
+    - Full standalone unit result: 637 successes, zero failures, zero errors,
+      and zero pending. Lua 5.4.6 syntax and formatting passed all 275 Lua
+      files. DFHack's embedded Lua 5.3 parser accepted both changed production
+      files and both focused unit files; the temporary probe was removed.
+    - `Subject:search()` and live component, overlay, complete-screen, and
+      borrowed-native proofs remain assigned to their later checklist work.
 
 Phase 5 - Add fluent subject search and public inventory coverage:
     ☐ Implement `Subject:search(query)` through the subject command-dispatch path.
@@ -403,16 +442,19 @@ Execution evidence ledger:
         - Ordinary byte, blank, graphical, and invalid reads were observed.
           TrueType was not active and remains explicitly unavailable evidence.
     ☒ Focused query and matching unit tests:
-        - 36 successes, zero failures, zero errors, zero pending.
-    ☐ Focused subject and mount-command unit tests:
-        - Not run.
+        - 37 successes, zero failures, zero errors, zero pending.
+    ☒ Focused subject and mount-command unit tests:
+        - Public mount-command coverage completed with 93 successes, zero
+          failures, zero errors, and zero pending. Subject command dispatch is
+          reserved for the next checklist section.
     ☐ Declaration and conformance tests:
         - Not run.
     ☒ Full standalone unit suite:
-        - 628 successes, zero failures, zero errors, zero pending.
+        - 637 successes, zero failures, zero errors, zero pending.
     ☐ Lua 5.3 syntax and formatting:
-        - The embedded Lua 5.3 parser accepted the changed command and focused
-          test files. The full repository and formatting gate was not run.
+        - The embedded Lua 5.3 parser accepted both changed production files
+          and both focused test files. The full repository and formatting gate
+          was not run.
     ☒ Lua 5.4 syntax and formatting:
         - Lua 5.4.6 syntax and formatting passed all 275 Lua files.
     ☐ Focused ordinary-widget live search:
