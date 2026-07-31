@@ -234,23 +234,57 @@ Phase 2 evidence:
       those behaviors and their tests belong to the next checklist section.
 
 Phase 3 - Implement deterministic rendered-cell matching:
-    ☐ Inject window-size and tile-reading functions into the pure search module so its algorithm is unit-testable without DFHack globals.
-    ☐ Capture the current window dimensions once per search.
-    ☐ Intersect the requested scope with the captured window rectangle before reading cells.
-    ☐ Read only the effective rectangle.
-    ☐ Convert readable `pen.ch` values into exact one-byte row strings without consulting colors, tiles, or adapted component text.
-    ☐ Treat nil pens, missing `ch`, nonintegral `ch`, and out-of-byte-range `ch` as unreadable match-breaking sentinels.
-    ☐ Preserve readable NUL-valued blank cells as readable nonmatching bytes.
-    ☐ Search each row with plain literal matching.
-    ☐ Count matches in deterministic top-to-bottom, then left-to-right order.
-    ☐ Count overlapping occurrences by advancing one cell after each match start.
-    ☐ Stop after the requested occurrence is found.
-    ☐ Return a fresh plain rectangle with exact text-cell bounds.
-    ☐ Return `nil` when at least one cell was readable but the requested occurrence was absent.
-    ☐ Fail with a bounded error when no cell in the effective region was readable.
-    ☐ Avoid allocating pen copies or a full `ds.capture_screen()` evidence record.
-    ☐ Add unit tests for left and right edges, single-cell text, repeated text, overlapping text, occurrence selection, clipped matches, unreadable gaps, fully unreadable regions, and no-match readable regions.
-    ☐ Add a bounded performance characterization for the default 128 by 64 component viewport without establishing an unstable wall-clock gate.
+    ☒ Inject window-size and tile-reading functions into the command module so its algorithm is unit-testable without DFHack globals.
+    ☒ Capture the current window dimensions once per search.
+    ☒ Intersect the requested scope with the captured window rectangle before reading cells.
+    ☒ Read only the effective rectangle.
+    ☒ Convert readable `pen.ch` values into exact one-byte row strings without consulting colors, tiles, or adapted component text.
+    ☒ Treat nil pens, missing `ch`, nonintegral `ch`, and out-of-byte-range `ch` as unreadable match-breaking sentinels.
+    ☒ Preserve readable NUL-valued blank cells as readable nonmatching bytes.
+    ☒ Search each row with plain literal matching.
+    ☒ Count matches in deterministic top-to-bottom, then left-to-right order.
+    ☒ Count overlapping occurrences by advancing one cell after each match start.
+    ☒ Stop after the requested occurrence is found.
+    ☒ Return a fresh plain rectangle with exact text-cell bounds.
+    ☒ Return `nil` when at least one cell was readable but the requested occurrence was absent.
+    ☒ Fail with a bounded error when no cell in the effective region was readable.
+    ☒ Avoid allocating pen copies or a full `ds.capture_screen()` evidence record.
+    ☒ Add unit tests for left and right edges, single-cell text, repeated text, overlapping text, occurrence selection, clipped matches, unreadable gaps, fully unreadable regions, and no-match readable regions.
+    ☒ Add a bounded performance characterization for the default 128 by 64 component viewport without establishing an unstable wall-clock gate.
+
+Phase 3 evidence:
+    - `dwarfspec.commands.text_search.new()` requires injected
+      `get_window_size` and `read_tile` functions and returns the isolated
+      matcher. It captures and validates window geometry once, intersects the
+      requested scope with that window, and returns `EMPTY_INTERSECTION`
+      without tile reads when they do not overlap.
+    - Each effective row is represented by exact one-byte `pen.ch` values.
+      Nil pens, inaccessible or missing `ch`, fractional values, and values
+      outside 0 through 255 become NUL match-breaking sentinels. A genuine
+      readable NUL remains counted as readable, and byte 255 matches exactly.
+      Pen colors, tiles, and adapted text are never read or copied.
+    - Plain row searches advance one cell after each match start, preserving
+      overlaps. Occurrences are selected top-to-bottom then left-to-right.
+      The matcher returns a fresh zero-based inclusive rectangle immediately
+      after the selected row is searched and does not read subsequent rows.
+    - A readable miss or unavailable requested occurrence returns nil. A
+      wholly unreadable effective region fails with the bounded rectangle
+      diagnostic `text search effective region has no readable screen cells`.
+    - Focused standalone unit result: 36 successes, zero failures, zero
+      errors, and zero pending. The cases cover dependency and window
+      validation, clipping and read bounds, empty intersections, horizontal
+      edges, single cells, repeated, overlapping, and row-major occurrences,
+      selected-occurrence early exit, clipped matches, unreadable gaps and
+      character values, readable NUL, byte 255, style independence, fresh
+      results, in-progress caller mutation, readable misses, and wholly
+      unreadable regions.
+    - The bounded 128 by 64 characterization performed one window-size call
+      and exactly 8,192 tile reads for a full readable miss. It establishes no
+      wall-clock threshold.
+    - Full standalone unit result: 628 successes, zero failures, zero errors,
+      and zero pending. Lua 5.4.6 syntax and formatting passed all 275 Lua
+      files, and DFHack's embedded Lua 5.3 parser accepted the command module
+      and focused unit file. The temporary parser probe was removed.
 
 Phase 4 - Resolve mount and search-area scopes:
     ☐ Add a small `ds.search()` command body that delegates validation, scope resolution, and matching to named helpers.
@@ -368,18 +402,19 @@ Execution evidence ledger:
     ☒ DFHack `readTile()` CP437, graphical, blank-cell, invalid-cell, and TrueType probes:
         - Ordinary byte, blank, graphical, and invalid reads were observed.
           TrueType was not active and remains explicitly unavailable evidence.
-    ☐ Focused query and matching unit tests:
-        - Not run.
+    ☒ Focused query and matching unit tests:
+        - 36 successes, zero failures, zero errors, zero pending.
     ☐ Focused subject and mount-command unit tests:
         - Not run.
     ☐ Declaration and conformance tests:
         - Not run.
-    ☐ Full standalone unit suite:
-        - Not run.
+    ☒ Full standalone unit suite:
+        - 628 successes, zero failures, zero errors, zero pending.
     ☐ Lua 5.3 syntax and formatting:
-        - Not run.
-    ☐ Lua 5.4 syntax and formatting:
-        - Not run.
+        - The embedded Lua 5.3 parser accepted the changed command and focused
+          test files. The full repository and formatting gate was not run.
+    ☒ Lua 5.4 syntax and formatting:
+        - Lua 5.4.6 syntax and formatting passed all 275 Lua files.
     ☐ Focused ordinary-widget live search:
         - Not run.
     ☐ Focused complete-screen live search:
@@ -400,8 +435,8 @@ Execution evidence ledger:
         - Not run.
     ☐ Cleanup and repeatability:
         - Not run.
-    ☐ `git diff --check`:
-        - Not run.
+    ☒ `git diff --check`:
+        - Passed after the focused implementation and evidence update.
 
 Definition of done:
     ☐ `ds.search({text="..."}, search_area?)` and `Subject:search(query)` implement the locked contract.

@@ -17,6 +17,25 @@ local function is_integer(value)
     return type(value) == 'number' and value % 1 == 0
 end
 
+---Reads one exact byte from a screen pen or returns an unreadable sentinel.
+---@param pen any
+---@return integer|nil
+local function readable_byte(pen)
+    local pen_type = type(pen)
+    if pen_type ~= 'table' and pen_type ~= 'userdata' then return nil end
+    local ok, ch = pcall(function() return pen.ch end)
+    if not ok or not is_integer(ch) or ch < 0 or ch > 255 then return nil end
+    return ch
+end
+
+---Formats one normalized rectangle for a bounded diagnostic.
+---@param rectangle table
+---@return string
+local function format_rectangle(rectangle)
+    return ('{x1=%d,y1=%d,x2=%d,y2=%d}'):format(
+        rectangle.x1, rectangle.y1, rectangle.x2, rectangle.y2)
+end
+
 ---Validates and copies one rendered-text search query.
 ---@param query any
 ---@return table
@@ -97,6 +116,89 @@ end
 ---@return boolean
 function M.is_empty_intersection(value)
     return value == EMPTY_INTERSECTION
+end
+
+---Constructs a rendered-cell text-search command from screen dependencies.
+---@param dependencies table
+---@return fun(query:any, scope:any):table|nil
+function M.new(dependencies)
+    assert(type(dependencies) == 'table',
+        'text search command requires dependencies')
+    local get_window_size = assert(dependencies.get_window_size,
+        'text search command requires window-size access')
+    local read_tile = assert(dependencies.read_tile,
+        'text search command requires tile-reading access')
+    assert(type(get_window_size) == 'function',
+        'text search window-size access must be a function')
+    assert(type(read_tile) == 'function',
+        'text search tile-reading access must be a function')
+
+    ---Searches one normalized screen scope in row-major order.
+    ---@param query any
+    ---@param scope any
+    ---@return table|nil
+    local function search(query, scope)
+        local normalized_query = M.normalize_query(query)
+        local normalized_scope =
+            M.normalize_rectangle(scope, 'text search scope')
+
+        local width, height = get_window_size()
+        assert(is_integer(width) and width > 0 and
+                is_integer(height) and height > 0,
+            ('text search received invalid window dimensions: ' ..
+                'width=%s height=%s'):format(
+                    tostring(width), tostring(height)))
+        local effective = M.intersect_rectangles(normalized_scope, {
+            x1=0,
+            y1=0,
+            x2=width - 1,
+            y2=height - 1,
+        })
+        if M.is_empty_intersection(effective) then
+            return EMPTY_INTERSECTION
+        end
+
+        local readable_cell_seen = false
+        local remaining = normalized_query.occurrence
+        for y = effective.y1, effective.y2 do
+            local bytes = {}
+            for x = effective.x1, effective.x2 do
+                local ch = readable_byte(read_tile(x, y))
+                if ch == nil then
+                    bytes[#bytes + 1] = '\0'
+                else
+                    readable_cell_seen = true
+                    bytes[#bytes + 1] = string.char(ch)
+                end
+            end
+
+            local row = table.concat(bytes)
+            local start = 1
+            while true do
+                local found = row:find(
+                    normalized_query.text, start, true)
+                if found == nil then break end
+                remaining = remaining - 1
+                if remaining == 0 then
+                    local x1 = effective.x1 + found - 1
+                    return {
+                        x1=x1,
+                        y1=y,
+                        x2=x1 + #normalized_query.text - 1,
+                        y2=y,
+                    }
+                end
+                start = found + 1
+            end
+        end
+
+        assert(readable_cell_seen,
+            'text search effective region has no readable screen cells: ' ..
+                format_rectangle(effective))
+        return nil
+    end
+
+    return search
 end
 
 return M
