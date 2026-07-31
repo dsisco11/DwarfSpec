@@ -70,6 +70,14 @@ The following decisions are accepted unless later discussion revises them:
   metals while accepting custom raw metal identifiers.
 - The first implementation always uses quickstart. Custom embark profiles are
   deferred to a later follow-up.
+- The first provisioning backend runs in the current Dwarf Fortress process.
+  It combines exposed native viewscreen fields with simulated native input and
+  has no initial external or fallback backend.
+- Provisioning transitions reuse the internal event-wait machinery developed
+  for `ds.awaitEvent()`.
+- Native menu elements are located by visible UI text through the planned
+  internal search machinery behind `ds.search()` wherever that machinery can
+  identify the required control.
 - A test that does not declare its isolation behavior conservatively requires
   a pristine world and leaves the entire world dirty.
 - Isolation uses `requires` for facets that must be pristine and `dirties` for
@@ -987,6 +995,29 @@ A missing fixture requires this conceptual transaction:
 19. Complete the manifest and clear the operation journal.
 20. Load or retain the managed realization as the mounted fixture.
 
+The provisioner models those steps with these observable states:
+
+```text
+TITLE
+  -> WORLD_CONFIG
+  -> GENERATING
+  -> WORLD_READY
+  -> SITE_SELECTION
+  -> QUICKSTART
+  -> MAP_LOADING
+  -> FORTRESS_READY
+  -> SAVING
+  -> UNLOADED
+  -> SNAPSHOT_COMPLETE
+```
+
+Each transition defines its expected native screen or game state, triggering
+action, completion event or predicate, timeout, bounded diagnostics, and
+pre-action journal entry. Event-backed transitions use the internal
+`ds.awaitEvent()` mechanism and then verify the resulting current state.
+Fixed-frame waits may allow native UI state to settle, but they never establish
+transition success.
+
 The transaction must distinguish:
 
 - generator rejection;
@@ -999,15 +1030,41 @@ The transaction must distinguish:
 - manifest finalization failure.
 
 Each failure after storage reservation needs a recoverable journal state. A
-partial fixture must never be treated as complete.
+partial fixture must never be treated as complete. Failures before the initial
+save attempt to return to the title screen without creating a completed
+manifest. A map-load failure must not proceed to saving. A save failure must
+not proceed to snapshot capture. A snapshot or manifest failure retains the
+operation journal so later recovery can distinguish a successfully saved but
+incomplete managed fixture from an owned complete fixture.
 
 ## Provisioning backends
 
 ### In-process native UI backend
 
-The recommended initial backend drives the installed game's native screens
-through stable DFHack viewscreen identities, declared fields, enum values, and
-simulated input.
+The accepted initial backend drives the installed game's native screens through
+stable DFHack viewscreen identities, declared fields, enum values, and simulated
+input. It is a hybrid adapter:
+
+- exposed native fields configure values that would otherwise require fragile
+  or repetitive UI entry;
+- simulated input invokes native actions and allows Dwarf Fortress to perform
+  its own validation and side effects;
+- native screens are not manually instantiated; and
+- undocumented internal Dwarf Fortress functions are not called directly.
+
+Where an action is represented by a visible native menu element, the adapter
+should reuse the planned internal search machinery behind `ds.search()` to
+locate it by UI text. This avoids fixed screen coordinates when a semantic text
+target is available. Search results remain subject to native-screen identity,
+uniqueness, visibility, and enabled-state checks before input is dispatched.
+Views without a searchable text element may use a documented field, enum, or
+version-specific adapter mapping.
+
+Provisioning waits should reuse the internal event-listener and scheduler
+machinery developed for `ds.awaitEvent()`. The controller arms the relevant
+listener before triggering the transition, resumes only at a safe scheduler
+boundary, and then verifies the resulting native state directly. Events are
+transition observations rather than sole proof of success.
 
 Advantages:
 
@@ -1046,9 +1103,9 @@ Risks:
 - cleanup after aborted processes.
 
 The public API should depend on a private provisioner interface so the backend
-can change without altering `WorldDefinition`. The in-process backend is the
-recommended first implementation; the external backend remains a later
-optimization or pre-provisioning tool.
+can change without altering `WorldDefinition`. The external backend is not part
+of the first implementation and is considered only if later evidence
+demonstrates a concrete need.
 
 Reference:
 
@@ -1283,6 +1340,12 @@ References:
 World transitions must use raw-frame waits. Simulation-tick waits are not
 suitable because most tick-based timers are canceled or cannot make progress
 while a world is unloaded or paused.
+
+World-load, map-load, unload, viewscreen, and pause transitions should share the
+event-wait machinery behind `ds.awaitEvent()` instead of installing
+provisioner-specific native listeners. The listener must be armed before the
+triggering input. Transitions without a suitable state-change event continue to
+use an explicit raw-frame state predicate through the shared scheduler.
 
 State-change callbacks are observations, not sole transaction authority.
 Success should verify current state directly:
@@ -1567,23 +1630,22 @@ and should not be inferred complete from isolated unit tests.
 
 - Which native viewscreen fields and inputs form the supported in-process
   generation path?
-- Is a direct parameter adapter preferable to driving every advanced-generation
-  field through UI input?
 - What is the authoritative durable-save boundary?
 - Can site discovery be implemented without a required optional plugin?
-- When, if ever, should the external `-gen` backend be implemented?
 
 ## Next discussion
 
 Fixture storage, save sentinels, ownership, collision behavior, and
-compatibility are settled. The next useful design discussion should select the
-first provisioning backend and define its state machine:
+compatibility are settled. The in-process hybrid provisioning backend and its
+event-driven state-machine boundaries are also accepted. The next useful design
+discussion should settle deterministic embark-site discovery:
 
-1. whether to drive the native world-generation and embark viewscreens,
-   manipulate their backing parameters directly, or combine both approaches;
-2. the observable states and timeouts from starting generation through the
-   first durable fortress save;
-3. how generation failure, site-search failure, embark failure, and interrupted
-   provisioning unwind safely;
-4. which pieces require live characterization before implementation; and
-5. whether the first implementation needs any fallback backend.
+1. whether the native embark finder is only a coarse candidate source or the
+   primary search engine;
+2. which private adapter verifies aquifer, flux, clay, sand, river, metals, and
+   rectangle fit;
+3. the deterministic order in which region tiles and local rectangles are
+   examined;
+4. how playable civilizations participate in candidate acceptance; and
+5. whether the first implementation can remain independent of the optional
+   `embark-assistant` plugin.
