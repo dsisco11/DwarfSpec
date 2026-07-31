@@ -58,18 +58,93 @@ Explicit exclusions:
     ☐ Do not broaden `ds.capture_screen()` or persist transient search buffers in run evidence.
 
 Phase 0 - Reconcile the active contract and baseline:
-    ☐ Re-read this checklist and the roadmap entry in `docs/project.todo` before editing runtime code.
-    ☐ Inventory the active checkout, branch, worktree state, index state, installed rock version, and current package archive contents.
-    ☐ Confirm the current runtime and declaration signatures for `ds.root`, `ds.get`, `ds.inspect`, `ds.capture_screen`, and every `Subject` query method.
-    ☐ Confirm the current mount categories and how each category exposes its root, subject adapter, interaction target, window size, and render tracker.
-    ☐ Confirm zero-based inclusive bounds for Lua views, native widgets, pointer commands, and screen captures.
-    ☐ Confirm the locally installed DFHack contract for `dfhack.screen.getWindowSize()` and `dfhack.screen.readTile(x, y)`.
-    ☐ Reproduce and record `readTile()` behavior for ordinary text cells, blank cells, graphical cells, invalid cells, and TrueType mode where available.
-    ☐ Record the pre-change focused unit-test baseline for subject, mount-command, adapter, and diagnostic coverage.
-    ☐ Record the pre-change full standalone unit-suite result.
-    ☐ Record the pre-change Lua 5.3 and Lua 5.4 syntax and formatting results.
-    ☐ Record focused pre-change live results separately for ordinary widget, overlay widget, complete screen, and borrowed native screen mounts.
-    ☐ Stop and update this checklist if current DFHack cannot expose rendered character bytes consistently enough to support the locked contract.
+    ☒ Re-read this checklist and the roadmap entry in `docs/project.todo` before editing runtime code.
+    ☒ Inventory the active checkout, branch, worktree state, index state, installed rock version, and current package archive contents.
+    ☒ Confirm the current runtime and declaration signatures for `ds.root`, `ds.get`, `ds.inspect`, `ds.capture_screen`, and every `Subject` query method.
+    ☒ Confirm the current mount categories and how each category exposes its root, subject adapter, interaction target, window size, and render tracker.
+    ☒ Confirm zero-based inclusive bounds for Lua views, native widgets, pointer commands, and screen captures.
+    ☒ Confirm the locally installed DFHack contract for `dfhack.screen.getWindowSize()` and `dfhack.screen.readTile(x, y)`.
+    ☒ Reproduce and record `readTile()` behavior for ordinary text cells, blank cells, graphical cells, invalid cells, and TrueType mode where available.
+    ☒ Record the pre-change focused unit-test baseline for subject, mount-command, adapter, and diagnostic coverage.
+    ☒ Record the pre-change full standalone unit-suite result.
+    ☒ Record the pre-change Lua 5.3 and Lua 5.4 syntax and formatting results.
+    ☒ Record focused pre-change live results separately for ordinary widget, overlay widget, complete screen, and borrowed native screen mounts.
+    ☒ Stop and update this checklist if current DFHack cannot expose rendered character bytes consistently enough to support the locked contract.
+        - No stop was required. DFHack exposed all 19,800 cells in the active
+          graphical screen as readable byte-bearing pens. TrueType was not
+          active in the available environment, and its documented nil-cell
+          behavior remains an explicit limitation and later live gate.
+
+Phase 0 evidence:
+    - Checkout: `world-mount-system` at
+      `39e137ead8a2b3d57c93bbba89a166ab7ce17b11`, ahead of
+      `origin/world-mount-system` by two commits, with an empty index and
+      worktree before the evidence update.
+    - Source package: `dwarfspec-0.2.1-1.rockspec`. User-level LuaRocks still
+      had `dwarfspec 0.2.0-1` installed for Lua 5.4. The initial live command
+      correctly rejected the already-loaded 0.2.0 service; DFHack was
+      restarted before any live baseline was accepted.
+    - Current archive: `dist/dwarfspec-0.2.1-1.all.rock`, 220,008 bytes,
+      modified 2026-07-31 01:10:52 -07:00. Its 99 entries were 92 Lua files,
+      four documents, one command, the rockspec, and `rock_manifest`; it
+      included `lua/ds/d.lua` and contained zero tests and zero native
+      binaries.
+    - Runtime and declarations agreed on:
+        - `ds.root(options)` / `DS.root(options)`;
+        - `ds.get(control_path, options)` /
+          `DS.get(control_path, options)`;
+        - `ds.inspect(view)` / `DS.inspect(view)`; and
+        - `ds.capture_screen(name, options)` /
+          `DS.capture_screen(name, options)`.
+    - Runtime and declarations both exposed the same 11 Subject methods:
+      `click`, `hover`, `move_pointer`, `mouseWheel`, `input`, `type`,
+      `redraw`, `inspect`, `getFocusList`, `text`, and `raw`.
+    - Mount categories were `widget`, `overlay`, `screen`, and borrowed
+      `native`. Owned mounts expose their component root, owned host screen,
+      Lua-view subject adapter, owned interaction target, and render tracker
+      instrumented around `onRender`. Native mounts expose a pinned viewscreen,
+      native-widget subject adapter, borrowed interaction target, render
+      tracker, and reversible overlay-dispatch render observer. All use the
+      current window-size service supplied to `ds`.
+    - Lua-view bounds are the live `frame_body`; native-widget bounds are
+      normalized zero-based inclusive rectangles and offer window-clipped
+      interaction bounds. Pointer documentation uses zero-based UI-grid
+      coordinates. `capture_screen()` reads `x=0..width-1` and
+      `y=0..height-1` into one-based Lua row storage.
+    - Installed DFHack was `53.15-r2 (release)`. Its installed Lua API states
+      that `getWindowSize()` returns width and height and `readTile()` returns
+      a pen or nil for invalid or TrueType cells.
+    - Live read-only probe in graphics mode at 264 by 75 cells:
+      `readable=19800`, `unreadable=0`, `printable=197`, `blank=19611`,
+      `graphical=1485`, and both negative and beyond-window reads returned
+      nil. Ordinary, blank, and graphical readable-cell behavior was observed.
+      TrueType behavior was unavailable because the active screen exposed no
+      nil cells; no display or configuration change was made to force it.
+    - Focused standalone baseline:
+      `subject_spec.lua`, `ds_mount_commands_spec.lua`,
+      `lua_view_adapter_spec.lua`, `native_widget_adapter_spec.lua`,
+      `mount_adapters_spec.lua`, and `automation_diagnostics_spec.lua`
+      completed with 118 successes, zero failures, zero errors, and zero
+      pending.
+    - Full standalone baseline: 592 successes, zero failures, zero errors,
+      and zero pending under Lua 5.4.6.
+    - Syntax and formatting baseline: `Tools/Check-Lua.ps1` passed 271 files
+      with Lua 5.4.6. The embedded DFHack Lua 5.3 runtime parsed the same 271
+      repository files plus the temporary probe itself; formatting checks are
+      byte-oriented and were supplied by the 5.4 tool run. The temporary probe
+      and its result file were removed after evidence capture.
+    - Focused live baseline after the service restart:
+        - ordinary widget: 7 successes, cleanup confirmed;
+        - mounted overlay: 5 successes, cleanup confirmed;
+        - complete screen: 2 successes, cleanup confirmed; and
+        - borrowed native screen: 2 successes, cleanup confirmed.
+      Post-run service status reported version 0.2.1, executor idle, queue
+      zero, and quarantine none.
+    - Probe live run: 2 successes with `cleanup_confirmed=true`. An earlier
+      probe attempt enumerated the Dwarf Fortress directory instead of the
+      project and failed on a non-project Lua 5.4 file; cleanup was still
+      confirmed, the root was corrected, and the successful rerun supplied
+      the recorded evidence.
 
 Phase 1 - Add canonical authoring types and API declarations:
     ☐ Add the canonical `dwarfspec.ScreenRect` declaration without duplicating or drifting from existing inspected-rectangle types.
@@ -219,18 +294,21 @@ Phase 11 - Full verification, cleanup, and handoff:
     ☐ Mark a checklist item complete only when its required implementation and evidence both exist.
 
 Execution evidence ledger:
-    ☐ Baseline checkout, branch, worktree, index, installed rock, and archive:
-        - Not run.
-    ☐ Pre-change focused unit tests:
-        - Not run.
-    ☐ Pre-change full unit suite:
-        - Not run.
-    ☐ Pre-change Lua 5.3 and Lua 5.4 syntax and formatting:
-        - Not run.
-    ☐ Pre-change focused component, overlay, complete-screen, and native live tests:
-        - Not run.
-    ☐ DFHack `readTile()` CP437, graphical, blank-cell, invalid-cell, and TrueType probes:
-        - Not run.
+    ☒ Baseline checkout, branch, worktree, index, installed rock, and archive:
+        - Recorded in Phase 0 evidence.
+    ☒ Pre-change focused unit tests:
+        - 118 successes, zero failures, zero errors, zero pending.
+    ☒ Pre-change full unit suite:
+        - 592 successes, zero failures, zero errors, zero pending.
+    ☒ Pre-change Lua 5.3 and Lua 5.4 syntax and formatting:
+        - Embedded Lua 5.3 parsed 271 repository files; Lua 5.4.6 syntax and
+          formatting passed 271 files.
+    ☒ Pre-change focused component, overlay, complete-screen, and native live tests:
+        - 7 ordinary-widget, 5 overlay, 2 complete-screen, and 2 native-screen
+          successes; every run reported `cleanup_confirmed=true`.
+    ☒ DFHack `readTile()` CP437, graphical, blank-cell, invalid-cell, and TrueType probes:
+        - Ordinary byte, blank, graphical, and invalid reads were observed.
+          TrueType was not active and remains explicitly unavailable evidence.
     ☐ Focused query and matching unit tests:
         - Not run.
     ☐ Focused subject and mount-command unit tests:
