@@ -66,13 +66,17 @@ Phase 1 - Implement current-save comparison and validation:
         - Evidence: `tests/unit/save_game_mount_spec.lua` covers all listed cases, including missing DFHack APIs and malformed loaded-directory results.
 
 Phase 2 - Implement discard and unload:
-    ☐ Open the required native options state through stable input when a different world is loaded.
-    ☐ Select `QUIT_WITHOUT_SAVING` through a stable native identity.
-    ☐ Approve any required discard confirmation through stable native input.
-    ☐ Wait across raw frames until `dfhack.isWorldLoaded()` is false.
-    ☐ Use bounded timeouts that include the requested directory, observed directory, focus, viewscreen, and elapsed time.
-    ☐ Restore temporary input and pointer-tracking state used while initiating the unload.
-    ☐ Add focused adapter tests for success, confirmation, timeout, unexpected screen state, and temporary-input cleanup.
+    ☒ Accept native mouse selection for the enum-identified discard action.
+        - Evidence: a controlled live probe opened the native options overlay in `TestWorld 01`, found `QUIT_WITHOUT_SAVING` as visible ordinal 4, clicked its computed row at grid coordinate `(132, 42)` in a `264x75` window, and observed `fort_quit_without_saving_confirm=true` while the world remained loaded.
+    ☒ Open the required native options state through stable input when a different world is loaded.
+    ☒ Select `QUIT_WITHOUT_SAVING` by generated enum identity and click its computed native button row.
+    ☒ Approve any required discard confirmation through stable native input.
+        - Evidence: the destructive live probe clicked the confirmation action at computed grid coordinate `(106, 41)`. After 1.5 seconds, `dfhack.isWorldLoaded()` was false, the active screen was `viewscreen_titlest`, focus was `title/Default`, and the options interface was closed.
+    ☒ Wait across raw frames until `dfhack.isWorldLoaded()` is false.
+    ☒ Use bounded timeouts that include the requested directory, observed directory, focus, viewscreen, and elapsed time.
+    ☒ Restore temporary input and pointer-tracking state used while initiating the unload.
+    ☒ Add focused adapter tests for success, confirmation, timeout, unexpected screen state, temporary-input cleanup, click geometry, and invalid geometry.
+        - Evidence: focused `save-game unload adapter` coverage reports 12 successes, 0 failures, and 0 errors. The complete standalone unit suite reports 547 successes, 0 failures, and 0 errors. Lua 5.4.6 syntax and formatting checks pass for 257 files.
 
 Phase 3 - Implement requested-save loading:
     ☐ Reach or verify a screen from which the installed `load-save` command can run.
