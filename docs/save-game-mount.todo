@@ -42,8 +42,8 @@ Phase 0 - Confirm the runtime boundary:
         - Evidence: `dfhack.isWorldLoaded()` is the world-loaded predicate and `dfhack.world.ReadWorldFolder()` returns the loaded directory. DFHack publishes `SC_WORLD_LOADED` and `SC_WORLD_UNLOADED`; direct predicate and directory reads remain the command's authoritative checks.
     ☒ Confirm that raw-frame waits continue across world unload and load.
         - Evidence: DwarfSpec schedules ordinary waits with `dfhack.timeout(..., 'frames', ...)`. DFHack stores frame timers separately and cancels only tick timers on `SC_WORLD_UNLOADED`; raw-frame callbacks therefore remain available during the transition.
-    ☒ Confirm the supported screens from which the installed `load-save` command can load a requested save.
-        - Evidence: DFHack 53.15-r1 `scripts/load-save.lua` accepts an existing `viewscreen_loadgamest`, or a `viewscreen_titlest` containing the `Continue` choice, then defers its final `SELECT` by one raw frame.
+    ☒ Confirm whether the installed `load-save` command can load a requested save.
+        - Evidence: the DFHack 53.15-r2 runtime rejects the bundled script because it accesses the removed `viewscreen_titlest.sel_menu_line` field. The current title flow instead uses `mode`, `menu_line_id`, `savegame_header_world`, and `savegame_header_game`, and must be driven with DFHack's simulated native input.
     ☒ Confirm a stable mechanism for choosing `QUIT_WITHOUT_SAVING` without localized text, pixel coordinates, or resolution assumptions.
         - Evidence: `df.main_menu_option_type.QUIT_WITHOUT_SAVING` is a generated enum value. The native options interface exposes its current `option` vector and dedicated fortress/adventure confirmation flags, allowing the adapter to locate the action by enum identity rather than rendered text or coordinates. Phase 2 will validate the corresponding input sequence against a disposable live save.
     ☒ Record the focused and full pre-change test baselines.
@@ -79,16 +79,17 @@ Phase 2 - Implement discard and unload:
         - Evidence: focused `save-game unload adapter` coverage reports 12 successes, 0 failures, and 0 errors. The complete standalone unit suite reports 547 successes, 0 failures, and 0 errors. Lua 5.4.6 syntax and formatting checks pass for 257 files.
 
 Phase 3 - Implement requested-save loading:
-    ☐ Reach or verify a screen from which the installed `load-save` command can run.
-    ☐ Invoke `load-save` with the validated directory name as one exact argument.
-    ☐ Account for the script deferring save selection by one raw frame.
-    ☐ Capture immediate errors for missing, inactive, incompatible, or unavailable saves.
-    ☐ Wait across raw frames until a world is loaded.
-    ☐ Read the resulting directory through `dfhack.world.ReadWorldFolder()`.
-    ☐ Require the resulting directory to exactly match the requested directory.
-    ☐ Fail with bounded diagnostics when loading times out or a different directory becomes loaded.
-    ☐ Leave the successfully loaded requested save in place.
-    ☐ Add focused tests for successful loading, deferred selection, script failure, timeout, and wrong-save detection.
+    ☒ Reach or verify the current native title screen.
+    ☒ Select Continue, the requested save's active world, and its exact directory through DFHack's built-in simulated input.
+    ☒ Account for each title selection taking effect on a later raw frame.
+    ☒ Capture immediate errors for missing, inactive, incompatible, or unavailable saves.
+    ☒ Wait across raw frames until a world is loaded.
+    ☒ Read the resulting directory through `dfhack.world.ReadWorldFolder()`.
+    ☒ Require the resulting directory to exactly match the requested directory.
+    ☒ Fail with bounded diagnostics when loading times out or a different directory becomes loaded.
+    ☒ Leave the successfully loaded requested save in place.
+    ☒ Add focused tests for successful loading, deferred selection, unavailable saves, timeout, wrong-save detection, and temporary-input cleanup.
+        - Evidence: the native adapter performs explicit main-menu, active-world, and exact-save transitions, restoring temporary virtual-pointer state on success or failure. A live `gui.simulateInput`-only probe selected TestWorld's active-world row and the `TestWorld 01` save row, traversed `viewscreen_loadgamest`, reached `dwarfmode/Default`, and confirmed `dfhack.world.ReadWorldFolder()` returned `TestWorld 01`. Focused `save-game load adapter` coverage reports 8 successes, 0 failures, and 0 errors. The complete standalone unit suite reports 555 successes, 0 failures, and 0 errors. Lua 5.4.6 syntax and formatting checks pass for 259 files.
 
 Phase 4 - Export and document the command:
     ☐ Wire the implementation into the run-scoped `ds` namespace.
