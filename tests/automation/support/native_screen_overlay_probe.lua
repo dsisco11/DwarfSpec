@@ -32,7 +32,7 @@ NativeScreenOverlayProbe.ATTRS{
     default_pos={x=8, y=8},
     viewscreens='dwarfmode',
     overlay_onupdate_max_freq_seconds=0,
-    frame={w=24, h=5},
+    frame={w=40, h=7},
 }
 
 ---Builds one rendered button that records normal overlay input dispatch.
@@ -56,6 +56,11 @@ function NativeScreenOverlayProbe:init()
             view_id='status',
             frame={l=1, t=4, w=18, h=1},
             text='clicks: 0',
+        },
+        widgets.Label{
+            view_id='search_label',
+            frame={l=1, t=6, w=30, h=1},
+            text='DS_SEARCH_NATIVE_PROBE',
         },
     }
 end

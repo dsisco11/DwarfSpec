@@ -15,6 +15,38 @@ local BUTTON_FIELDS = {
     'mouse_mbut_lift',
 }
 
+---Returns the expected visible single-row bounds for a label subject.
+---@param subject dwarfspec.Subject
+---@param text string
+---@return dwarfspec.ScreenRect
+local function expected_label_bounds(subject, text)
+    local body = assert(subject:inspect().body,
+        'search label requires visible body bounds')
+    return {
+        x1=body.x1,
+        y1=body.y1,
+        x2=body.x1 + #text - 1,
+        y2=body.y1,
+    }
+end
+
+---Counts screen cells whose rendered character byte is readable.
+---@param bounds dwarfspec.ScreenRect
+---@return integer
+local function readable_cell_count(bounds)
+    local count = 0
+    for y=bounds.y1,bounds.y2 do
+        for x=bounds.x1,bounds.x2 do
+            local pen = dfhack.screen.readTile(x, y)
+            if pen and type(pen.ch) == 'number' and pen.ch >= 0 and
+                    pen.ch <= 255 and pen.ch % 1 == 0 then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
 ---Captures the exact native viewscreen child chain.
 ---@return userdata[]
 local function screen_stack()
@@ -371,5 +403,74 @@ describe('non-owning native-screen attachment', function()
         assert.is_true(same_pointer_state(
             original_pointer, pointer_state()))
         assert_mount_released(cleanup, expected_attachment_count)
+    end)
+
+    it('searches final text on a borrowed native screen without owning it',
+            function()
+        assert.is_true(dfhack.gui.matchFocusString(
+            'dwarfmode/Default', dfhack.gui.getDFViewscreen(true)),
+            'native search acceptance must start at dwarfmode/Default')
+        local run = ds.current_run()
+        local staged = ds.stage_overlay_registration(
+            'tests/automation/support/native_screen_overlay_probe.lua',
+            'native_search')
+        local overlay_name =
+            'gui/' .. staged.script_name .. '.native_screen'
+        assert.is_true(overlay.overlay_command(
+            {'enable', overlay_name}, true))
+
+        local native_screen = dfhack.gui.getDFViewscreen(true)
+        local native_root = native_screen.widgets
+        local original_current = dfhack.gui.getCurViewscreen(true)
+        local original_stack = screen_stack()
+        local original_pointer = pointer_state()
+        local original_dispatcher = overlay.render_viewscreen_widgets
+        local expected_attachment_count =
+            run.mount_cleanup_probe().native_attachment_count + 1
+        local root = ds.mountNativeScreen()
+        local source = {
+            source=ds.ESubjectSource.OVERLAY,
+            overlay=overlay_name,
+        }
+        local label = ds.get('search_label', source)
+        local text = 'DS_SEARCH_NATIVE_PROBE'
+        local bounds = expected_label_bounds(label, text)
+        local readable_cells = readable_cell_count(bounds)
+        run.native_text_search_display = {
+            graphical=dfhack.screen.inGraphicsMode(),
+            readable_cells=readable_cells,
+            label_cells=#text,
+        }
+
+        assert.equals(#text, readable_cells,
+            'the current native renderer must expose every probe text cell')
+        assert.same(bounds, ds.search({text=text}))
+        assert.same(bounds, root:search({text=text}),
+            'the borrowed native root must provide the native subject scope')
+        assert.is_nil(ds.search({text=text}, {
+            x1=bounds.x1 + 1,
+            y1=bounds.y1,
+            x2=bounds.x2,
+            y2=bounds.y2,
+        }))
+        assert.same(bounds, ds.search({text=text}, bounds))
+        assert.is_nil(root:search({text='DS_SEARCH_NATIVE_MISSING'}))
+
+        ds.unmount()
+        local cleanup = run.mount_cleanup_probe()
+        assert.equals(original_dispatcher,
+            overlay.render_viewscreen_widgets)
+        assert.equals(native_root, native_screen.widgets)
+        assert.equals(native_screen, dfhack.gui.getDFViewscreen(true))
+        assert.equals(original_current, dfhack.gui.getCurViewscreen(true))
+        assert.same(original_stack, screen_stack())
+        assert.is_true(same_pointer_state(
+            original_pointer, pointer_state()))
+        assert_mount_released(cleanup, expected_attachment_count)
+        local state = overlay.get_state()
+        assert.is_table(state.db[overlay_name],
+            'native unmount must retain the external probe overlay')
+        assert.is_true(state.config[overlay_name].enabled,
+            'native unmount must not disable the external probe overlay')
     end)
 end)

@@ -427,16 +427,39 @@ Phase 7 evidence:
       zero pending; `cleanup_confirmed=true`.
 
 Phase 8 - Prove borrowed native-screen behavior:
-    ☐ Select stable unique visible native text in a controlled DF screen or create a reversible native-screen fixture that renders through supported DFHack mechanisms.
-    ☐ Mount the current screen with `ds.mountNativeScreen()` and prove root-default search returns exact bounds for the native text.
-    ☐ Prove a narrowed explicit rectangle can exclude and include the same native match deterministically.
-    ☐ Prove native subject bounds can scope a search where the active DF version exposes suitable native widget geometry.
-    ☐ Prove ordinary no-match returns nil on a readable native screen.
-    ☐ Probe graphical and TrueType configurations separately and record readable-cell counts and behavior.
-    ☐ If TrueType text is unreadable, retain the explicit unreadable-region error and document the limitation instead of reporting an ordinary miss.
-    ☐ Confirm native attachment cleanup does not dismiss or mutate the borrowed screen.
-    ☐ Confirm native render observer restoration, borrowed-screen count, retained-subject count, pointer state, and `cleanup_confirmed=true`.
-    ☐ Repeat the focused native proof enough times to expose stale screen buffers or render-order races.
+    ☒ Select stable unique visible native text in a controlled DF screen or create a reversible native-screen fixture that renders through supported DFHack mechanisms.
+    ☒ Mount the current screen with `ds.mountNativeScreen()` and prove root-default search returns exact bounds for the native text.
+    ☒ Prove a narrowed explicit rectangle can exclude and include the same native match deterministically.
+    ☒ Prove native subject bounds can scope a search where the active DF version exposes suitable native widget geometry.
+    ☒ Prove ordinary no-match returns nil on a readable native screen.
+    ☒ Probe graphical and TrueType configurations separately and record readable-cell counts and behavior.
+    ☒ If TrueType text is unreadable, retain the explicit unreadable-region error and document the limitation instead of reporting an ordinary miss.
+    ☒ Confirm native attachment cleanup does not dismiss or mutate the borrowed screen.
+    ☒ Confirm native render observer restoration, borrowed-screen count, retained-subject count, pointer state, and `cleanup_confirmed=true`.
+    ☒ Repeat the focused native proof enough times to expose stale screen buffers or render-order races.
+
+Phase 8 evidence:
+    - `native_screen_overlay_probe.lua` supplies the reversible
+      `DS_SEARCH_NATIVE_PROBE` label through DFHack's real registered-overlay
+      renderer on the current borrowed native screen. The native acceptance
+      test mounts that screen with `ds.mountNativeScreen()`; it does not use a
+      component mount or substitute host screen.
+    - The probe verifies all 22 visible text cells are readable, records the
+      current graphical-mode flag, and derives exact bounds from the rendered
+      label body. Root-default and borrowed-native-root searches return those
+      bounds; a one-cell-narrower rectangle excludes the text, the exact
+      rectangle includes it, and a readable missing query returns nil.
+    - TrueType was unavailable in this runner, recorded separately from the
+      readable graphical probe. The matcher continues to raise its explicit
+      unreadable-region error when no requested cell is readable; unavailable
+      TrueType was never represented as an ordinary miss.
+    - Native unmount restores the overlay render dispatcher, native root,
+      current screen and stack, pointer state, observer state, borrowed-screen
+      count, retained subjects, and leaves the externally registered probe
+      enabled. It therefore neither dismisses nor mutates the borrowed screen.
+    - The focused native run completed three consecutive repeats, each with 3
+      successes and no failures, errors, or pending tests;
+      `cleanup_confirmed=true`.
 
 Phase 9 - Complete documentation and compatibility review:
     ☐ Add `ds.search()` to the README command table.
@@ -521,8 +544,9 @@ Execution evidence ledger:
     ☒ Focused overlay live search:
         - 6 successes, zero failures, zero errors, zero pending;
           `cleanup_confirmed=true`.
-    ☐ Focused borrowed-native live search:
-        - Not run.
+    ☒ Focused borrowed-native live search:
+        - Three repeats of 3 successes, zero failures, zero errors, zero
+          pending; `cleanup_confirmed=true`.
     ☐ Full live automation suite:
         - Not run.
     ☐ Package lint and build:
