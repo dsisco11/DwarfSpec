@@ -200,15 +200,31 @@
 ---@field max_width? integer
 ---@field max_height? integer
 
----@class dwarfspec.SubjectInspectRect
----@field x1? integer
----@field y1? integer
----@field x2? integer
----@field y2? integer
+---A zero-based inclusive rectangle in absolute UI-grid coordinates.
+---@class (exact) dwarfspec.ScreenRect
+---@field x1 integer Leftmost included UI-grid column.
+---@field y1 integer Topmost included UI-grid row.
+---@field x2 integer Rightmost included UI-grid column.
+---@field y2 integer Bottommost included UI-grid row.
+
+---A subject inspection rectangle with optional window-clipped coordinates.
+---@class dwarfspec.SubjectInspectRect: dwarfspec.ScreenRect
 ---@field clip_x1? integer
 ---@field clip_y1? integer
 ---@field clip_x2? integer
 ---@field clip_y2? integer
+
+---An exact rendered-text query.
+---Text is a nonempty, single-row CP437 or byte string matched literally and
+---case-sensitively. Occurrences are counted top-to-bottom, then left-to-right.
+---@class (exact) dwarfspec.TextSearchQuery
+---@field text string Text to match; NUL, carriage-return, and newline bytes are invalid.
+---@field occurrence? integer Positive occurrence number; defaults to 1.
+
+---A spatial rendered-text search area.
+---A subject contributes only its current visible body bounds and does not
+---prove that the subject painted any matching screen cell.
+---@alias dwarfspec.TextSearchArea dwarfspec.Subject|dwarfspec.ScreenRect
 
 ---@class dwarfspec.SubjectInspectState
 ---@field class string
@@ -291,6 +307,16 @@ function Subject:redraw(options) end
 ---Returns a stable diagnostic snapshot of this subject.
 ---@return dwarfspec.SubjectInspectState
 function Subject:inspect() end
+
+---Searches the final rendered buffer within this subject's visible body.
+---Matching is literal and case-sensitive. Occurrences are counted
+---top-to-bottom, then left-to-right. A match returns exact zero-based
+---inclusive UI-grid bounds; an ordinary readable miss returns nil. The
+---operation fails when the entire effective region is unreadable.
+---Subject scoping is spatial and does not prove which view painted a match.
+---@param query dwarfspec.TextSearchQuery
+---@return dwarfspec.ScreenRect|nil
+function Subject:search(query) end
 
 ---Returns a copied focus-string list for this subject's current mounted screen.
 ---@return string[]
@@ -445,6 +471,17 @@ function DS.get(control_path, options) end
 ---@param view? dwarfspec.Subject Defaults to the current source root.
 ---@return dwarfspec.SubjectInspectState
 function DS.inspect(view) end
+
+---Searches the current mount's final rendered screen-cell buffer.
+---Matching is literal and case-sensitive. Occurrences are counted
+---top-to-bottom, then left-to-right. A match returns exact zero-based
+---inclusive UI-grid bounds; an ordinary readable miss returns nil. The
+---operation fails when the entire effective region is unreadable.
+---Subject areas are spatial bounds and do not prove render ownership.
+---@param query dwarfspec.TextSearchQuery
+---@param search_area? dwarfspec.TextSearchArea Defaults to the current mount's search scope.
+---@return dwarfspec.ScreenRect|nil
+function DS.search(query, search_area) end
 
 ---Invalidates the mounted screen and waits for a completed render by default.
 ---Pass `{wait=false}` to return after invalidation without waiting.

@@ -147,17 +147,49 @@ Phase 0 evidence:
       the recorded evidence.
 
 Phase 1 - Add canonical authoring types and API declarations:
-    ☐ Add the canonical `dwarfspec.ScreenRect` declaration without duplicating or drifting from existing inspected-rectangle types.
-    ☐ Add the canonical `dwarfspec.TextSearchQuery` declaration.
-    ☐ Add the canonical `dwarfspec.TextSearchArea` declaration.
-    ☐ Add the `DS.search(query, search_area?)` declaration.
-    ☐ Add the `Subject:search(query)` declaration.
-    ☐ Document literal case-sensitive matching, row-major occurrence ordering, nil-on-miss behavior, coordinate conventions, and unreadable-region failure behavior at the declarations.
-    ☐ Document that subject scoping is spatial and cannot prove render ownership.
-    ☐ Add language-appropriate documentation comments for every new public and internal class and method.
-    ☐ Extend declaration fixtures with valid root, subject, and rectangle searches.
-    ☐ Add negative declaration fixtures for missing text, invalid text, invalid occurrence, malformed rectangles, and unsupported search-area types.
-    ☐ Verify that an installed-rock consumer discovers all search types without adding the source checkout to the LuaLS library path.
+    ☒ Add the canonical `dwarfspec.ScreenRect` declaration without duplicating or drifting from existing inspected-rectangle types.
+    ☒ Add the canonical `dwarfspec.TextSearchQuery` declaration.
+    ☒ Add the canonical `dwarfspec.TextSearchArea` declaration.
+    ☒ Add the `DS.search(query, search_area?)` declaration.
+    ☒ Add the `Subject:search(query)` declaration.
+    ☒ Document literal case-sensitive matching, row-major occurrence ordering, nil-on-miss behavior, coordinate conventions, and unreadable-region failure behavior at the declarations.
+    ☒ Document that subject scoping is spatial and cannot prove render ownership.
+    ☒ Add language-appropriate documentation comments for every new public and internal class and method.
+    ☒ Extend declaration fixtures with valid root, subject, and rectangle searches.
+    ☒ Add negative declaration fixtures for missing text, invalid text, invalid occurrence, malformed rectangles, and unsupported search-area types.
+    ☒ Verify that an installed-rock consumer discovers all search types without adding the source checkout to the LuaLS library path.
+
+Phase 1 evidence:
+    - `dwarfspec.ScreenRect` is the required-coordinate canonical rectangle.
+      `dwarfspec.SubjectInspectRect` now inherits it and declares only its
+      optional clipped-coordinate extension, avoiding a second copy of the
+      base coordinate fields.
+    - `dwarfspec.TextSearchQuery` and `dwarfspec.ScreenRect` are exact LuaLS
+      classes. The query requires `text`, allows integer `occurrence`, and
+      rejects injected unknown fields. Runtime-only value constraints remain
+      assigned to the validation work below.
+    - `DS.search(query, search_area?)` and `Subject:search(query)` declare
+      `dwarfspec.ScreenRect|nil` results and document exact matching, row-major
+      occurrence selection, zero-based inclusive coordinates, readable
+      misses, wholly unreadable regions, and spatial-only subject scoping.
+    - The valid declaration fixture covers root-default, subject, and explicit
+      rectangle searches and references every new public type. LuaLS 3.18.2
+      checked it with zero problems against the source declaration.
+    - The invalid declaration fixture produced exactly six intended LuaLS
+      warnings: missing text, non-string text, non-integer occurrence, unknown
+      query field, missing rectangle coordinate, and unsupported boolean area.
+    - `luarocks make` installed the current source package into the temporary
+      `.package-declaration-test` tree with dependency resolution disabled.
+      That tree contained `share/lua/5.4/ds/d.lua`; LuaLS checked the valid
+      consumer with zero problems while its only project library entry was the
+      installed tree. The source checkout was absent from that configuration,
+      and the temporary tree was removed after verification.
+    - Full standalone unit suite: 592 successes, zero failures, zero errors,
+      and zero pending.
+    - Lua 5.4.6 syntax and formatting passed all 273 Lua files. Runtime,
+      focused live, package-archive, and Lua 5.3 gates were not rerun because
+      this work changed declarations, authoring fixtures, and planning
+      evidence only.
 
 Phase 2 - Implement pure query and rectangle normalization:
     ☐ Add `src/dwarfspec/text_search.lua` as the focused framework-neutral module for text-search validation and matching.
