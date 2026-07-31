@@ -21,6 +21,7 @@ $luaFiles = @(
     Get-ChildItem -LiteralPath $projectRoot -Recurse -File -Filter '*.lua' |
         Where-Object {
             $_.FullName -notmatch '[\\/]\.luarocks[\\/]' -and
+            $_.FullName -notmatch '[\\/]\.tmp-luarocks[\\/]' -and
             $_.FullName -notmatch '[\\/]\.package-[^\\/]+[\\/]'
         } |
         Sort-Object FullName

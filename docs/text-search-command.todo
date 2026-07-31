@@ -516,22 +516,44 @@ Phase 10 evidence:
       `cleanup_confirmed=true`.
 
 Phase 11 - Full verification, cleanup, and handoff:
-    ☐ Run focused pure search-module unit tests.
-    ☐ Run focused subject, mount-command, adapter, declaration, and conformance unit tests.
-    ☐ Run the full standalone unit suite with `Tools/Run-UnitTests.ps1`.
-    ☐ Run Lua 5.3 syntax and formatting checks with `Tools/Check-Lua.ps1`.
-    ☐ Run the equivalent Lua 5.4 syntax and formatting gate.
-    ☐ Run focused ordinary-widget live search coverage.
-    ☐ Run focused complete-screen live search coverage.
-    ☐ Run focused overlay live search coverage.
-    ☐ Run focused borrowed-native live search coverage.
-    ☐ Run the full live automation suite and report unrelated baseline failures separately.
-    ☐ Require `cleanup_confirmed=true` for every successful focused live run.
-    ☐ Confirm zero leaked owned screens, borrowed attachments, subjects, render wrappers, pointer patches, captures, and staged registrations.
-    ☐ Run `git diff --check`.
-    ☐ Review the final diff against this checklist and the explicit exclusions.
-    ☐ Record every command, result, environment, package artifact, archive inspection, cleanup result, and unresolved limitation in the evidence ledger.
-    ☐ Mark a checklist item complete only when its required implementation and evidence both exist.
+    ☒ Run focused pure search-module unit tests.
+    ☒ Run focused subject, mount-command, adapter, declaration, and conformance unit tests.
+    ☒ Run the full standalone unit suite with `Tools/Run-UnitTests.ps1`.
+    ☒ Run Lua 5.3 syntax and formatting checks with `Tools/Check-Lua.ps1`.
+    ☒ Run the equivalent Lua 5.4 syntax and formatting gate.
+    ☒ Run focused ordinary-widget live search coverage.
+    ☒ Run focused complete-screen live search coverage.
+    ☒ Run focused overlay live search coverage.
+    ☒ Run focused borrowed-native live search coverage.
+    ☒ Run the full live automation suite and report unrelated baseline failures separately.
+    ☒ Require `cleanup_confirmed=true` for every successful focused live run.
+    ☒ Confirm zero leaked owned screens, borrowed attachments, subjects, render wrappers, pointer patches, captures, and staged registrations.
+    ☒ Run `git diff --check`.
+    ☒ Review the final diff against this checklist and the explicit exclusions.
+    ☒ Record every command, result, environment, package artifact, archive inspection, cleanup result, and unresolved limitation in the evidence ledger.
+    ☒ Mark a checklist item complete only when its required implementation and evidence both exist.
+
+Phase 11 evidence:
+    - Focused standalone checks: rendered search primitives 37, public mount
+      commands 93, subject commands 3, mount adapters 4, component boundary
+      10, and external configuration 9 successes; all had zero failures,
+      errors, and pending tests. The full standalone suite passed 637.
+    - DFHack's embedded Lua 5.3 parser loaded all 220 tracked Lua files.
+      `Tools/Check-Lua.ps1` then passed the same 220 repository files under
+      Lua 5.4.6. Its source scan now excludes the generated
+      `.tmp-luarocks/` verification tree, preventing third-party dependency
+      tests from being mistaken for repository files.
+    - Focused source-checkout live results: ordinary widget 8, complete screen
+      3, overlay 6, and borrowed native 3 successes; every run reported
+      `cleanup_confirmed=true`. The full automation suite passed 51 successes
+      with zero failures, errors, or pending tests and
+      `cleanup_confirmed=true`; there were no baseline failures to separate.
+    - Final `dwarfspec status` reported an idle executor, queue 0, and no
+      quarantine. Focused and full cleanup established no retained owned
+      screens, borrowed attachments, subjects, render observers/wrappers,
+      pointer patches, captures, or staged registrations. `git diff --check`
+      passed, and review found the generated-tree exclusion and this evidence
+      update only.
 
 Execution evidence ledger:
     ☒ Baseline checkout, branch, worktree, index, installed rock, and archive:
@@ -560,12 +582,11 @@ Execution evidence ledger:
           standalone unit suite.
     ☒ Full standalone unit suite:
         - 637 successes, zero failures, zero errors, zero pending.
-    ☐ Lua 5.3 syntax and formatting:
-        - The embedded Lua 5.3 parser accepted both changed production files
-          and both focused test files. The full repository and formatting gate
-          was not run.
+    ☒ Lua 5.3 syntax and formatting:
+        - DFHack embedded Lua 5.3 parsed all 220 tracked Lua files; the
+          repository formatting gate is recorded separately under Lua 5.4.
     ☒ Lua 5.4 syntax and formatting:
-        - Lua 5.4.6 syntax and formatting passed all 275 Lua files.
+        - Lua 5.4.6 syntax and formatting passed all 220 repository files.
     ☒ Focused ordinary-widget live search:
         - 8 successes, zero failures, zero errors, zero pending;
           `cleanup_confirmed=true`.
@@ -578,8 +599,9 @@ Execution evidence ledger:
     ☒ Focused borrowed-native live search:
         - Three repeats of 3 successes, zero failures, zero errors, zero
           pending; `cleanup_confirmed=true`.
-    ☐ Full live automation suite:
-        - Not run.
+    ☒ Full live automation suite:
+        - 51 successes, zero failures, zero errors, zero pending;
+          `cleanup_confirmed=true`.
     ☒ Package lint and build:
         - `Tools/Publish.ps1` built `dist/dwarfspec-0.2.1-1.all.rock`.
     ☒ Archive inspection:
@@ -592,16 +614,17 @@ Execution evidence ledger:
     ☒ Installed-package live proof:
         - Isolated launcher: ordinary widget 8 successes and borrowed native
           3 successes; both `cleanup_confirmed=true`.
-    ☐ Cleanup and repeatability:
-        - Not run.
+    ☒ Cleanup and repeatability:
+        - Focused and full live runs confirmed cleanup; final service state was
+          idle with queue 0 and no quarantine.
     ☒ `git diff --check`:
         - Passed after the focused implementation and evidence update.
 
 Definition of done:
-    ☐ `ds.search({text="..."}, search_area?)` and `Subject:search(query)` implement the locked contract.
-    ☐ Borrowed native screens, ordinary widgets, overlays, and complete screens have separate focused live proof.
-    ☐ Returned rectangles identify exact visible single-row text cells in zero-based inclusive coordinates.
-    ☐ Nil-on-miss, occurrence ordering, clipping, unreadable-region failures, and spatial ownership limits are tested and documented.
-    ☐ Runtime, declarations, public inventories, documentation, package contents, and installed behavior agree.
-    ☐ Focused, full, syntax, package, cleanup, component-live, overlay-live, complete-screen-live, and native-live evidence are recorded separately.
-    ☐ No unrelated user changes are modified, stashed, committed, or incorporated into completion claims.
+    ☒ `ds.search({text="..."}, search_area?)` and `Subject:search(query)` implement the locked contract.
+    ☒ Borrowed native screens, ordinary widgets, overlays, and complete screens have separate focused live proof.
+    ☒ Returned rectangles identify exact visible single-row text cells in zero-based inclusive coordinates.
+    ☒ Nil-on-miss, occurrence ordering, clipping, unreadable-region failures, and spatial ownership limits are tested and documented.
+    ☒ Runtime, declarations, public inventories, documentation, package contents, and installed behavior agree.
+    ☒ Focused, full, syntax, package, cleanup, component-live, overlay-live, complete-screen-live, and native-live evidence are recorded separately.
+    ☒ No unrelated user changes are modified, stashed, committed, or incorporated into completion claims.
