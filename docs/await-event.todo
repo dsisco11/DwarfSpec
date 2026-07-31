@@ -143,19 +143,19 @@ Phase 5 - Verify focused and full unit behavior:
     ☒ Run and record `git diff --check`.
 
 Phase 6 - Verify live DFHack behavior:
-    ☐ Add focused live coverage for `PAUSED` and `UNPAUSED` using DFHack's built-in simulated input.
-    ☐ Restore the original pause state even when a live assertion fails.
-    ☐ Add focused live coverage for `VIEWSCREEN_CHANGED` using a controlled native-screen transition.
-    ☐ Restore or dismiss every screen opened by the live test.
-    ☐ Reuse the dynamic smallest-save selection based on `world.sav` size for load and unload coverage.
-    ☐ Do not depend on a hardcoded save-directory name.
-    ☐ Add focused live coverage for `MAP_LOADED` through `ds.mountSaveGame()`.
-    ☐ Add focused live coverage for the applicable world/map unload and load notifications.
-    ☐ Use native events or explicit state predicates for setup and cleanup; do not add arbitrary sleep periods.
-    ☐ Confirm that no physical mouse manipulation is used.
-    ☐ Confirm every selected live run reports `cleanup_confirmed=true`.
-    ☐ Confirm the executor is idle, the queue is empty, quarantine is absent, mounts are clear, pointer tracking is restored, no buttons remain pressed, and DFHack remains responsive.
-    ☐ Record selected live-event results separately from the complete live suite.
+    ☒ Add focused live coverage for `PAUSED` and `UNPAUSED` using DFHack's built-in simulated input.
+    ☒ Restore the original pause state even when a live assertion fails.
+    ☒ Add focused live coverage for `VIEWSCREEN_CHANGED` using a controlled native-screen transition.
+    ☒ Restore or dismiss every screen opened by the live test.
+    ☒ Reuse the dynamic smallest-save selection based on `world.sav` size for load and unload coverage.
+    ☒ Do not depend on a hardcoded save-directory name.
+    ☒ Add focused live coverage for `MAP_LOADED` through `ds.mountSaveGame()`.
+    ☒ Add focused live coverage for the applicable world/map unload and load notifications.
+    ☒ Use native events or explicit state predicates for setup and cleanup; do not add arbitrary sleep periods.
+    ☒ Confirm that no physical mouse manipulation is used.
+    ☒ Confirm every selected live run reports `cleanup_confirmed=true`.
+    ☒ Confirm the executor is idle, the queue is empty, quarantine is absent, mounts are clear, pointer tracking is restored, no buttons remain pressed, and DFHack remains responsive.
+    ☒ Record selected live-event results separately from the complete live suite.
 
 Phase 7 - Document, package, and close acceptance:
     ☐ Add `ds.awaitEvent()` and `ds.EEvent` to the public command documentation.
@@ -258,15 +258,15 @@ Completion evidence:
         - Evidence: The full standalone suite was run separately and completed with 592 successes, 0 failures, 0 errors, and 0 pending. A subsequent `git diff --check` completed without errors.
     ☒ Lua syntax and formatting:
         - Evidence: The separate Lua 5.4.6 syntax and formatting gate passed for 269 files.
-    ☐ Selected live event coverage:
-        - Evidence:
-    ☐ Save-game mount live coverage:
-        - Evidence:
-    ☐ Complete live suite:
-        - Evidence:
+    ☒ Selected live event coverage:
+        - Evidence: `Tools/Run-AutomationTests.ps1 --test-glob tests/automation/await_event_live_spec.lua` completed with 2 successes, 0 failures, 0 errors, 0 pending, and `cleanup_confirmed=true`. The tests use simulated `D_PAUSE` input, restore the original pause state through failure-safe cleanup, and show and dismiss a controlled native screen while awaiting both viewscreen transitions.
+    ☒ Save-game mount live coverage:
+        - Evidence: `Tools/Run-AutomationTests.ps1 --test-glob tests/destructive/await_event_world_live_spec.lua` completed with 1 success, 0 failures, 0 errors, 0 pending, and `cleanup_confirmed=true`. The fixture selects the smallest current and alternate saves dynamically by `world.sav` size, proves `MAP_LOADED` through `ds.mountSaveGame()`, and records the ordered `MAP_UNLOADED`, `WORLD_UNLOADED`, `WORLD_LOADED`, and `MAP_LOADED` notifications without arbitrary sleeps or physical mouse input.
+    ☒ Complete live suite:
+        - Evidence: The complete live suite was run separately with `Tools/Run-AutomationTests.ps1` and completed with 47 successes, 0 failures, 0 errors, 0 pending, and `cleanup_confirmed=true`.
     ☐ Package build and archive audit:
         - Evidence:
     ☐ Diff and worktree audit:
         - Evidence:
-    ☐ Final DFHack runtime state:
-        - Evidence:
+    ☒ Final DFHack runtime state:
+        - Evidence: The selected and complete runs confirmed mount cleanup, pointer tracking restoration, and no pressed buttons. A final responsive `dwarfspec status` reported service version `0.2.0`, executor `idle`, queue `0`, and quarantine `none`.
