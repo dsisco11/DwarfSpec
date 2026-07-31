@@ -192,19 +192,46 @@ Phase 1 evidence:
       evidence only.
 
 Phase 2 - Implement pure query and rectangle normalization:
-    ☐ Add `src/dwarfspec/text_search.lua` as the focused framework-neutral module for text-search validation and matching.
-    ☐ Add `tests/unit/text_search_spec.lua` as its focused standalone unit-test file.
-    ☐ Validate that the query is a table before reading fields.
-    ☐ Reject unknown query fields with a stable error that names the field.
-    ☐ Validate `text` as a nonempty string.
-    ☐ Reject NUL, carriage-return, and newline bytes explicitly.
-    ☐ Validate `occurrence` as a positive integer and apply the default of `1`.
-    ☐ Copy normalized query values so caller mutation cannot alter an in-progress search.
-    ☐ Validate all rectangle coordinates as integers.
-    ☐ Reject inverted rectangles.
-    ☐ Implement inclusive rectangle intersection.
-    ☐ Return a distinct empty-intersection result so invalid input, an empty effective area, and an unreadable area cannot be conflated.
-    ☐ Add focused unit tests for every validation branch, boundary coordinate, clipping case, and caller-mutation case.
+    ☒ Add `src/dwarfspec/commands/text_search.lua` as the focused dependency-injected command module for text-search validation and matching.
+    ☒ Add `tests/unit/text_search_command_spec.lua` as its focused standalone unit-test file.
+    ☒ Validate that the query is a table before reading fields.
+    ☒ Reject unknown query fields with a stable error that names the field.
+    ☒ Validate `text` as a nonempty string.
+    ☒ Reject NUL, carriage-return, and newline bytes explicitly.
+    ☒ Validate `occurrence` as a positive integer and apply the default of `1`.
+    ☒ Copy normalized query values so caller mutation cannot alter an in-progress search.
+    ☒ Validate all rectangle coordinates as integers.
+    ☒ Reject inverted rectangles.
+    ☒ Implement inclusive rectangle intersection.
+    ☒ Return a distinct empty-intersection result so invalid input, an empty effective area, and an unreadable area cannot be conflated.
+    ☒ Add focused unit tests for every validation branch, boundary coordinate, clipping case, and caller-mutation case.
+
+Phase 2 evidence:
+    - `dwarfspec.commands.text_search.normalize_query()` validates the table
+      shape,
+      closed field set, nonempty single-row byte string, and positive integral
+      occurrence, then returns a copied query with occurrence defaulted to one.
+    - `normalize_rectangle()` validates and copies all four integral inclusive
+      coordinates and reports horizontal and vertical inversion separately.
+      Negative coordinates remain valid input for later window clipping.
+    - `intersect_rectangles()` performs inclusive intersection on validated
+      copies. Disjoint rectangles return the identity-stable
+      `EMPTY_INTERSECTION` sentinel, while invalid inputs fail validation;
+      later rendered-cell work retains a separate unreadable-region failure.
+    - Focused standalone unit result: 16 successes, zero failures, zero
+      errors, and zero pending. Coverage includes query type, unknown fields,
+      text type and emptiness, each forbidden byte, occurrence default and
+      failures, coordinate failures, both inversion axes, negative and zero
+      boundaries, four-edge clipping, inclusive edge and point contact,
+      horizontal and vertical disjointness, operand validation, fresh results,
+      and caller-mutation isolation.
+    - Full standalone unit result: 608 successes, zero failures, zero errors,
+      and zero pending.
+    - Lua 5.4.6 syntax and formatting passed all 275 Lua files. DFHack's
+      embedded Lua 5.3 parser separately accepted the new module and focused
+      unit file. The temporary parser probe was removed after verification.
+    - Rendered-cell reading and matching remain deliberately unimplemented;
+      those behaviors and their tests belong to the next checklist section.
 
 Phase 3 - Implement deterministic rendered-cell matching:
     ☐ Inject window-size and tile-reading functions into the pure search module so its algorithm is unit-testable without DFHack globals.
