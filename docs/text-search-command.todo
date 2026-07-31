@@ -369,15 +369,34 @@ Phase 5 evidence:
       `git diff --check` passed.
 
 Phase 6 - Prove ordinary component and complete-screen behavior:
-    ☐ Add a uniquely identifiable single-line label to a focused ordinary-widget live fixture without coupling the production algorithm to widget fields.
-    ☐ Prove root-default search returns the exact rendered label bounds.
-    ☐ Prove subject-scoped search excludes an identical label outside the selected subject bounds.
-    ☐ Prove explicit-rectangle search selects the requested duplicate occurrence.
-    ☐ Prove nil is returned after the visible label is removed or replaced and a render completes.
-    ☐ Prove `ds.await()` can poll `ds.search()` until asynchronously rendered text appears.
-    ☐ Add equivalent focused complete-screen coverage using a label rendered by the complete screen.
-    ☐ Confirm the search command does not increment render generation or create a named capture.
-    ☐ Confirm cleanup reports zero active owned screens and zero retained subjects after each focused run.
+    ☒ Add a uniquely identifiable single-line label to a focused ordinary-widget live fixture without coupling the production algorithm to widget fields.
+    ☒ Prove root-default search returns the exact rendered label bounds.
+    ☒ Prove subject-scoped search excludes an identical label outside the selected subject bounds.
+    ☒ Prove explicit-rectangle search selects the requested duplicate occurrence.
+    ☒ Prove nil is returned after the visible label is removed or replaced and a render completes.
+    ☒ Prove `ds.await()` can poll `ds.search()` until asynchronously rendered text appears.
+    ☒ Add equivalent focused complete-screen coverage using a label rendered by the complete screen.
+    ☒ Confirm the search command does not increment render generation or create a named capture.
+    ☒ Confirm cleanup reports zero active owned screens and zero retained subjects after each focused run.
+
+Phase 6 evidence:
+    - `ordinary_widget_mount_live_spec.lua` renders dedicated root, duplicate,
+      mutable, and deferred labels through normal DFHack widget rendering. The
+      proof derives each expected exact single-row rectangle from the rendered
+      label subject body, never from production search internals.
+    - `complete_screen_mount_live_spec.lua` provides the equivalent labels from
+      a mounted `gui.ZScreen`; both proofs confirm root default, subject scope,
+      explicit right-duplicate rectangle scope, post-redraw replacement miss,
+      and `ds.await()` polling after a no-wait redraw.
+    - Before the deliberate redraws, the fixture render count and retained
+      capture table remain unchanged across all searches, proving the query
+      adds neither render work nor a named capture. Each proof explicitly
+      unmounts and observes zero current mount, active owned screens, and
+      retained subjects.
+    - Focused ordinary-widget live result: 8 successes, zero failures, zero
+      errors, zero pending; `cleanup_confirmed=true`. Focused complete-screen
+      live result: 3 successes, zero failures, zero errors, zero pending;
+      `cleanup_confirmed=true`.
 
 Phase 7 - Prove overlay behavior and spatial ownership limits:
     ☐ Add a uniquely identifiable label to a focused mounted-overlay fixture.
@@ -475,10 +494,12 @@ Execution evidence ledger:
           was not run.
     ☒ Lua 5.4 syntax and formatting:
         - Lua 5.4.6 syntax and formatting passed all 275 Lua files.
-    ☐ Focused ordinary-widget live search:
-        - Not run.
-    ☐ Focused complete-screen live search:
-        - Not run.
+    ☒ Focused ordinary-widget live search:
+        - 8 successes, zero failures, zero errors, zero pending;
+          `cleanup_confirmed=true`.
+    ☒ Focused complete-screen live search:
+        - 3 successes, zero failures, zero errors, zero pending;
+          `cleanup_confirmed=true`.
     ☐ Focused overlay live search:
         - Not run.
     ☐ Focused borrowed-native live search:

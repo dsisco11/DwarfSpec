@@ -18,11 +18,26 @@ local ORDINARY_CAPABILITIES = command_conformance.new{
     viewport='supported',
 }
 
+---Returns the expected visible single-row bounds for a label subject.
+---@param subject dwarfspec.Subject
+---@param text string
+---@return dwarfspec.ScreenRect
+local function expected_label_bounds(subject, text)
+    local body = assert(subject:inspect().body,
+        'search label requires visible body bounds')
+    return {
+        x1=body.x1,
+        y1=body.y1,
+        x2=body.x1 + #text - 1,
+        y2=body.y1,
+    }
+end
+
 ---@class tests.OrdinaryWidgetHarness: widgets.Panel
 local OrdinaryWidgetHarness = defclass(nil, widgets.Panel)
 OrdinaryWidgetHarness.ATTRS{
     view_id='ordinary_root',
-    frame={w=50, h=12},
+    frame={w=80, h=16},
 }
 
 ---Creates nested interactive content using only normal DFHack widgets.
@@ -64,6 +79,31 @@ function OrdinaryWidgetHarness:init()
             view_id='pointer_target',
             frame={l=2, t=8, w=24, h=2},
             text='Rendered pointer target',
+        },
+        widgets.Label{
+            view_id='search_root',
+            frame={l=1, t=10, w=35},
+            text='DS_SEARCH_WIDGET_ROOT',
+        },
+        widgets.Label{
+            view_id='search_left',
+            frame={l=1, t=11, w=35},
+            text='DS_SEARCH_WIDGET_DUPLICATE',
+        },
+        widgets.Label{
+            view_id='search_right',
+            frame={l=40, t=11, w=35},
+            text='DS_SEARCH_WIDGET_DUPLICATE',
+        },
+        widgets.Label{
+            view_id='search_mutable',
+            frame={l=1, t=12, w=35},
+            text='DS_SEARCH_WIDGET_OLD',
+        },
+        widgets.Label{
+            view_id='search_await',
+            frame={l=40, t=12, w=35},
+            text='DS_SEARCH_WIDGET_WAITING',
         },
     }
 end
@@ -359,6 +399,56 @@ describe('ordinary widget component host', function()
             focus_list[1])
 
         ds.unmount()
+    end)
+
+    it('searches visible rendered labels without creating render work',
+            function()
+        local run = ds.current_run()
+        local root = ds.mount(OrdinaryWidgetHarness, {
+            viewport={width=80, height=16},
+        })
+        local component = root:raw()
+        local root_label = ds.get('search_root')
+        local left = ds.get('search_left')
+        local right = ds.get('search_right')
+        local mutable = ds.get('search_mutable')
+        local awaited = ds.get('search_await')
+        local root_text = 'DS_SEARCH_WIDGET_ROOT'
+        local duplicate = 'DS_SEARCH_WIDGET_DUPLICATE'
+        local old_text = 'DS_SEARCH_WIDGET_OLD'
+        local new_text = 'DS_SEARCH_WIDGET_NEW'
+        local awaited_text = 'DS_SEARCH_WIDGET_APPEARED'
+        local renders_before_search = component.render_count
+        local captures_before_search = run.captures
+
+        assert.same(expected_label_bounds(root_label, root_text),
+            ds.search({text=root_text}))
+        assert.same(expected_label_bounds(left, duplicate),
+            left:search({text=duplicate}))
+        assert.same(expected_label_bounds(right, duplicate),
+            ds.search({text=duplicate}, assert(right:inspect().body)))
+        assert.equals(renders_before_search, component.render_count)
+        assert.equals(captures_before_search, run.captures)
+
+        mutable:raw():setText(new_text)
+        root:redraw()
+        assert.is_nil(ds.search({text=old_text}, mutable))
+        assert.same(expected_label_bounds(mutable, new_text),
+            mutable:search({text=new_text}))
+
+        awaited:raw():setText(awaited_text)
+        root:redraw({wait=false})
+        assert.same(expected_label_bounds(awaited, awaited_text),
+            ds.await('ordinary rendered search text appears', function()
+                return awaited:search({text=awaited_text})
+            end))
+
+        ds.unmount()
+        local cleanup = run.mount_cleanup_probe()
+        assert.is_nil(cleanup.current_mount_id)
+        assert.equals(0, cleanup.active_screen_count)
+        assert.equals(0, cleanup.owned_screen_count)
+        assert.equals(0, cleanup.subject_count)
     end)
 
     it('routes physical mouse states over the rendered target', function()
