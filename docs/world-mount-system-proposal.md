@@ -45,8 +45,22 @@ The following decisions are accepted unless later discussion revises them:
 - The world-generation master seed defaults to `0` for repeatability.
 - The string `"random"` requests random generation during initial
   provisioning.
+- A deterministic master seed is written to all four native Dwarf Fortress
+  seed fields.
 - A random fixture records its resolved native seeds and reuses the realized
   world on later mounts.
+- The first public `WorldGenerationDefinition` contains only `seed`,
+  `world_size`, and `history_years`.
+- Playable-civilization enforcement and the remaining advanced world-generation
+  settings belong to a versioned internal fast-generation profile.
+- `MapDefinition` accepts either strict site criteria or one exact location,
+  but never both.
+- The initial strict site criteria are aquifer, flux, clay, sand, river, and
+  required metals.
+- DwarfSpec exposes immutable constants for the eleven canonical vanilla ore
+  metals while accepting custom raw metal identifiers.
+- The first implementation always uses quickstart. Custom embark profiles are
+  deferred to a later follow-up.
 - A test that does not declare its isolation behavior conservatively requires
   a pristine world and leaves the entire world dirty.
 - Reuse is an optimization. Uncertain state must cause restoration or a
@@ -150,10 +164,10 @@ local config = {
             site={
                 aquifer='none',
                 flux=true,
+                metals={
+                    ds.ECanonicalMetal.IRON,
+                },
             },
-        },
-        embark={
-            mode='quickstart',
         },
     },
     isolation={
@@ -188,14 +202,15 @@ local world = ds.mountWorld('exploratory-fixture', {
 mean random on every mount. The manifest stores the resolved seeds, and later
 mounts reuse the same realization until the fixture is explicitly recreated.
 
-### Proposed authoring-time types
+### Authoring-time types
 
-The exact field set remains open to refinement. The authoritative production
-annotations and `ds.d.lua` declarations must eventually use one canonical set
-of types rather than parallel copies.
+The first-version world and map definition fields below are accepted. The
+authoritative production annotations and `ds.d.lua` declarations must
+eventually use these canonical types rather than parallel copies.
 
 ```lua
 ---Selects the requested master-seed behavior for world generation.
+---Integers are restricted to the inclusive range from 0 to `math.maxinteger`.
 ---@alias dwarfspec.WorldSeed integer|'"random"'
 
 ---Selects the generated world's region dimensions.
@@ -213,6 +228,34 @@ of types rather than parallel copies.
 ---| '"light"'
 ---| '"heavy"'
 ---| '"light_or_none"'
+
+---Identifies a canonical vanilla metal that can occur in an ore.
+---@alias dwarfspec.CanonicalMetal
+---| '"ALUMINUM"'
+---| '"BISMUTH"'
+---| '"COPPER"'
+---| '"GOLD"'
+---| '"IRON"'
+---| '"LEAD"'
+---| '"NICKEL"'
+---| '"PLATINUM"'
+---| '"SILVER"'
+---| '"TIN"'
+---| '"ZINC"'
+
+---Provides immutable constants for canonical vanilla ore-metal identifiers.
+---@class dwarfspec.ECanonicalMetalEnum
+---@field ALUMINUM `ALUMINUM`
+---@field BISMUTH `BISMUTH`
+---@field COPPER `COPPER`
+---@field GOLD `GOLD`
+---@field IRON `IRON`
+---@field LEAD `LEAD`
+---@field NICKEL `NICKEL`
+---@field PLATINUM `PLATINUM`
+---@field SILVER `SILVER`
+---@field TIN `TIN`
+---@field ZINC `ZINC`
 
 ---Identifies one coarse category of mutable world state.
 ---@alias dwarfspec.WorldFacet
@@ -237,23 +280,19 @@ of types rather than parallel copies.
 
 ---Defines the size of a local embark rectangle.
 ---@class dwarfspec.MapSize
----@field width? integer Defaults to 2.
----@field height? integer Defaults to 2.
+---@field width? integer Defaults to 2; accepts 2 through 16.
+---@field height? integer Defaults to 2; accepts 2 through 16.
 
----Defines criteria used to select a valid embark site.
+---Defines strict criteria used to select a valid embark site.
 ---@class dwarfspec.EmbarkSiteCriteria
 ---@field aquifer? dwarfspec.AquiferRequirement Defaults to `"any"`.
----@field flux? boolean
----@field clay? boolean
----@field sand? boolean
----@field soil_minimum? integer
----@field river_minimum? string
----@field savagery? string
----@field evilness? string
----@field biome_count_minimum? integer
----@field neighbors? string[]
+---@field flux? boolean True requires presence; false requires absence.
+---@field clay? boolean True requires presence; false requires absence.
+---@field sand? boolean True requires presence; false requires absence.
+---@field river? boolean True requires presence; false requires absence.
+---@field metals? string[] Canonical constants or exact custom raw identifiers.
 
----Selects one exact embark location when discovery is not desired.
+---Selects the upper-left local tile of an exact embark location.
 ---@class dwarfspec.ExactEmbarkLocation
 ---@field region_x integer
 ---@field region_y integer
@@ -264,25 +303,18 @@ of types rather than parallel copies.
 ---@class dwarfspec.MapDefinition
 ---@field size? dwarfspec.MapSize Defaults to a 2 by 2 embark rectangle.
 ---@field site? dwarfspec.EmbarkSiteCriteria
----@field location? dwarfspec.ExactEmbarkLocation Overrides site discovery.
+---@field location? dwarfspec.ExactEmbarkLocation Mutually exclusive with `site`.
 
 ---Defines the generated world that will contain the embark site.
 ---@class dwarfspec.WorldGenerationDefinition
 ---@field seed? dwarfspec.WorldSeed Defaults to `0`.
 ---@field world_size? dwarfspec.WorldSize Defaults to `"pocket"`.
 ---@field history_years? integer Defaults to 2.
----@field playable_civilization_required? boolean Defaults to true.
-
----Defines initial fortress setup after a site has been selected.
----@class dwarfspec.EmbarkDefinition
----@field mode? '"quickstart"' Defaults to `"quickstart"`.
----@field profile? string Reserved for a later starting-profile contract.
 
 ---Defines the immutable properties of one managed world fixture.
 ---@class dwarfspec.WorldDefinition
 ---@field generation? dwarfspec.WorldGenerationDefinition
 ---@field map? dwarfspec.MapDefinition
----@field embark? dwarfspec.EmbarkDefinition
 
 ---Declares the pristine state required and possible mutations for one test.
 ---@class dwarfspec.WorldIsolation
@@ -316,6 +348,10 @@ of types rather than parallel copies.
 ---@field seeds dwarfspec.ResolvedWorldSeeds
 ---@field map dwarfspec.ResolvedMap
 
+---Provides canonical vanilla ore-metal identifiers.
+---@type dwarfspec.ECanonicalMetalEnum
+DS.ECanonicalMetal = nil
+
 ---Mounts a managed world fixture for the current example.
 ---@param name string
 ---@param config? dwarfspec.WorldConfig
@@ -330,7 +366,7 @@ proof.
 
 ## Default definition
 
-The normalized default definition is provisionally:
+The accepted normalized default definition is:
 
 ```lua
 {
@@ -338,7 +374,6 @@ The normalized default definition is provisionally:
         seed=0,
         world_size='pocket',
         history_years=2,
-        playable_civilization_required=true,
     },
     map={
         size={
@@ -346,9 +381,6 @@ The normalized default definition is provisionally:
             height=2,
         },
         site={},
-    },
-    embark={
-        mode='quickstart',
     },
 }
 ```
@@ -361,12 +393,12 @@ These defaults optimize for repeatability and provisioning speed:
 - A 2 by 2 embark contains 96 by 96 playable map tiles because each local
   embark tile is 48 by 48 game tiles.
 - Quickstart avoids detailed starting-party preparation.
-- Requiring a playable civilization rejects worlds that cannot provide a
-  fortress-mode embark.
+- The internal fast-generation profile requires a playable civilization and
+  supplies all advanced settings that are not part of the public definition.
 
-The default definition does not require flux, soil, a river, a particular
-biome, or the absence of aquifers. Such constraints can make a tiny world
-substantially harder or impossible to provision and should be explicit.
+The default definition does not require flux, clay, sand, a river, a metal, or
+the absence of aquifers. Such constraints can make a tiny world substantially
+harder or impossible to provision and should be explicit.
 
 References:
 
@@ -382,22 +414,22 @@ public proposal intentionally exposes one master seed for the common case.
 For an integer master seed:
 
 1. Normalize the integer to one canonical textual representation.
-2. Derive four native seeds with a stable, domain-separated algorithm.
-3. Write every resolved seed explicitly into the generation parameters.
-4. Record the derivation version and four results in the manifest.
+2. Write that exact representation to all four native seed fields.
+3. Record the master seed and four native values in the manifest.
 
-For example, the conceptual derivation inputs are:
+For example, `seed=0` resolves to:
 
 ```text
-<algorithm-version>:world:<master-seed>
-<algorithm-version>:history:<master-seed>
-<algorithm-version>:name:<master-seed>
-<algorithm-version>:creature:<master-seed>
+world seed    = "0"
+history seed  = "0"
+name seed     = "0"
+creature seed = "0"
 ```
 
-The final hash and numeric encoding remain an implementation decision. They
-must be stable across supported Lua hosts and must not depend on table order,
-process-specific hashing, locale, or native integer overflow.
+Accepted deterministic master seeds are integers from `0` through
+`math.maxinteger`. Canonical encoding is base-10 ASCII without a sign, leading
+zeroes, separators, whitespace, locale-sensitive formatting, or scientific
+notation.
 
 For `"random"`:
 
@@ -434,10 +466,10 @@ The fingerprint should include at least:
 
 - managed-world schema version;
 - seed mode and deterministic master seed when applicable;
-- seed-derivation algorithm version;
 - normalized generation settings;
 - normalized map size and site criteria;
-- normalized embark settings;
+- internal fast-generation profile version;
+- fixed quickstart provisioning contract version;
 - Dwarf Fortress save compatibility version;
 - DFHack compatibility version where transition behavior requires it;
 - ordered raw and mod identity;
@@ -820,6 +852,99 @@ Supplying both should be a validation error. When neither is supplied, the
 system selects the first deterministic valid site that can fit the requested
 rectangle and playable civilization.
 
+Each embark dimension accepts 2 through 16 and defaults to 2. A request that
+exceeds the installed maximum-embark setting fails with a capability error;
+DwarfSpec does not change that persistent player preference. An exact
+location's local coordinates identify the upper-left tile, and the complete
+rectangle must fit within the region tile's 16 by 16 local grid.
+
+### Accepted first-version criteria
+
+The first implementation supports:
+
+- `aquifer`;
+- `flux`;
+- `clay`;
+- `sand`;
+- `river`; and
+- `metals`.
+
+For `flux`, `clay`, `sand`, and `river`:
+
+- `true` requires the property somewhere in the selected rectangle;
+- `false` requires the property to be absent everywhere in the rectangle; and
+- an omitted field does not constrain the property.
+
+Aquifer values have these strict meanings:
+
+| Value | Required rectangle state |
+|---|---|
+| `"any"` | No aquifer constraint |
+| `"none"` | No light or heavy aquifer anywhere |
+| `"light"` | Light aquifer present and heavy aquifer absent |
+| `"heavy"` | Heavy aquifer present |
+| `"light_or_none"` | Heavy aquifer absent |
+
+`metals` is an order-independent list of raw metal identifiers. Every listed
+metal must be obtainable from an ore present somewhere in the selected
+rectangle. Duplicate identifiers are rejected during definition normalization.
+
+DwarfSpec exposes the canonical vanilla ore-metal identifiers through one
+immutable string enum:
+
+```lua
+local site = {
+    metals={
+        ds.ECanonicalMetal.IRON,
+        ds.ECanonicalMetal.COPPER,
+        'MY_MODDED_METAL',
+    },
+}
+```
+
+The canonical members are:
+
+```text
+ALUMINUM
+BISMUTH
+COPPER
+GOLD
+IRON
+LEAD
+NICKEL
+PLATINUM
+SILVER
+TIN
+ZINC
+```
+
+These are the vanilla metals referenced as products by `METAL_ORE` raw tokens.
+Manufactured alloys such as bronze and steel are not geological site
+properties and are not included.
+
+A custom string is accepted when it exactly identifies a loaded inorganic raw
+that is obtainable from at least one ore. Custom identifiers remain
+case-sensitive and are included in raw/mod compatibility fingerprints.
+An unknown, nonmetal, or non-ore-obtainable identifier is a definition error.
+
+The native finder is only a candidate-discovery accelerator. Its results are
+best-fit rather than strict, so DwarfSpec must independently verify every
+accepted property across the final rectangle.
+
+Soil, savagery, evilness, climate, elevation, biome count, and neighbor
+criteria are deferred until their rectangle-wide semantics and verification
+contracts are separately accepted.
+
+### Initial embark behavior
+
+The first implementation always uses the native quickstart path after selecting
+the site and civilization. `WorldDefinition` does not expose an embark profile
+field yet.
+
+Custom starting dwarves, skills, equipment, animals, points, and profiles are a
+later follow-up. Adding that capability will extend `WorldDefinition` and its
+fingerprint schema without changing the accepted first-version map contract.
+
 ### Deterministic discovery
 
 Candidate enumeration must have a documented stable order. It should not
@@ -1053,7 +1178,9 @@ Use injected adapters to test:
 
 - configuration validation and normalization;
 - default seed and `"random"` semantics;
-- stable four-seed derivation;
+- deterministic master-seed replication to all four native seed fields;
+- independent random-seed resolution and persistence;
+- canonical and custom ore-metal validation;
 - canonical fingerprints and definition diffs;
 - logical-name and path safety;
 - ownership verification;
@@ -1143,24 +1270,17 @@ should not be inferred complete from isolated unit tests.
 - Should the `WorldMount` result remain a read-only data record, or should it
   expose carefully bounded query methods?
 - Should unknown configuration fields fail immediately to catch misspellings?
-- What numeric range and textual normalization should the master seed accept?
 - Should fixture recreation be a separate DwarfSpec command, a command-line
   tool, or intentionally manual at first?
 
 ### Definition
 
-- Which world-generation settings must be configurable in the first useful
-  version beyond size, history, seed, and playable-civilization requirement?
-- What embark width and height bounds can be supported independently of the
-  player's configured maximum embark size?
-- Which embark-site criteria have sufficiently stable native data and clear
-  semantics?
-- Should exact embark coordinates include world identity checks to prevent
-  accidental reuse against a different realization?
-- Does starting-party configuration belong in `EmbarkDefinition` immediately,
-  or should quickstart be the only initial mode?
 - How many deterministic generation attempts are allowed when world generation
   rejects valid settings?
+- Which accepted use case should drive the first addition beyond the
+  first-version site criteria?
+- What explicit compatibility rule should govern a later embark-profile
+  extension?
 
 ### Isolation
 
@@ -1205,14 +1325,16 @@ should not be inferred complete from isolated unit tests.
 
 ## Next discussion
 
-The next useful design discussion should settle the normalized
-`WorldDefinition` surface:
+The accepted first-version `WorldDefinition` surface is now sufficiently
+precise to normalize and fingerprint. The next useful design discussion should
+settle the isolation and dirty-ledger contract:
 
-1. exact first-version `WorldGenerationDefinition` fields;
-2. exact first-version `MapDefinition` site criteria;
-3. exact master-seed input range and four-seed derivation contract;
-4. whether quickstart is the only initial embark mode.
+1. exact meanings and boundaries of the initial world facets;
+2. dependency expansion between facets;
+3. normalization of omitted, empty, and `{"all"}` read/write declarations;
+4. whether and how the dirty ledger persists across DwarfSpec runs;
+5. which restoration mechanisms may safely clear a dirty facet.
 
-Those choices determine fixture identity and manifest compatibility. The
-transition, storage, and isolation implementations should not begin until that
-definition can be normalized and fingerprinted without ambiguity.
+Those decisions determine when DwarfSpec may safely avoid a world reload. They
+must remain conservative when native state or restoration evidence is
+ambiguous.
