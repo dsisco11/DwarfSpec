@@ -50,13 +50,20 @@ Phase 0 - Confirm the runtime boundary:
         - Evidence: focused current-save unit coverage: 1 success, 0 failures, 0 errors; full unit suite: 530 successes, 0 failures, 0 errors; Lua syntax and formatting: 253 files; safe live export suite: 2 successes, 0 failures, 0 errors, `cleanup_confirmed=true`.
 
 Phase 1 - Implement current-save comparison and validation:
-    ☐ Validate that `directory_name` is a string containing one nonempty directory name.
-    ☐ Reject path separators, absolute paths, current-directory names, parent-directory names, and traversal attempts.
-    ☐ Reject extra arguments.
-    ☐ Read `dfhack.isWorldLoaded()` before deciding whether an unload is needed.
-    ☐ Read the loaded directory through `dfhack.world.ReadWorldFolder()` when a world is loaded.
-    ☐ Return immediately without unload, load, or cleanup registration when the loaded directory exactly matches the request.
-    ☐ Add focused tests for valid names, invalid names, extra arguments, unloaded state, matching state, and differing state.
+    ☒ Validate that `directory_name` is a string containing one nonempty directory name.
+        - Evidence: `save_game_mount.validate_directory_name()` accepts exactly one nonempty string.
+    ☒ Reject path separators, absolute paths, current-directory names, parent-directory names, and traversal attempts.
+        - Evidence: validation rejects separators, drive-qualified names, `.` and `..`, and embedded NUL bytes without rendering the supplied name.
+    ☒ Reject extra arguments.
+        - Evidence: validation receives the exact argument count and rejects every count other than one.
+    ☒ Read `dfhack.isWorldLoaded()` before deciding whether an unload is needed.
+        - Evidence: the injected `is_world_loaded` predicate is required and is evaluated before any directory read.
+    ☒ Read the loaded directory through `dfhack.world.ReadWorldFolder()` when a world is loaded.
+        - Evidence: the injected `read_world_folder` function is required only for the loaded-world path and its result is validated.
+    ☒ Return immediately without unload, load, or cleanup registration when the loaded directory exactly matches the request.
+        - Evidence: matching preflight returns `transition_required=false`; its focused test proves no cleanup registration occurs.
+    ☒ Add focused tests for valid names, invalid names, extra arguments, unloaded state, matching state, and differing state.
+        - Evidence: `tests/unit/save_game_mount_spec.lua` covers all listed cases, including missing DFHack APIs and malformed loaded-directory results.
 
 Phase 2 - Implement discard and unload:
     ☐ Open the required native options state through stable input when a different world is loaded.
