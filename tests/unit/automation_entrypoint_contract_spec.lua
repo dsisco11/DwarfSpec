@@ -177,10 +177,10 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals('registration', encoded[4].kind)
         assert.is_false(encode_options[4].pretty)
         assert.matches('incompatible automation package version: ' ..
-            'expected 0.1.3, found 0.2.0', encoded[4].message, 1, true)
+            'expected 0.1.3, found 0.2.1', encoded[4].message, 1, true)
         assert.is_nil(registry.runs['entrypoint-version-rejection'])
 
-        registry.package_version = '0.2.0'
+        registry.package_version = '0.2.1'
         registry.quarantine = {
             active=true,
             run_id=run.run_id,

@@ -150,7 +150,7 @@ describe('DwarfSpec CLI selection', function()
                             protocol_version=2,
                             service_instance_id='service-cli-fixture',
                             package_root='D:/Packages/DwarfSpec',
-                            package_version='0.2.0',
+                            package_version='0.2.1',
                             queue={},
                             projects={},
                             quarantine={active=false},
@@ -265,7 +265,7 @@ describe('DwarfSpec CLI selection', function()
                         protocol_version=2,
                         service_instance_id='service-cli-fixture',
                         package_root='D:/Packages/DwarfSpec',
-                        package_version='0.2.0',
+                        package_version='0.2.1',
                         queue={},
                         projects={},
                         quarantine={active=false},
@@ -288,7 +288,7 @@ describe('DwarfSpec CLI selection', function()
         assert.matches('Usage: dwarfspec run', output.text, 1, true)
         output.text = ''
         assert.equals(0, cli.main({'version'}, context))
-        assert.equals('DwarfSpec 0.2.0\n', output.text)
+        assert.equals('DwarfSpec 0.2.1\n', output.text)
         assert.is_nil(invoked)
     end)
 
@@ -502,7 +502,7 @@ describe('DwarfSpec CLI selection', function()
     it('prints read-only scheduler status', function()
         assert.equals(0, cli.main({'status'}, context))
         assert.equals('status', invoked.command)
-        assert.matches('SERVICE service-cli-fixture version=0.2.0',
+        assert.matches('SERVICE service-cli-fixture version=0.2.1',
             output.text, 1, true)
         assert.matches('EXECUTOR idle', output.text, 1, true)
         assert.matches('QUARANTINE none', output.text, 1, true)
