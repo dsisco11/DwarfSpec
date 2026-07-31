@@ -1,0 +1,225 @@
+DwarfSpec Event Awaiting Implementation
+========================================
+
+Purpose:
+    ☐ Add `ds.awaitEvent(event, options)` for awaiting the next supported Dwarf Fortress event without polling a state predicate.
+    ☐ Support the seven core Lua-visible DFHack state-change events needed by deterministic automation.
+    ☐ Replace the command-specific map-loaded listener with the shared event-awaiting command.
+
+Completion contract:
+    ☐ Complete every applicable implementation, focused-test, full-test, declaration, documentation, package, cleanup, and live-evidence item below.
+    ☐ Treat this checklist as the source of truth for implementation status.
+    ☐ Preserve unrelated worktree and index changes; do not stash or commit user changes.
+    ☐ Keep focused unit, full unit, Lua syntax, package, cleanup, and live DFHack evidence distinct in the final handoff.
+    ☐ Keep EventManager events and specialized `eventful` hooks outside this implementation unless this checklist is explicitly revised.
+
+Command contract:
+    ☐ Export `ds.awaitEvent(event, options)`.
+    ☐ Define a public `ds.EEvent` enum with `WORLD_LOADED`, `WORLD_UNLOADED`, `MAP_LOADED`, `MAP_UNLOADED`, `VIEWSCREEN_CHANGED`, `PAUSED`, and `UNPAUSED`.
+    ☐ Wait for the next matching event; do not infer success from the associated state already being true.
+    ☐ Accept an optional `trigger` callback that runs only after the native listener is armed.
+    ☐ Capture a matching event raised synchronously by `trigger`.
+    ☐ Accept an optional nonempty diagnostic `description`.
+    ☐ Accept an optional positive `timeout_ms`, with `false` disabling the command-local timeout.
+    ☐ Do not impose a command-local timeout by default.
+    ☐ Return one immutable event-occurrence record containing the public event, source, and normalized payload.
+    ☐ Never expose a transient native pointer through the returned occurrence.
+    ☐ Resume the waiting test at a safe scheduler boundary instead of resuming it inside the DFHack callback.
+    ☐ Remove the native listener after success, trigger failure, timeout, cancellation, example cleanup, or run cleanup.
+    ☐ Ignore unrelated state-change events without consuming the wait.
+    ☐ Reject unsupported events and malformed options with bounded diagnostics.
+
+Normalized payload contract:
+    ☐ Return the loaded save-directory name for `WORLD_LOADED` and `MAP_LOADED` when it is available.
+    ☐ Capture the previous save-directory name for `WORLD_UNLOADED` and `MAP_UNLOADED` before it becomes unavailable.
+    ☐ Return the current focus and native screen type for `VIEWSCREEN_CHANGED` without returning the screen object.
+    ☐ Return `paused=true` for `PAUSED`.
+    ☐ Return `paused=false` for `UNPAUSED`.
+    ☐ Define and test the result when an otherwise valid payload field is unavailable.
+
+Non-goals:
+    ☐ Do not replace `ds.await()` for polling arbitrary read-only conditions.
+    ☐ Do not replace `ds.wait_frames()` or `ds.wait_ticks()`.
+    ☐ Do not replay past events or treat current state as an event occurrence.
+    ☐ Do not expose `SC_CORE_INITIALIZED`, since a DwarfSpec command cannot normally await it before it occurs.
+    ☐ Do not expose the C++-only `SC_BEGIN_UNLOAD` or the `SC_UNKNOWN` sentinel.
+    ☐ Do not add arbitrary plugin-event discovery or string-based callback registration.
+    ☐ Do not enable, disable, or change shared `eventful` EventManager frequencies.
+    ☐ Do not expose synchronous workshop, reaction, wound, or projectile interposition hooks.
+
+Phase 0 - Freeze the runtime contract and baseline:
+    ☐ Record the active checkout, branch, worktree state, index state, installed rock version, and current package archive contents.
+    ☐ Reconfirm the state-change constants exported by the active DFHack Lua runtime.
+    ☐ Reconfirm that `dfhack.onStateChange` supports keyed listeners that can be removed independently.
+    ☐ Record the current `ds.await()`, `ds.wait_frames()`, and `ds.wait_ticks()` declarations, implementations, and scheduler wait kinds.
+    ☐ Record the current command-specific `await_native_map_loaded()` implementation and every caller.
+    ☐ Identify the scheduler cancellation and run-cleanup paths that must release an event listener.
+    ☐ Select the production and test filenames before implementation.
+    ☐ Run and record the focused scheduler and save-game mount unit baselines.
+    ☐ Run and record the full standalone unit baseline.
+    ☐ Run and record the pre-change Lua syntax and formatting baseline.
+    ☐ Stop and revise this checklist if the active runtime does not expose the seven contracted events.
+
+Phase 1 - Add the public event types:
+    ☐ Define the public `dwarfspec.EEvent` enum in `src/ds.d.lua`.
+    ☐ Define `dwarfspec.EventWaitOptions`.
+        ☐ Type the optional `trigger` callback.
+        ☐ Type the optional `description`.
+        ☐ Type `timeout_ms` as a positive integer or `false`.
+    ☐ Define the immutable `dwarfspec.EventOccurrence` record.
+        ☐ Type the public `event`.
+        ☐ Type the fixed `state_change` source.
+        ☐ Type the normalized payload.
+    ☐ Declare `ds.awaitEvent(event, options)`.
+    ☐ Document next-occurrence semantics at the declaration.
+    ☐ Document listener-before-trigger ordering at the declaration.
+    ☐ Document the absence of a default command-local timeout.
+    ☐ Add language-appropriate documentation comments for every new production method and type.
+    ☐ Add `EEvent` and `awaitEvent` to the reserved DwarfSpec command names.
+    ☐ Add declaration fixtures or declaration checks for valid and invalid calls if the current declaration test harness supports them.
+
+Phase 2 - Implement scheduler event suspension:
+    ☐ Add a dedicated event wait kind to the coroutine scheduler.
+    ☐ Give each event wait a unique wait identity that cannot collide with another run or example.
+    ☐ Add a signal path that accepts an immutable occurrence for the currently outstanding event wait.
+    ☐ Queue a signaled occurrence for the next safe scheduler pump.
+    ☐ Do not call `coroutine.resume()` from inside a DFHack event callback.
+    ☐ Preserve an occurrence signaled synchronously before the waiting coroutine finishes suspending.
+    ☐ Ignore duplicate signals after the first accepted occurrence.
+    ☐ Ignore signals for stale or canceled wait identities.
+    ☐ Apply an explicit positive timeout only when supplied.
+    ☐ Support `timeout_ms=false`.
+    ☐ Leave the command-local timeout disabled when the option is omitted.
+    ☐ Ensure scheduler cancellation invokes the wait's listener-cleanup callback exactly once.
+    ☐ Include the operation description, awaited event, elapsed time, and current runtime diagnostics in timeout errors.
+    ☐ Add focused scheduler tests for synchronous signaling, deferred resumption, unrelated signals, duplicate signals, timeout, cancellation, stale signals, and exactly-once cleanup.
+
+Phase 3 - Implement the core state-change command:
+    ☐ Add `src/dwarfspec/commands/await_event.lua`.
+    ☐ Keep DFHack listener registration and payload normalization in the command module.
+    ☐ Map each public enum value to its exact DFHack state-change constant.
+    ☐ Validate the event and option record before installing a listener.
+    ☐ Install one uniquely keyed `dfhack.onStateChange` listener for the wait.
+    ☐ Capture the currently loaded save-directory name before unload events can erase it.
+    ☐ Snapshot payload data while it is valid.
+    ☐ Arm the native listener before invoking `trigger`.
+    ☐ Forward a matching normalized occurrence to the scheduler event signal path.
+    ☐ Remove the listener after the first accepted occurrence.
+    ☐ Remove the listener when `trigger` raises an error.
+    ☐ Preserve the original trigger error after listener cleanup.
+    ☐ Expose a concise documented construction function for run-scoped dependency binding.
+    ☐ Keep dependency injection available for focused tests without redefining unrelated `ds` commands.
+    ☐ Add focused command-module tests for all seven mappings and payloads.
+    ☐ Add focused command-module tests for validation, listener ordering, synchronous events, unrelated events, trigger failure, unavailable payload fields, and listener cleanup.
+
+Phase 4 - Export the command and migrate map loading:
+    ☐ Construct the event-awaiting command with the current run's scheduler and native DFHack dependencies.
+    ☐ Export `ds.EEvent` without allowing consumers to mutate the authoritative internal mapping.
+    ☐ Export `ds.awaitEvent(event, options)` from the run-scoped `ds` namespace.
+    ☐ Keep the public implementation limited to validation, dependency delegation, and its documented return value.
+    ☐ Replace `await_native_map_loaded()` with `ds.awaitEvent(ds.EEvent.MAP_LOADED, {trigger=...})` or the equivalent shared internal command call.
+    ☐ Remove the command-specific map-loaded listener counter, boolean observation, and query polling.
+    ☐ Preserve `ds.mountSaveGame()` listener-before-save-selection ordering.
+    ☐ Preserve `ds.mountSaveGame()` behavior, return value, no-op path, and lack of example-owned unload cleanup.
+    ☐ Confirm that no other `ds` command changes behavior.
+    ☐ Add export, delegation, and save-game-loader migration coverage.
+
+Phase 5 - Verify focused and full unit behavior:
+    ☐ Prove that `awaitEvent()` waits for a new occurrence when the corresponding state is already true.
+    ☐ Prove that the listener is armed before `trigger`.
+    ☐ Prove that a synchronous trigger event is not lost.
+    ☐ Prove that unrelated events do not resume the wait.
+    ☐ Prove that only the first matching event is returned.
+    ☐ Prove that every success and failure path removes the listener exactly once.
+    ☐ Prove that canceled or stale listeners cannot resume a later example.
+    ☐ Prove that returned payloads contain snapshots rather than native pointers.
+    ☐ Prove all seven public event-to-state-change mappings.
+    ☐ Prove that `ds.mountSaveGame()` uses the shared map-loaded event wait.
+    ☐ Run and record focused scheduler tests.
+    ☐ Run and record focused command-module tests.
+    ☐ Run and record focused save-game mount tests.
+    ☐ Run and record the full standalone unit suite separately.
+    ☐ Run and record Lua syntax and formatting checks separately.
+    ☐ Run and record `git diff --check`.
+
+Phase 6 - Verify live DFHack behavior:
+    ☐ Add focused live coverage for `PAUSED` and `UNPAUSED` using DFHack's built-in simulated input.
+    ☐ Restore the original pause state even when a live assertion fails.
+    ☐ Add focused live coverage for `VIEWSCREEN_CHANGED` using a controlled native-screen transition.
+    ☐ Restore or dismiss every screen opened by the live test.
+    ☐ Reuse the dynamic smallest-save selection based on `world.sav` size for load and unload coverage.
+    ☐ Do not depend on a hardcoded save-directory name.
+    ☐ Add focused live coverage for `MAP_LOADED` through `ds.mountSaveGame()`.
+    ☐ Add focused live coverage for the applicable world/map unload and load notifications.
+    ☐ Use native events or explicit state predicates for setup and cleanup; do not add arbitrary sleep periods.
+    ☐ Confirm that no physical mouse manipulation is used.
+    ☐ Confirm every selected live run reports `cleanup_confirmed=true`.
+    ☐ Confirm the executor is idle, the queue is empty, quarantine is absent, mounts are clear, pointer tracking is restored, no buttons remain pressed, and DFHack remains responsive.
+    ☐ Record selected live-event results separately from the complete live suite.
+
+Phase 7 - Document, package, and close acceptance:
+    ☐ Add `ds.awaitEvent()` and `ds.EEvent` to the public command documentation.
+    ☐ Document all seven supported events and their normalized payloads.
+    ☐ Document next-occurrence semantics and contrast them with `ds.await()` current-state polling.
+    ☐ Document listener-before-trigger ordering with a save-loading example.
+    ☐ Document optional timeout behavior and the absence of a default command-local timeout.
+    ☐ Document that EventManager and specialized `eventful` callbacks are not supported by this release.
+    ☐ Update the LuaRocks package manifest for every new production module and declaration artifact.
+    ☐ Build the release rock through the repository publish tooling.
+    ☐ Inspect the archive contents directly.
+    ☐ Require the event command module and updated declaration artifact in the archive.
+    ☐ Reject tests, fixture saves, generated logs, and temporary artifacts from the archive.
+    ☐ Load the built artifact in the controlled DFHack environment.
+    ☐ Re-run the focused live event coverage against the packaged artifact.
+    ☐ Re-run the save-game mount coverage against the packaged artifact.
+    ☐ Run and record the complete live suite separately.
+    ☐ Record the final diff, worktree, index, archive, and DFHack runtime state.
+
+Deferred event families:
+    EventManager candidates:
+        - `JOB_INITIATED`, `JOB_STARTED`, `JOB_COMPLETED`
+        - `UNIT_NEW_ACTIVE`, `UNIT_DEATH`
+        - `ITEM_CREATED`, `BUILDING`, `CONSTRUCTION`
+        - `SYNDROME`, `INVASION`, `INVENTORY_CHANGE`, `REPORT`
+        - `UNIT_ATTACK`, `UNLOAD`, `INTERACTION`
+    Required design work before EventManager support:
+        - Define immutable payloads for callbacks that currently expose native pointers.
+        - Define safe ownership for globally shared `eventful` scan frequencies.
+        - Add frequency introspection and restoration or use a native adapter with per-consumer ownership.
+        - Avoid duplicating `ds.wait_ticks()` for the EventManager `TICK` type.
+    Specialized hooks intentionally excluded from the generic event API:
+        - `onWorkshopFillSidebarMenu`, `postWorkshopFillSidebarMenu`
+        - `onReactionCompleting`, `onReactionComplete`
+        - `onItemContaminateWound`
+        - `onProjItemCheckImpact`, `onProjItemCheckMovement`
+        - `onProjUnitCheckImpact`, `onProjUnitCheckMovement`
+
+Completion evidence:
+    ☐ Contract and baseline:
+        - Evidence:
+    ☐ Public declarations and reserved names:
+        - Evidence:
+    ☐ Scheduler event-wait primitive:
+        - Evidence:
+    ☐ Core state-change command:
+        - Evidence:
+    ☐ Save-game mount migration:
+        - Evidence:
+    ☐ Focused unit tests:
+        - Evidence:
+    ☐ Full standalone unit suite:
+        - Evidence:
+    ☐ Lua syntax and formatting:
+        - Evidence:
+    ☐ Selected live event coverage:
+        - Evidence:
+    ☐ Save-game mount live coverage:
+        - Evidence:
+    ☐ Complete live suite:
+        - Evidence:
+    ☐ Package build and archive audit:
+        - Evidence:
+    ☐ Diff and worktree audit:
+        - Evidence:
+    ☐ Final DFHack runtime state:
+        - Evidence:
