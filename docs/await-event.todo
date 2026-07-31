@@ -48,17 +48,17 @@ Non-goals:
     ☐ Do not expose synchronous workshop, reaction, wound, or projectile interposition hooks.
 
 Phase 0 - Freeze the runtime contract and baseline:
-    ☐ Record the active checkout, branch, worktree state, index state, installed rock version, and current package archive contents.
-    ☐ Reconfirm the state-change constants exported by the active DFHack Lua runtime.
-    ☐ Reconfirm that `dfhack.onStateChange` supports keyed listeners that can be removed independently.
-    ☐ Record the current `ds.await()`, `ds.wait_frames()`, and `ds.wait_ticks()` declarations, implementations, and scheduler wait kinds.
-    ☐ Record the current command-specific `await_native_map_loaded()` implementation and every caller.
-    ☐ Identify the scheduler cancellation and run-cleanup paths that must release an event listener.
-    ☐ Select the production and test filenames before implementation.
-    ☐ Run and record the focused scheduler and save-game mount unit baselines.
-    ☐ Run and record the full standalone unit baseline.
-    ☐ Run and record the pre-change Lua syntax and formatting baseline.
-    ☐ Stop and revise this checklist if the active runtime does not expose the seven contracted events.
+    ☒ Record the active checkout, branch, worktree state, index state, installed rock version, and current package archive contents.
+    ☒ Reconfirm the state-change constants exported by the active DFHack Lua runtime.
+    ☒ Reconfirm that `dfhack.onStateChange` supports keyed listeners that can be removed independently.
+    ☒ Record the current `ds.await()`, `ds.wait_frames()`, and `ds.wait_ticks()` declarations, implementations, and scheduler wait kinds.
+    ☒ Record the current command-specific `await_native_map_loaded()` implementation and every caller.
+    ☒ Identify the scheduler cancellation and run-cleanup paths that must release an event listener.
+    ☒ Select the production and test filenames before implementation.
+    ☒ Run and record the focused scheduler and save-game mount unit baselines.
+    ☒ Run and record the full standalone unit baseline.
+    ☒ Run and record the pre-change Lua syntax and formatting baseline.
+    ☒ Stop and revise this checklist if the active runtime does not expose the seven contracted events.
 
 Phase 1 - Add the public event types:
     ☐ Define the public `dwarfspec.EEvent` enum in `src/ds.d.lua`.
@@ -195,8 +195,22 @@ Deferred event families:
         - `onProjUnitCheckImpact`, `onProjUnitCheckMovement`
 
 Completion evidence:
-    ☐ Contract and baseline:
-        - Evidence:
+    ☒ Contract and baseline:
+        - Evidence: Recorded 2026-07-30 PDT against checkout `D:\CODE\DFHack\DwarfSpec`, commit `55383880bfdb09a700f177c50bc02bf2eba60197`, branch `world-mount-system` tracking `origin/world-mount-system` at `ahead 18, behind 0`. The worktree and index were clean before this checklist update.
+        - Evidence: The active LuaRocks installation is `dwarfspec 0.2.0-1`; `dwarfspec version` reports `DwarfSpec 0.2.0`. Live DFHack resolves `dwarfspec.ds` from `C:/Users/Sisco/AppData/Roaming/luarocks/share/lua/5.4/dwarfspec/ds.lua`.
+        - Evidence: The current archive is `dist/dwarfspec-0.2.0-1.all.rock`, 214152 bytes, SHA-256 `7AE48475E2533849ADF2825D0CA4BEFED3F4F88B4A31D9CB55F437C9BFC3996A`. Direct `tar -tf` inspection found 97 entries: 90 `lua/`, 4 `doc/`, 1 `bin/`, and 2 root entries, with no test entry. The archive contains the declaration, scheduler, save-game load adapter and command, `ds` implementation, executable, documents, rockspec, and rock manifest.
+        - Evidence: Live DFHack `53.15-r2` exported `SC_WORLD_LOADED=0`, `SC_WORLD_UNLOADED=1`, `SC_MAP_LOADED=2`, `SC_MAP_UNLOADED=3`, `SC_VIEWSCREEN_CHANGED=4`, `SC_PAUSED=7`, and `SC_UNPAUSED=8`. A read-only contract probe installed two unique `dfhack.onStateChange` keys, removed the first without disturbing the second, then removed the second; final checks reported both keys absent.
+        - Evidence: Public declarations are `src/ds.d.lua`: `DS.wait_frames` at line 282, `DS.wait_ticks` at line 288, and `DS.await` at line 296. Run-scoped implementations are `src/dwarfspec/ds.lua`: `ds.wait_frames` at line 872 delegates to `wait_frames`, `ds.wait_ticks` at line 881 delegates to `wait_ticks`, and `ds.await` at line 891 delegates to `wait_until`.
+        - Evidence: `src/dwarfspec/automation/coroutine_scheduler.lua` currently owns `frames`, `ticks`, and `query` waits. `wait_frames`, `wait_ticks`, and `wait_until` all suspend the sole owner; frame and query waits advance from raw-frame callbacks, while tick waits use the simulation-tick timeout callback.
+        - Evidence: `src/dwarfspec/commands/save_game_load.lua:174` defines the only `await_native_map_loaded()`. It allocates a unique `dwarfspec.mountSaveGame.mapLoaded.N` key, records `SC_MAP_LOADED`, runs the selection action after listener registration, polls the recorded boolean through `wait_until`, and clears the key after success or failure. It is bound as the workflow's `await_map_loaded` dependency at line 237; `src/dwarfspec/automation/save_game_load.lua:91` calls that dependency, and its sole workflow call is the save selection at line 182. No other caller was found.
+        - Evidence: Event-listener cancellation must integrate with `coroutine_scheduler.cancel()` in `src/dwarfspec/automation/coroutine_scheduler.lua:405`. Run-level release must also survive `clean_run()` in `src/dwarfspec/automation/host.lua`, which cancels the scheduler before draining the cleanup registry and is reached by both normal `finalize_run()` and abort `terminate_aborted()` paths. Example cleanup must therefore own an idempotent listener cleanup entry in the existing cleanup registry as well as the scheduler wait cleanup callback.
+        - Evidence: Selected production files are new `src/dwarfspec/state_change_events.lua` and `src/dwarfspec/commands/await_event.lua`, plus existing `src/ds.d.lua`, `src/dwarfspec/automation/coroutine_scheduler.lua`, `src/dwarfspec/ds.lua`, `src/dwarfspec/commands/save_game_load.lua`, `dwarfspec-0.2.0-1.rockspec`, and `README.md`.
+        - Evidence: Selected tests are new `tests/unit/await_event_command_spec.lua`, existing `tests/unit/automation_scheduler_spec.lua`, `tests/unit/immutable_enums_spec.lua`, `tests/unit/automation_entrypoint_contract_spec.lua`, and `tests/unit/save_game_load_command_spec.lua`, plus new live files `tests/automation/await_event_live_spec.lua` and `tests/destructive/await_event_world_live_spec.lua`.
+        - Evidence: Focused scheduler baseline: `tools/Run-UnitTests.ps1 --filter 'automation scheduler'` completed with 12 successes, 0 failures, 0 errors, and 0 pending.
+        - Evidence: Focused save-game baseline: `tools/Run-UnitTests.ps1 --filter 'save%-game'` completed with 28 successes, 0 failures, 0 errors, and 0 pending.
+        - Evidence: Full standalone baseline: `tools/Run-UnitTests.ps1` completed with 562 successes, 0 failures, 0 errors, and 0 pending.
+        - Evidence: Pre-change syntax and formatting baseline: `tools/Check-Lua.ps1` passed under Lua 5.4.6 for 267 files.
+        - Evidence: All seven contracted runtime constants are present, so no checklist revision was required.
     ☐ Public declarations and reserved names:
         - Evidence:
     ☐ Scheduler event-wait primitive:
