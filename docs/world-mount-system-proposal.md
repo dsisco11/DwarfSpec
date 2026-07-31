@@ -63,6 +63,16 @@ The following decisions are accepted unless later discussion revises them:
   deferred to a later follow-up.
 - A test that does not declare its isolation behavior conservatively requires
   a pristine world and leaves the entire world dirty.
+- Isolation uses `requires` for facets that must be pristine and `dirties` for
+  facets that a test may mutate.
+- DwarfSpec exposes the accepted facets through an immutable
+  `ds.EWorldFacet` enum.
+- Advancing fortress simulation dirties every facet in the first
+  implementation.
+- The dirty ledger is run-scoped in memory and is never persisted across a
+  Dwarf Fortress process restart.
+- The first managed-world mount in a new DwarfSpec run restores the baseline
+  before granting access to an existing fixture.
 - Reuse is an optimization. Uncertain state must cause restoration or a
   bounded failure, never optimistic reuse.
 - DwarfSpec must never discard, overwrite, or silently save an unmanaged
@@ -122,8 +132,8 @@ The following decisions are accepted unless later discussion revises them:
   after a successful initial embark and durable save.
 - **Facet:** A coarse category of world state used to decide whether a working
   world is compatible with a later test.
-- **Dirty ledger:** The set of facets that may differ from the pristine
-  baseline.
+- **Dirty ledger:** The run-scoped in-memory set of facets that may differ from
+  the pristine baseline.
 - **Managed world:** A world whose manifest, ownership marker, definition,
   realization, working save, and baseline have all been verified by
   DwarfSpec.
@@ -171,14 +181,14 @@ local config = {
         },
     },
     isolation={
-        reads={
-            'map_tiles',
-            'units',
-            'items',
+        requires={
+            ds.EWorldFacet.MAP_TILES,
+            ds.EWorldFacet.UNITS,
+            ds.EWorldFacet.ITEMS,
         },
-        writes={
-            'jobs_orders',
-            'items',
+        dirties={
+            ds.EWorldFacet.JOBS_ORDERS,
+            ds.EWorldFacet.ITEMS,
         },
     },
 }
@@ -261,6 +271,7 @@ eventually use these canonical types rather than parallel copies.
 ---@alias dwarfspec.WorldFacet
 ---| '"all"'
 ---| '"calendar_weather"'
+---| '"simulation_state"'
 ---| '"map_tiles"'
 ---| '"units"'
 ---| '"items"'
@@ -270,6 +281,21 @@ eventually use these canonical types rather than parallel copies.
 ---| '"world_history"'
 ---| '"site_persistence"'
 ---| '"unknown_native"'
+
+---Provides immutable constants for accepted world-isolation facets.
+---@class dwarfspec.EWorldFacetEnum
+---@field ALL `all`
+---@field CALENDAR_WEATHER `calendar_weather`
+---@field SIMULATION_STATE `simulation_state`
+---@field MAP_TILES `map_tiles`
+---@field UNITS `units`
+---@field ITEMS `items`
+---@field BUILDINGS_ZONES `buildings_zones`
+---@field JOBS_ORDERS `jobs_orders`
+---@field FORTRESS_STATE `fortress_state`
+---@field WORLD_HISTORY `world_history`
+---@field SITE_PERSISTENCE `site_persistence`
+---@field UNKNOWN_NATIVE `unknown_native`
 
 ---Reports how a requested fixture reached its mounted state.
 ---@alias dwarfspec.WorldMountAction
@@ -318,8 +344,8 @@ eventually use these canonical types rather than parallel copies.
 
 ---Declares the pristine state required and possible mutations for one test.
 ---@class dwarfspec.WorldIsolation
----@field reads? dwarfspec.WorldFacet[] Defaults to `{"all"}`.
----@field writes? dwarfspec.WorldFacet[] Defaults to `{"all"}`.
+---@field requires? dwarfspec.WorldFacet[] Defaults to `{"all"}`.
+---@field dirties? dwarfspec.WorldFacet[] Defaults to `{"all"}`.
 
 ---Configures one managed-world request.
 ---@class dwarfspec.WorldConfig
@@ -351,6 +377,10 @@ eventually use these canonical types rather than parallel copies.
 ---Provides canonical vanilla ore-metal identifiers.
 ---@type dwarfspec.ECanonicalMetalEnum
 DS.ECanonicalMetal = nil
+
+---Provides accepted world-isolation facets.
+---@type dwarfspec.EWorldFacetEnum
+DS.EWorldFacet = nil
 
 ---Mounts a managed world fixture for the current example.
 ---@param name string
@@ -521,9 +551,12 @@ The manifest should record:
 - managed working-save directory;
 - baseline identity and integrity information;
 - Dwarf Fortress and DFHack compatibility information;
-- current dirty ledger;
 - last completed operation;
-- clean-shutdown or interrupted-operation state.
+- interrupted filesystem-operation state.
+
+The manifest does not persist per-test facet dirtiness. Every new DwarfSpec run
+starts without trusted in-memory reuse history and restores the pristine
+baseline before granting its first mount of an existing fixture.
 
 The ownership marker must be independently verifiable from both the external
 manifest and the managed save. A matching directory name alone is not proof of
@@ -555,7 +588,8 @@ ownership:
 Managed-world reuse has a different lifecycle:
 
 - a fixture can remain loaded after one example finishes;
-- example cleanup records the fixture's declared writes;
+- example cleanup records the fixture's declared dirtiness in the run-scoped
+  ledger;
 - a compatible later example can reuse the in-memory world;
 - run cleanup, an incompatible request, or recovery may unload it.
 
@@ -620,13 +654,11 @@ World cleanup should:
 
 - verify that the expected managed realization is still loaded;
 - fail safely if an unrelated world appeared;
-- union the normalized declared writes into the dirty ledger;
-- persist the ledger before reporting cleanup success when persistence is part
-  of the accepted design;
+- union normalized declared and observed dirtiness into the run-scoped ledger;
 - release the example's fixture claim;
 - leave the compatible managed world loaded for possible reuse;
-- preserve `cleanup_confirmed=false` when ownership or ledger persistence
-  cannot be proven.
+- preserve `cleanup_confirmed=false` when ownership or the in-memory ledger
+  update cannot be proven.
 
 Unlike component mounting, successful world-mount cleanup does not normally
 unload the mounted resource.
@@ -645,6 +677,11 @@ Leaving the last fixture loaded would be faster for consecutive runs but would
 make ownership and crash recovery more visible to the user. This tradeoff
 requires an explicit decision.
 
+Regardless of final run-state policy, a later DwarfSpec run does not inherit
+the prior run's dirty ledger. Its first mount restores the requested fixture
+baseline before use. A Dwarf Fortress process crash needs no special facet
+recovery because both DwarfSpec and the in-memory world disappear together.
+
 ## Isolation and reuse model
 
 ### Conservative default
@@ -653,8 +690,8 @@ The normalized default is:
 
 ```lua
 isolation={
-    reads={'all'},
-    writes={'all'},
+    requires={ds.EWorldFacet.ALL},
+    dirties={ds.EWorldFacet.ALL},
 }
 ```
 
@@ -662,17 +699,38 @@ This means:
 
 - the current test requires a pristine realization;
 - after the test, every world facet is considered dirty;
-- a later mount restores before use unless its contract can establish
-  compatibility through a future, more specialized rule.
+- a later mount in the same DwarfSpec run restores unless its contract can
+  establish compatibility.
 
 Tests opt into reuse by declaring narrower facets.
+
+### Normalization
+
+`requires` describes facets that must match the pristine baseline before the
+test. `dirties` describes facets that the test may mutate and that DwarfSpec
+must conservatively mark dirty after cleanup.
+
+Normalization follows these rules:
+
+- omitting `isolation` defaults both fields to `ALL`;
+- omitting either field defaults that field independently to `ALL`;
+- an explicit empty `requires` accepts any in-run dirty world state;
+- an explicit empty `dirties` promises that the test does not mutate
+  world-owned state;
+- `ALL` must be the only member when present;
+- duplicate or unknown facets are errors;
+- input arrays are copied and normalized into stable enum order.
+
+Empty `dirties` is reserved for genuinely read-only tests. A test that mutates
+and manually restores a facet must still declare that facet dirty in the first
+implementation.
 
 ### Decision rule
 
 Let:
 
-- `D` be the fixture's normalized dirty-facet set;
-- `R` be the next test's normalized read-facet set.
+- `D` be the fixture's run-scoped dirty-facet set;
+- `R` be the next test's normalized required-facet set.
 
 The loaded realization can be reused when:
 
@@ -680,40 +738,62 @@ The loaded realization can be reused when:
 D intersect R = empty
 ```
 
+`unknown_native` in `D` blocks every reuse because its effect cannot be bounded
+to an accepted narrower facet.
+
 Otherwise, the pristine baseline must be restored and loaded before the test
 continues.
 
 After the example:
 
 ```text
-D = D union W
+D = D union declared_dirties union observed_dirties
 ```
 
-where `W` is the test's normalized write-facet set.
+`ALL` expands to every known facet plus `unknown_native`.
 
-The wildcard `all` expands to every known facet plus
-`unknown_native`. Facet dependency closure must occur during normalization.
-For example, advancing time may affect jobs, units, items, weather, and history
-even when a test directly intended to change only the calendar.
+The initial implementation does not apply a broad static dependency graph
+between ordinary facets. Test authors declare every facet they may affect, and
+DwarfSpec-owned mutation commands add every facet their production contracts
+identify.
+
+Observed fortress simulation advancement adds `ALL`. Raw-frame waits while the
+fortress remains paused add nothing. An operation whose world effects cannot
+be classified adds `unknown_native`.
 
 ### Initial facets
 
 | Facet | Intended scope |
 |---|---|
 | `calendar_weather` | Time, season, weather, and time-driven environmental state |
-| `map_tiles` | Tile materials, shapes, designations, liquids, flows, and revealed state |
-| `units` | Unit existence, position, health, inventory ownership, needs, and state |
-| `items` | Item existence, position, flags, containment, and ownership |
-| `buildings_zones` | Buildings, stockpiles, zones, routes, and related configuration |
-| `jobs_orders` | Jobs, work details, labor assignments, and manager orders |
-| `fortress_state` | Economy, stocks, alerts, petitions, squads, burrows, and fortress-level configuration |
+| `simulation_state` | RNG state, simulation counters, pending internal events, and other future-outcome state |
+| `map_tiles` | Tile materials, shapes, designations, liquids, flows, temperatures, plants, revealed state, and map features |
+| `units` | Unit existence, position, health, skills, attributes, needs, relationships, and unit-side inventory references |
+| `items` | Item existence, position, wear, flags, containment, ownership, and item-side holder references |
+| `buildings_zones` | Buildings, constructions, stockpiles, zones, routes, and related configuration |
+| `jobs_orders` | Jobs, tasks, manager orders, work details, labor assignments, and job queues |
+| `fortress_state` | Alerts, squads, burrows, nobles, petitions, mandates, economy, population, wealth, and fortress-wide configuration |
 | `world_history` | Historical events, entities, figures, relationships, and off-map world changes |
-| `site_persistence` | State persisted outside the immediate loaded fortress but associated with its site |
+| `site_persistence` | Site records and state associated with the fortress but stored outside the immediate loaded map |
 | `unknown_native` | Native state not represented by an accepted narrower facet |
 
 This list is intentionally coarse. Overly narrow facets create incorrect reuse
 through hidden dependencies. The list should only be split when a concrete
 test need, restorer, and live proof justify it.
+
+### Run and process boundaries
+
+The dirty ledger exists only for one DwarfSpec run in the live Dwarf Fortress
+process. It is not stored in the fixture manifest.
+
+On the first mount of an existing fixture in a new run, DwarfSpec restores the
+pristine baseline before granting access. Subsequent examples in that run may
+reuse the in-memory realization through the facet decision rule.
+
+If Dwarf Fortress exits or crashes, the ledger and in-memory mutations vanish
+with the process. The next process again restores the baseline on first mount.
+If autosave, manual save, or an interrupted file operation may have changed the
+working save, baseline replacement occurs before loading it.
 
 ### What a reload does not restore
 
@@ -735,7 +815,7 @@ fixtures, or process isolation.
 ### Manual restoration
 
 The first contract should not let a test assert that arbitrary state was
-restored merely by saying so. Declared writes remain dirty.
+restored merely by saying so. Declared dirtiness remains dirty.
 
 A future extension could clear facets only through:
 
@@ -1184,9 +1264,11 @@ Use injected adapters to test:
 - canonical fingerprints and definition diffs;
 - logical-name and path safety;
 - ownership verification;
-- isolation wildcard expansion and dependency closure;
+- isolation omission, empty-list, wildcard, duplicate, and enum normalization;
+- simulation and unknown-native observed-dirtiness escalation;
 - dirty-set intersection decisions;
 - example cleanup ledger updates;
+- first-mount baseline restoration in a new run;
 - same-world reuse;
 - conflicting-world restore;
 - different-managed-world transitions;
@@ -1249,7 +1331,8 @@ embarked, saved, restored, or loaded a world.
 ## Proposed workstreams
 
 1. Public types, normalization, and definition identity.
-2. Isolation facets, dependency closure, and dirty-ledger semantics.
+2. Isolation facets, normalization, observed dirtiness, and run-scoped ledger
+   semantics.
 3. Project-scoped manifest, ownership marker, and storage layout.
 4. Shared private world transition controller and diagnostics.
 5. In-process world-generation driver.
@@ -1284,14 +1367,10 @@ should not be inferred complete from isolated unit tests.
 
 ### Isolation
 
-- Is the initial facet list appropriately coarse?
-- Which facet dependencies should automatically expand declared reads and
-  writes?
-- Should the dirty ledger persist across DwarfSpec runs?
-- Can any initial DwarfSpec mutation helpers provide verified automatic
-  restoration?
-- Should a test be allowed to declare no writes explicitly, and how visible
-  should that risk be in diagnostics?
+- Which initial DwarfSpec mutation helpers can classify their world effects
+  more narrowly than `ALL`?
+- Which future facet-specific restorers can provide enough evidence to clear
+  dirtiness safely?
 
 ### Lifecycle
 
@@ -1325,16 +1404,17 @@ should not be inferred complete from isolated unit tests.
 
 ## Next discussion
 
-The accepted first-version `WorldDefinition` surface is now sufficiently
-precise to normalize and fingerprint. The next useful design discussion should
-settle the isolation and dirty-ledger contract:
+The accepted first-version definition and isolation contracts are now
+sufficiently precise for reuse decisions. The next useful design discussion
+should settle managed fixture storage and ownership:
 
-1. exact meanings and boundaries of the initial world facets;
-2. dependency expansion between facets;
-3. normalization of omitted, empty, and `{"all"}` read/write declarations;
-4. whether and how the dirty ledger persists across DwarfSpec runs;
-5. which restoration mechanisms may safely clear a dirty facet.
+1. the project-scoped fixture root;
+2. logical-name to working-save mapping;
+3. manifest and in-save ownership evidence;
+4. immutable baseline and replaceable working-save layout;
+5. raw/mod and version compatibility fingerprints;
+6. atomic replacement and interrupted filesystem-operation recovery.
 
-Those decisions determine when DwarfSpec may safely avoid a world reload. They
-must remain conservative when native state or restoration evidence is
-ambiguous.
+Those decisions determine which files DwarfSpec may safely create, replace, or
+reject. No destructive save operation should be implemented until ownership
+and path containment can be proven independently.
