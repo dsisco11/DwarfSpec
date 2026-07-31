@@ -513,14 +513,34 @@ The fingerprint should include at least:
 - normalized map size and site criteria;
 - internal fast-generation profile version;
 - fixed quickstart provisioning contract version;
-- Dwarf Fortress save compatibility version;
-- DFHack compatibility version where transition behavior requires it;
-- ordered raw and mod identity;
 - provisioning-backend contract version.
 
 The separate per-test isolation argument must not participate in fixture
 identity. Tests can reuse the same `WorldDefinition` value while independently
 declaring different required and dirtied facets.
+
+Fixture compatibility is deliberately simpler than fixture identity. The
+manifest records:
+
+- the exact Dwarf Fortress version used to create the fixture;
+- the complete ordered active-mod list, with each entry represented by its mod
+  ID and numeric version; and
+- the generating DFHack version for diagnostics.
+
+Loading requires an exact Dwarf Fortress version match and an exact match of the
+complete ordered mod list. DwarfSpec does not hash, inspect, or compare mod
+content files. Mod installation paths, file timestamps, graphics, scripts, and
+other package contents do not participate in compatibility. A mod whose content
+changes without an ID or numeric-version change is therefore intentionally
+treated as unchanged.
+
+The DFHack version does not invalidate a fixture by itself. DwarfSpec checks
+whether the current DFHack runtime satisfies its controller requirements
+separately from fixture compatibility.
+
+An incompatible fixture must be refused with a bounded comparison of the
+expected and current Dwarf Fortress versions or ordered mod entries.
+`mountWorld()` must not migrate, regenerate, or overwrite it.
 
 When a fixture name already exists:
 
@@ -605,7 +625,9 @@ The manifest should record:
 - managed save-image directory and recorded `world.sav` last-write time and
   size;
 - recovery-snapshot identity and integrity information;
-- Dwarf Fortress and DFHack compatibility information;
+- exact Dwarf Fortress version;
+- complete ordered active-mod IDs and numeric versions;
+- generating DFHack version for diagnostics;
 - last completed operation;
 - interrupted filesystem-operation state.
 
@@ -621,6 +643,8 @@ The managed save is owned only when:
 - the manifest and marker fixture UUIDs and names match exactly;
 - the directory name exactly matches `WorldDefinition.name`;
 - the requested definition fingerprint matches the manifest;
+- the current Dwarf Fortress version and complete ordered active-mod list match
+  the manifest;
 - the resolved save directory is an immediate child of the recorded save
   root; and
 - exactly one DF-visible save root contains the requested directory name.
@@ -1115,8 +1139,8 @@ properties and are not included.
 
 A custom string is accepted when it exactly identifies a loaded inorganic raw
 that is obtainable from at least one ore. Custom identifiers remain
-case-sensitive and are included in raw/mod compatibility fingerprints.
-An unknown, nonmetal, or non-ore-obtainable identifier is a definition error.
+case-sensitive and are included in the normalized world definition. An unknown,
+nonmetal, or non-ore-obtainable identifier is a definition error.
 
 The native finder is only a candidate-discovery accelerator. Its results are
 best-fit rather than strict, so DwarfSpec must independently verify every
@@ -1535,8 +1559,6 @@ and should not be inferred complete from isolated unit tests.
 
 ### Storage and compatibility
 
-- What raw/mod fingerprint is both stable and affordable?
-- Which Dwarf Fortress or DFHack upgrades invalidate a fixture?
 - Which file-copy or rename strategy is safe while the game process is
   running?
 - How should storage quotas and stale fixture cleanup be administered?
@@ -1553,17 +1575,15 @@ and should not be inferred complete from isolated unit tests.
 
 ## Next discussion
 
-Fixture storage, save sentinels, ownership evidence, collision behavior, and
-save-root containment are settled. The next useful design discussion should
-settle compatibility fingerprints:
+Fixture storage, save sentinels, ownership, collision behavior, and
+compatibility are settled. The next useful design discussion should select the
+first provisioning backend and define its state machine:
 
-1. the effective raw and mod identity recorded at generation;
-2. whether raw identity uses object metadata, source-file content hashes, or
-   both;
-3. which Dwarf Fortress version or save-format changes invalidate a fixture;
-4. whether DFHack version is fixture identity, controller compatibility, or
-   diagnostic information only;
-5. the exact refusal and explicit-recreation behavior on incompatibility.
-
-These decisions determine whether an owned fixture produced by an earlier
-installation remains safe and semantically equivalent to the world definition.
+1. whether to drive the native world-generation and embark viewscreens,
+   manipulate their backing parameters directly, or combine both approaches;
+2. the observable states and timeouts from starting generation through the
+   first durable fortress save;
+3. how generation failure, site-search failure, embark failure, and interrupted
+   provisioning unwind safely;
+4. which pieces require live characterization before implementation; and
+5. whether the first implementation needs any fallback backend.
