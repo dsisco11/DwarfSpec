@@ -293,10 +293,12 @@ are outside the `ds.awaitEvent()` contract.
 | `ds.mountNativeScreen()` | Attach non-owningly to the base native DF viewscreen and return its widget-root subject; DwarfSpec automatically detaches without dismissing it during example cleanup. |
 | `ds.root(options)` | Return the selected native, registered-overlay, or component root subject. |
 | `ds.get(control_path, options)` | Select one exact source-specific path from the current mount. |
+| `ds.search({text=..., occurrence?}, search_area?)` | Find literal final rendered text and return its zero-based inclusive cell bounds, or `nil` for a readable miss. |
 | `ds.unmount()` | Cleanly remove and settle the implicit current mount. |
 | `ds.viewport(width, height)` | Change the mount-scoped viewport in DF cells; automatic unmount cleanup ends the override. |
 | `ds.inspect(subject)` | Return stable, read-only information about a subject or the selected root. |
 | `subject:inspect()` | Return stable, read-only information about the selected view. |
+| `subject:search({text=..., occurrence?})` | Find literal final rendered text within the subject's current visible body bounds. |
 | `subject:getFocusList()` | Return a copied focus-string list for the subject's mounted screen. |
 | `subject:text()` | Return the selected view's inspected text value. |
 | `subject:raw()` | Access the borrowed Lua view or native DF widget as an exceptional escape hatch. |

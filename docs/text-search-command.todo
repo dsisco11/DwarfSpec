@@ -462,16 +462,27 @@ Phase 8 evidence:
       `cleanup_confirmed=true`.
 
 Phase 9 - Complete documentation and compatibility review:
-    ☐ Add `ds.search()` to the README command table.
-    ☐ Add root, subject, rectangle, occurrence, no-match, and `ds.await()` examples to `docs/writing-tests.md`.
-    ☐ Explain exact literal CP437 or byte matching and the lack of multiline or Unicode-normalized matching.
-    ☐ Explain zero-based inclusive returned bounds.
-    ☐ Explain that subject and rectangle areas are spatial filters over final rendered cells.
-    ☐ Explain that callers should use existing render-waiting mutations, `redraw()`, or `ds.await()` when text may not yet be present.
-    ☐ Explain unreadable-region behavior and any verified TrueType limitation.
-    ☐ Update the public API inventory and release notes if the active release process requires them.
-    ☐ Keep the separate `ds.get()` query-object and selector roadmap items unchanged.
-    ☐ Audit examples for accidental claims that search identifies component ownership or searches hidden tree text.
+    ☒ Add `ds.search()` to the README command table.
+    ☒ Add root, subject, rectangle, occurrence, no-match, and `ds.await()` examples to `docs/writing-tests.md`.
+    ☒ Explain exact literal CP437 or byte matching and the lack of multiline or Unicode-normalized matching.
+    ☒ Explain zero-based inclusive returned bounds.
+    ☒ Explain that subject and rectangle areas are spatial filters over final rendered cells.
+    ☒ Explain that callers should use existing render-waiting mutations, `redraw()`, or `ds.await()` when text may not yet be present.
+    ☒ Explain unreadable-region behavior and any verified TrueType limitation.
+    ☒ Update the public API inventory and release notes if the active release process requires them.
+    ☒ Keep the separate `ds.get()` query-object and selector roadmap items unchanged.
+    ☒ Audit examples for accidental claims that search identifies component ownership or searches hidden tree text.
+
+Phase 9 evidence:
+    - The README command table exposes root and fluent search forms alongside
+      the existing mount and subject commands. `docs/writing-tests.md` includes
+      root, subject, rectangle, occurrence, readable miss, and `ds.await()`
+      examples plus the exact byte, zero-based-inclusive, spatial-scoping,
+      render-waiting, unreadable-region, and unavailable-TrueType rules.
+    - The public-command inventory and Unreleased changelog now include search.
+      The existing `ds.get()` direct-child selection description and roadmap
+      language remain unchanged. The example audit explicitly rejects claims
+      that search establishes painter ownership or examines hidden tree text.
 
 Phase 10 - Verify package and installed-runtime inclusion:
     ☐ Confirm the current rockspec automatically discovers the new module beneath `src/`.
