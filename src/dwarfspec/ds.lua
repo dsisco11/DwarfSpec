@@ -127,6 +127,9 @@ local EScreenOrigin = load_automation_module(package_root,
     'dwarfspec.screen_origins', '/src/dwarfspec/screen_origins.lua')
 local ESubjectSource = load_automation_module(package_root,
     'dwarfspec.subject_sources', '/src/dwarfspec/subject_sources.lua')
+local EEvent = load_automation_module(package_root,
+    'dwarfspec.state_change_events',
+    '/src/dwarfspec/state_change_events.lua')
 local EventType = load_automation_module(package_root,
     'dwarfspec.automation.event_types',
     '/src/dwarfspec/automation/event_types.lua')
@@ -148,6 +151,9 @@ local save_game_unload_command = load_automation_module(package_root,
 local save_game_load_command = load_automation_module(package_root,
     'dwarfspec.commands.save_game_load',
     '/src/dwarfspec/commands/save_game_load.lua')
+local await_event_command = load_automation_module(package_root,
+    'dwarfspec.commands.await_event',
+    '/src/dwarfspec/commands/await_event.lua')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
@@ -245,6 +251,30 @@ local save_game_load_command = load_automation_module(package_root,
             pointer=context.pointer,
         })
 
+    local await_event = mount_dependencies.await_event or
+        await_event_command.new({
+            events=EEvent,
+            state_changes={
+                WORLD_LOADED=SC_WORLD_LOADED,
+                WORLD_UNLOADED=SC_WORLD_UNLOADED,
+                MAP_LOADED=SC_MAP_LOADED,
+                MAP_UNLOADED=SC_MAP_UNLOADED,
+                VIEWSCREEN_CHANGED=SC_VIEWSCREEN_CHANGED,
+                PAUSED=SC_PAUSED,
+                UNPAUSED=SC_UNPAUSED,
+            },
+            state_change_handlers=dfhack.onStateChange,
+            scheduler_module=scheduler_module,
+            scheduler=scheduler,
+            read_save_directory=function()
+                return dfhack.world.ReadWorldFolder()
+            end,
+            get_focus=function()
+                return dfhack.gui.getCurFocus()
+            end,
+            current_viewscreen=context.current_viewscreen,
+        })
+
     local save_game_loader =
         mount_dependencies.save_game_loader or save_game_load_command.new({
             workflow=save_game_load_module,
@@ -257,8 +287,8 @@ local save_game_load_command = load_automation_module(package_root,
             get_window_size=context.get_window_size,
             pointer_adapter=pointer_adapter_module,
             pointer=context.pointer,
-            state_change_handlers=dfhack.onStateChange,
-            map_loaded_event=SC_MAP_LOADED,
+            events=EEvent,
+            await_event=await_event,
         })
     local publisher = context.run.event_publisher
 
@@ -575,6 +605,7 @@ local save_game_load_command = load_automation_module(package_root,
         EPointerAnchor=EPointerAnchor,
         EScreenOrigin=EScreenOrigin,
         ESubjectSource=ESubjectSource,
+        EEvent=EEvent,
     }
 
     ---Returns the exact service-owned run that currently owns the executor.
@@ -891,6 +922,14 @@ local save_game_load_command = load_automation_module(package_root,
     function ds.await(description, query, options)
         return scheduler_module.wait_until(
             scheduler, description, query, wait_options(options, true))
+    end
+
+    ---Waits for and returns the next occurrence of one native event.
+    ---@param event DwarfSpecEEvent
+    ---@param options DwarfSpecAwaitEventOptions|nil
+    ---@return DwarfSpecEventOccurrence
+    function ds.awaitEvent(event, options)
+        return await_event(event, options)
     end
 
     ---Returns whether the Dwarf Fortress simulation is currently paused.

@@ -17,6 +17,7 @@ local EInputState = require('dwarfspec.input_states')
 local EPointerSpace = require('dwarfspec.pointer_spaces')
 local EPointerAnchor = require('dwarfspec.pointer_anchors')
 local EScreenOrigin = require('dwarfspec.screen_origins')
+local EEvent = require('dwarfspec.state_change_events')
 local EFieldMode =
     require('dwarfspec.native_game_ui_path').EFieldMode
 local TestStatus = require('dwarfspec.automation.test_statuses')
@@ -89,6 +90,7 @@ describe('DwarfSpec public mount commands', function()
     local world_loaded
     local save_game_unload_calls
     local save_game_load_calls
+    local event_wait_calls
     local map_view_position
     local map_view_dimensions
     local map_view_dimensions_failure
@@ -185,6 +187,7 @@ describe('DwarfSpec public mount commands', function()
         world_loaded = true
         save_game_unload_calls = {}
         save_game_load_calls = {}
+        event_wait_calls = {}
         map_view_position = {x=12, y=34, z=5}
         map_view_dimensions = {
             map_x1=3,
@@ -438,6 +441,14 @@ describe('DwarfSpec public mount commands', function()
                         save_directory_name = requested_directory
                     end,
                 },
+                await_event=function(event, options)
+                    local occurrence = {
+                        event=event,
+                        options=options,
+                    }
+                    table.insert(event_wait_calls, occurrence)
+                    return occurrence
+                end,
                 native_viewscreen=function() return native_df_screen end,
                 is_native_widget_root=function(root)
                     return root and root._type and
@@ -576,6 +587,32 @@ describe('DwarfSpec public mount commands', function()
 
     it('waits for simulation ticks without requiring a mount', function()
         assert.equals(2, ds.wait_ticks(2))
+    end)
+
+    it('exports immutable event identifiers and delegates event awaiting',
+            function()
+        local options = {
+            description='wait for a new map',
+            timeout_ms=250,
+        }
+
+        local occurrence = ds.awaitEvent(ds.EEvent.MAP_LOADED, options)
+
+        assert.equals(EEvent.WORLD_LOADED, ds.EEvent.WORLD_LOADED)
+        assert.equals(EEvent.WORLD_UNLOADED, ds.EEvent.WORLD_UNLOADED)
+        assert.equals(EEvent.MAP_LOADED, ds.EEvent.MAP_LOADED)
+        assert.equals(EEvent.MAP_UNLOADED, ds.EEvent.MAP_UNLOADED)
+        assert.equals(EEvent.VIEWSCREEN_CHANGED,
+            ds.EEvent.VIEWSCREEN_CHANGED)
+        assert.equals(EEvent.PAUSED, ds.EEvent.PAUSED)
+        assert.equals(EEvent.UNPAUSED, ds.EEvent.UNPAUSED)
+        assert.has_error(function()
+            ds.EEvent.MAP_LOADED = 'changed'
+        end, 'Enums are immutable.')
+        assert.equals(1, #event_wait_calls)
+        assert.equals(EEvent.MAP_LOADED, event_wait_calls[1].event)
+        assert.equals(options, event_wait_calls[1].options)
+        assert.equals(event_wait_calls[1], occurrence)
     end)
 
     it('returns whether the game is paused without requiring a mount',

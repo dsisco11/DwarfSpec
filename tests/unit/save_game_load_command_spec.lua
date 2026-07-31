@@ -2,6 +2,7 @@
 
 local command = assert(loadfile(
     'src/dwarfspec/commands/save_game_load.lua'))()
+local EEvent = require('dwarfspec.state_change_events')
 
 describe('save-game load command binding', function()
     it('binds save-game command dependencies for loading', function()
@@ -112,7 +113,18 @@ describe('save-game load command binding', function()
                 end
             end,
         }
-        local state_change_handlers = {}
+        local event_wait_calls = {}
+        local event_occurrence = {}
+        local await_event = function(event, options)
+            table.insert(event_wait_calls, {
+                event=event,
+                options=options,
+                trigger_called=false,
+            })
+            options.trigger()
+            event_wait_calls[#event_wait_calls].trigger_called = true
+            return event_occurrence
+        end
         local dfhack_api = {
             isWorldLoaded=function() return false end,
             world={ReadWorldFolder=function() return 'region2' end},
@@ -140,8 +152,8 @@ describe('save-game load command binding', function()
             pointer_adapter=pointer_adapter,
             pointer=pointer,
             gui=gui,
-            state_change_handlers=state_change_handlers,
-            map_loaded_event=91,
+            events=EEvent,
+            await_event=await_event,
         })
 
         assert.equals(sentinel, result)
@@ -197,18 +209,19 @@ describe('save-game load command binding', function()
             wait_calls[#wait_calls].options)
 
         local action_called = false
-        captured.await_map_loaded('load requested save', function()
+        local query_wait_count = #wait_calls
+        local occurrence = captured.await_map_loaded(
+            'load requested save', function()
             action_called = true
-            local listener
-            for _, candidate in pairs(state_change_handlers) do
-                listener = candidate
-            end
-            assert.is_function(listener)
-            listener(91)
         end)
+        assert.equals(event_occurrence, occurrence)
         assert.is_true(action_called)
-        assert.same({frame_budget=false, timeout_ms=false},
-            wait_calls[#wait_calls].options)
-        assert.is_nil(next(state_change_handlers))
+        assert.equals(query_wait_count, #wait_calls)
+        assert.equals(1, #event_wait_calls)
+        assert.equals(EEvent.MAP_LOADED, event_wait_calls[1].event)
+        assert.equals('load requested save',
+            event_wait_calls[1].options.description)
+        assert.is_nil(event_wait_calls[1].options.timeout_ms)
+        assert.is_true(event_wait_calls[1].trigger_called)
     end)
 end)

@@ -113,16 +113,16 @@ Phase 3 - Implement the core state-change command:
     ☒ Add focused command-module tests for validation, listener ordering, synchronous events, unrelated events, trigger failure, unavailable payload fields, and listener cleanup.
 
 Phase 4 - Export the command and migrate map loading:
-    ☐ Construct the event-awaiting command with the current run's scheduler and native DFHack dependencies.
-    ☐ Export `ds.EEvent` without allowing consumers to mutate the authoritative internal mapping.
-    ☐ Export `ds.awaitEvent(event, options)` from the run-scoped `ds` namespace.
-    ☐ Keep the public implementation limited to validation, dependency delegation, and its documented return value.
-    ☐ Replace `await_native_map_loaded()` with `ds.awaitEvent(ds.EEvent.MAP_LOADED, {trigger=...})` or the equivalent shared internal command call.
-    ☐ Remove the command-specific map-loaded listener counter, boolean observation, and query polling.
-    ☐ Preserve `ds.mountSaveGame()` listener-before-save-selection ordering.
-    ☐ Preserve `ds.mountSaveGame()` behavior, return value, no-op path, and lack of example-owned unload cleanup.
-    ☐ Confirm that no other `ds` command changes behavior.
-    ☐ Add export, delegation, and save-game-loader migration coverage.
+    ☒ Construct the event-awaiting command with the current run's scheduler and native DFHack dependencies.
+    ☒ Export `ds.EEvent` without allowing consumers to mutate the authoritative internal mapping.
+    ☒ Export `ds.awaitEvent(event, options)` from the run-scoped `ds` namespace.
+    ☒ Keep the public implementation limited to validation, dependency delegation, and its documented return value.
+    ☒ Replace `await_native_map_loaded()` with `ds.awaitEvent(ds.EEvent.MAP_LOADED, {trigger=...})` or the equivalent shared internal command call.
+    ☒ Remove the command-specific map-loaded listener counter, boolean observation, and query polling.
+    ☒ Preserve `ds.mountSaveGame()` listener-before-save-selection ordering.
+    ☒ Preserve `ds.mountSaveGame()` behavior, return value, no-op path, and lack of example-owned unload cleanup.
+    ☒ Confirm that no other `ds` command changes behavior.
+    ☒ Add export, delegation, and save-game-loader migration coverage.
 
 Phase 5 - Verify focused and full unit behavior:
     ☐ Prove that `awaitEvent()` waits for a new occurrence when the corresponding state is already true.
@@ -213,7 +213,7 @@ Completion evidence:
         - Evidence: All seven contracted runtime constants are present, so no checklist revision was required.
     ☒ Public declarations and reserved names:
         - Evidence: `src/ds.d.lua` defines the seven-value `dwarfspec.EEvent` alias and documented immutable `dwarfspec.EEventEnum`, including `WORLD_LOADED`, `WORLD_UNLOADED`, `MAP_LOADED`, `MAP_UNLOADED`, `VIEWSCREEN_CHANGED`, `PAUSED`, and `UNPAUSED`.
-        - Evidence: `src/dwarfspec/state_change_events.lua` defines the authoritative immutable string enum using the existing `dwarfspec.immutable_enum` contract. Runtime export remains intentionally deferred to Phase 4.
+        - Evidence: `src/dwarfspec/state_change_events.lua` defines the authoritative immutable string enum using the existing `dwarfspec.immutable_enum` contract. The run-scoped namespace now exports that enum as `ds.EEvent`.
         - Evidence: `dwarfspec.EventWaitOptions` types the optional post-arm `trigger`, nonempty diagnostic `description`, and positive integer or `false` `timeout_ms`.
         - Evidence: `dwarfspec.EventPayload` documents normalized optional save-directory, focus, native-screen-type, and pause-state fields, including omission when a valid field is unavailable. `dwarfspec.EventOccurrence` types the public event, fixed `state_change` source, and normalized pointer-free payload as an immutable snapshot.
         - Evidence: The `ds.awaitEvent(event, options)` declaration documents next-occurrence semantics, listener-before-trigger ordering, synchronous trigger capture, and the absence of a default command-local timeout.
@@ -243,8 +243,12 @@ Completion evidence:
         - Evidence: Trigger failure retains the original trigger error after listener cleanup. Focused coverage also proves immediate removal, unique listener keys, pre-unload capture, post-callback snapshot independence, and unavailable-field behavior.
         - Evidence: Focused command-module coverage completed with 17 successes, 0 failures, 0 errors, and 0 pending. Focused scheduler coverage completed with 23 successes, 0 failures, 0 errors, and 0 pending. The full standalone suite completed with 590 successes, 0 failures, 0 errors, and 0 pending.
         - Evidence: Lua 5.4.6 syntax and formatting checks passed for 269 files.
-    ☐ Save-game mount migration:
-        - Evidence:
+    ☒ Save-game mount migration:
+        - Evidence: `src/dwarfspec/ds.lua` constructs one run-scoped event command from the current scheduler, all seven exact `SC_*` constants, `dfhack.onStateChange`, and native save-directory, focus, and viewscreen readers. The same bound command backs both `ds.awaitEvent()` and the save-game loader.
+        - Evidence: `ds.EEvent` exposes the authoritative immutable event mapping, while `ds.awaitEvent(event, options)` only delegates to the bound command and returns its occurrence.
+        - Evidence: `src/dwarfspec/commands/save_game_load.lua` now delegates map loading to the shared `MAP_LOADED` event wait with the save-selection action as its trigger. Its private listener counter, handler registration, observation boolean, query polling, and cleanup path were removed.
+        - Evidence: Focused namespace coverage proves all seven exported values, rejected mutation, exact option delegation, and return propagation. Focused loader coverage proves `MAP_LOADED` delegation, trigger propagation, occurrence return, omitted command-local timeout, and no additional query wait.
+        - Evidence: Existing mount coverage preserves the same-directory no-op, unload-before-load transition, unloaded-world load, requested-directory return value, and zero example-owned cleanup. The full standalone suite completed with 591 successes, 0 failures, 0 errors, and 0 pending; Lua 5.4.6 syntax and formatting checks passed for 269 files.
     ☐ Focused unit tests:
         - Evidence:
     ☐ Full standalone unit suite:

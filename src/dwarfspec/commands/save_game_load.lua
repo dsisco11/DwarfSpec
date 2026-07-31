@@ -1,7 +1,6 @@
 -- Native DFHack binding for the save-game load workflow.
 
 local M = {}
-local next_listener_id = 0
 
 ---Returns a stable identity for one native save header's world.
 ---@param header any
@@ -51,10 +50,10 @@ function M.new(dependencies)
         'DwarfSpec save-game load command requires a pointer adapter')
     local pointer = assert(dependencies.pointer,
         'DwarfSpec save-game load command requires a pointer')
-    local state_change_handlers = assert(dependencies.state_change_handlers,
-        'DwarfSpec save-game load command requires state-change handlers')
-    local map_loaded_event = assert(dependencies.map_loaded_event,
-        'DwarfSpec save-game load command requires the map-loaded event')
+    local EEvent = assert(dependencies.events,
+        'DwarfSpec save-game load command requires public event identifiers')
+    local await_event = assert(dependencies.await_event,
+        'DwarfSpec save-game load command requires event awaiting')
     local wait_settings = dependencies.wait_settings or {}
 
     ---Dispatches one built-in DFHack input key to a native viewscreen.
@@ -167,34 +166,19 @@ function M.new(dependencies)
         click_native(title.screen)
     end
 
-    ---Runs one action and awaits DFHack's map-loaded state-change event.
+    ---Runs one action through the shared map-loaded event command.
     ---@param description string
     ---@param action function
     ---@return any
-    local function await_native_map_loaded(description, action)
+    local function await_shared_map_loaded(description, action)
         assert(type(description) == 'string' and description ~= '',
             'DwarfSpec map-loaded wait requires a description')
         assert(type(action) == 'function',
             'DwarfSpec map-loaded wait requires an action')
-        next_listener_id = next_listener_id + 1
-        local listener_id = ('dwarfspec.mountSaveGame.mapLoaded.%d')
-            :format(next_listener_id)
-        local observed = false
-        state_change_handlers[listener_id] = function(state)
-            if state == map_loaded_event then observed = true end
-        end
-
-        local ok, result = xpcall(function()
-            action()
-            return scheduler_module.wait_until(scheduler, description,
-                function() return observed end, {
-                    frame_budget=false,
-                    timeout_ms=false,
-                })
-        end, debug.traceback)
-        state_change_handlers[listener_id] = nil
-        if not ok then error(result, 0) end
-        return result
+        return await_event(EEvent.MAP_LOADED, {
+            description=description,
+            trigger=action,
+        })
     end
 
     ---Returns the current native focus string for diagnostics.
@@ -234,7 +218,7 @@ function M.new(dependencies)
         end,
         select_world=select_native_title_list_item,
         select_save=select_native_title_list_item,
-        await_map_loaded=await_native_map_loaded,
+        await_map_loaded=await_shared_map_loaded,
         capture_input_state=function()
             return pointer_adapter.begin_transient(pointer)
         end,
