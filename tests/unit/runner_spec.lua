@@ -31,7 +31,7 @@ local function scheduler_snapshot(quarantine)
         protocol_version=2,
         service_instance_id='service-runner-fixture',
         package_root='D:/Packages/DwarfSpec',
-        package_version='0.2.0',
+        package_version='0.2.1',
         queue={},
         projects={},
         quarantine=quarantine or {active=false},
@@ -999,7 +999,7 @@ describe('DwarfSpec external runner', function()
                     protocol=2,
                     kind=runner.failure_kinds.REGISTRATION,
                     message='incompatible automation package version: ' ..
-                        'expected 0.1.3, found 0.2.0',
+                        'expected 0.1.3, found 0.2.1',
                 })}}
             end
             recovery_calls = recovery_calls + 1
@@ -1014,7 +1014,7 @@ describe('DwarfSpec external runner', function()
             runner.failure_kinds.REGISTRATION], outcome.exit_code)
         assert.equals(runner.failure_kinds.REGISTRATION, outcome.error.kind)
         assert.equals(ResultState.REGISTRATION_ERROR, outcome.result.state)
-        assert.matches('expected 0.1.3, found 0.2.0',
+        assert.matches('expected 0.1.3, found 0.2.1',
             outcome.error.message, 1, true)
         assert.matches('Restart DFHack', outcome.error.message, 1, true)
         assert.is_nil(outcome.report)

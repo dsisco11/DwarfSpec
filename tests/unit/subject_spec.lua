@@ -49,6 +49,11 @@ describe('DwarfSpec subject commands', function()
                     table.insert(calls, {'inspect'})
                     return {text='saved'}
                 end,
+                search=function(_, query)
+                    table.insert(calls, {'search', query})
+                    if query.text == 'missing' then return nil end
+                    return {x1=2, y1=3, x2=7, y2=3}
+                end,
             },
             invoke_subject_command=function(self, selected, name, ...)
                 return self.subject_commands[name](selected, ...)
@@ -79,6 +84,11 @@ describe('DwarfSpec subject commands', function()
         assert.equals(subject, subject:redraw())
         assert.equals(subject, subject:redraw({wait=false}))
         assert.same({text='saved'}, subject:inspect())
+        local descriptor_before_search = subject._descriptor
+        assert.same({x1=2, y1=3, x2=7, y2=3},
+            subject:search({text='saved'}))
+        assert.is_nil(subject:search({text='missing'}))
+        assert.equals(descriptor_before_search, subject._descriptor)
         assert.equals('saved', subject:text())
         assert.same({
             {'click', 'right'},
@@ -90,6 +100,8 @@ describe('DwarfSpec subject commands', function()
             {'redraw', nil},
             {'redraw', {wait=false}},
             {'inspect'},
+            {'search', {text='saved'}},
+            {'search', {text='missing'}},
             {'inspect'},
         }, calls)
     end)
@@ -105,6 +117,8 @@ describe('DwarfSpec subject commands', function()
         assert.has_error(function() subject:mouseWheel({}) end,
             'DwarfSpec subject is unavailable because its run has ended')
         assert.has_error(function() subject:redraw() end,
+            'DwarfSpec subject is unavailable because its run has ended')
+        assert.has_error(function() subject:search({text='saved'}) end,
             'DwarfSpec subject is unavailable because its run has ended')
     end)
 

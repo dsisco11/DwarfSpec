@@ -13,7 +13,7 @@ local service = require('dwarfspec.automation.service')
 
 local M = {
     protocol_version=2,
-    package_version='0.2.0',
+    package_version='0.2.1',
 }
 
 local RUN_STATE_TERMINAL = {

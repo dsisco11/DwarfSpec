@@ -10,7 +10,7 @@ M.PUBLIC_API = {
     mount_context={'mount', 'root', 'unmount', 'viewport'},
     subject={
         'click', 'hover', 'move_pointer', 'mouseWheel', 'input', 'type',
-        'inspect', 'text', 'raw',
+        'inspect', 'search', 'text', 'raw',
     },
 }
 

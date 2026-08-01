@@ -17,6 +17,7 @@ local EInputState = require('dwarfspec.input_states')
 local EPointerSpace = require('dwarfspec.pointer_spaces')
 local EPointerAnchor = require('dwarfspec.pointer_anchors')
 local EScreenOrigin = require('dwarfspec.screen_origins')
+local EEvent = require('dwarfspec.state_change_events')
 local EFieldMode =
     require('dwarfspec.native_game_ui_path').EFieldMode
 local TestStatus = require('dwarfspec.automation.test_statuses')
@@ -68,6 +69,8 @@ describe('DwarfSpec public mount commands', function()
     local native_df_screen
     local run
     local TestWidget
+    local TestOverlay
+    local TestScreen
     local published
     local current_tracker
     local original_dfhack
@@ -85,6 +88,11 @@ describe('DwarfSpec public mount commands', function()
     local focus_queries
     local focus_match_queries
     local dfhack_time
+    local save_directory_name
+    local world_loaded
+    local save_game_unload_calls
+    local save_game_load_calls
+    local event_wait_calls
     local map_view_position
     local map_view_dimensions
     local map_view_dimensions_failure
@@ -97,6 +105,30 @@ describe('DwarfSpec public mount commands', function()
     local suppress_native_render
     local wait_until_failure
     local wait_until_dispatch
+    local screen_cells
+    local screen_default_ch
+    local screen_read_calls
+    local window_size_calls
+
+    ---Returns the stable lookup key for one zero-based screen cell.
+    ---@param x integer
+    ---@param y integer
+    ---@return string
+    local function screen_cell_key(x, y)
+        return x .. ',' .. y
+    end
+
+    ---Writes one exact byte string into the injected rendered screen.
+    ---@param x integer
+    ---@param y integer
+    ---@param text string
+    local function write_screen_text(x, y, text)
+        for index = 1, #text do
+            screen_cells[screen_cell_key(x + index - 1, y)] = {
+                ch=text:byte(index),
+            }
+        end
+    end
 
     ---Installs one declared main-interface path ending in a native widget.
     ---@param final_widget table|nil
@@ -177,6 +209,11 @@ describe('DwarfSpec public mount commands', function()
         focus_queries = {}
         focus_match_queries = {}
         dfhack_time = 67890
+        save_directory_name = 'region1'
+        world_loaded = true
+        save_game_unload_calls = {}
+        save_game_load_calls = {}
+        event_wait_calls = {}
         map_view_position = {x=12, y=34, z=5}
         map_view_dimensions = {
             map_x1=3,
@@ -197,12 +234,32 @@ describe('DwarfSpec public mount commands', function()
         simulate_input_failure = nil
         simulate_input_dispatch = nil
         wait_until_calls = 0
+        screen_cells = {}
+        screen_default_ch = nil
+        screen_read_calls = {}
+        window_size_calls = 0
         rawset(_G, 'dfhack', {
             getTickCount=function() return dfhack_time end,
+            isWorldLoaded=function() return world_loaded end,
+            world={
+                ReadWorldFolder=function() return save_directory_name end,
+            },
             screen={
                 getMousePos=function() return 90, 91 end,
                 getMousePixels=function() return 900, 910 end,
-                getWindowSize=function() return 80, 25 end,
+                getWindowSize=function()
+                    window_size_calls = window_size_calls + 1
+                    return 80, 25
+                end,
+                readTile=function(x, y)
+                    screen_read_calls[#screen_read_calls + 1] = {x=x, y=y}
+                    local pen = screen_cells[screen_cell_key(x, y)]
+                    if pen ~= nil then return pen end
+                    if screen_default_ch ~= nil then
+                        return {ch=screen_default_ch}
+                    end
+                    return nil
+                end,
             },
             gui={
                 getMousePos=function(allow_out_of_bounds)
@@ -305,6 +362,8 @@ describe('DwarfSpec public mount commands', function()
         local OverlayWidget = make_class(Widget)
         local ZScreen = make_class()
         TestWidget = make_class(Widget)
+        TestOverlay = make_class(OverlayWidget)
+        TestScreen = make_class(ZScreen)
         local boundary = component.new({
             Widget=Widget,
             OverlayWidget=OverlayWidget,
@@ -407,6 +466,32 @@ describe('DwarfSpec public mount commands', function()
                     enabler.fps_per_gfps =
                         game_speed_ratio_override or speed_ratio
                     return true
+                end,
+                save_game_unloader={
+                    unload=function(_, loaded_directory,
+                            requested_directory)
+                        table.insert(save_game_unload_calls, {
+                            loaded_directory=loaded_directory,
+                            requested_directory=requested_directory,
+                        })
+                        world_loaded = false
+                    end,
+                },
+                save_game_loader={
+                    load=function(_, requested_directory)
+                        table.insert(save_game_load_calls,
+                            requested_directory)
+                        world_loaded = true
+                        save_directory_name = requested_directory
+                    end,
+                },
+                await_event=function(event, options)
+                    local occurrence = {
+                        event=event,
+                        options=options,
+                    }
+                    table.insert(event_wait_calls, occurrence)
+                    return occurrence
                 end,
                 native_viewscreen=function() return native_df_screen end,
                 is_native_widget_root=function(root)
@@ -546,6 +631,32 @@ describe('DwarfSpec public mount commands', function()
 
     it('waits for simulation ticks without requiring a mount', function()
         assert.equals(2, ds.wait_ticks(2))
+    end)
+
+    it('exports immutable event identifiers and delegates event awaiting',
+            function()
+        local options = {
+            description='wait for a new map',
+            timeout_ms=250,
+        }
+
+        local occurrence = ds.awaitEvent(ds.EEvent.MAP_LOADED, options)
+
+        assert.equals(EEvent.WORLD_LOADED, ds.EEvent.WORLD_LOADED)
+        assert.equals(EEvent.WORLD_UNLOADED, ds.EEvent.WORLD_UNLOADED)
+        assert.equals(EEvent.MAP_LOADED, ds.EEvent.MAP_LOADED)
+        assert.equals(EEvent.MAP_UNLOADED, ds.EEvent.MAP_UNLOADED)
+        assert.equals(EEvent.VIEWSCREEN_CHANGED,
+            ds.EEvent.VIEWSCREEN_CHANGED)
+        assert.equals(EEvent.PAUSED, ds.EEvent.PAUSED)
+        assert.equals(EEvent.UNPAUSED, ds.EEvent.UNPAUSED)
+        assert.has_error(function()
+            ds.EEvent.MAP_LOADED = 'changed'
+        end, 'Enums are immutable.')
+        assert.equals(1, #event_wait_calls)
+        assert.equals(EEvent.MAP_LOADED, event_wait_calls[1].event)
+        assert.equals(options, event_wait_calls[1].options)
+        assert.equals(event_wait_calls[1], occurrence)
     end)
 
     it('returns whether the game is paused without requiring a mount',
@@ -755,6 +866,68 @@ describe('DwarfSpec public mount commands', function()
         dfhack.getTickCount = nil
         assert.has_error(function() ds.getTime() end,
             'DwarfSpec getTime requires dfhack.getTickCount')
+    end)
+
+    it('returns the loaded save directory name without requiring a mount',
+            function()
+        assert.equals('region1', ds.getSaveDirectoryName())
+        save_directory_name = 'region2'
+        assert.equals('region2', ds.getSaveDirectoryName())
+        assert.equals(0, cleanup.pending_count(registry))
+
+        world_loaded = false
+        assert.has_error(function() ds.getSaveDirectoryName() end,
+            'DwarfSpec getSaveDirectoryName requires a loaded save game')
+
+        world_loaded = true
+        save_directory_name = ''
+        assert.has_error(function() ds.getSaveDirectoryName() end,
+            'DFHack ReadWorldFolder did not return a valid save directory name')
+
+        dfhack.world = nil
+        assert.has_error(function() ds.getSaveDirectoryName() end,
+            'DwarfSpec getSaveDirectoryName requires ' ..
+                'dfhack.world.ReadWorldFolder')
+    end)
+
+    it('exports and delegates save-game mounting without cleanup ownership',
+            function()
+        assert.equals('function', type(ds.mountSaveGame))
+
+        assert.equals('region1', ds.mountSaveGame('region1'))
+        assert.same({}, save_game_unload_calls)
+        assert.same({}, save_game_load_calls)
+        assert.equals(0, cleanup.pending_count(registry))
+
+        assert.equals('region2', ds.mountSaveGame('region2'))
+        assert.same({
+            {
+                loaded_directory='region1',
+                requested_directory='region2',
+            },
+        }, save_game_unload_calls)
+        assert.same({'region2'}, save_game_load_calls)
+        assert.equals('region2', ds.getSaveDirectoryName())
+        assert.equals(0, cleanup.pending_count(registry))
+
+        world_loaded = false
+        assert.equals('region3', ds.mountSaveGame('region3'))
+        assert.equals(1, #save_game_unload_calls)
+        assert.same({'region2', 'region3'}, save_game_load_calls)
+        assert.equals('region3', ds.getSaveDirectoryName())
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('validates mountSaveGame arguments before adapter delegation',
+            function()
+        assert.has_error(function() ds.mountSaveGame() end,
+            'DwarfSpec mountSaveGame requires exactly one save directory name')
+        assert.has_error(function() ds.mountSaveGame('region1', 'extra') end,
+            'DwarfSpec mountSaveGame requires exactly one save directory name')
+        assert.has_error(function() ds.mountSaveGame('../region1') end,
+            'DwarfSpec mountSaveGame requires one directory name, not a path')
+        assert.same({}, save_game_unload_calls)
+        assert.same({}, save_game_load_calls)
     end)
 
     it('matches the current DFHack focus without requiring a mount',
@@ -2978,6 +3151,302 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, native_screen.replace_calls)
         assert.equals(0, native_screen.navigation_calls)
         assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('searches visible root bounds for every owned mount category',
+            function()
+        screen_default_ch = string.byte(' ')
+        write_screen_text(12, 6, 'Ready')
+        for _, component_class in ipairs({
+            TestWidget,
+            TestOverlay,
+            TestScreen,
+        }) do
+            ds.mount(component_class, {
+                visible=true,
+                frame_body={x1=10, y1=5, x2=20, y2=7},
+            })
+            assert.same({x1=12, y1=6, x2=16, y2=6},
+                ds.search({text='Ready'}))
+            ds.unmount()
+        end
+    end)
+
+    it('searches the full native window and explicit rectangles', function()
+        screen_default_ch = string.byte(' ')
+        write_screen_text(70, 20, 'Native')
+        ds.mountNativeScreen()
+
+        local window_calls_before = window_size_calls
+        assert.same({x1=70, y1=20, x2=75, y2=20},
+            ds.search({text='Native'}))
+        assert.equals(window_calls_before + 1, window_size_calls)
+        assert.is_nil(ds.search(
+            {text='Native'}, {x1=0, y1=0, x2=69, y2=24}))
+        assert.same({x1=70, y1=20, x2=75, y2=20},
+            ds.search(
+                {text='Native'}, {x1=70, y1=20, x2=79, y2=24}))
+    end)
+
+    it('intersects Lua subjects and rectangles with owned root bounds',
+            function()
+        screen_default_ch = string.byte(' ')
+        write_screen_text(8, 6, 'Child')
+        local child = TestWidget({
+            view_id='child',
+            visible=true,
+            frame_body={x1=7, y1=5, x2=14, y2=7},
+            subviews={},
+        })
+        local root = TestWidget({
+            visible=true,
+            frame_body={x1=5, y1=4, x2=15, y2=8},
+            subviews={child},
+        })
+        ds.mount(root)
+        local subject = ds.get('child')
+
+        assert.same({x1=8, y1=6, x2=12, y2=6},
+            ds.search({text='Child'}, subject))
+        assert.same({x1=8, y1=6, x2=12, y2=6},
+            subject:search({text='Child'}))
+        assert.same({x1=8, y1=6, x2=12, y2=6},
+            ds.search(
+                {text='Child'}, {x1=8, y1=6, x2=12, y2=6}))
+        local reads_before = #screen_read_calls
+        assert.is_nil(ds.search(
+            {text='Child'}, {x1=30, y1=20, x2=35, y2=22}))
+        assert.equals(reads_before, #screen_read_calls)
+        assert.has_error(function()
+            ds.search({}, {x1=30, y1=20, x2=35, y2=22})
+        end, 'text search query.text must be a nonempty string')
+        assert.equals(reads_before, #screen_read_calls)
+        local subject_ok, subject_failure = pcall(subject.search, subject, {})
+        assert.is_false(subject_ok)
+        assert.matches('DwarfSpec subject failure: operation="search"',
+            subject_failure, 1, true)
+        assert.matches('text search query.text must be a nonempty string',
+            subject_failure, 1, true)
+    end)
+
+    it('uses clipped native and registered-overlay subject scopes',
+            function()
+        screen_default_ch = string.byte(' ')
+        local native_child = make_native_widget(
+            'Partial', 'df.widget_text', nil, {
+                rect={x1=-4, y1=3, x2=8, y2=5},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        local inherited_hidden = make_native_widget(
+            'InheritedHidden', 'df.widget_text', nil, {
+                rect={x1=10, y1=3, x2=18, y2=5},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        local hidden_parent = make_native_widget(
+            'HiddenParent', 'df.widget_container', {inherited_hidden}, {
+                flag={
+                    VISIBILITY_VISIBLE=false,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        inherited_hidden.parent = hidden_parent
+        native_root.children = {native_child, hidden_parent}
+        local overlay_root = {
+            view_id='overlay-root',
+            subviews={},
+            visible=true,
+            active=true,
+            frame_body={x1=30, y1=10, x2=45, y2=12},
+        }
+        overlay_state.db['gui/example.SearchOverlay'] = {
+            widget=overlay_root,
+        }
+        overlay_state.config['gui/example.SearchOverlay'] = {enabled=true}
+        write_screen_text(0, 4, 'Native')
+        write_screen_text(32, 11, 'Overlay')
+        ds.mountNativeScreen()
+
+        assert.same({x1=0, y1=4, x2=5, y2=4},
+            ds.search({text='Native'}, ds.get('Partial')))
+        assert.has_error(function()
+            ds.search(
+                {text='Hidden'},
+                ds.get({'HiddenParent', 'InheritedHidden'}))
+        end, 'DwarfSpec search requires an effectively visible subject: ' ..
+            'control_path="{\\"HiddenParent\\", ' ..
+                '\\"InheritedHidden\\"}"')
+        local overlay_subject = ds.root({
+            source=ds.ESubjectSource.OVERLAY,
+            overlay='gui/example.SearchOverlay',
+        })
+        assert.same({x1=32, y1=11, x2=38, y2=11},
+            ds.search({text='Overlay'}, overlay_subject))
+    end)
+
+    it('leaves mount, render, pointer, cleanup, and capture state unchanged',
+            function()
+        screen_default_ch = string.byte(' ')
+        write_screen_text(3, 2, 'Stable')
+        run.captures = {existing={kind='capture'}}
+        local captures = run.captures
+        ds.mount(TestWidget, {
+            visible=true,
+            frame_body={x1=1, y1=1, x2=12, y2=4},
+        })
+        local generation = current_tracker:capture()
+        local cleanup_count = cleanup.pending_count(registry)
+        local pointer_before = {
+            x=df.global.gps.mouse_x,
+            y=df.global.gps.mouse_y,
+            precise_x=df.global.gps.precise_mouse_x,
+            precise_y=df.global.gps.precise_mouse_y,
+        }
+        local published_before = #published
+        local invalidations_before = screen.invalidation_count
+
+        assert.same({x1=3, y1=2, x2=8, y2=2},
+            ds.search({text='Stable'}, ds.root()))
+
+        assert.equals(generation, current_tracker:capture())
+        assert.equals(cleanup_count, cleanup.pending_count(registry))
+        assert.same(pointer_before, {
+            x=df.global.gps.mouse_x,
+            y=df.global.gps.mouse_y,
+            precise_x=df.global.gps.precise_mouse_x,
+            precise_y=df.global.gps.precise_mouse_y,
+        })
+        assert.equals(published_before, #published)
+        assert.equals(invalidations_before, screen.invalidation_count)
+        assert.equals(captures, run.captures)
+        assert.same({existing={kind='capture'}}, run.captures)
+        assert.is_false(run.mount_cleanup_probe().pointer_active)
+
+        ds.redraw()
+        assert.equals('mount:1/<root>',
+            published[#published - 1].payload.subject_identity)
+    end)
+
+    it('rejects missing mounts, malformed areas, and inactive screens',
+            function()
+        assert.has_error(function()
+            ds.search({text='x'})
+        end, 'DwarfSpec search requires a current mount; call ' ..
+            'ds.mount(component, options) or ds.mountNativeScreen() first')
+
+        screen_default_ch = string.byte(' ')
+        ds.mount(TestWidget, {
+            visible=true,
+            frame_body={x1=0, y1=0, x2=10, y2=3},
+        })
+        assert.has_error(function()
+            ds.search({text='x'}, {x1=4, y1=0, x2=3, y2=1})
+        end, 'text search area must not be horizontally inverted')
+        assert.has_error(function()
+            ds.search({text='x'}, false)
+        end, 'text search area must be a table')
+        screen.active = false
+        assert.has_error(function()
+            ds.search({text='x'})
+        end, 'search screen is not currently active')
+    end)
+
+    it('rejects hidden, unbounded, offscreen, and unreadable subjects',
+            function()
+        screen_default_ch = string.byte(' ')
+        local hidden = TestWidget({
+            view_id='hidden',
+            visible=false,
+            frame_body={x1=1, y1=1, x2=4, y2=2},
+            subviews={},
+        })
+        local unbounded = TestWidget({
+            view_id='unbounded',
+            visible=true,
+            subviews={},
+        })
+        local offscreen = TestWidget({
+            view_id='offscreen',
+            visible=true,
+            frame_body={x1=90, y1=30, x2=95, y2=35},
+            subviews={},
+        })
+        ds.mount(TestWidget({
+            visible=true,
+            frame_body={x1=0, y1=0, x2=100, y2=40},
+            subviews={hidden, unbounded, offscreen},
+        }))
+        assert.has_error(function()
+            ds.search({text='x'}, ds.get('hidden'))
+        end, 'DwarfSpec search requires an effectively visible subject: ' ..
+            'control_path="hidden"')
+        assert.has_error(function()
+            ds.search({text='x'}, ds.get('unbounded'))
+        end, 'DwarfSpec search subject has no visible body bounds: ' ..
+            'control_path="unbounded"')
+        assert.has_error(function()
+            ds.search({text='x'}, ds.get('offscreen'))
+        end, 'DwarfSpec search subject has no usable visible body bounds ' ..
+            'within the current window')
+
+        ds.unmount()
+        screen_default_ch = nil
+        ds.mount(TestWidget, {
+            visible=true,
+            frame_body={x1=2, y1=2, x2=4, y2=3},
+        })
+        assert.has_error(function()
+            ds.search({text='x'})
+        end, 'text search effective region has no readable screen cells: ' ..
+            '{x1=2,y1=2,x2=4,y2=3}')
+    end)
+
+    it('preserves retained-subject ownership and replacement failures',
+            function()
+        screen_default_ch = string.byte(' ')
+        local old_mount = ds.mount(TestWidget, {
+            visible=true,
+            frame_body={x1=0, y1=0, x2=5, y2=2},
+        })
+        ds.unmount()
+        ds.mount(TestWidget, {
+            visible=true,
+            frame_body={x1=0, y1=0, x2=5, y2=2},
+        })
+        local ok, failure = pcall(ds.search, {text='x'}, old_mount)
+        assert.is_false(ok)
+        assert.matches('search rejected stale subject', failure, 1, true)
+        assert.matches('from mount 1; current mount is 2', failure, 1, true)
+
+        ds.unmount()
+        local original = make_native_widget(
+            'Replaceable', 'df.widget_text', nil, {
+                rect={x1=1, y1=1, x2=5, y2=2},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        native_root.children = {original}
+        ds.mountNativeScreen()
+        local retained = ds.get('Replaceable')
+        native_root.children[1] = make_native_widget(
+            'Replaceable', 'df.widget_text', nil, {
+                rect={x1=1, y1=1, x2=5, y2=2},
+                flag={
+                    VISIBILITY_VISIBLE=true,
+                    VISIBILITY_ACTIVE=true,
+                },
+            })
+        ok, failure = pcall(ds.search, {text='x'}, retained)
+        assert.is_false(ok)
+        assert.matches('rejected stale native subject', failure, 1, true)
+        assert.matches('widget was replaced', failure, 1, true)
     end)
 
     it('routes input to a native child while retaining the mounted root',

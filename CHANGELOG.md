@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `ds.search({text=..., occurrence?}, search_area?)` and
+  `Subject:search(query)` find literal final rendered text in the active mount
+  and return zero-based inclusive screen-cell bounds. Subject and rectangle
+  areas are spatial filters, not render-ownership claims.
+
+## [0.2.1] - 2026-07-31
+
+### Added
+
 - `ds.EPointerAnchor` provides immutable `CENTER`, `TOP_LEFT`, `TOP_RIGHT`,
   `BOTTOM_LEFT`, and `BOTTOM_RIGHT` values for subject pointer placement.
 - `ds.EPointerSpace.WORLD_TILE` lets

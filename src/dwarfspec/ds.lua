@@ -127,12 +127,36 @@ local EScreenOrigin = load_automation_module(package_root,
     'dwarfspec.screen_origins', '/src/dwarfspec/screen_origins.lua')
 local ESubjectSource = load_automation_module(package_root,
     'dwarfspec.subject_sources', '/src/dwarfspec/subject_sources.lua')
+local EEvent = load_automation_module(package_root,
+    'dwarfspec.state_change_events',
+    '/src/dwarfspec/state_change_events.lua')
 local EventType = load_automation_module(package_root,
     'dwarfspec.automation.event_types',
     '/src/dwarfspec/automation/event_types.lua')
 local TestStatus = load_automation_module(package_root,
     'dwarfspec.automation.test_statuses',
     '/src/dwarfspec/automation/test_statuses.lua')
+local save_game_mount_module = load_automation_module(package_root,
+    'dwarfspec.automation.save_game_mount',
+    '/src/dwarfspec/automation/save_game_mount.lua')
+local save_game_unload_module = load_automation_module(package_root,
+    'dwarfspec.automation.save_game_unload',
+    '/src/dwarfspec/automation/save_game_unload.lua')
+local save_game_load_module = load_automation_module(package_root,
+    'dwarfspec.automation.save_game_load',
+    '/src/dwarfspec/automation/save_game_load.lua')
+local save_game_unload_command = load_automation_module(package_root,
+    'dwarfspec.commands.save_game_unload',
+    '/src/dwarfspec/commands/save_game_unload.lua')
+local save_game_load_command = load_automation_module(package_root,
+    'dwarfspec.commands.save_game_load',
+    '/src/dwarfspec/commands/save_game_load.lua')
+local await_event_command = load_automation_module(package_root,
+    'dwarfspec.commands.await_event',
+    '/src/dwarfspec/commands/await_event.lua')
+local text_search_command = load_automation_module(package_root,
+    'dwarfspec.commands.text_search',
+    '/src/dwarfspec/commands/text_search.lua')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
@@ -179,6 +203,8 @@ local TestStatus = load_automation_module(package_root,
             function() return dfhack.gui.getCurViewscreen(true) end,
         get_window_size=mount_dependencies.get_window_size or
             function() return dfhack.screen.getWindowSize() end,
+        read_tile=mount_dependencies.read_tile or
+            function(x, y) return dfhack.screen.readTile(x, y) end,
         get_map_view_position=mount_dependencies.get_map_view_position or
             function()
                 local global = assert(df and df.global,
@@ -215,6 +241,66 @@ local TestStatus = load_automation_module(package_root,
         game_pause_cleanup_entry=nil,
         game_speed_cleanup_entry=nil,
     }
+
+    local save_game_unloader =
+        mount_dependencies.save_game_unloader or save_game_unload_command.new({
+            workflow=save_game_unload_module,
+            scheduler_module=scheduler_module,
+            scheduler=scheduler,
+            wait_settings=wait_settings,
+            dfhack=dfhack,
+            df=df,
+            current_viewscreen=context.current_viewscreen,
+            get_window_size=context.get_window_size,
+            pointer_adapter=pointer_adapter_module,
+            pointer=context.pointer,
+        })
+
+    local rendered_text_search = mount_dependencies.text_search or
+        text_search_command.new({
+            get_window_size=context.get_window_size,
+            read_tile=context.read_tile,
+        })
+
+    local await_event = mount_dependencies.await_event or
+        await_event_command.new({
+            events=EEvent,
+            state_changes={
+                WORLD_LOADED=SC_WORLD_LOADED,
+                WORLD_UNLOADED=SC_WORLD_UNLOADED,
+                MAP_LOADED=SC_MAP_LOADED,
+                MAP_UNLOADED=SC_MAP_UNLOADED,
+                VIEWSCREEN_CHANGED=SC_VIEWSCREEN_CHANGED,
+                PAUSED=SC_PAUSED,
+                UNPAUSED=SC_UNPAUSED,
+            },
+            state_change_handlers=dfhack.onStateChange,
+            scheduler_module=scheduler_module,
+            scheduler=scheduler,
+            read_save_directory=function()
+                return dfhack.world.ReadWorldFolder()
+            end,
+            get_focus=function()
+                return dfhack.gui.getCurFocus()
+            end,
+            current_viewscreen=context.current_viewscreen,
+        })
+
+    local save_game_loader =
+        mount_dependencies.save_game_loader or save_game_load_command.new({
+            workflow=save_game_load_module,
+            scheduler_module=scheduler_module,
+            scheduler=scheduler,
+            wait_settings=wait_settings,
+            dfhack=dfhack,
+            df=df,
+            current_viewscreen=context.current_viewscreen,
+            get_window_size=context.get_window_size,
+            pointer_adapter=pointer_adapter_module,
+            pointer=context.pointer,
+            events=EEvent,
+            await_event=await_event,
+        })
     local publisher = context.run.event_publisher
 
     ---Publishes one command boundary through the active run generation.
@@ -494,6 +580,10 @@ local TestStatus = load_automation_module(package_root,
         subject_module=mount_dependencies.subject_module or subject_module,
         command_observer=command_observer,
     })
+    local search_command = text_search_command.new_command({
+        mount_context=context.mount_context,
+        matcher=rendered_text_search,
+    })
     context.run.mount_cleanup_probe = function()
         local state = context.mount_context:cleanup_state()
         state.pointer_active =
@@ -530,6 +620,7 @@ local TestStatus = load_automation_module(package_root,
         EPointerAnchor=EPointerAnchor,
         EScreenOrigin=EScreenOrigin,
         ESubjectSource=ESubjectSource,
+        EEvent=EEvent,
     }
 
     ---Returns the exact service-owned run that currently owns the executor.
@@ -848,6 +939,14 @@ local TestStatus = load_automation_module(package_root,
             scheduler, description, query, wait_options(options, true))
     end
 
+    ---Waits for and returns the next occurrence of one native event.
+    ---@param event DwarfSpecEEvent
+    ---@param options DwarfSpecAwaitEventOptions|nil
+    ---@return DwarfSpecEventOccurrence
+    function ds.awaitEvent(event, options)
+        return await_event(event, options)
+    end
+
     ---Returns whether the Dwarf Fortress simulation is currently paused.
     ---@return boolean
     function ds.isGamePaused()
@@ -1008,6 +1107,46 @@ local TestStatus = load_automation_module(package_root,
         assert(type(time) == 'number' and time % 1 == 0 and time >= 0,
             'DFHack getTickCount did not return a valid millisecond clock')
         return time
+    end
+
+    ---Returns the directory name of the currently loaded save game.
+    ---@return string
+    function ds.getSaveDirectoryName()
+        local is_world_loaded = dfhack and dfhack.isWorldLoaded
+        assert(type(is_world_loaded) == 'function' and is_world_loaded(),
+            'DwarfSpec getSaveDirectoryName requires a loaded save game')
+        local world = dfhack.world
+        assert(type(world) == 'table' and
+                type(world.ReadWorldFolder) == 'function',
+            'DwarfSpec getSaveDirectoryName requires ' ..
+                'dfhack.world.ReadWorldFolder')
+        local name = world.ReadWorldFolder()
+        assert(type(name) == 'string' and name ~= '',
+            'DFHack ReadWorldFolder did not return a valid save directory name')
+        return name
+    end
+
+    ---Ensures that one exact save directory is loaded.
+    ---A different loaded world is discarded without saving. The requested
+    ---world remains loaded for subsequent examples and is not cleanup-owned.
+    ---@param ... any
+    ---@return string
+    function ds.mountSaveGame(...)
+        local arguments = table.pack(...)
+        local world = dfhack and dfhack.world
+        local preflight = save_game_mount_module.preflight({
+            is_world_loaded=dfhack and dfhack.isWorldLoaded,
+            read_world_folder=world and world.ReadWorldFolder,
+        }, arguments.n, arguments[1])
+        if not preflight.transition_required then
+            return preflight.requested_directory
+        end
+        if preflight.loaded_directory then
+            save_game_unloader:unload(preflight.loaded_directory,
+                preflight.requested_directory)
+        end
+        save_game_loader:load(preflight.requested_directory)
+        return preflight.requested_directory
     end
 
     ---Returns whether the current DFHack focus matches one focus path.
@@ -1259,6 +1398,14 @@ local TestStatus = load_automation_module(package_root,
         return diagnostics.inspect_view(view, adapter)
     end
 
+    ---Searches final rendered screen cells within the current mount scope.
+    ---@param query table
+    ---@param search_area table|nil
+    ---@return table|nil
+    function ds.search(query, search_area)
+        return search_command(query, search_area)
+    end
+
     ---Returns a copied focus-string list for one current mounted subject.
     ---@param subject table
     ---@return string[]
@@ -1446,7 +1593,9 @@ local TestStatus = load_automation_module(package_root,
         assert(y < height,
             ('pointer y coordinate %d is outside the current window height %d')
                 :format(y, height))
-        set_pointer_coordinates(x, y, EPointerSpace.GRID)
+        mutate_pointer('move_pointer', function()
+            pointer_adapter_module.set_grid(context.pointer, x, y)
+        end)
         return x, y
     end
 
@@ -1867,6 +2016,7 @@ local TestStatus = load_automation_module(package_root,
             return ds.redraw(subject, options)
         end,
         inspect=function(subject) return ds.inspect(subject) end,
+        search=function(subject, query) return ds.search(query, subject) end,
         getFocusList=get_focus_list,
     }
 

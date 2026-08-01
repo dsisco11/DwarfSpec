@@ -212,7 +212,7 @@ describe('DwarfSpec component boundary', function()
             component.PUBLIC_API.mount_context)
         assert.same({
             'click', 'hover', 'move_pointer', 'mouseWheel', 'input', 'type',
-            'inspect', 'text', 'raw',
+            'inspect', 'search', 'text', 'raw',
         }, component.PUBLIC_API.subject)
     end)
 end)

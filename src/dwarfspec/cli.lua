@@ -10,11 +10,11 @@ local result_store = require('dwarfspec.automation.result_store')
 local runner = require('dwarfspec.runner')
 
 local M = {
-    version='0.2.0',
+    version='0.2.1',
 }
 
 local HELP = [[
-DwarfSpec 0.2.0 - live DFHack automation with in-process Busted
+DwarfSpec 0.2.1 - live DFHack automation with in-process Busted
 
 Usage:
   dwarfspec

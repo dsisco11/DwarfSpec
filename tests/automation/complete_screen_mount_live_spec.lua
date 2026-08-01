@@ -19,6 +19,21 @@ local COMPLETE_SCREEN_CAPABILITIES = command_conformance.new{
     viewport='supported',
 }
 
+---Returns the expected visible single-row bounds for a label subject.
+---@param subject dwarfspec.Subject
+---@param text string
+---@return dwarfspec.ScreenRect
+local function expected_label_bounds(subject, text)
+    local body = assert(subject:inspect().body,
+        'search label requires visible body bounds')
+    return {
+        x1=body.x1,
+        y1=body.y1,
+        x2=body.x1 + #text - 1,
+        y2=body.y1,
+    }
+end
+
 ---@class tests.CompleteScreenBacking: gui.ZScreen
 local CompleteScreenBacking = defclass(nil, gui.ZScreen)
 CompleteScreenBacking.ATTRS{
@@ -125,6 +140,31 @@ function CompleteScreenHarness:init()
                     view_id='pointer_target',
                     frame={l=2, t=10, w=24, h=2},
                     text='Rendered pointer target',
+                },
+                widgets.Label{
+                    view_id='search_root',
+                    frame={l=2, t=14, w=35},
+                    text='DS_SEARCH_SCREEN_ROOT',
+                },
+                widgets.Label{
+                    view_id='search_left',
+                    frame={l=2, t=15, w=35},
+                    text='DS_SEARCH_SCREEN_DUPLICATE',
+                },
+                widgets.Label{
+                    view_id='search_right',
+                    frame={l=42, t=15, w=35},
+                    text='DS_SEARCH_SCREEN_DUPLICATE',
+                },
+                widgets.Label{
+                    view_id='search_mutable',
+                    frame={l=2, t=16, w=35},
+                    text='DS_SEARCH_SCREEN_OLD',
+                },
+                widgets.Label{
+                    view_id='search_await',
+                    frame={l=42, t=16, w=35},
+                    text='DS_SEARCH_SCREEN_WAITING',
                 },
             },
         },
@@ -356,5 +396,55 @@ describe('complete screen component mount', function()
         assert.equals(original_resize, rawget(screen, 'onResize'))
         assert.equals(original_input, screen.onInput)
         assert.equals(original_dismiss, screen.dismiss)
+    end)
+
+    it('searches visible rendered labels on the complete screen', function()
+        local run = ds.current_run()
+        local root = ds.mount(CompleteScreenHarness, {
+            backing_viewscreen=backing._native,
+            viewport={width=80, height=24},
+        })
+        local screen = root:raw()
+        local root_label = ds.get('content/search_root')
+        local left = ds.get('content/search_left')
+        local right = ds.get('content/search_right')
+        local mutable = ds.get('content/search_mutable')
+        local awaited = ds.get('content/search_await')
+        local root_text = 'DS_SEARCH_SCREEN_ROOT'
+        local duplicate = 'DS_SEARCH_SCREEN_DUPLICATE'
+        local old_text = 'DS_SEARCH_SCREEN_OLD'
+        local new_text = 'DS_SEARCH_SCREEN_NEW'
+        local awaited_text = 'DS_SEARCH_SCREEN_APPEARED'
+        local renders_before_search = screen.render_count
+        local captures_before_search = run.captures
+
+        assert.same(expected_label_bounds(root_label, root_text),
+            ds.search({text=root_text}))
+        assert.same(expected_label_bounds(left, duplicate),
+            left:search({text=duplicate}))
+        assert.same(expected_label_bounds(right, duplicate),
+            ds.search({text=duplicate}, assert(right:inspect().body)))
+        assert.equals(renders_before_search, screen.render_count)
+        assert.equals(captures_before_search, run.captures)
+
+        mutable:raw():setText(new_text)
+        root:redraw()
+        assert.is_nil(ds.search({text=old_text}, mutable))
+        assert.same(expected_label_bounds(mutable, new_text),
+            mutable:search({text=new_text}))
+
+        awaited:raw():setText(awaited_text)
+        root:redraw({wait=false})
+        assert.same(expected_label_bounds(awaited, awaited_text),
+            ds.await('complete-screen rendered search text appears', function()
+                return awaited:search({text=awaited_text})
+            end))
+
+        ds.unmount()
+        local cleanup = run.mount_cleanup_probe()
+        assert.is_nil(cleanup.current_mount_id)
+        assert.equals(0, cleanup.active_screen_count)
+        assert.equals(0, cleanup.owned_screen_count)
+        assert.equals(0, cleanup.subject_count)
     end)
 end)

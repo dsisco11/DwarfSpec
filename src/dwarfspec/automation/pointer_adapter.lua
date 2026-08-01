@@ -40,6 +40,20 @@ local GEOMETRY_FIELDS = {
     {name='cell_pixel_height', gps_name='tile_pixel_y'},
 }
 
+local TRANSIENT_INPUT_FIELDS = {
+    'mouse_focus',
+    'tracking_on',
+    'mouse_lbut',
+    'mouse_rbut',
+    'mouse_mbut',
+    'mouse_lbut_down',
+    'mouse_rbut_down',
+    'mouse_mbut_down',
+    'mouse_lbut_lift',
+    'mouse_rbut_lift',
+    'mouse_mbut_lift',
+}
+
 ---Creates an inactive pointer adapter scoped to one cleanup registry.
 ---@param cleanup_module table
 ---@param cleanup_registry table
@@ -312,6 +326,16 @@ function M.set(adapter, position)
     apply_position(adapter)
 end
 
+---Normalizes and applies one UI-grid pointer coordinate.
+---@param adapter table
+---@param x any
+---@param y any
+function M.set_grid(adapter, x, y)
+    local position = M.normalize_position(
+        x, y, EPointerSpace.GRID, M.geometry(adapter))
+    M.set(adapter, position)
+end
+
 ---Returns a defensive copy of the active paired pointer position.
 ---@param adapter table
 ---@return DwarfSpecPointerPosition
@@ -348,6 +372,53 @@ function M.clear(adapter)
     end, debug.traceback)
     adapter.cleanup_module.release(adapter.cleanup_registry, cleanup_entry)
     if not ok then error(failure, 0) end
+end
+
+---Captures pointer and native mouse state for one reversible interaction.
+---The returned operation is idempotent and preserves pre-existing ownership.
+---@param adapter table
+---@return function
+function M.begin_transient(adapter)
+    local enabler = assert(adapter.enabler,
+        'pointer adapter requires an injected enabler boundary')
+    local was_active = M.is_active(adapter)
+    local original_position = was_active and M.position(adapter) or nil
+    local input_state = {}
+    for _, field in ipairs(TRANSIENT_INPUT_FIELDS) do
+        local readable, value = pcall(function() return enabler[field] end)
+        if readable then
+            input_state[#input_state + 1] = {field=field, value=value}
+        end
+    end
+    local restored = false
+
+    ---Restores the pointer ownership and native input state captured above.
+    local function restore_transient()
+        if restored then return end
+        restored = true
+        local failures = {}
+        if was_active then
+            attempt_restoration(failures, 'pointer position', function()
+                M.set(adapter, original_position)
+            end)
+        elseif M.is_active(adapter) then
+            attempt_restoration(failures, 'pointer ownership', function()
+                M.clear(adapter)
+            end)
+        end
+        for _, entry in ipairs(input_state) do
+            attempt_restoration(failures,
+                ('native input field %s'):format(entry.field), function()
+                    enabler[entry.field] = entry.value
+                end)
+        end
+        if #failures > 0 then
+            error('transient pointer restoration failed: ' ..
+                table.concat(failures, '; '), 0)
+        end
+    end
+
+    return restore_transient
 end
 
 ---Runs one mouse operation with temporary native focus and tracking flags.

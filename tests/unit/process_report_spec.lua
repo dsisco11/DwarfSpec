@@ -262,14 +262,14 @@ describe('DwarfSpec native reports', function()
                     protocol=2,
                     kind='registration',
                     message='incompatible automation package version: ' ..
-                        'expected 0.1.3, found 0.2.0',
+                        'expected 0.1.3, found 0.2.1',
                 }
             end)
 
         assert.is_nil(transport)
         assert.equals('registration', response_error.kind)
         assert.equals('incompatible automation package version: ' ..
-            'expected 0.1.3, found 0.2.0', response_error.message)
+            'expected 0.1.3, found 0.2.1', response_error.message)
     end)
 
     it('accepts one exact version 2 transport identity and cursor', function()

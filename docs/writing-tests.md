@@ -128,6 +128,61 @@ mounting another component or attaching to the current native screen.
 DwarfSpec automatically unmounts an owned component during example cleanup,
 including when the example fails.
 
+## Search rendered text
+
+`ds.search({text=..., occurrence?}, search_area?)` reads the current final
+screen cells in the active mount. It returns a fresh rectangle with zero-based,
+inclusive `{x1, y1, x2, y2}` bounds for the requested match, or `nil` when the
+effective region was readable but does not contain that occurrence. The default
+occurrence is `1`; occurrences are ordered top-to-bottom and then left-to-right.
+
+```lua
+local root_match = ds.search({text='Saved'})
+assert.same({x1=4, y1=8, x2=8, y2=8}, root_match)
+
+local status = ds.get('status')
+assert.same(root_match, status:search({text='Saved'}))
+
+local second = ds.search({text='Saved', occurrence=2})
+assert.is_truthy(second)
+
+local status_bounds = assert(status:inspect().body)
+assert.same(root_match, ds.search({text='Saved'}, status_bounds))
+assert.is_nil(ds.search({text='Not rendered'}))
+```
+
+`text` is a nonempty single-row literal CP437/byte string. Matching is
+case-sensitive and performs neither Unicode normalization nor multiline
+matching; NUL, carriage-return, and newline bytes are invalid. The result is a
+screen-cell rectangle, not a character-index range.
+
+The optional area is a spatial filter over final rendered cells. Pass either a
+plain rectangle or a subject; a subject contributes only its current visible
+body. It does not establish that the subject, component, or overlay painted a
+match. In particular, a later painter can overwrite a cell in the selected
+subject's body, and search reports the final cell contents. Search also does
+not inspect hidden widget-tree text outside the effective on-screen area.
+
+Search is read-only and does not request a render. Use an existing mutation
+that waits for rendering, `ds.redraw()`, or `ds.await()` when the desired text
+may appear later:
+
+```lua
+ds.get('submit'):click() -- click waits for its rendered result
+local saved = ds.search({text='Saved'})
+
+ds.redraw(nil, {wait=false})
+local ready = ds.await('saved text appears', function()
+    return ds.search({text='Saved'})
+end)
+assert.is_truthy(ready)
+```
+
+If no cell in the effective region can be read, search raises an explicit
+unreadable-region error instead of returning `nil`. The current live runner
+does not provide a TrueType configuration, so that mode is an unavailable
+configuration limitation; it is never reported as an ordinary no-match.
+
 Every path segment is an exact `view_id`. `/` is reserved as the separator;
 paths cannot start or end with `/`, contain empty segments, `.` or `..`, or
 cross an anonymous control. Assign a `view_id` to every parent control that a
@@ -637,6 +692,18 @@ local milliseconds = ds.getTime()
 assert.is_true(milliseconds >= 0)
 ```
 
+`ds.getSaveDirectoryName()` returns the directory name of the currently loaded
+save game through `dfhack.world.ReadWorldFolder()`. It is read-only and does
+not require a mount:
+
+```lua
+assert.equals('region1', ds.getSaveDirectoryName())
+```
+
+It fails explicitly when no save is loaded or DFHack cannot provide a nonempty
+directory name. This is the save-directory identifier, not the translated
+world name or a fortress/site name.
+
 `ds.wait_ticks(count, options)` suspends the test until exactly `count`
 unpaused Dwarf Fortress simulation ticks have passed:
 
@@ -797,9 +864,9 @@ when validating the DFHack overlay boundary.
 The first-release surface is intentionally small:
 
 - synchronization: `await`, `wait_frames`, `wait_ticks`;
-- components: `mount`, `root`, `get`, `unmount`, `viewport`;
+- components: `mount`, `root`, `get`, `search`, `unmount`, `viewport`;
 - subjects: `click`, `hover`, `move_pointer`, `mouseWheel`, `input`, `type`, `inspect`,
-  `text`, and the exceptional `raw` escape hatch;
+  `text`, `search`, and the exceptional `raw` escape hatch;
 - positioned mouse input: `mouseInput` with `EMouseButton` and `EInputState`,
   plus batched discrete wheel input through `mouseWheel`;
 - evidence: `capture_view_tree`, `capture_screen`; and

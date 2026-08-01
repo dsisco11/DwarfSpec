@@ -20,6 +20,21 @@ local OVERLAY_CAPABILITIES = command_conformance.new{
     viewport='supported',
 }
 
+---Returns the expected visible single-row bounds for a label subject.
+---@param subject dwarfspec.Subject
+---@param text string
+---@return dwarfspec.ScreenRect
+local function expected_label_bounds(subject, text)
+    local body = assert(subject:inspect().body,
+        'search label requires visible body bounds')
+    return {
+        x1=body.x1,
+        y1=body.y1,
+        x2=body.x1 + #text - 1,
+        y2=body.y1,
+    }
+end
+
 ---@class tests.MouseInputBacking: gui.ZScreen
 local MouseInputBacking = defclass(nil, gui.ZScreen)
 MouseInputBacking.ATTRS{
@@ -127,7 +142,7 @@ end
 local OverlayWidgetHarness = defclass(nil, overlay.OverlayWidget)
 OverlayWidgetHarness.ATTRS{
     default_pos={x=3, y=4},
-    frame={w=28, h=10},
+    frame={w=80, h=16},
     full_interface=true,
     overlay_onupdate_max_freq_seconds=0,
 }
@@ -170,6 +185,21 @@ function OverlayWidgetHarness:init()
             view_id='pointer_target',
             frame={l=0, t=6, w=24, h=2},
             text='Rendered pointer target',
+        },
+        widgets.Label{
+            view_id='search_root',
+            frame={l=1, t=9, w=40},
+            text='DS_SEARCH_OVERLAY_ROOT',
+        },
+        widgets.Label{
+            view_id='search_hidden',
+            frame={l=1, t=10, w=40},
+            text='DS_SEARCH_OVERLAY_HIDDEN',
+        },
+        widgets.Label{
+            view_id='search_final',
+            frame={l=1, t=10, w=40},
+            text='DS_SEARCH_OVERLAY_FINAL',
         },
     }
 end
@@ -505,6 +535,66 @@ describe('overlay widget component host', function()
         ds.unmount()
         assert.equals('disable', instance.events[#instance.events])
         assert.is_nil(instance.name)
+    end)
+
+    it('searches final rendered overlay cells within current spatial bounds',
+            function()
+        local run = ds.current_run()
+        local initial_pointer = command_conformance.pointer_snapshot()
+        local backing = OverlayInputBacking{}
+        backing:show()
+        local root = ds.mount(OverlayWidgetHarness, {
+            backing_viewscreen=backing._native,
+            overlay_position={x=6, y=7},
+        })
+        local component = root:raw()
+        local root_label = ds.get('search_root')
+        local hidden_label = ds.get('search_hidden')
+        local final_label = ds.get('search_final')
+        local root_text = 'DS_SEARCH_OVERLAY_ROOT'
+        local hidden_text = 'DS_SEARCH_OVERLAY_HIDDEN'
+        local final_text = 'DS_SEARCH_OVERLAY_FINAL'
+        local renders_before_search = component.render_count
+        local captures_before_search = run.captures
+
+        assert.same(expected_label_bounds(root_label, root_text),
+            ds.search({text=root_text}))
+        assert.same(expected_label_bounds(final_label, final_text),
+            final_label:search({text=final_text}))
+        assert.same(expected_label_bounds(final_label, final_text),
+            hidden_label:search({text=final_text}))
+        assert.is_nil(hidden_label:search({text=hidden_text}),
+            'search must observe the later painter in overlapping cells')
+        assert.equals(renders_before_search, component.render_count)
+        assert.equals(captures_before_search, run.captures)
+
+        local before_move = expected_label_bounds(root_label, root_text)
+        component.frame.l = 32
+        component.frame.t = 18
+        component:updateLayout()
+        root:redraw()
+        local after_move = expected_label_bounds(root_label, root_text)
+        assert.is_not.same(before_move, after_move)
+        assert.same(after_move, root_label:search({text=root_text}))
+
+        ds.unmount()
+        local cleanup = run.mount_cleanup_probe()
+        local backing_revealed = backing:isActive()
+        if backing_revealed then backing:dismiss() end
+        assert.equals('disable', component.events[#component.events])
+        assert.is_nil(component.name)
+        assert.is_nil(cleanup.current_mount_id)
+        assert.equals(0, cleanup.active_screen_count)
+        assert.equals(0, cleanup.owned_screen_count)
+        assert.equals(0, cleanup.subject_count)
+        assert.is_false(cleanup.render_observer_active)
+        assert.is_false(cleanup.pointer_active)
+        assert.is_true(backing_revealed,
+            'unmount must reveal the native backing screen')
+        assert.is_false(backing:isActive(),
+            'native backing screen must be dismissed during cleanup')
+        command_conformance.assert_pointer_restored(
+            initial_pointer, command_conformance.pointer_snapshot())
     end)
 
     it('mounts a fullscreen existing instance with throttled updates',

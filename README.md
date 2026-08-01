@@ -212,11 +212,70 @@ frames is itself part of the behavior being tested. Use
 `ds.wait_ticks(count)` when the test instead requires the simulation to advance;
 simulation ticks stop while the game is paused.
 
+### Wait for the next native event
+
+Use `ds.awaitEvent(event, options)` when the occurrence itself matters. Unlike
+`ds.await()`, which polls current state and can complete immediately,
+`ds.awaitEvent()` waits for the next matching notification after its listener is
+armed. An already-paused game therefore does not satisfy a new
+`ds.awaitEvent(ds.EEvent.PAUSED)` call.
+
+Select events through the immutable `ds.EEvent` enum. Every result has the form
+`{event=..., source='state_change', payload=...}` and is an immutable snapshot
+without borrowed native pointers. Optional payload fields are omitted when
+DFHack cannot provide a valid value.
+
+| Event | Normalized payload |
+|---|---|
+| `ds.EEvent.WORLD_LOADED` | `save_directory`, when available |
+| `ds.EEvent.WORLD_UNLOADED` | The previous `save_directory`, when available |
+| `ds.EEvent.MAP_LOADED` | `save_directory`, when available |
+| `ds.EEvent.MAP_UNLOADED` | The previous `save_directory`, when available |
+| `ds.EEvent.VIEWSCREEN_CHANGED` | `focus` and `native_screen_type`, when available |
+| `ds.EEvent.PAUSED` | `paused=true` |
+| `ds.EEvent.UNPAUSED` | `paused=false` |
+
+The optional `trigger` runs only after the native listener is installed. This
+ordering captures an event even when the action raises it synchronously. For
+example, save-loading code follows this pattern:
+
+```lua
+local occurrence = ds.awaitEvent(ds.EEvent.MAP_LOADED, {
+    description='load selected save',
+    trigger=function()
+        select_save(directory_name)
+    end,
+})
+
+assert.equals(directory_name, occurrence.payload.save_directory)
+```
+
+Here, `select_save()` represents the action that selects the save in the native
+load screen. `ds.mountSaveGame(directory_name)` uses this listener-before-action
+ordering internally and is the preferred command when the test only needs a
+specific save loaded.
+
+No command-local timeout is added by default. Pass a positive
+`timeout_ms`, or pass `false` explicitly to keep it disabled:
+
+```lua
+ds.awaitEvent(ds.EEvent.VIEWSCREEN_CHANGED, {
+    description='open settings',
+    timeout_ms=5000,
+    trigger=open_settings,
+})
+```
+
+This release supports only the seven `dfhack.onStateChange` notifications
+listed above. DFHack EventManager events and specialized `eventful` callbacks
+are outside the `ds.awaitEvent()` contract.
+
 ## The `ds` commands
 
 | Command | Purpose |
 |---|---|
 | `ds.await(description, query, options)` | Poll a condition between live frames. |
+| `ds.awaitEvent(event, options)` | Wait for the next `ds.EEvent` notification; an optional trigger runs after listener registration. |
 | `ds.wait_frames(count, options)` | Wait for a specific number of DFHack frames. |
 | `ds.wait_ticks(count, options)` | Wait for unpaused simulation ticks; options are `timeout_ms` and diagnostic `description`. |
 | `ds.isGamePaused()` | Return whether the Dwarf Fortress simulation is paused. |
@@ -225,6 +284,8 @@ simulation ticks stop while the game is paused.
 | `ds.setGameSpeed(tps)` | Set the target game speed in ticks per second; DwarfSpec automatically restores the inherited state during example cleanup. |
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
+| `ds.getSaveDirectoryName()` | Return the directory name of the currently loaded save game. |
+| `ds.mountSaveGame(directory_name)` | Ensure the exact save directory is loaded and the native loading viewscreen has disappeared. A matching loaded save is left untouched; a different loaded world is discarded without saving first. The requested save remains loaded for subsequent examples and is not restored or unloaded during example cleanup. |
 | `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
 | `ds.getViewPos(origin)` | Return the map tile aligned with an `EScreenOrigin`; defaults to `CENTER`. |
 | `ds.setViewPos({x=..., y=..., z=...}, origin)` | Align a map tile with an `EScreenOrigin`, defaulting to `CENTER`; DwarfSpec automatically restores the inherited view during example cleanup. |
@@ -232,10 +293,12 @@ simulation ticks stop while the game is paused.
 | `ds.mountNativeScreen()` | Attach non-owningly to the base native DF viewscreen and return its widget-root subject; DwarfSpec automatically detaches without dismissing it during example cleanup. |
 | `ds.root(options)` | Return the selected native, registered-overlay, or component root subject. |
 | `ds.get(control_path, options)` | Select one exact source-specific path from the current mount. |
+| `ds.search({text=..., occurrence?}, search_area?)` | Find literal final rendered text and return its zero-based inclusive cell bounds, or `nil` for a readable miss. |
 | `ds.unmount()` | Cleanly remove and settle the implicit current mount. |
 | `ds.viewport(width, height)` | Change the mount-scoped viewport in DF cells; automatic unmount cleanup ends the override. |
 | `ds.inspect(subject)` | Return stable, read-only information about a subject or the selected root. |
 | `subject:inspect()` | Return stable, read-only information about the selected view. |
+| `subject:search({text=..., occurrence?})` | Find literal final rendered text within the subject's current visible body bounds. |
 | `subject:getFocusList()` | Return a copied focus-string list for the subject's mounted screen. |
 | `subject:text()` | Return the selected view's inspected text value. |
 | `subject:raw()` | Access the borrowed Lua view or native DF widget as an exceptional escape hatch. |
