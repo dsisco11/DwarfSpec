@@ -139,6 +139,8 @@ flowchart TB
     root --> layout["layout.lua"]
 
     root --> controller["controller/"]
+    controller --> controller_application["application.lua"]
+    controller --> controller_command_line["command_line.lua"]
     controller --> controller_configuration["configuration/<br/>config.lua<br/>dotenv.lua"]
     controller --> controller_discovery["discovery/<br/>project.lua"]
     controller --> controller_execution["execution/<br/>process.lua<br/>runner.lua"]
@@ -185,6 +187,7 @@ hierarchy.
 
 | Current area | Target area | Notes |
 |---|---|---|
+| root `cli.lua` | root facade plus `controller/application.lua` and `controller/command_line.lua` | Perform this decomposition near the end, after the namespace migrations and larger runtime splits are stable. |
 | `config.lua`, `dotenv.lua` | `controller/configuration/` | These load external process configuration and environment values. |
 | `config_schema.lua`, `settings.lua`, `error_formats.lua` | `protocol/configuration/` | Both the controller and host validate the same consumer configuration contract. |
 | `glob.lua` | `support/` | Glob compilation is pure and is used by both controller and host project discovery. |
@@ -249,7 +252,7 @@ intentional; the list of downstream host paths should not be duplicated.
 
 Directory moves and file decomposition should be separate commits. First move
 cohesive modules without changing their behavior. Once the new dependency
-boundaries are enforced, split the five current hotspots:
+boundaries are enforced, split the six current hotspots:
 
 - `ds.lua` (about 2,000 lines): retain construction and public command binding
   in the facade; move mount, pointer, event, game-state, and wait command
@@ -264,6 +267,10 @@ boundaries are enforced, split the five current hotspots:
   subject resolution, command execution diagnostics, and cleanup verification.
 - `runner.lua` (about 1,000 lines): separate command construction, process
   transport, polling, timeout/abort handling, and result interpretation.
+- `cli.lua` (about 700 lines): near the end of the work, move argument parsing,
+  option validation, and help construction into `controller/command_line.lua`;
+  move command selection and orchestration into `controller/application.lua`;
+  retain only delegation from the stable root facade.
 
 Each extraction must introduce a named responsibility with its own direct
 tests. Avoid generic dumping grounds such as `utils.lua`, `helpers.lua`, or
@@ -329,11 +336,26 @@ fixtures or generated `.test-results` merely to make the tree look symmetric.
    consumer-path audit.
 9. Declare the initial migration complete with any intentional compatibility
    forwarding modules still present.
-10. Decompose the large modules in small, separately verified changes.
+10. Decompose `ds.lua`, host execution, the scheduler, mount context, and the
+   runner in small, separately verified changes.
+11. As one of the final implementation steps, decompose `cli.lua` into
+   `controller/command_line.lua` and `controller/application.lua`, leaving the
+   stable root module as a thin facade.
 
 Forwarding modules are removed in later maintenance only after the promised
 compatibility window and consumer audit are complete. Their deferred removal
 does not block completion of the initial source-organization migration.
+
+The completion milestones are:
+
+- **Initial directory migration:** the namespace moves, recursive test-tree
+  migration, documentation updates, and source gates are complete; temporary
+  forwarding modules may still exist.
+- **Full source organization:** the late large-module decompositions,
+  including the final CLI split, are complete and the full source gates pass.
+- **Deferred compatibility cleanup:** forwarding modules are removed after
+  their compatibility window; this is later maintenance and does not reopen
+  either completed milestone.
 
 Every move should use `git mv` and update one cohesive dependency cluster in
 the same commit, including callers and tests. Keep behavior changes and
@@ -343,8 +365,9 @@ TestBed implementation, or selector redesign.
 
 ## Verification gates
 
-The cleanup is complete only when all of the following are independently
-demonstrated:
+Each migration milestone is complete only when all applicable checks below are
+independently demonstrated. Full source organization additionally requires all
+decompositions listed in the implementation sequence:
 
 - all unit tests pass from the source checkout;
 - Lua syntax and repository formatting checks pass;
