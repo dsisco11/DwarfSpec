@@ -15,16 +15,17 @@ the production tree.
 
 The recommended top-level production layout is:
 
-```text
-src/dwarfspec/
-  cli.lua                 # stable external-command facade
-  ds.lua                  # stable run-scoped driver facade
-  layout.lua              # stable package-layout facade
-  controller/             # external Lua process
-  host/                   # DFHack core Lua process
-  driver/                 # live-test interaction implementation
-  protocol/               # data contracts shared across processes
-  support/                # small runtime-neutral utilities
+```mermaid
+flowchart LR
+    root["src/dwarfspec/"]
+    root --> cli["cli.lua<br/>external-command facade"]
+    root --> ds["ds.lua<br/>run-scoped driver facade"]
+    root --> layout["layout.lua<br/>package-layout facade"]
+    root --> controller["controller/<br/>external Lua process"]
+    root --> host["host/<br/>DFHack core Lua process"]
+    root --> driver["driver/<br/>live-test interaction"]
+    root --> protocol["protocol/<br/>cross-process data contracts"]
+    root --> support["support/<br/>runtime-neutral utilities"]
 ```
 
 This layout reflects the four responsibilities already documented in
@@ -67,14 +68,20 @@ on both sides must be pure Lua and belongs under `protocol/` or `support/`.
 
 The intended dependency direction is:
 
-```text
-cli.lua -> controller -------> protocol -> support
-host entry scripts -> host ---> protocol -> support
-                        |
-                        +-----> driver ---> protocol -> support
-
-ds.lua (composition root) ---> host
-                         +---> driver
+```mermaid
+flowchart LR
+    cli["cli.lua"] --> controller["controller/"]
+    entry["host entry scripts"] --> host["host/"]
+    controller --> protocol["protocol/"]
+    controller --> support["support/"]
+    host --> driver["driver/"]
+    host --> protocol
+    host --> support
+    driver --> protocol
+    driver --> support
+    protocol --> support
+    ds["ds.lua<br/>composition root"] -->|temporary exception| host
+    ds --> driver
 ```
 
 `controller/` must not require `host/` or `driver/`. The controller may select
@@ -117,130 +124,46 @@ Likewise, reserve `host/entrypoints/` for scripts invoked directly through
 
 ## Proposed production tree
 
-```text
-src/dwarfspec/
-  cli.lua
-  ds.lua
-  layout.lua
+```mermaid
+flowchart TB
+    root["src/dwarfspec/"]
+    root --> cli["cli.lua"]
+    root --> ds["ds.lua"]
+    root --> layout["layout.lua"]
 
-  controller/
-    configuration/
-      config.lua
-      dotenv.lua
-    discovery/
-      project.lua
-    execution/
-      process.lua
-      runner.lua
-    reporting/
-      diagnostic_formatter.lua
-      report.lua
-    result_store.lua
+    root --> controller["controller/"]
+    controller --> controller_configuration["configuration/<br/>config.lua<br/>dotenv.lua"]
+    controller --> controller_discovery["discovery/<br/>project.lua"]
+    controller --> controller_execution["execution/<br/>process.lua<br/>runner.lua"]
+    controller --> controller_reporting["reporting/<br/>diagnostic_formatter.lua<br/>report.lua"]
+    controller --> controller_result_store["result_store.lua"]
 
-  host/
-    entrypoints/
-      abort.lua
-      acknowledge.lua
-      bootstrap.lua
-      cancel.lua
-      discard.lua
-      event_read.lua
-      probe.lua
-      recover.lua
-      recover_executor.lua
-      run_query.lua
-      scheduler_status.lua
-      status.lua
-    execution/
-      busted_lifecycle_adapter.lua
-      cleanup.lua
-      coroutine_scheduler.lua
-      file_suite_identity.lua
-      host.lua
-      output_handler.lua
-    service/
-      projects.lua
-      scheduler.lua
-      service.lua
-      snapshots.lua
-    environment/
-      extensions.lua
-      lfs_adapter.lua
-      project_environment.lua
-      system_adapter.lua
-    diagnostics/
-      base_screen_focus_comparisons.lua
-      diagnostics.lua
-      focus_diagnostics.lua
-      problem_source.lua
-    game/
-      base_screen_focus_guard.lua
-      overlay_registration.lua
-      save_game_load.lua
-      save_game_mount.lua
-      save_game_unload.lua
+    root --> host["host/"]
+    host --> host_entrypoints["entrypoints/<br/>abort.lua<br/>acknowledge.lua<br/>bootstrap.lua<br/>cancel.lua<br/>discard.lua<br/>event_read.lua<br/>probe.lua<br/>recover.lua<br/>recover_executor.lua<br/>run_query.lua<br/>scheduler_status.lua<br/>status.lua"]
+    host --> host_execution["execution/<br/>busted_lifecycle_adapter.lua<br/>cleanup.lua<br/>coroutine_scheduler.lua<br/>file_suite_identity.lua<br/>host.lua<br/>output_handler.lua"]
+    host --> host_service["service/<br/>projects.lua<br/>scheduler.lua<br/>service.lua<br/>snapshots.lua"]
+    host --> host_environment["environment/<br/>extensions.lua<br/>lfs_adapter.lua<br/>project_environment.lua<br/>system_adapter.lua"]
+    host --> host_diagnostics["diagnostics/<br/>base_screen_focus_comparisons.lua<br/>diagnostics.lua<br/>focus_diagnostics.lua<br/>problem_source.lua"]
+    host --> host_game["game/<br/>base_screen_focus_guard.lua<br/>overlay_registration.lua<br/>save_game_load.lua<br/>save_game_mount.lua<br/>save_game_unload.lua"]
 
-  driver/
-    commands/
-      await_event.lua
-      save_game_load.lua
-      save_game_unload.lua
-      text_search.lua
-    input/
-      input_states.lua
-      mouse_buttons.lua
-      pointer_anchors.lua
-      pointer_adapter.lua
-      pointer_spaces.lua
-    mount/
-      component.lua
-      mount_adapters.lua
-      mount_context.lua
-      native_attachment.lua
-      overlay_mount.lua
-    render/
-      native_render_observer.lua
-      render_instrumentation.lua
-      render_tracker.lua
-    subjects/
-      interaction_target.lua
-      lua_view_adapter.lua
-      native_game_ui_path.lua
-      native_widget_adapter.lua
-      overlay_registry_adapter.lua
-      subject.lua
-      subject_paths.lua
-      subject_requests.lua
-      subject_sources.lua
-      native_resolution_failure_kinds.lua
-      native_resolution_stages.lua
-    screen_origins.lua
-    state_change_events.lua
+    root --> driver["driver/"]
+    driver --> driver_commands["commands/<br/>await_event.lua<br/>save_game_load.lua<br/>save_game_unload.lua<br/>text_search.lua"]
+    driver --> driver_input["input/<br/>input_states.lua<br/>mouse_buttons.lua<br/>pointer_anchors.lua<br/>pointer_adapter.lua<br/>pointer_spaces.lua"]
+    driver --> driver_mount["mount/<br/>component.lua<br/>mount_adapters.lua<br/>mount_context.lua<br/>native_attachment.lua<br/>overlay_mount.lua"]
+    driver --> driver_render["render/<br/>native_render_observer.lua<br/>render_instrumentation.lua<br/>render_tracker.lua"]
+    driver --> driver_subjects["subjects/<br/>interaction_target.lua<br/>lua_view_adapter.lua<br/>native_game_ui_path.lua<br/>native_widget_adapter.lua<br/>overlay_registry_adapter.lua<br/>subject.lua<br/>subject_paths.lua<br/>subject_requests.lua<br/>subject_sources.lua<br/>native_resolution_failure_kinds.lua<br/>native_resolution_stages.lua"]
+    driver --> driver_screen_origins["screen_origins.lua"]
+    driver --> driver_state_change_events["state_change_events.lua"]
 
-  protocol/
-    events.lua
-    schemas.lua
-    configuration/
-      error_formats.lua
-      schema.lua
-      settings.lua
-    diagnostics/
-      focus.lua
-    enums/
-      event_types.lua
-      owner_kinds.lua
-      result_policies.lua
-      result_states.lua
-      runner_failure_kinds.lua
-      run_states.lua
-      scheduler_failure_kinds.lua
-      test_statuses.lua
+    root --> protocol["protocol/"]
+    protocol --> protocol_events["events.lua"]
+    protocol --> protocol_schemas["schemas.lua"]
+    protocol --> protocol_configuration["configuration/<br/>error_formats.lua<br/>schema.lua<br/>settings.lua"]
+    protocol --> protocol_diagnostics["diagnostics/<br/>focus.lua"]
+    protocol --> protocol_enums["enums/<br/>event_types.lua<br/>owner_kinds.lua<br/>result_policies.lua<br/>result_states.lua<br/>runner_failure_kinds.lua<br/>run_states.lua<br/>scheduler_failure_kinds.lua<br/>test_statuses.lua"]
 
-  support/
-    glob.lua
-    identity_labels.lua
-    immutable_enum.lua
-    project_paths.lua
+    root --> support["support/"]
+    support --> support_files["glob.lua<br/>identity_labels.lua<br/>immutable_enum.lua<br/>project_paths.lua"]
 ```
 
 `ds.d.lua` remains at `src/ds.d.lua`. It is a declaration surface rather than
@@ -335,13 +258,13 @@ tests. Avoid generic dumping grounds such as `utils.lua`, `helpers.lua`, or
 
 After production paths stabilize, mirror them beneath `tests/unit/`:
 
-```text
-tests/unit/
-  controller/
-  host/
-  driver/
-  protocol/
-  support/
+```mermaid
+flowchart LR
+    unit["tests/unit/"] --> controller_tests["controller/"]
+    unit --> host_tests["host/"]
+    unit --> driver_tests["driver/"]
+    unit --> protocol_tests["protocol/"]
+    unit --> support_tests["support/"]
 ```
 
 Update `tools/Run-UnitTests.ps1` before moving any unit specs. Remove Busted's
