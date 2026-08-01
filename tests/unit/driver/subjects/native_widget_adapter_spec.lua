@@ -2,7 +2,7 @@
 
 local interaction_target = require('dwarfspec.driver.subjects.interaction_target')
 local native_widget_adapter = require('dwarfspec.driver.subjects.native_widget_adapter')
-local diagnostics = require('dwarfspec.automation.diagnostics')
+local diagnostics = require('dwarfspec.host.diagnostics.diagnostics')
 
 ---Creates one native widget fixture with stable pointer-like identity.
 ---@param id string

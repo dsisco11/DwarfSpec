@@ -1,9 +1,9 @@
 -- Unit contracts for live interaction support utilities without DFHack state.
 
 local cleanup = assert(loadfile(
-    'src/dwarfspec/automation/cleanup.lua'))()
+    'src/dwarfspec/host/execution/cleanup.lua'))()
 local diagnostics = assert(loadfile(
-    'src/dwarfspec/automation/diagnostics.lua'))()
+    'src/dwarfspec/host/diagnostics/diagnostics.lua'))()
 local pointer_adapter = assert(loadfile(
     'src/dwarfspec/driver/input/pointer_adapter.lua'))()
 local EPointerSpace = require('dwarfspec.driver.input.pointer_spaces')

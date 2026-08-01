@@ -61,11 +61,11 @@ function M.new(package_root, project, scheduler_module, scheduler,
         cleanup_module, cleanup_registry, extensions, mount_dependencies)
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
 local diagnostics = load_automation_module(package_root,
-    'dwarfspec.automation.diagnostics')
+    'dwarfspec.host.diagnostics.diagnostics')
 local pointer_adapter_module = load_automation_module(package_root,
     'dwarfspec.driver.input.pointer_adapter')
 local overlay_registration = load_automation_module(package_root,
-    'dwarfspec.automation.overlay_registration')
+    'dwarfspec.host.game.overlay_registration')
 local component_module = load_automation_module(package_root,
     'dwarfspec.driver.mount.component')
 local mount_context_module = load_automation_module(package_root,
@@ -121,11 +121,11 @@ local EventType = load_automation_module(package_root,
 local TestStatus = load_automation_module(package_root,
     'dwarfspec.protocol.enums.test_statuses')
 local save_game_mount_module = load_automation_module(package_root,
-    'dwarfspec.automation.save_game_mount')
+    'dwarfspec.host.game.save_game_mount')
 local save_game_unload_module = load_automation_module(package_root,
-    'dwarfspec.automation.save_game_unload')
+    'dwarfspec.host.game.save_game_unload')
 local save_game_load_module = load_automation_module(package_root,
-    'dwarfspec.automation.save_game_load')
+    'dwarfspec.host.game.save_game_load')
 local save_game_unload_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.save_game_unload')
 local save_game_load_command = load_automation_module(package_root,

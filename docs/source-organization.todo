@@ -108,21 +108,21 @@ Phase 4 - Create the driver namespace:
     ☑ Complete the remaining standard phase gate items.
 
 Phase 5 - Replace automation with the host namespace:
-    ☐ Create the host directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
-    ☐ Move Busted lifecycle, cleanup, coroutine scheduling, suite identity, output handling, and monolithic host execution into `host/execution/`.
-    ☐ Move projects, the monolithic scheduler, service state, and snapshots into `host/service/`.
-    ☐ Move extensions, filesystem and system adapters, and the host project loader into `host/environment/`; rename the loader to `project_environment.lua`.
-    ☐ Move diagnostics, problem-source classification, and native focus observation into `host/diagnostics/`.
-    ☐ Update problem-source classification for the organized source tree without exposing absolute local paths.
-    ☐ Move overlay registration and save-game load, mount, and unload workflows into `host/game/`.
-    ☐ Move directly invoked scripts into `host/entrypoints/` last, preserving continuous `dfhack-run` invocation.
-    ☐ Keep only the tiny duplicated bootstrap needed for each entrypoint to derive the Lua module root; do not duplicate downstream host paths.
-    ☐ Update `layout.lua`, controller callers, dynamic loaders, integration helpers, and matching tests with each entrypoint move.
-    ☐ Remove the empty `src/dwarfspec/automation/` directory after all references have moved.
-    ☐ Confirm `host/execution/host.lua` and root `ds.lua` are the only uses of the documented composition exception.
-    ☐ Verify every CLI command path against the relocated host entrypoints.
-    ☐ Run focused live coverage for events, save-game commands, cleanup, scheduler recovery, and host execution.
-    ☐ Complete the remaining standard phase gate items.
+    ☑ Create the host directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
+    ☑ Move Busted lifecycle, cleanup, coroutine scheduling, suite identity, output handling, and monolithic host execution into `host/execution/`.
+    ☑ Move projects, the monolithic scheduler, service state, and snapshots into `host/service/`.
+    ☑ Move extensions, filesystem and system adapters, and the host project loader into `host/environment/`; rename the loader to `project_environment.lua`.
+    ☑ Move diagnostics, problem-source classification, and native focus observation into `host/diagnostics/`.
+    ☑ Update problem-source classification for the organized source tree without exposing absolute local paths.
+    ☑ Move overlay registration and save-game load, mount, and unload workflows into `host/game/`.
+    ☑ Move directly invoked scripts into `host/entrypoints/` last, preserving continuous `dfhack-run` invocation.
+    ☑ Keep only the tiny duplicated bootstrap needed for each entrypoint to derive the Lua module root; do not duplicate downstream host paths.
+    ☑ Update `layout.lua`, controller callers, dynamic loaders, integration helpers, and matching tests with each entrypoint move.
+    ☑ Remove the empty `src/dwarfspec/automation/` directory after all references have moved.
+    ☑ Confirm `host/execution/host.lua` and root `ds.lua` are the only uses of the documented composition exception.
+    ☑ Verify every CLI command path against the relocated host entrypoints.
+    ☑ Run focused live coverage for events, save-game commands, cleanup, scheduler recovery, and host execution.
+    ☑ Complete the remaining standard phase gate items.
 
 Phase 6 - Close the initial directory-migration milestone:
     ☐ Compare the resulting production tree with the proposal's initial Mermaid tree and resolve every unexplained difference.

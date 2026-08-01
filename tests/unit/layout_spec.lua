@@ -25,7 +25,7 @@ describe('package layout', function()
                 assert.is_true(
                     normalized(current.host_scripts[name]):match(
                         '^' .. package_root ..
-                        '/src/dwarfspec/automation/' .. name .. '%.lua$') ~= nil)
+            '/src/dwarfspec/host/entrypoints/' .. name .. '%.lua$') ~= nil)
             end
         end)
 
@@ -40,9 +40,10 @@ describe('package layout', function()
         assert(lfs.mkdir(temporary_root .. '/share/lua'))
         assert(lfs.mkdir(temporary_root .. '/share/lua/5.4'))
         assert(lfs.mkdir(lua_root))
-        assert(lfs.mkdir(lua_root .. '/automation'))
+        assert(lfs.mkdir(lua_root .. '/host'))
+        assert(lfs.mkdir(lua_root .. '/host/entrypoints'))
         local bootstrap = assert(io.open(
-            lua_root .. '/automation/bootstrap.lua', 'wb'))
+            lua_root .. '/host/entrypoints/bootstrap.lua', 'wb'))
         bootstrap:close()
 
         local original_getinfo = debug.getinfo
@@ -54,8 +55,9 @@ describe('package layout', function()
         end
         local ok, result = xpcall(layout.current, debug.traceback)
         debug.getinfo = original_getinfo
-        os.remove(lua_root .. '/automation/bootstrap.lua')
-        lfs.rmdir(lua_root .. '/automation')
+        os.remove(lua_root .. '/host/entrypoints/bootstrap.lua')
+        lfs.rmdir(lua_root .. '/host/entrypoints')
+        lfs.rmdir(lua_root .. '/host')
         lfs.rmdir(lua_root)
         lfs.rmdir(temporary_root .. '/share/lua/5.4')
         lfs.rmdir(temporary_root .. '/share/lua')
@@ -65,7 +67,7 @@ describe('package layout', function()
         assert.is_true(ok, result)
         for _, name in ipairs(host_script_names) do
             assert.equals(
-                normalized(lua_root .. '/automation/' .. name .. '.lua'),
+                normalized(lua_root .. '/host/entrypoints/' .. name .. '.lua'),
                 normalized(result.host_scripts[name]))
         end
     end)

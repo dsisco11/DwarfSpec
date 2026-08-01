@@ -1,7 +1,7 @@
 -- Unit contracts for public mount commands on the run-scoped ds namespace.
 
 local cleanup = assert(loadfile(
-    'src/dwarfspec/automation/cleanup.lua'))()
+    'src/dwarfspec/host/execution/cleanup.lua'))()
 local component = assert(loadfile('src/dwarfspec/driver/mount/component.lua'))()
 local render_tracker = assert(loadfile(
     'src/dwarfspec/driver/render/render_tracker.lua'))()

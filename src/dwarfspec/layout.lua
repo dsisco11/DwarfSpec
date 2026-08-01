@@ -73,16 +73,17 @@ function M.current()
         return {
             package_root=package_root,
             host_scripts=host_scripts(package_root,
-                'src/dwarfspec/automation'),
+                'src/dwarfspec/host/entrypoints'),
         }
     end
 
     local installed_bootstrap = join(lua_root,
-        'dwarfspec/automation/bootstrap.lua')
+        'dwarfspec/host/entrypoints/bootstrap.lua')
     if is_file(installed_bootstrap) then
         return {
             package_root=lua_root,
-            host_scripts=host_scripts(lua_root, 'dwarfspec/automation'),
+            host_scripts=host_scripts(lua_root,
+                'dwarfspec/host/entrypoints'),
         }
     end
 

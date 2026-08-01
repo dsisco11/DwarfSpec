@@ -44,7 +44,7 @@ describe('automation framework live resilience', function()
             function()
         local root = repository_root()
         local host = assert(loadfile(root ..
-        '/src/dwarfspec/automation/host.lua'))()
+        '/src/dwarfspec/host/execution/host.lua'))()
         local registry = assert(dfhack.dwarfspec)
         local active = ds.current_run()
         local other_root = root .. '/tests/framework/command_project'
@@ -72,7 +72,7 @@ describe('automation framework live resilience', function()
             function()
         local root = repository_root()
         local scheduler_module = assert(loadfile(root ..
-        '/src/dwarfspec/automation/coroutine_scheduler.lua'))()
+        '/src/dwarfspec/host/execution/coroutine_scheduler.lua'))()
         local run = {outstanding_wait=nil, suspended=false}
         local complete_calls = 0
         local stale_callback

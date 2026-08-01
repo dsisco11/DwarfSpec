@@ -1,7 +1,7 @@
 -- Unit contracts for product-independent DwarfSpec project resolution.
 
 local project = assert(loadfile(
-    'src/dwarfspec/automation/project.lua'))()
+    'src/dwarfspec/host/environment/project_environment.lua'))()
 
 describe('DwarfSpec project resolution', function()
     local files
