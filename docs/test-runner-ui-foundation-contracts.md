@@ -13,7 +13,8 @@ single static state.
   `D:\CODE\DFHack\dfhack-53.15-r1\library\lua\gui\widgets\`.
 - Frame implementation:
   `D:\CODE\DFHack\dfhack-53.15-r1\library\lua\gui.lua`.
-- Runner capability contracts: `src/dwarfspec/automation/`,
+- Runner capability contracts: `src/dwarfspec/controller/`,
+  `src/dwarfspec/host/`, `src/dwarfspec/driver/`,
   `src/dwarfspec/ds.lua`, and `src/dwarfspec/cli.lua`.
 
 The stable documentation inventory used to seed the checklist contains 28

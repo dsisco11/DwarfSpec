@@ -28,7 +28,7 @@ flowchart LR
     root --> support["support/<br/>runtime-neutral utilities"]
 ```
 
-This layout reflects the four responsibilities already documented in
+This layout applies the four operational responsibilities documented in
 `docs/architecture.md`: the external command, the in-process host, the
 run-scoped driver, and their shared deterministic reporting contracts.
 

@@ -489,7 +489,7 @@ ordering. Sequence numbers are authoritative within one run.
 ### Initial event types
 
 Service-side publishers use immutable members of
-`dwarfspec.automation.event_types`. Each member is already the stable string
+`dwarfspec.protocol.enums.event_types`. Each member is already the stable string
 written into the envelope's `type` field. Readers validate that string against
 the event payload contract table.
 
@@ -922,34 +922,33 @@ their admitted run activates as soon as the executor becomes available.
 
 ## Proposed module boundaries
 
-The implementation is expected to converge on boundaries similar to:
+The implementation uses these module boundaries:
 
 | Module | Responsibility |
 |---|---|
-| `dwarfspec.automation.service` | Public multi-project service operations and registry compatibility. |
-| `dwarfspec.automation.projects` | Project identity, registration, compatibility, and configuration. |
-| `dwarfspec.automation.scheduler` | Admission queue, leases, activation, executor release, and quarantine. |
-| `dwarfspec.automation.scheduler_failure_kinds` | Immutable scheduler conflict and blocking identifiers. |
-| `dwarfspec.automation.events` | Event construction, validation, copying, sequencing, and cursor reads. |
-| `dwarfspec.automation.event_types` | Immutable identifiers for all supported structured event types. |
-| `dwarfspec.automation.run_states` | Immutable service run-state identifiers. |
-| `dwarfspec.automation.result_states` | Immutable persisted invocation-state identifiers. |
-| `dwarfspec.automation.test_statuses` | Immutable Busted result-status identifiers. |
-| `dwarfspec.automation.result_policies` | Immutable result-persistence policies. |
-| `dwarfspec.automation.schemas` | Versioned service, scheduler, run, transport, event, and result validation. |
-| `dwarfspec.automation.snapshots` | Immutable run, history, and scheduler snapshot construction. |
-| `dwarfspec.automation.host` | Busted execution, native state transitions, and cleanup. |
-| `dwarfspec.automation.output_handler` | Translation from Busted callbacks into service events. |
-| `dwarfspec.automation.result_store` | Per-project result schema and safe replacement writes. |
+| `dwarfspec.host.service.service` | Public multi-project service operations and registry compatibility. |
+| `dwarfspec.host.service.projects` | Project identity, registration, compatibility, and configuration. |
+| `dwarfspec.host.service.scheduler` | Admission queue, leases, activation, executor release, and quarantine. |
+| `dwarfspec.protocol.enums.scheduler_failure_kinds` | Immutable scheduler conflict and blocking identifiers. |
+| `dwarfspec.protocol.events` | Event construction, validation, copying, sequencing, and cursor reads. |
+| `dwarfspec.protocol.enums.event_types` | Immutable identifiers for all supported structured event types. |
+| `dwarfspec.protocol.enums.run_states` | Immutable service run-state identifiers. |
+| `dwarfspec.protocol.enums.result_states` | Immutable persisted invocation-state identifiers. |
+| `dwarfspec.protocol.enums.test_statuses` | Immutable Busted result-status identifiers. |
+| `dwarfspec.protocol.enums.result_policies` | Immutable result-persistence policies. |
+| `dwarfspec.protocol.schemas` | Versioned service, scheduler, run, transport, event, and result validation. |
+| `dwarfspec.host.service.snapshots` | Immutable run, history, and scheduler snapshot construction. |
+| `dwarfspec.host.execution.host` | Busted execution, native state transitions, and cleanup. |
+| `dwarfspec.host.execution.output_handler` | Translation from Busted callbacks into service events. |
+| `dwarfspec.controller.result_store` | Per-project result schema and safe replacement writes. |
 | command adapters | `dfhack-run` argument and JSON transport translation. |
-| `dwarfspec.runner` | External registration, submission, polling, formatting, recovery, and exit classification. |
-| `dwarfspec.runner_failure_kinds` | Immutable runner failure-classification identifiers. |
-| `dwarfspec.report` | Native and service transport parsing and validation. |
+| `dwarfspec.controller.execution.runner` | External registration, submission, polling, formatting, recovery, and exit classification. |
+| `dwarfspec.protocol.enums.runner_failure_kinds` | Immutable runner failure-classification identifiers. |
+| `dwarfspec.controller.reporting.report` | Native and service transport parsing and validation. |
 
-Exact filenames may change, but projects, scheduling, events, host execution,
-transport, and persistence must remain separate responsibilities. UI modules
-belong to the separate runner UI implementation and consume only the public
-service boundary.
+Projects, scheduling, events, host execution, transport, and persistence
+remain separate responsibilities. UI modules belong to the separate runner UI
+implementation and consume only the public service boundary.
 
 ## Verification requirements
 

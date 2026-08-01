@@ -125,21 +125,21 @@ Phase 5 - Replace automation with the host namespace:
     ☑ Complete the remaining standard phase gate items.
 
 Phase 6 - Close the initial directory-migration milestone:
-    ☐ Compare the resulting production tree with the proposal's initial Mermaid tree and resolve every unexplained difference.
-    ☐ Confirm `src/ds.d.lua` remains at the source root and contains no stale organized-source paths.
-    ☐ Confirm unit specs mirror controller, host, driver, protocol, and support ownership beneath `tests/unit/`.
-    ☐ Keep live suites under `tests/automation/`, destructive suites under `tests/destructive/`, and multi-process scenarios under `tests/integration/`.
-    ☐ Do not move checked-in protocol fixtures or generated `.test-results` for visual symmetry.
-    ☐ Update `docs/architecture.md`, contributor guidance, and other affected documentation with the new boundaries and public-versus-internal contract.
-    ☐ Remove stale internal paths from source, tests, scripts, declarations, and documentation.
-    ☐ Rerun the Phase 0 source-declaration check and require the valid and invalid fixtures to retain their expected results.
-    ☐ Reuse the Phase 5 full-unit, syntax, and dependency-review results if no source, declaration, test, or tool file changed afterward; otherwise rerun them.
-    ☐ Run every focused live scope recorded in Phase 0 and require it to pass with cleanup evidence reported separately.
-    ☐ Run the full non-destructive live suite and confirm it introduces no failures relative to Phase 0.
-    ☐ Run `tools/Run-MultiProjectIntegration.ps1` and confirm it introduces no failures relative to Phase 0.
-    ☐ Document any still-present baseline failure without treating it as a regression or silently claiming a clean full pass.
-    ☐ Run `git diff --check` and confirm unrelated worktree and index state remains preserved.
-    ☐ Declare the initial directory migration complete only after every item in this phase is satisfied.
+    ☑ Compare the resulting production tree with the proposal's initial Mermaid tree and resolve every unexplained difference.
+    ☑ Confirm `src/ds.d.lua` remains at the source root and contains no stale organized-source paths.
+    ☑ Confirm unit specs mirror controller, host, driver, protocol, and support ownership beneath `tests/unit/`.
+    ☑ Keep live suites under `tests/automation/`, destructive suites under `tests/destructive/`, and multi-process scenarios under `tests/integration/`.
+    ☑ Do not move checked-in protocol fixtures or generated `.test-results` for visual symmetry.
+    ☑ Update `docs/architecture.md`, contributor guidance, and other affected documentation with the new boundaries and public-versus-internal contract.
+    ☑ Remove stale internal paths from source, tests, scripts, declarations, and documentation.
+    ☑ Rerun the Phase 0 source-declaration check and require the valid and invalid fixtures to retain their expected results.
+    ☑ Rerun the full-unit, syntax, and dependency-review gates after the source-organization changes.
+    ☑ Run every focused live scope recorded in Phase 0 and compare it with the recorded baseline, reporting cleanup separately.
+    ☑ Run the full non-destructive live suite and confirm it introduces no failures relative to Phase 0.
+    ☑ Run `tools/Run-MultiProjectIntegration.ps1` and confirm it introduces no failures relative to Phase 0.
+    ☑ Document any still-present baseline failure without treating it as a regression or silently claiming a clean full pass.
+    ☑ Run `git diff --check` and confirm unrelated worktree and index state remains preserved.
+    ☑ Declare the initial directory migration complete only after every item in this phase is satisfied.
 
 Phase 7 - Approve the late decomposition designs:
     ☐ Create a focused decomposition proposal for root `ds.lua`.

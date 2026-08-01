@@ -1,12 +1,22 @@
 # Architecture
 
-DwarfSpec has four explicit responsibilities:
+DwarfSpec has five internal namespaces and three shallow root facades:
 
 - an external command coordinates a run through `dfhack-run`;
 - an in-process host embeds Busted in DFHack's core Lua context;
 - a run-scoped driver exposes live UI operations to isolated specs; and
 - schedulers, cleanup registries, adapters, and reports make each run
   deterministic and reversible.
+
+`dwarfspec.controller` owns the external command, configuration, discovery,
+execution, reporting, and result persistence. `dwarfspec.host` owns the
+in-DFHack service, execution lifecycle, environment adapters, diagnostics,
+game integration, and command entrypoints. `dwarfspec.driver` owns
+run-scoped UI operations. `dwarfspec.protocol` contains cross-boundary
+schemas, enums, and events; `dwarfspec.support` contains neutral shared
+helpers. The root `cli`, `layout`, and `ds` modules are composition facades.
+They are internal implementation modules; the executable and injected `ds`
+API are the product surfaces.
 
 Busted remains responsible for test discovery, test structure, hooks,
 assertions, and result classification. DwarfSpec does not implement a second
@@ -25,11 +35,11 @@ framework coverage.
 
 ## Package and consumer boundary
 
-Every host run receives two roots. The package root owns Busted, the scheduler,
-cleanup, reporting, mount context, component adapters, render instrumentation,
-and the `ds` implementation. The project root owns live specs, configuration
-modules, custom commands, and ordinary test-support modules. Neither root is
-inferred from the layout of the other.
+Every host run receives two roots. The package root owns the DwarfSpec
+controller, host, driver, protocol, support, Busted, and the `ds`
+implementation. The project root owns live specs, configuration modules,
+custom commands, and ordinary test-support modules. Neither root is inferred
+from the layout of the other.
 
 The external command recursively discovers files whose basenames match
 `*.ds.lua` beneath the project test root in stable path order by default.
@@ -47,7 +57,7 @@ library.
 `ds.mount(component, options)` is the only component entry point. The
 component boundary classifies a `widgets.Widget`, `overlay.OverlayWidget`, or
 `gui.ZScreen` class or existing instance and normalizes mount-only options. A
-A run owns at most one implicit current mount. Calling either public mount entry
+run owns at most one implicit current mount. Calling either public mount entry
   point while that mount remains current is an error; the test must call
 `ds.unmount()` before selecting another mount.
 
