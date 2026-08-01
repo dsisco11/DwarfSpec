@@ -76,6 +76,7 @@ flowchart LR
     cli["cli.lua"] --> controller["controller/"]
     controller -.->|invokes by path| entry["host entry scripts"]
     entry --> host["host/"]
+    host -->|constructs run-scoped API| ds["ds.lua<br/>composition root"]
     controller --> protocol["protocol/"]
     controller --> support["support/"]
     host --> driver["driver/"]
@@ -84,7 +85,7 @@ flowchart LR
     driver --> protocol
     driver --> support
     protocol --> support
-    ds["ds.lua<br/>composition root"] -->|temporary exception| host
+    ds -->|temporary exception| host
     ds --> driver
 ```
 
@@ -94,7 +95,9 @@ external interpreter. `protocol/` and `support/` must not depend on either
 runtime. `driver/` may use DFHack but must not own run scheduling or service
 persistence. As an explicit temporary exception, the root `ds.lua` facade is
 the composition root that may load both host services and driver modules.
-Modules beneath `driver/` must not require modules beneath `host/` directly.
+The host execution root may load `dwarfspec.ds` to construct the run-scoped
+API; this is the other half of the documented composition exception. Modules
+beneath `driver/` must not require modules beneath `host/` directly.
 
 ### Stable entry points stay shallow
 
@@ -110,9 +113,9 @@ layout to the internal directory structure.
 
 No other internal module path should be treated as public without evidence
 that a consumer uses it. Before removing an old path, search the repository,
-documentation, packaged archive, and known consumer projects. When external
-use cannot be ruled out, leave a one-release forwarding module that returns
-the replacement module.
+documentation, and known consumer projects. When external use cannot be ruled
+out, leave a one-release forwarding module that returns the replacement
+module.
 
 ### One concept, one name
 
@@ -234,10 +237,9 @@ Before moving modules:
    `require()` calls as part of the directory cleanup.
 4. Update source-identity classification in `host/diagnostics/problem_source`
    to recognize the organized tree without exposing absolute local paths.
-5. Add a package-layout test that resolves every registered entry point and
-   every driver module from both a source checkout and an installed-tree
-   fixture. Exercise `support/module_loader.lua` through ordinary cached loads
-   and explicit cache-bypassing loads.
+5. Add source-level module-resolution tests for every registered entry point
+   and driver module. Exercise `support/module_loader.lua` through ordinary
+   cached loads and explicit cache-bypassing loads.
 
 The entrypoint scripts need a tiny duplicated bootstrap that derives the Lua
 module root before normal module loading is available. That exception is
@@ -269,7 +271,8 @@ tests. Avoid generic dumping grounds such as `utils.lua`, `helpers.lua`, or
 
 ## Test organization
 
-After production paths stabilize, mirror them beneath `tests/unit/`:
+As each production dependency cluster moves, mirror its tests beneath
+`tests/unit/`:
 
 ```mermaid
 flowchart LR
@@ -309,22 +312,28 @@ fixtures or generated `.test-results` merely to make the tree look symmetric.
 
 ## Implementation sequence
 
-1. Record the current unit, syntax, package, and focused live baselines.
-2. Add dependency-boundary tests and centralize source/installed path
-   resolution without moving files.
-3. Split host-aware validation from the pure event and configuration
-   contracts, then create `protocol/` and `support/` and update all callers.
-4. Create `controller/`, retaining the three stable root facades.
-5. Move the run-scoped implementation into `driver/`.
-6. Replace `automation/` with `host/`, moving entry scripts last so external
+1. Record the current unit, syntax, and focused live baselines.
+2. Enable recursive Busted discovery and add the nested-test inventory guard
+   before moving any unit spec.
+3. Create the `support/` skeleton and `support/module_loader.lua`, add
+   dependency-boundary tests, and centralize source/installed path resolution
+   without moving existing modules.
+4. Split host-aware validation from the pure event and configuration
+   contracts, then move the remaining protocol and support modules with their
+   callers and tests.
+5. Create `controller/`, retaining the three stable root facades.
+6. Move the run-scoped implementation into `driver/`.
+7. Replace `automation/` with `host/`, moving entry scripts last so external
    invocation remains continuously testable.
-7. Enable recursive Busted discovery, then mirror unit-test paths and update
-   direct `loadfile()` fixtures.
-8. Update architecture and contributor documentation, publish a package, and
-   inspect the archive for the exact expected module tree.
-9. Remove forwarding modules only after the compatibility window and consumer
-   audit are complete.
+8. Update architecture and contributor documentation and complete the
+   consumer-path audit.
+9. Declare the initial migration complete with any intentional compatibility
+   forwarding modules still present.
 10. Decompose the large modules in small, separately verified changes.
+
+Forwarding modules are removed in later maintenance only after the promised
+compatibility window and consumer audit are complete. Their deferred removal
+does not block completion of the initial source-organization migration.
 
 Every move should use `git mv` and update one cohesive dependency cluster in
 the same commit, including callers and tests. Keep behavior changes and
@@ -348,8 +357,9 @@ demonstrated:
   `loadfile()` targets, every entry in the centralized module loader or module
   catalog, host entrypoint paths returned by `layout.lua`, and temporary
   compatibility forwarding modules;
-- the dependency audit recognizes only the documented root `ds.lua`
-  composition exception for loading both host and driver modules;
+- the dependency audit recognizes both directions of the sole composition
+  exception: `host/execution/host.lua` may load the root `dwarfspec.ds`
+  facade, and that facade may load both host and driver modules;
 - the unit runner recursively discovers nested specs and verifies its expected
   test inventory;
 - the CLI `help`, `list`, `run`, status, abort, recovery, and inspection paths
@@ -358,11 +368,7 @@ demonstrated:
   pointer input, events, save-game commands, cleanup, and scheduler recovery;
 - the full non-destructive live suite passes with cleanup confirmation kept
   distinct from test success;
-- the LuaRocks package builds and its archive contains every new module and no
-  retired implementation paths, except intentional forwarding modules;
-- an installed-package smoke run proves that paths are not accidentally
-  resolving back to the source checkout;
-- declarations still validate against both source and installed layouts;
+- source declarations still validate against the organized source tree;
 - documentation contains no stale internal paths; and
 - `git diff --check` passes with unrelated worktree state preserved.
 
@@ -371,7 +377,8 @@ demonstrated:
 ### Hidden path coupling
 
 Tests and host adapters use direct `loadfile()` paths. Centralize those paths
-first and add source/installed layout tests before any bulk move.
+first and add source-level loader and entrypoint-resolution tests before any
+bulk move.
 
 ### Runtime boundary violations
 
@@ -380,12 +387,6 @@ dependency. Add a static import audit and isolated-load tests for `protocol/`
 and `controller/`. Supplement the static scan with catalog and runtime layout
 tests so dynamically constructed `loadfile()` paths cannot bypass the allowed
 dependency matrix.
-
-### Stale installed modules
-
-Moving modules can leave old files in a development LuaRocks tree. Validate in
-a fresh temporary tree and inspect the produced rock; do not infer installed
-correctness from source tests.
 
 ### Compatibility ambiguity
 
