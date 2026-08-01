@@ -142,15 +142,15 @@ Phase 6 - Close the initial directory-migration milestone:
     ☑ Declare the initial directory migration complete only after every item in this phase is satisfied.
 
 Phase 7 - Approve the late decomposition designs:
-    ☐ Create a focused decomposition proposal for root `ds.lua`.
-    ☐ Create a focused decomposition proposal for `host/execution/host.lua`.
-    ☐ Create a focused decomposition proposal for `host/service/scheduler.lua`.
-    ☐ Create a focused decomposition proposal for `driver/mount/mount_context.lua`.
-    ☐ Create a focused decomposition proposal for `controller/execution/runner.lua`.
-    ☐ In each proposal, name every extracted module, its responsibility, dependency changes, direct tests, and proposed Mermaid subtree.
-    ☐ Reject generic destinations such as `utils.lua`, `helpers.lua`, or `common.lua`.
-    ☐ Reconcile the proposals together so they do not assign the same responsibility to multiple modules.
-    ☐ Obtain explicit approval for all five proposals before implementing any late decomposition.
+    ☑ Create a focused decomposition proposal for root `ds.lua`.
+    ☑ Create a focused decomposition proposal for `host/execution/host.lua`.
+    ☑ Create a focused decomposition proposal for `host/service/scheduler.lua`.
+    ☑ Create a focused decomposition proposal for `driver/mount/mount_context.lua`.
+    ☑ Create a focused decomposition proposal for `controller/execution/runner.lua`.
+    ☑ In each proposal, name every extracted module, its responsibility, dependency changes, direct tests, and proposed Mermaid subtree.
+    ☑ Reject generic destinations such as `utils.lua`, `helpers.lua`, or `common.lua`.
+    ☑ Reconcile the proposals together so they do not assign the same responsibility to multiple modules.
+    ☑ Obtain explicit approval for all five proposals before implementing any late decomposition.
 
 Phase 8 - Decompose root ds.lua:
     ☐ Implement only the module boundaries approved in the `ds.lua` decomposition proposal.
