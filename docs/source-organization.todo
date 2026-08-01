@@ -269,16 +269,16 @@ Phase 14 - Close full source organization:
     ☑ Declare full source organization complete only after every item in this phase is satisfied.
 
 Phase 15 - Create and present the option 2 follow-up plan:
-    ☐ Create a separate planning document for removing the temporary root `ds.lua` composition exception; do not implement that ownership redesign in this checklist.
-    ☐ Inventory every host module still loaded by `ds.lua` after full source organization.
-    ☐ Define the narrow host capabilities required by driver-facing code.
-    ☐ Evaluate moving run-scoped save-game workflows, overlay registration, and interaction diagnostics under `driver/` according to ownership.
-    ☐ Define explicit injected interfaces for host scheduling, cleanup, project-environment, and service capabilities.
-    ☐ Preserve fresh `loadfile()` behavior and source-versus-installed loading in the proposed design.
-    ☐ Specify boundary tests proving modules beneath `driver/` do not import `host/`.
-    ☐ Specify incremental implementation and verification gates without changing the public `ds` API.
-    ☐ Present the follow-up plan for approval and record its approval state.
-    ☐ Treat approval as a prerequisite for option 2 implementation, not as a prerequisite for completing this source-organization checklist.
+    ☑ Create a separate planning document for removing the temporary root `ds.lua` composition exception; do not implement that ownership redesign in this checklist.
+    ☑ Inventory every host module still loaded by `ds.lua` after full source organization.
+    ☑ Define the narrow host capabilities required by driver-facing code.
+    ☑ Evaluate moving run-scoped save-game workflows, overlay registration, and interaction diagnostics under `driver/` according to ownership.
+    ☑ Define explicit injected interfaces for host scheduling, cleanup, project-environment, and service capabilities.
+    ☑ Preserve fresh `loadfile()` behavior and source-versus-installed loading in the proposed design.
+    ☑ Specify boundary tests proving modules beneath `driver/` do not import `host/`.
+    ☑ Specify incremental implementation and verification gates without changing the public `ds` API.
+    ☑ Present the follow-up plan for approval and record its approval state.
+    ☑ Treat approval as a prerequisite for option 2 implementation, not as a prerequisite for completing this source-organization checklist.
 
 Final handoff:
     ☐ Summarize the initial directory migration and each approved late decomposition.
