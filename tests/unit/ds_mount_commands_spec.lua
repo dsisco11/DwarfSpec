@@ -2,24 +2,24 @@
 
 local cleanup = assert(loadfile(
     'src/dwarfspec/automation/cleanup.lua'))()
-local component = assert(loadfile('src/dwarfspec/component.lua'))()
+local component = assert(loadfile('src/dwarfspec/driver/mount/component.lua'))()
 local render_tracker = assert(loadfile(
-    'src/dwarfspec/render_tracker.lua'))()
+    'src/dwarfspec/driver/render/render_tracker.lua'))()
 local ds_factory = assert(loadfile(
     'src/dwarfspec/ds.lua'))()
 local interaction_target = assert(loadfile(
-    'src/dwarfspec/interaction_target.lua'))()
+    'src/dwarfspec/driver/subjects/interaction_target.lua'))()
 local lua_view_adapter = assert(loadfile(
-    'src/dwarfspec/lua_view_adapter.lua'))()
+    'src/dwarfspec/driver/subjects/lua_view_adapter.lua'))()
 local EventType = require('dwarfspec.protocol.enums.event_types')
-local EMouseButton = require('dwarfspec.mouse_buttons')
-local EInputState = require('dwarfspec.input_states')
-local EPointerSpace = require('dwarfspec.pointer_spaces')
-local EPointerAnchor = require('dwarfspec.pointer_anchors')
-local EScreenOrigin = require('dwarfspec.screen_origins')
-local EEvent = require('dwarfspec.state_change_events')
+local EMouseButton = require('dwarfspec.driver.input.mouse_buttons')
+local EInputState = require('dwarfspec.driver.input.input_states')
+local EPointerSpace = require('dwarfspec.driver.input.pointer_spaces')
+local EPointerAnchor = require('dwarfspec.driver.input.pointer_anchors')
+local EScreenOrigin = require('dwarfspec.driver.screen_origins')
+local EEvent = require('dwarfspec.driver.state_change_events')
 local EFieldMode =
-    require('dwarfspec.native_game_ui_path').EFieldMode
+    require('dwarfspec.driver.subjects.native_game_ui_path').EFieldMode
 local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.

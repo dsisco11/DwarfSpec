@@ -63,59 +63,59 @@ function M.new(package_root, project, scheduler_module, scheduler,
 local diagnostics = load_automation_module(package_root,
     'dwarfspec.automation.diagnostics')
 local pointer_adapter_module = load_automation_module(package_root,
-    'dwarfspec.automation.pointer_adapter')
+    'dwarfspec.driver.input.pointer_adapter')
 local overlay_registration = load_automation_module(package_root,
     'dwarfspec.automation.overlay_registration')
 local component_module = load_automation_module(package_root,
-    'dwarfspec.component')
+    'dwarfspec.driver.mount.component')
 local mount_context_module = load_automation_module(package_root,
-    'dwarfspec.mount_context')
+    'dwarfspec.driver.mount.mount_context')
 local mount_adapters_module = load_automation_module(package_root,
-    'dwarfspec.mount_adapters')
+    'dwarfspec.driver.mount.mount_adapters')
 local overlay_mount_module = load_automation_module(package_root,
-    'dwarfspec.overlay_mount')
+    'dwarfspec.driver.mount.overlay_mount')
 local render_instrumentation = load_automation_module(package_root,
-    'dwarfspec.render_instrumentation')
+    'dwarfspec.driver.render.render_instrumentation')
 local native_render_observer_module = load_automation_module(package_root,
-    'dwarfspec.native_render_observer')
+    'dwarfspec.driver.render.native_render_observer')
 local render_tracker_module = load_automation_module(package_root,
-    'dwarfspec.render_tracker')
+    'dwarfspec.driver.render.render_tracker')
 local subject_module = load_automation_module(package_root,
-    'dwarfspec.subject')
+    'dwarfspec.driver.subjects.subject')
 local interaction_target_module = load_automation_module(package_root,
-    'dwarfspec.interaction_target')
+    'dwarfspec.driver.subjects.interaction_target')
 local lua_view_adapter_module = load_automation_module(package_root,
-    'dwarfspec.lua_view_adapter')
+    'dwarfspec.driver.subjects.lua_view_adapter')
 local native_attachment_module = load_automation_module(package_root,
-    'dwarfspec.native_attachment')
+    'dwarfspec.driver.mount.native_attachment')
 local native_widget_adapter_module = load_automation_module(package_root,
-    'dwarfspec.native_widget_adapter')
+    'dwarfspec.driver.subjects.native_widget_adapter')
 local native_game_ui_path_module = load_automation_module(package_root,
-    'dwarfspec.native_game_ui_path')
+    'dwarfspec.driver.subjects.native_game_ui_path')
 local overlay_registry_adapter_module = load_automation_module(package_root,
-    'dwarfspec.overlay_registry_adapter')
+    'dwarfspec.driver.subjects.overlay_registry_adapter')
 local subject_paths_module = load_automation_module(package_root,
-    'dwarfspec.subject_paths')
+    'dwarfspec.driver.subjects.subject_paths')
 local subject_requests_module = load_automation_module(package_root,
-    'dwarfspec.subject_requests')
+    'dwarfspec.driver.subjects.subject_requests')
 local identity_labels = load_automation_module(package_root,
     'dwarfspec.support.identity_labels')
 local EResolutionStage = load_automation_module(package_root,
-    'dwarfspec.native_resolution_stages')
+    'dwarfspec.driver.subjects.native_resolution_stages')
 local EMouseButton = load_automation_module(package_root,
-    'dwarfspec.mouse_buttons')
+    'dwarfspec.driver.input.mouse_buttons')
 local EInputState = load_automation_module(package_root,
-    'dwarfspec.input_states')
+    'dwarfspec.driver.input.input_states')
 local EPointerSpace = load_automation_module(package_root,
-    'dwarfspec.pointer_spaces')
+    'dwarfspec.driver.input.pointer_spaces')
 local EPointerAnchor = load_automation_module(package_root,
-    'dwarfspec.pointer_anchors')
+    'dwarfspec.driver.input.pointer_anchors')
 local EScreenOrigin = load_automation_module(package_root,
-    'dwarfspec.screen_origins')
+    'dwarfspec.driver.screen_origins')
 local ESubjectSource = load_automation_module(package_root,
-    'dwarfspec.subject_sources')
+    'dwarfspec.driver.subjects.subject_sources')
 local EEvent = load_automation_module(package_root,
-    'dwarfspec.state_change_events')
+    'dwarfspec.driver.state_change_events')
 local EventType = load_automation_module(package_root,
     'dwarfspec.protocol.enums.event_types')
 local TestStatus = load_automation_module(package_root,
@@ -127,13 +127,13 @@ local save_game_unload_module = load_automation_module(package_root,
 local save_game_load_module = load_automation_module(package_root,
     'dwarfspec.automation.save_game_load')
 local save_game_unload_command = load_automation_module(package_root,
-    'dwarfspec.commands.save_game_unload')
+    'dwarfspec.driver.commands.save_game_unload')
 local save_game_load_command = load_automation_module(package_root,
-    'dwarfspec.commands.save_game_load')
+    'dwarfspec.driver.commands.save_game_load')
 local await_event_command = load_automation_module(package_root,
-    'dwarfspec.commands.await_event')
+    'dwarfspec.driver.commands.await_event')
 local text_search_command = load_automation_module(package_root,
-    'dwarfspec.commands.text_search')
+    'dwarfspec.driver.commands.text_search')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}

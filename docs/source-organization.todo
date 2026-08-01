@@ -93,19 +93,19 @@ Phase 3 - Create the controller namespace:
     ☑ Complete the standard phase gate.
 
 Phase 4 - Create the driver namespace:
-    ☐ Create the driver directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
-    ☐ Move built-in run-scoped commands into `driver/commands/`.
-    ☐ Move input state, mouse button, pointer anchor, pointer space, and pointer adapter modules into `driver/input/`.
-    ☐ Move component and mount lifecycle modules into `driver/mount/`, retaining monolithic `mount_context.lua` for later decomposition.
-    ☐ Move render observation and instrumentation modules into `driver/render/`.
-    ☐ Move subject, native lookup, interaction target, retained-identity, and view adapter modules into `driver/subjects/`.
-    ☐ Move driver-only screen-origin and state-change-event modules into `driver/`.
-    ☐ Keep root `ds.lua` as the composition root and update its local loader to the new canonical module names.
-    ☐ Do not move or redesign host-owned save-game, overlay-registration, scheduling, cleanup, or diagnostic workflows in this phase.
-    ☐ Update matching unit specs and all `require()` and `loadfile()` paths with each cohesive production move.
-    ☐ Confirm no module beneath `driver/` imports a module beneath `host/` or the old `automation/` namespace.
-    ☐ Run focused live coverage for mounting, native screens, pointer input, events, and cleanup.
-    ☐ Complete the remaining standard phase gate items.
+    ☑ Create the driver directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
+    ☑ Move built-in run-scoped commands into `driver/commands/`.
+    ☑ Move input state, mouse button, pointer anchor, pointer space, and pointer adapter modules into `driver/input/`.
+    ☑ Move component and mount lifecycle modules into `driver/mount/`, retaining monolithic `mount_context.lua` for later decomposition.
+    ☑ Move render observation and instrumentation modules into `driver/render/`.
+    ☑ Move subject, native lookup, interaction target, retained-identity, and view adapter modules into `driver/subjects/`.
+    ☑ Move driver-only screen-origin and state-change-event modules into `driver/`.
+    ☑ Keep root `ds.lua` as the composition root and update its local loader to the new canonical module names.
+    ☑ Do not move or redesign host-owned save-game, overlay-registration, scheduling, cleanup, or diagnostic workflows in this phase.
+    ☑ Update matching unit specs and all `require()` and `loadfile()` paths with each cohesive production move.
+    ☑ Confirm no module beneath `driver/` imports a module beneath `host/` or the old `automation/` namespace.
+    ☑ Run focused live coverage for mounting, native screens, pointer input, events, and cleanup.
+    ☑ Complete the remaining standard phase gate items.
 
 Phase 5 - Replace automation with the host namespace:
     ☐ Create the host directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
