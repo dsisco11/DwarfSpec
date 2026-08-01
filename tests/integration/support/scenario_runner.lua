@@ -12,8 +12,8 @@ package.path = root .. '/src/?.lua;' .. root ..
 package.cpath = root .. '/.luarocks/lib/lua/5.4/?.dll;' .. package.cpath
 
 local cli = require('dwarfspec.cli')
-local process = require('dwarfspec.process')
-local reports = require('dwarfspec.report')
+local process = require('dwarfspec.controller.execution.process')
+local reports = require('dwarfspec.controller.reporting.report')
 local system = require('system')
 
 local active_seen = false

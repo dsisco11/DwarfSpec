@@ -3,7 +3,7 @@
 local cli = require('dwarfspec.cli')
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 local glob = require('dwarfspec.support.glob')
-local project = require('dwarfspec.project')
+local project = require('dwarfspec.controller.discovery.project')
 local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 
 ---Creates one append-only stream compatible with the CLI writer.

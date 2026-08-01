@@ -1,7 +1,7 @@
 -- Unit contracts for cross-platform commands and native JSON reports.
 
-local process = require('dwarfspec.process')
-local report = require('dwarfspec.report')
+local process = require('dwarfspec.controller.execution.process')
+local report = require('dwarfspec.controller.reporting.report')
 local EComparison =
     require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
 local RunState = require('dwarfspec.protocol.enums.run_states')

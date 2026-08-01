@@ -1,6 +1,6 @@
 -- Unit contracts for external project configuration.
 
-local config = require('dwarfspec.config')
+local config = require('dwarfspec.controller.configuration.config')
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 
 describe('DwarfSpec external project configuration', function()

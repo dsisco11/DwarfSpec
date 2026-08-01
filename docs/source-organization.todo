@@ -79,18 +79,18 @@ Phase 2 - Extract protocol and support namespaces:
     ☑ Complete the standard phase gate.
 
 Phase 3 - Create the controller namespace:
-    ☐ Create the controller directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
-    ☐ Move external configuration loading into `controller/configuration/config.lua` and `controller/configuration/dotenv.lua`.
-    ☐ Move controller project discovery into `controller/discovery/project.lua` and consume only pure shared path operations from `support/project_paths.lua`.
-    ☐ Move `process.lua` and the still-monolithic `runner.lua` into `controller/execution/` without decomposing the runner yet.
-    ☐ Move `diagnostic_formatter.lua` and `report.lua` into `controller/reporting/`.
-    ☐ Move `result_store.lua` into `controller/` only after removing its dependency on host project state.
-    ☐ Keep root `cli.lua` as the existing facade and allow it to import controller, protocol, and support during the initial migration.
-    ☐ Update CLI callers, tests, and all matching unit-spec paths atomically.
-    ☐ Verify `help`, `list`, `run`, status, abort, recovery, and inspection commands resolve their host entry paths through `layout.lua`.
-    ☐ Confirm controller modules do not load host or driver code into the external interpreter.
-    ☐ Review controller `require()` and `loadfile()` dependencies and confirm they do not reach host, driver, or DFHack-only modules.
-    ☐ Complete the standard phase gate.
+    ☑ Create the controller directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
+    ☑ Move external configuration loading into `controller/configuration/config.lua` and `controller/configuration/dotenv.lua`.
+    ☑ Move controller project discovery into `controller/discovery/project.lua` and consume only pure shared path operations from `support/project_paths.lua`.
+    ☑ Move `process.lua` and the still-monolithic `runner.lua` into `controller/execution/` without decomposing the runner yet.
+    ☑ Move `diagnostic_formatter.lua` and `report.lua` into `controller/reporting/`.
+    ☑ Move `result_store.lua` into `controller/` only after removing its dependency on host project state.
+    ☑ Keep root `cli.lua` as the existing facade and allow it to import controller, protocol, and support during the initial migration.
+    ☑ Update CLI callers, tests, and all matching unit-spec paths atomically.
+    ☑ Verify `help`, `list`, `run`, status, abort, recovery, and inspection commands resolve their host entry paths through `layout.lua`.
+    ☑ Confirm controller modules do not load host or driver code into the external interpreter.
+    ☑ Review controller `require()` and `loadfile()` dependencies and confirm they do not reach host, driver, or DFHack-only modules.
+    ☑ Complete the standard phase gate.
 
 Phase 4 - Create the driver namespace:
     ☐ Create the driver directory and matching unit-test subtrees from the proposal's initial Mermaid tree.

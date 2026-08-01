@@ -100,7 +100,7 @@ describe('automation problem source extraction', function()
                 {
                     element={},
                     trace={
-                        source='@/project/src/dwarfspec/runner.lua',
+                        source='@/project/src/dwarfspec/controller/execution/runner.lua',
                         currentline=4,
                     },
                 },

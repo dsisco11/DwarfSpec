@@ -3,7 +3,7 @@
 local json = require('dkjson')
 local lfs = require('lfs')
 local ResultState = require('dwarfspec.protocol.enums.result_states')
-local result_store = require('dwarfspec.automation.result_store')
+local result_store = require('dwarfspec.controller.result_store')
 local events = require('dwarfspec.protocol.events')
 local EventType = require('dwarfspec.protocol.enums.event_types')
 

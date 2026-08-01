@@ -2,12 +2,12 @@
 
 local argparse = require('argparse')
 local glob = require('dwarfspec.support.glob')
-local config = require('dwarfspec.config')
-local dotenv = require('dwarfspec.dotenv')
-local project = require('dwarfspec.project')
+local config = require('dwarfspec.controller.configuration.config')
+local dotenv = require('dwarfspec.controller.configuration.dotenv')
+local project = require('dwarfspec.controller.discovery.project')
 local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
-local result_store = require('dwarfspec.automation.result_store')
-local runner = require('dwarfspec.runner')
+local result_store = require('dwarfspec.controller.result_store')
+local runner = require('dwarfspec.controller.execution.runner')
 
 local M = {
     version='0.2.1',
@@ -552,7 +552,7 @@ function M.main(argv, context)
             local outcome = (context.runner or runner).status(options)
             if outcome.status then
                 for _, line in ipairs(
-                        require('dwarfspec.report').format_status(
+                        require('dwarfspec.controller.reporting.report').format_status(
                             outcome.status)) do
                     write(output, line)
                 end
@@ -571,7 +571,7 @@ function M.main(argv, context)
             local outcome = (context.runner or runner).history(options)
             if outcome.history then
                 for _, line in ipairs(
-                        require('dwarfspec.report').format_run_history(
+                        require('dwarfspec.controller.reporting.report').format_run_history(
                             outcome.history)) do
                     write(output, line)
                 end
@@ -591,7 +591,7 @@ function M.main(argv, context)
                 positionals[1])
             if outcome.inspection and outcome.inspection.found then
                 for _, line in ipairs(
-                        require('dwarfspec.report').format_run_inspection(
+                        require('dwarfspec.controller.reporting.report').format_run_inspection(
                             outcome.inspection)) do
                     write(output, line)
                 end
@@ -645,7 +645,7 @@ function M.main(argv, context)
                 options, positionals[1], options.generation, options.reason)
             if outcome.scheduler then
                 for _, line in ipairs(
-                        require('dwarfspec.report').format_scheduler(
+                        require('dwarfspec.controller.reporting.report').format_scheduler(
                             outcome.scheduler)) do
                     write(output, line)
                 end

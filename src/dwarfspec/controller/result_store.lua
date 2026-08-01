@@ -1,9 +1,8 @@
 -- Version 2 latest-invocation result construction and safe persistence.
 
 local json = require('dkjson')
-local project = require('dwarfspec.project')
+local project = require('dwarfspec.controller.discovery.project')
 local project_paths = require('dwarfspec.support.project_paths')
-local projects = require('dwarfspec.automation.projects')
 local schemas = require('dwarfspec.protocol.schemas')
 
 local M = {
@@ -25,8 +24,12 @@ function M.resolve_path(project_root, configured_path, filesystem)
         return project_paths.normalize(project_paths.join(project_root,
             configured_path))
     end
-    return projects.normalize_file_path(configured_path, project_root,
-        filesystem)
+    local case_insensitive = filesystem and filesystem.case_insensitive
+    if case_insensitive == nil then
+        case_insensitive = package.config:sub(1, 1) == '\\'
+    end
+    return project_paths.normalize_file_path(configured_path, project_root,
+        case_insensitive)
 end
 
 ---Constructs and validates one version 2 invocation result.

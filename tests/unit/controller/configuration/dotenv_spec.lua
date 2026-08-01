@@ -1,6 +1,6 @@
 -- Unit contracts for safe project-local dotenv configuration.
 
-local dotenv = require('dwarfspec.dotenv')
+local dotenv = require('dwarfspec.controller.configuration.dotenv')
 
 describe('DwarfSpec dotenv configuration', function()
     it('parses comments, exports, literal quotes, and inline comments',

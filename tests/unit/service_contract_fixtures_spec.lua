@@ -2,8 +2,8 @@
 
 local json = require('dkjson')
 local lfs = require('lfs')
-local project = require('dwarfspec.project')
-local runner = require('dwarfspec.runner')
+local project = require('dwarfspec.controller.discovery.project')
+local runner = require('dwarfspec.controller.execution.runner')
 local schemas = require('dwarfspec.protocol.schemas')
 local EventType = require('dwarfspec.protocol.enums.event_types')
 local ResultState = require('dwarfspec.protocol.enums.result_states')

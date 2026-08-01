@@ -1,7 +1,7 @@
 -- Unit contracts for external orchestration, recovery, and exit propagation.
 
 local json = require('dkjson')
-local runner = require('dwarfspec.runner')
+local runner = require('dwarfspec.controller.execution.runner')
 local layout = require('dwarfspec.layout')
 local EComparison =
     require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
@@ -1108,7 +1108,7 @@ describe('DwarfSpec external runner', function()
         local run_options = options('write-failure')
         local calls = {}
         run_options.result_path = require('lfs').currentdir() ..
-            '/tests/unit/runner_spec.lua/results.json'
+            '/tests/unit/controller/execution/runner_spec.lua/results.json'
         run_options.invoke = function(_, arguments)
             table.insert(calls, arguments[3])
             if arguments[3]:match('probe%.lua$') then

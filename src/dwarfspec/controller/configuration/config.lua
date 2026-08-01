@@ -2,7 +2,7 @@
 
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 local config_schema = require('dwarfspec.protocol.configuration.schema')
-local project = require('dwarfspec.project')
+local project = require('dwarfspec.controller.discovery.project')
 local settings_validator = require('dwarfspec.protocol.configuration.settings')
 
 local M = {

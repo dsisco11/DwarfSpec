@@ -1,12 +1,12 @@
 -- External DwarfSpec orchestration over the supported dfhack-run bridge.
 
-local process = require('dwarfspec.process')
-local project = require('dwarfspec.project')
-local reports = require('dwarfspec.report')
+local process = require('dwarfspec.controller.execution.process')
+local project = require('dwarfspec.controller.discovery.project')
+local reports = require('dwarfspec.controller.reporting.report')
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 local ResultState = require('dwarfspec.protocol.enums.result_states')
-local result_store = require('dwarfspec.automation.result_store')
+local result_store = require('dwarfspec.controller.result_store')
 local RunState = require('dwarfspec.protocol.enums.run_states')
 local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
 

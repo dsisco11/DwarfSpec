@@ -3,7 +3,7 @@
 local M = {}
 local events = require('dwarfspec.protocol.events')
 local EventType = require('dwarfspec.protocol.enums.event_types')
-local diagnostic_formatter = require('dwarfspec.diagnostic_formatter')
+local diagnostic_formatter = require('dwarfspec.controller.reporting.diagnostic_formatter')
 local focus =
     require('dwarfspec.protocol.diagnostics.focus')
 local focus_warning =
