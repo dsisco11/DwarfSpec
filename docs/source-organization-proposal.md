@@ -268,9 +268,9 @@ intentional; the list of downstream host paths should not be duplicated.
 
 ## Large-module decomposition
 
-Directory moves and file decomposition should be separate commits. First move
-cohesive modules without changing their behavior. Once the new dependency
-boundaries are enforced, split the six current hotspots:
+Directory moves and file decomposition should be separate reviewable
+changesets. First move cohesive modules without changing their behavior. Once
+the new dependency boundaries are enforced, split the six current hotspots:
 
 - `ds.lua` (about 2,000 lines): retain construction and public command binding
   in the facade; move command argument validation, normalization, and
@@ -335,14 +335,15 @@ Rename unit specs to match the target module path, for example:
 
 Move each production dependency cluster atomically with all corresponding
 `require()` paths, `loadfile()` paths, and unit-test paths. Every migration
-commit must remain testable. Do not move checked-in protocol fixtures or
+changeset must remain testable. Do not move checked-in protocol fixtures or
 generated `.test-results` merely to make the tree look symmetric.
 
 ## Implementation sequence
 
 0. **Phase 0 -- initial test baseline:** Record the current unit, syntax,
-   source-declaration, focused live, and full non-destructive live-suite
-   results. Record cleanup confirmation separately from test success.
+   source-declaration, focused live, full non-destructive live-suite, and
+   multi-process integration results. Record cleanup confirmation separately
+   from test success.
 1. Enable recursive Busted discovery and add the nested-test inventory guard
    before moving any unit spec.
 2. Add dependency-boundary tests and centralize source/installed path
@@ -371,11 +372,12 @@ The completion milestones are:
 - **Full source organization:** the late large-module decompositions,
   including the final CLI split, are complete and the full source gates pass.
 
-Every move should use `git mv` and update one cohesive dependency cluster in
-the same commit, including callers and tests. Keep behavior changes and
-large-module decomposition separate from these atomic migration commits. Do
-not combine this work with public API changes, new test-runner UI behavior,
-TestBed implementation, or selector redesign.
+Every tracked move should use `git mv` and update one cohesive dependency
+cluster in the same reviewable changeset, including callers and tests. Keep
+behavior changes and large-module decomposition separate from these atomic
+changesets. Do not create commits unless explicitly requested. Do not combine
+this work with public API changes, new test-runner UI behavior, TestBed
+implementation, or selector redesign.
 
 ## Verification gates
 
@@ -410,6 +412,8 @@ decompositions listed in the implementation sequence:
 - the full non-destructive live suite is rerun with no new failures relative
   to the Phase 0 baseline; any pre-existing failures remain documented, and
   cleanup confirmation remains distinct from test success;
+- the multi-process integration suite is rerun with no new failures relative
+  to the Phase 0 baseline, with pre-existing failures reported separately;
 - source declarations still validate against the organized source tree using
   the source LuaLS configuration and its valid and invalid fixtures, without
   installed-rock or packaged-source verification;
@@ -442,8 +446,9 @@ work exposes a new require-able module to consumers.
 ### Review noise
 
 Moves plus behavior edits obscure history. Keep each move, its require/load
-path changes, and corresponding test moves together so the commit remains
-green. Keep behavioral changes and later decompositions in distinct commits.
+path changes, and corresponding test moves together so the reviewable
+changeset remains green. Keep behavioral changes and later decompositions in
+distinct changesets.
 
 ## Follow-up work
 

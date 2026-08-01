@@ -25,9 +25,15 @@ Completion contract:
     ☐ Add LuaDoc-style prose for every new or materially extracted Lua module and function in every phase.
     ☐ Preserve unrelated worktree and index changes; do not stash, discard, or commit user changes.
     ☐ Use `git mv` for tracked moves and keep directory moves, behavior fixes, and decompositions as separate reviewable changesets; do not create commits unless explicitly requested.
-    ☐ After each implementation phase, run affected focused tests, the full source-checkout unit suite, `tools/Check-Lua.ps1`, the dependency-boundary audit, and `git diff --check`.
-    ☐ Run live tests after a phase only when it changes host entry paths, dynamic loading, or live execution behavior; keep live success and `cleanup_confirmed` as separate evidence.
-    ☐ After Phase 0, rerun the full non-destructive live sweep only at the two milestone phases and compare it with the Phase 0 baseline.
+
+Standard phase gate:
+    ☐ Run the affected focused tests.
+    ☐ Run the full source-checkout unit suite and verify the recursive test inventory.
+    ☐ Run `tools/Check-Lua.ps1`.
+    ☐ Run the dependency-boundary audit.
+    ☐ Run `git diff --check`.
+    ☐ If the phase changed host entry paths, dynamic loading, or live execution behavior, run the affected focused live tests and report test success and `cleanup_confirmed` separately.
+    ☐ Do not rerun the full non-destructive live suite here; after Phase 0, that sweep is reserved for the two milestone phases and is compared with the Phase 0 baseline.
 
 Phase 0 - Initial test baseline:
     ☐ Record the active checkout, branch, worktree state, and index state without modifying them.
@@ -69,9 +75,6 @@ Phase 1 - Establish recursive discovery, path authority, and boundary guards:
     ☐ Complete the standard phase gate.
 
 Phase 2 - Extract protocol and support namespaces:
-    ☐ Create `src/dwarfspec/support/` and the matching `tests/unit/support/` tree.
-    ☐ Extract pure project path normalization into `support/project_paths.lua` before moving `result_store.lua`.
-    ☐ Move `glob.lua`, `identity_labels.lua`, and `immutable_enum.lua` into `support/` with their callers and tests.
     ☐ Create `src/dwarfspec/protocol/configuration/` and move `error_formats.lua`, `settings.lua`, and `config_schema.lua` as `schema.lua` with their callers and tests.
     ☐ Move the current pure event contract, validation, and journal operations together into `protocol/events.lua`; do not invent a host-side event-validation module.
     ☐ Keep pure shared schema logic in `protocol/schemas.lua`.
@@ -79,6 +82,9 @@ Phase 2 - Extract protocol and support namespaces:
     ☐ Move the stable shared focus-warning formatter into `protocol/diagnostics/focus_warning.lua`; leave native focus observation for the host phase.
     ☐ Move cross-runtime enums into `protocol/enums/`: event types, owner kinds, result policies, result states, runner failure kinds, run states, scheduler failure kinds, and test statuses.
     ☐ Leave driver-only enums with the future driver namespace.
+    ☐ Create `src/dwarfspec/support/` and the matching `tests/unit/support/` tree.
+    ☐ Extract pure project path normalization into `support/project_paths.lua` before moving `result_store.lua`.
+    ☐ Move `glob.lua`, `identity_labels.lua`, and `immutable_enum.lua` into `support/` with their callers and tests.
     ☐ Update all callers, dynamic paths, and matching unit specs in the same cohesive moves.
     ☐ Confirm protocol and support modules load without controller, host, driver, `df`, or `dfhack` dependencies.
     ☐ Use the Phase 1 isolated-load harness to test every protocol production module against transitive DFHack-only dependencies.
