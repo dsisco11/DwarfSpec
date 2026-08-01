@@ -12,6 +12,16 @@ local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 local SchedulerFailureKind =
     require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 local service = require('dwarfspec.host.service.service')
+local module_environment_module =
+    require('dwarfspec.host.environment.module_environment')
+local suite_discovery_module =
+    require('dwarfspec.host.execution.suite_discovery')
+local transport_publication =
+    require('dwarfspec.host.execution.transport_publication')
+local run_assembly = require('dwarfspec.host.execution.run_assembly')
+local example_lifecycle_module = require('dwarfspec.host.execution.example_lifecycle')
+local suite_executor_module = require('dwarfspec.host.execution.suite_executor')
+local run_lifecycle_module = require('dwarfspec.host.execution.run_lifecycle')
 
 local M = {
     protocol_version=2,
@@ -78,16 +88,12 @@ local function load_automation_module(package_root, module_name)
     error(module, 0)
 end
 
----Returns whether a semicolon-delimited Lua search path contains an entry.
----@param search_path string
----@param entry string
----@return boolean
-local function search_path_contains(search_path, entry)
-    for candidate in search_path:gmatch('[^;]+') do
-        if candidate == entry then return true end
-    end
-    return false
-end
+local suite_discovery = suite_discovery_module.new(join_path)
+
+local module_environment = module_environment_module.new({
+    clear_dependencies=M.clear_dependency_modules,
+    load_module=load_automation_module,
+})
 
 ---Returns the current world frame when a world is loaded.
 ---@return integer|nil
@@ -269,59 +275,12 @@ local function service_dependencies(run_id)
     return dependencies
 end
 
----Returns whether a file can be opened for reading.
----@param path string
----@return boolean
-local function is_file(path)
-    local file = io.open(path, 'rb')
-    if not file then return false end
-    file:close()
-    return true
-end
-
----Resolves the shared Lua module root for source and installed layouts.
----@param package_root string
----@return string
-local function lua_module_root(package_root)
-    if is_file(join_path(package_root, 'busted/core.lua')) then
-        return package_root
-    end
-    local lua_version = assert(_VERSION:match('Lua (%d+%.%d+)'),
-        'could not determine the active Lua version from ' .. tostring(_VERSION))
-    return join_path(package_root,
-        '.luarocks/share/lua/' .. lua_version)
-end
-
 ---Configures pinned Lua dependencies and DFHack-native adapters.
 ---@param package_root string
 ---@param configured_lua_root string|nil
 ---@return string[]
 local function configure_dependencies(package_root, configured_lua_root)
-    local separator = package.config:sub(1, 1)
-    local lua_root = configured_lua_root or lua_module_root(package_root)
-    local source_entries = {
-        lua_root .. separator .. '?.lua',
-        lua_root .. separator .. '?' .. separator .. 'init.lua',
-    }
-    for index = #source_entries, 1, -1 do
-        local entry = source_entries[index]
-        if not search_path_contains(package.path, entry) then
-            package.path = entry .. ';' .. package.path
-        end
-    end
-
-    M.clear_dependency_modules()
-
-    local system_adapter = load_automation_module(package_root,
-        'dwarfspec.host.environment.system_adapter')
-    local lfs_adapter = load_automation_module(package_root,
-        'dwarfspec.host.environment.lfs_adapter')
-    package.preload.system = function() return system_adapter end
-    package.preload.lfs = function() return lfs_adapter end
-    package.loaded.system = system_adapter
-    package.loaded.lfs = lfs_adapter
-
-    return source_entries
+    return module_environment.configure(package_root, configured_lua_root)
 end
 
 ---Installs project-root module lookup and returns cleanup plus an audit record.
@@ -331,92 +290,15 @@ end
 ---@return function, table
 function M.configure_project_modules(project_root, protected_entries,
         runtime_package)
-    assert(type(project_root) == 'string' and project_root ~= '',
-        'project root must be a nonempty string')
-    assert(type(protected_entries) == 'table',
-        'protected package paths must be a table')
-    runtime_package = runtime_package or package
-    assert(type(runtime_package.path) == 'string' and
-        type(runtime_package.loaded) == 'table' and
-        type(runtime_package.searchpath) == 'function',
-        'runtime package must provide path, loaded, and searchpath')
-
-    local separator = package.config:sub(1, 1)
-    local project_entries = {
-        project_root .. separator .. '?.lua',
-        project_root .. separator .. '?' .. separator .. 'init.lua',
-    }
-    local original_path = runtime_package.path
-    local previously_loaded = {}
-    for name in pairs(runtime_package.loaded) do
-        previously_loaded[name] = true
-    end
-
-    local reordered = {}
-    local included = {}
-    local function include(entry)
-        if entry ~= '' and not included[entry] then
-            table.insert(reordered, entry)
-            included[entry] = true
-        end
-    end
-    for _, entry in ipairs(protected_entries) do include(entry) end
-    for _, entry in ipairs(project_entries) do include(entry) end
-    for entry in original_path:gmatch('[^;]+') do include(entry) end
-    runtime_package.path = table.concat(reordered, ';')
-
-    local audit = {
-        original_path=original_path,
-        project_entries=project_entries,
-        restored=false,
-        path_restored=false,
-        evicted_modules={},
-    }
-    local restored = false
-    return function()
-        if restored then return end
-        restored = true
-        local project_path = table.concat(project_entries, ';')
-        local protected_path = table.concat(protected_entries, ';')
-        for name in pairs(runtime_package.loaded) do
-            if type(name) == 'string' and not previously_loaded[name] and
-                    runtime_package.searchpath(name, project_path) and
-                    not runtime_package.searchpath(name, protected_path) then
-                runtime_package.loaded[name] = nil
-                table.insert(audit.evicted_modules, name)
-            end
-        end
-        runtime_package.path = original_path
-        audit.restored = true
-        audit.path_restored = runtime_package.path == original_path
-        table.sort(audit.evicted_modules)
-    end, audit
-end
-
----Normalizes a caller's optional scalar or dense-list filter value.
----@param value string|string[]|nil
----@return string[]
-local function filter_list(value)
-    if type(value) == 'table' then return value end
-    if type(value) == 'string' and value ~= '' then return {value} end
-    return {}
+    return module_environment.configure_project(project_root, protected_entries,
+        runtime_package)
 end
 
 ---Creates the standard Busted filter options for one automation run.
 ---@param options table
 ---@return table
 function M.filter_options(options)
-    return {
-        tags=filter_list(options.tags),
-        excludeTags=filter_list(options.exclude_tags),
-        filter=filter_list(options.filters or options.filter),
-        name=filter_list(options.names),
-        filterOut=filter_list(options.filter_out),
-        excludeNamesFile=nil,
-        list=false,
-        nokeepgoing=false,
-        suppressPending=false,
-    }
+    return suite_discovery.filter_options(options)
 end
 
 ---Discovers only DwarfSpec live-spec files from the selected project root.
@@ -425,30 +307,7 @@ end
 ---@param specs string[]|nil
 ---@return table
 function M.discover_tests(project_root, loader, specs)
-    assert(type(project_root) == 'string' and project_root ~= '',
-        'project root must be a nonempty string')
-    assert(type(loader) == 'function', 'live spec discovery requires a loader')
-    specs = specs or {}
-    assert(#specs > 0, 'no live specs were selected')
-    for _, spec in ipairs(specs) do
-        assert(type(spec) == 'string' and
-            spec ~= '' and spec:match('%.lua$') and
-            not spec:match('^[/\\]') and
-            not spec:match('^[A-Za-z]:[/\\]') and spec ~= '..' and
-            not spec:match('^%.%.[/\\]') and
-            not spec:match('[/\\]%.%.[/\\]') and
-            not spec:match('[/\\]%.%.$'),
-            'live spec must name one safe project-relative Lua path')
-    end
-    local roots = {}
-    for _, spec in ipairs(specs) do
-        table.insert(roots, join_path(project_root, 'tests/' .. spec))
-    end
-    return loader(roots, {'%.lua$'}, {
-        excludes={},
-        recursive=true,
-        verbose=false,
-    })
+    return suite_discovery.discover(project_root, loader, specs)
 end
 
 ---Creates per-example and file-suite focus observations and diagnostics.
@@ -457,137 +316,12 @@ end
 ---@param guard BaseScreenFocusGuard
 ---@return table
 function M.new_focus_lifecycle(run, reset, guard)
-    assert(type(run) == 'table',
-        'focus lifecycle run is required')
-    assert(type(reset) == 'function',
-        'focus lifecycle reset callback is required')
-    assert(type(guard) == 'table' and type(guard.capture) == 'function' and
-        type(guard.compare) == 'function',
-        'focus lifecycle guard is required')
-    assert(type(run.event_publisher) == 'table' and
-        type(run.event_publisher.publish) == 'function',
-        'focus lifecycle event publisher is required')
-    run.output_lines = run.output_lines or {}
-    assert(type(run.output_lines) == 'table',
-        'focus lifecycle output lines must be a table')
-
-    local lifecycle = {}
-    local active_suite
-    local active_example
-
-    ---Publishes one comparison with its detached lifecycle attribution.
-    ---@param diagnostic BaseScreenFocusDiagnostic|nil
-    ---@param scope 'example'|'suite'
-    ---@param attribution 'test'|'before_each'|'file'
-    ---@param suite DwarfSpecFileSuiteIdentity
-    ---@param example table|nil
-    local function publish_diagnostic(
-            diagnostic, scope, attribution, suite, example)
-        if diagnostic == nil then return end
-        diagnostic = events.copy_json(
-            diagnostic, 'base-screen focus diagnostic')
-        local content = diagnostic.content
-        content.scope = scope
-        content.attribution = attribution
-        content.suite_name = suite.suite_name
-        content.repeat_index = suite.repeat_index
-        if example ~= nil and example.example_name ~= nil then
-            content.example_name = example.example_name
-        end
-        local source_identity
-        if example ~= nil then
-            source_identity = example.source_identity
-        else
-            source_identity = suite.source_identity
-        end
-        if source_identity ~= nil then
-            content.source_identity = source_identity
-        end
-        run.event_publisher.publish(
-            EventType.DIAGNOSTIC_RECORDED, diagnostic)
-        if diagnostic.kind == focus_diagnostics.CHANGE_KIND then
-            table.insert(run.output_lines,
-                focus_warning.format_warning(diagnostic))
-        end
-    end
-
-    ---Captures S0 for one executed file-suite instance.
-    ---@param identity DwarfSpecFileSuiteIdentity
-    ---@return string
-    function lifecycle.suite_entry(identity)
-        assert(type(identity) == 'table' and
-            type(identity.copy) == 'function',
-            'focus lifecycle requires a file-suite identity')
-        assert(active_suite == nil,
-            'focus lifecycle already has an active file suite')
-        active_example = nil
-        active_suite = {
-            identity=identity:copy(),
-            before=guard:capture(),
-        }
-        return active_suite.identity.suite_id
-    end
-
-    ---Cleans suite resources, captures S2, and publishes one diagnostic.
-    ---@param identity DwarfSpecFileSuiteIdentity
-    ---@param state any
-    function lifecycle.suite_exit(identity, state)
-        local completed = active_suite
-        active_example = nil
-        active_suite = nil
-        if completed == nil then return end
-        assert(type(identity) == 'table' and
-            identity.suite_id == completed.identity.suite_id,
-            'focus lifecycle file-suite exit identity did not match entry')
-        assert(state == nil or state == completed.identity.suite_id,
-            'focus lifecycle file-suite state did not match entry')
-        reset('after suite')
-        publish_diagnostic(guard:compare(
-            completed.before, guard:capture()),
-            'suite', 'file', completed.identity)
-    end
-
-    ---Resets inherited resources and captures the example's T0 state.
-    function lifecycle.example_entry()
-        active_example = nil
-        reset('before example')
-        assert(active_suite ~= nil,
-            'focus lifecycle has no active file suite')
-        active_example = {
-            attribution='before_each',
-            suite=active_suite.identity:copy(),
-            before=guard:capture(),
-        }
-    end
-
-    ---Retains identity after project setup reaches Busted test start.
-    ---@param identity BustedExampleIdentity
-    function lifecycle.test_start(identity)
-        if active_example == nil then return end
-        active_example.attribution = 'test'
-        active_example.example_name = identity.example_name
-        active_example.source_identity = identity.source_identity
-    end
-
-    ---Resets resources, captures T1, and publishes one detached diagnostic.
-    function lifecycle.example_exit()
-        local completed = active_example
-        active_example = nil
-        reset('after example')
-        if completed == nil then return end
-        local diagnostic = guard:compare(
-            completed.before, guard:capture())
-        publish_diagnostic(diagnostic, 'example',
-            completed.attribution, completed.suite, completed)
-    end
-
-    ---Clears every unconsumed private observation and attribution token.
-    function lifecycle.clear()
-        active_example = nil
-        active_suite = nil
-    end
-
-    return lifecycle
+    return example_lifecycle_module.new(run, reset, guard, {
+        copy_json=events.copy_json,
+        event_type=EventType.DIAGNOSTIC_RECORDED,
+        change_kind=focus_diagnostics.CHANGE_KIND,
+        format_warning=focus_warning.format_warning,
+    })
 end
 
 ---Installs internal entry handling before project example setup.
@@ -595,14 +329,8 @@ end
 ---@param busted table
 ---@param lifecycle table
 function M.install_ds_example_entry(lifecycle_adapter, busted, lifecycle)
-    assert(type(lifecycle_adapter) == 'table' and
-        type(lifecycle_adapter.install_example_entry) == 'function',
-        'Busted lifecycle adapter is required')
-    assert(type(lifecycle) == 'table' and
-        type(lifecycle.example_entry) == 'function',
-        'example focus lifecycle entry callback is required')
-    lifecycle_adapter.install_example_entry(
-        busted, lifecycle.example_entry)
+    return example_lifecycle_module.install_entry(
+        lifecycle_adapter, busted, lifecycle)
 end
 
 ---Installs internal exit handling after all project example teardown.
@@ -610,14 +338,8 @@ end
 ---@param busted table
 ---@param lifecycle table
 function M.install_ds_example_exit(lifecycle_adapter, busted, lifecycle)
-    assert(type(lifecycle_adapter) == 'table' and
-        type(lifecycle_adapter.install_example_exit) == 'function',
-        'Busted lifecycle adapter is required')
-    assert(type(lifecycle) == 'table' and
-        type(lifecycle.example_exit) == 'function',
-        'example focus lifecycle exit callback is required')
-    lifecycle_adapter.install_example_exit(
-        busted, lifecycle.example_exit)
+    return example_lifecycle_module.install_exit(
+        lifecycle_adapter, busted, lifecycle)
 end
 
 ---Executes one configured Busted suite synchronously inside its owner coroutine.
@@ -627,70 +349,36 @@ end
 ---@param scheduler table
 local function execute_suite(package_root, project_root, run, scheduler_module,
         scheduler)
-    local dependency_entries = configure_dependencies(package_root,
-        run.options.lua_module_root)
-    local busted = require('busted.core')()
-    require('busted')(busted)
-    local project_module = load_automation_module(package_root,
-        'dwarfspec.host.environment.project_environment')
-    local project = project_module.new(project_root, package_root,
-        dfhack.filesystem)
-    local extensions_module = load_automation_module(package_root,
-        'dwarfspec.host.environment.extensions')
-    local restore_project_modules, module_audit =
-        M.configure_project_modules(project_root, dependency_entries)
-    run.module_environment_audit = module_audit
-    run.cleanup_module.push(run.cleanup_registry,
-        'project module environment', restore_project_modules)
-    local extensions = extensions_module.load(project)
-    local specs = run.options.specs or {}
-    if #specs == 0 then
-        local discovery = extensions.settings.discovery or {}
-        local configured_glob = run.options.test_glob or
-            discovery.test_glob
-        specs = project_module.discover_specs(project, configured_glob)
-    end
-    local ds_factory = load_automation_module(package_root, 'dwarfspec.ds')
-    local ds, reset = ds_factory.new(package_root, project, scheduler_module,
-        scheduler, run.cleanup_module, run.cleanup_registry, extensions)
-    busted.export('ds', ds)
-    local lifecycle_adapter = load_automation_module(package_root,
-        'dwarfspec.host.execution.busted_lifecycle_adapter')
-    local guard_factory = load_automation_module(package_root,
-        'dwarfspec.host.diagnostics.base_screen_focus_guard')
-    local focus_lifecycle = M.new_focus_lifecycle(
-        run, reset, guard_factory.new(dfhack.gui))
-    run.focus_lifecycle = focus_lifecycle
-    lifecycle_adapter.install(busted, {
-        project_root=project_root,
-        on_suite_entry=focus_lifecycle.suite_entry,
-        on_suite_exit=focus_lifecycle.suite_exit,
-        on_test_start=focus_lifecycle.test_start,
-    })
-    M.install_ds_example_entry(
-        lifecycle_adapter, busted, focus_lifecycle)
-    M.install_ds_example_exit(
-        lifecycle_adapter, busted, focus_lifecycle)
-
-    local output_factory = load_automation_module(package_root,
-        'dwarfspec.host.execution.output_handler')
-    output_factory.new(busted, run, run.event_publisher)
-    require('busted.modules.filter_loader')()(busted,
-        M.filter_options(run.options))
-
-    local loader = require('busted.modules.test_file_loader')(
-        busted, {'lua'})
-    run.discovered_files = M.discover_tests(project_root, loader, specs)
-
-    busted.randomize = false
-    busted.sort = true
-    busted.randomseed = run.options.seed
-    require('busted.execute')(busted)(run.options.repeat_count, {
-        seed=run.options.seed,
-        shuffle=false,
-        sort=true,
-    })
-    busted.publish({'exit'})
+    return suite_executor_module.execute(package_root, project_root, run,
+        scheduler_module, scheduler, {
+            configure_dependencies=configure_dependencies,
+            configure_project=M.configure_project_modules,
+            load_module=load_automation_module,
+            filesystem=dfhack.filesystem,
+            gui=dfhack.gui,
+            ds_factory=run.ds_factory,
+            new_lifecycle=M.new_focus_lifecycle,
+            install_entry=M.install_ds_example_entry,
+            install_exit=M.install_ds_example_exit,
+            filter_options=M.filter_options,
+            discover_tests=M.discover_tests,
+            new_busted=function()
+                local busted = require('busted.core')()
+                require('busted')(busted)
+                return busted
+            end,
+            install_filter=function(busted, options)
+                require('busted.modules.filter_loader')()(busted, options)
+            end,
+            new_loader=function(busted)
+                return require('busted.modules.test_file_loader')(
+                    busted, {'lua'})
+            end,
+            execute_busted=function(busted, repeat_count, options)
+                return require('busted.execute')(busted)(
+                    repeat_count, options)
+            end,
+        })
 end
 
 
@@ -705,246 +393,79 @@ end
 ---@param event_type DwarfSpecEventType
 ---@param payload table
 local function publish_run_event(run, event_type, payload)
-    assert(type(run.event_publisher) == 'table' and
-        type(run.event_publisher.publish) == 'function',
-        'active run does not own an event publisher')
-    run.event_publisher.publish(event_type, payload)
+    return transport_publication.publish(run, event_type, payload)
 end
 
----Records cleanup failures as host errors without hiding later failures.
----@param run table
----@param failures table[]
-local function record_cleanup_failures(run, failures)
-    for _, failure in ipairs(failures) do
-        local failure_key = failure.id or failure
-        if not run.recorded_cleanup_failures[failure_key] then
-            run.recorded_cleanup_failures[failure_key] = true
-            publish_run_event(run, EventType.CLEANUP_FAILED, {
-                action_name=failure.name,
-                reason=failure.reason,
-                message=failure.message,
-                trace=failure.message,
-            })
-            if not failure.reported_by_busted then
-                local message = ('cleanup %s failed during %s: %s')
-                    :format(failure.name, failure.reason, failure.message)
-                table.insert(run.output_lines, 'CLEANUP_ERROR ' .. message)
-                table.insert(run.failure_details, {
-                    kind='error',
-                    name='automation cleanup: ' .. failure.name,
-                    message=message,
-                    trace=failure.message,
-                })
-            end
-        end
-    end
-end
+local clean_run
+local finalize_run
+local begin_queued_run
 
----Cancels asynchronous work and drains all cleanup actions for a run.
----@param run table
----@param reason string
----@return boolean
-local function clean_run(run, reason)
-    if run.focus_lifecycle ~= nil then
-        run.focus_lifecycle.clear()
-        run.focus_lifecycle = nil
-    end
-    if run.scheduler then
-        run.scheduler_module.cancel(run.scheduler, reason)
-        run.scheduler.owner = nil
-        run.scheduler = nil
-    end
-    cancel_timeout(run.scheduled_timeout_id)
-    run.scheduled_timeout_id = nil
-    local ok = run.cleanup_module.run(run.cleanup_registry, reason)
-    run.coroutine = nil
-    run.suspended = false
-    local mount_state
-    local mount_ok = true
-    if run.mount_cleanup_probe then
-        local probe_ok, result = pcall(run.mount_cleanup_probe)
-        if probe_ok and type(result) == 'table' then
-            mount_state = result
-            mount_ok = result.current_mount_id == nil and
-                result.active_screen_count == 0 and
-                (result.tracked_screen_count or 0) == 0 and
-                (result.owned_screen_count or 0) == 0 and
-                (result.borrowed_native_screen_count or 0) == 0 and
-                (result.native_screen_dismissal_count or 0) == 0 and
-                result.subject_count == 0 and
-                result.pointer_active ~= true and
-                result.button_state_active ~= true and
-                result.game_pause_state_active ~= true and
-                result.game_speed_active ~= true and
-                result.render_observer_active ~= true
-        else
-            mount_ok = false
-            mount_state = {probe_error=tostring(result)}
-        end
-        run.mount_cleanup_probe = nil
-    end
-    if mount_state then mount_state.verified = mount_ok end
-    run.mount_cleanup_state = mount_state
-    run.mount_cleanup_verified = mount_ok
-    local history_ok = #run.cleanup_registry.failures == 0
-    local module_audit = run.module_environment_audit
-    local module_environment_ok = module_audit == nil or
-        module_audit.restored == true and
-        module_audit.path_restored == true
-    run.cleanup_confirmed = ok and history_ok and mount_ok and
-        module_environment_ok and
-        run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
-        run.outstanding_wait == nil and run.coroutine == nil and
-        run.scheduler == nil and run.scheduled_timeout_id == nil
-    run.cleanup_reason = reason
-    record_cleanup_failures(run, run.cleanup_registry.failures)
-    if not mount_ok then
-        local message = 'mount lifecycle verification failed during ' ..
-            reason
-        table.insert(run.output_lines, 'CLEANUP_ERROR ' .. message)
-        table.insert(run.failure_details, {
-            kind='error',
-            name='automation cleanup: mount lifecycle verification',
-            message=message,
-            trace=mount_state and mount_state.probe_error or nil,
+local run_lifecycle = run_lifecycle_module.new({
+    states={
+        starting=RunState.STARTING,
+        running=RunState.RUNNING,
+        passed=RunState.PASSED,
+        failed=RunState.FAILED,
+        aborted=RunState.ABORTED,
+    },
+    events={
+        cleanup_failed=EventType.CLEANUP_FAILED,
+        cleanup_finished=EventType.CLEANUP_FINISHED,
+        run_aborted=EventType.RUN_ABORTED,
+    },
+    publish_event=publish_run_event,
+    begin_cleanup=function(run, reason)
+        return service.begin_cleanup(run.run_id, run.generation, reason,
+            run.cleanup_module.pending_count(run.cleanup_registry),
+            service_dependencies())
+    end,
+    complete_active=function(run, state, cleanup_ok, reason)
+        return service.complete_active(run.run_id, run.generation, state,
+            cleanup_ok, reason, service_dependencies())
+    end,
+    start_active=function(run)
+        return service.start_active(run.run_id, run.generation, {
+            repeat_count=run.options.repeat_count,
+            options={
+                seed=run.options.seed,
+                shuffle=false,
+                filters=run.options.filters,
+                filter_out=run.options.filter_out,
+                names=run.options.names,
+                tags=run.options.tags,
+                exclude_tags=run.options.exclude_tags,
+            },
+        }, service_dependencies())
+    end,
+    activate_next=function() return M.activate_next() end,
+    cancel_timeout=cancel_timeout,
+    now_ms=function() return dfhack.getTickCount() end,
+    current_frame=current_frame,
+    assemble_scheduler=function(package_root, run, callbacks)
+        return run_assembly.create_scheduler(package_root, run, {
+            load_scheduler=function(root)
+                return load_automation_module(root,
+                    'dwarfspec.host.execution.coroutine_scheduler')
+            end,
+            is_current=callbacks.is_current,
+            schedule_frames=function(delay, callback)
+                return dfhack.timeout(delay, 'frames', callback)
+            end,
+            schedule_ticks=function(delay, callback)
+                return dfhack.timeout(delay, 'ticks', callback)
+            end,
+            cancel_timeout=cancel_timeout,
+            now_ms=function() return dfhack.getTickCount() end,
+            diagnostics=current_diagnostics,
+            on_complete=callbacks.on_complete,
         })
-        publish_run_event(run, EventType.CLEANUP_FAILED, {
-            action_name='mount lifecycle verification',
-            reason=reason,
-            message=message,
-            trace=mount_state and mount_state.probe_error or nil,
-        })
-    end
-    if not module_environment_ok then
-        local message = 'project module environment was not restored during ' ..
-            reason
-        table.insert(run.output_lines, 'CLEANUP_ERROR ' .. message)
-        table.insert(run.failure_details, {
-            kind='error',
-            name='automation cleanup: project module environment',
-            message=message,
-        })
-        publish_run_event(run, EventType.CLEANUP_FAILED, {
-            action_name='project module environment',
-            reason=reason,
-            message=message,
-        })
-    end
-    publish_run_event(run, EventType.CLEANUP_FINISHED, {
-        cleanup_confirmed=run.cleanup_confirmed,
-        mount_cleanup_verified=mount_ok,
-    })
-    return run.cleanup_confirmed
-end
+    end,
+    execute_suite=execute_suite,
+})
 
----Finalizes a run from Busted counts or an uncaught host failure.
----@param registry table
----@param run table
----@param ok boolean
----@param host_error any
-local function finalize_run(registry, run, ok, host_error)
-    if registry.active_run_id ~= run.run_id or
-            registry.runs[run.run_id] ~= run or
-            run.terminal then
-        return
-    end
-    service.begin_cleanup(run.run_id, run.generation, 'suite completion',
-        run.cleanup_module.pending_count(run.cleanup_registry),
-        service_dependencies())
-    if not ok then
-        run.host_error = tostring(host_error)
-        run.host_trace = debug.traceback(run.coroutine, tostring(host_error))
-        run.counts.errors = run.counts.errors + 1
-        run.totals.errors = run.totals.errors + 1
-        table.insert(run.output_lines, 'HOST_ERROR ' .. run.host_error)
-    end
-    local cleanup_ok = clean_run(run, 'suite completion')
-    if not cleanup_ok and not run.cleanup_failure_reported_by_busted then
-        run.counts.errors = run.counts.errors + 1
-        run.totals.errors = run.totals.errors + 1
-    end
-    run.finished_ms = dfhack.getTickCount()
-    run.finished_frame = current_frame()
-    local terminal_state
-    if ok and cleanup_ok and run.totals.failures == 0 and
-            run.totals.errors == 0 then
-        terminal_state = RunState.PASSED
-    else
-        terminal_state = RunState.FAILED
-    end
-    service.complete_active(run.run_id, run.generation, terminal_state,
-        cleanup_ok, run.cleanup_reason, service_dependencies())
-    run.terminal_observed = false
-    M.activate_next()
-end
-
----Starts Busted execution when the queued generation still owns the run.
----@param package_root string
----@param project_root string
----@param registry table
----@param run table
-local function begin_queued_run(package_root, project_root, registry, run)
-    if registry.active_run_id ~= run.run_id or
-            registry.runs[run.run_id] ~= run or
-            run.state ~= RunState.STARTING then
-        return
-    end
-    run.scheduled_timeout_id = nil
-    service.start_active(run.run_id, run.generation, {
-        repeat_count=run.options.repeat_count,
-        options={
-            seed=run.options.seed,
-            shuffle=false,
-            filters=run.options.filters,
-            filter_out=run.options.filter_out,
-            names=run.options.names,
-            tags=run.options.tags,
-            exclude_tags=run.options.exclude_tags,
-        },
-    }, service_dependencies())
-    run.started_ms = dfhack.getTickCount()
-    run.started_frame = current_frame()
-    local scheduler_module = load_automation_module(package_root,
-        'dwarfspec.host.execution.coroutine_scheduler')
-    local scheduler
-    scheduler = scheduler_module.new(run, {
-        is_current=function()
-            return registry.active_run_id == run.run_id and
-                registry.runs[run.run_id] == run and
-                run.state == RunState.RUNNING
-        end,
-        schedule_timeout=function(delay, callback)
-            return dfhack.timeout(delay, 'frames', callback)
-        end,
-        schedule_tick_timeout=function(delay, callback)
-            return dfhack.timeout(delay, 'ticks', callback)
-        end,
-        cancel_timeout=cancel_timeout,
-        now_ms=dfhack.getTickCount,
-        diagnostics=current_diagnostics,
-        on_complete=function(ok, host_error)
-            finalize_run(registry, run, ok, host_error)
-        end,
-    })
-    run.scheduler_module = scheduler_module
-    run.scheduler = scheduler
-    run.coroutine = coroutine.create(function()
-        execute_suite(package_root, project_root, run, scheduler_module,
-            scheduler)
-    end)
-    scheduler_module.bind(scheduler, run.coroutine)
-    local ok, yielded = coroutine.resume(run.coroutine)
-    if ok and coroutine.status(run.coroutine) ~= 'dead' then
-        if not scheduler_module.owns_yield(scheduler, yielded) then
-            finalize_run(registry, run, false,
-                'automation suite yielded outside the owned scheduler')
-            return
-        end
-        run.suspended = true
-        return
-    end
-    finalize_run(registry, run, ok, yielded)
-end
+clean_run = run_lifecycle.clean
+finalize_run = run_lifecycle.finalize
+begin_queued_run = run_lifecycle.begin
 
 
 ---Aborts a run for a host-owned reason and performs emergency cleanup.
@@ -953,23 +474,7 @@ end
 ---@param reason string
 ---@return table
 local function terminate_aborted(registry, run, reason)
-    publish_run_event(run, EventType.RUN_ABORTED, {reason=reason})
-    service.begin_cleanup(run.run_id, run.generation, reason,
-        run.cleanup_module.pending_count(run.cleanup_registry),
-        service_dependencies())
-    local cleanup_ok = clean_run(run, reason)
-    if not cleanup_ok and not run.cleanup_failure_reported_by_busted then
-        run.counts.errors = run.counts.errors + 1
-        run.totals.errors = run.totals.errors + 1
-    end
-    run.finished_ms = dfhack.getTickCount()
-    run.finished_frame = current_frame()
-    table.insert(run.output_lines, 'ABORTED ' .. reason)
-    service.complete_active(run.run_id, run.generation, RunState.ABORTED,
-        cleanup_ok, reason, service_dependencies())
-    run.terminal_observed = false
-    M.activate_next()
-    return run
+    return run_lifecycle.abort(registry, run, reason)
 end
 
 ---Performs emergency cleanup for one exact lease-expired generation.
@@ -994,74 +499,39 @@ end
 ---@param project_root string
 ---@param options table
 local function initialize_runtime(run, package_root, project_root, options)
-    local cleanup_module = load_automation_module(package_root,
-        'dwarfspec.host.execution.cleanup')
-    local created_ms = dfhack.getTickCount()
-    run.package_root = package_root
-    run.project_root = project_root
-    run.options = options
-    run.state_changed_ms = created_ms
-    run.created_ms = created_ms
-    run.created_frame = current_frame()
-    run.started_ms = nil
-    run.started_frame = nil
-    run.finished_ms = nil
-    run.finished_frame = nil
-    run.last_status_poll_ms = nil
-    run.last_status_poll_frame = nil
-    run.current_test = nil
-    run.output_lines = {}
-    run.failure_details = {}
-    run.discovered_files = {}
-    run.coroutine = nil
-    run.scheduled_timeout_id = nil
-    run.outstanding_wait = nil
-    run.cleanup_module = cleanup_module
-    run.cleanup_registry = nil
-    run.cleanup_reason = nil
-    run.mount_cleanup_probe = nil
-    run.mount_cleanup_state = nil
-    run.module_environment_audit = nil
-    run.recorded_cleanup_failures = {}
-    run.cleanup_failure_reported_by_busted = false
-    run.scheduler_module = nil
-    run.scheduler = nil
-    run.suspended = false
-    run.terminal_observed = false
-    assert(type(run.lease_check_frames) == 'number' and
-        run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0,
-        'lease check interval must be a positive integer')
-    run.cleanup_registry = cleanup_module.new(run, function()
-        local registry = dfhack.dwarfspec
-        return type(registry) == 'table' and
-            registry.active_run_id == run.run_id and
-            registry.runs[run.run_id] == run and
-            run.generation == registry.runs[run.run_id].generation and
-            not run.terminal
-    end)
-    run.event_publisher = {
+    local ds_factory = load_automation_module(package_root, 'dwarfspec.ds')
+    return run_assembly.initialize(run, package_root, project_root, options, {
+        load_module=load_automation_module,
         now_ms=dfhack.getTickCount,
-        publish=function(event_type, payload)
-            return service.publish_active_event(run.run_id, run.generation,
-                event_type, payload, service_dependencies())
+        current_frame=current_frame,
+        ds_factory=ds_factory,
+        create_event_publisher=transport_publication.new_publisher,
+        is_active=function()
+            local registry = dfhack.dwarfspec
+            return type(registry) == 'table' and registry.active_run_id == run.run_id and
+                registry.runs[run.run_id] == run and run.generation == registry.runs[run.run_id].generation and not run.terminal
         end,
-    }
+        publish_active_event=function(run_id, generation, event_type, payload)
+            return service.publish_active_event(run_id, generation, event_type, payload, service_dependencies())
+        end,
+    })
 end
 
 ---Schedules native execution for one activated run.
 ---@param registry table
 ---@param run table
 local function schedule_activated_run(registry, run)
-    local timeout_id = dfhack.timeout(run.options.defer_frames, 'frames',
-        function()
-        begin_queued_run(run.package_root, run.project_root, registry, run)
-    end)
-    if not timeout_id then
-        finalize_run(registry, run, false,
-            'DFHack rejected the automation startup timer')
-        return
-    end
-    run.scheduled_timeout_id = timeout_id
+    return run_assembly.schedule_activation(run, {
+        schedule_frames=function(delay, callback)
+            return dfhack.timeout(delay, 'frames', callback)
+        end,
+        begin_run=function()
+            begin_queued_run(run.package_root, run.project_root, registry, run)
+        end,
+        fail_run=function(message)
+            finalize_run(registry, run, false, message)
+        end,
+    })
 end
 
 ---Activates and schedules the next service-owned FIFO run when possible.
@@ -1402,10 +872,7 @@ local JSON_NULL = '\0'
 ---@param transport table
 ---@return string
 function M.encode_transport(transport)
-    return require('json').encode(transport, {
-        pretty=false,
-        null=JSON_NULL,
-    })
+    return transport_publication.encode(transport, JSON_NULL)
 end
 
 return M

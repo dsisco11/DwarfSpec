@@ -165,14 +165,14 @@ Phase 8 - Decompose root ds.lua:
     ☑ Complete the standard phase gate and the relevant focused live driver tests.
 
 Phase 9 - Decompose host execution:
-    ☐ Implement only the module boundaries approved for `host/execution/host.lua`.
-    ☐ Create `host/environment/module_environment.lua` for pinned/project module setup, restoration, eviction, and audit behavior.
-    ☐ Create `host/execution/suite_discovery.lua`, `example_lifecycle.lua`, `suite_executor.lua`, `run_assembly.lua`, `run_lifecycle.lua`, and `transport_publication.lua` with exactly the approved responsibilities.
-    ☐ Keep `host/execution/host.lua` as the service-facing orchestration facade and documented fresh loader of root `dwarfspec.ds`; inject that factory into `run_assembly.lua`.
-    ☐ Preserve transport output, cleanup order, error handling, and module freshness behavior.
-    ☐ Add the approved direct behavioral specs for `module_environment`, `suite_discovery`, `example_lifecycle`, `suite_executor`, `run_assembly`, `run_lifecycle`, and `transport_publication`.
-    ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
-    ☐ Complete the standard phase gate and focused host-execution live tests.
+    ☑ Implement only the module boundaries approved for `host/execution/host.lua`.
+    ☑ Create `host/environment/module_environment.lua` for pinned/project module setup, restoration, eviction, and audit behavior.
+    ☑ Create `host/execution/suite_discovery.lua`, `example_lifecycle.lua`, `suite_executor.lua`, `run_assembly.lua`, `run_lifecycle.lua`, and `transport_publication.lua` with exactly the approved responsibilities.
+    ☑ Keep `host/execution/host.lua` as the service-facing orchestration facade and documented fresh loader of root `dwarfspec.ds`; inject that factory into `run_assembly.lua`.
+    ☑ Preserve transport output, cleanup order, error handling, and module freshness behavior.
+    ☑ Add the approved direct behavioral specs for `module_environment`, `suite_discovery`, `example_lifecycle`, `suite_executor`, `run_assembly`, `run_lifecycle`, and `transport_publication`.
+    ☑ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
+    ☑ Complete the standard phase gate and focused host-execution live tests.
 
 Phase 10 - Decompose the scheduler:
     ☐ Implement only the module boundaries approved for `host/service/scheduler.lua`.

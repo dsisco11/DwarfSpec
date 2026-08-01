@@ -88,9 +88,9 @@ root `dwarfspec.ds`.
 | `host/execution/suite_discovery.lua` | Validate selected project-relative Lua paths, invoke recursive Busted discovery, and construct Busted filter options. | `host/execution/suite_discovery_spec.lua`: safe paths, rejected traversal/absolute paths, recursive loader arguments, and every filter option. |
 | `host/execution/example_lifecycle.lua` | Build focus observation, install Busted example-entry/exit hooks, reset per-example state, and publish focus diagnostics. | `host/execution/example_lifecycle_spec.lua`: hook ordering, reset failures, focus comparison, warnings, output, and lifecycle cleanup. |
 | `host/execution/suite_executor.lua` | Assemble Busted dependencies for one active run, load selected specs, execute repeats, attach output handling, and return the native execution outcome. | `host/execution/suite_executor_spec.lua`: load order, repeat counts, Busted callbacks, assertion/error propagation, early abort, and cleanup handoff. |
-| `host/execution/run_assembly.lua` | Create one host runtime from package/project/options, scheduler, cleanup, extensions, diagnostics, and an injected root `dwarfspec.ds` factory; schedule activation and retain its cleanup probes. | `host/execution/run_assembly_spec.lua`: dependency wiring, injected `ds` construction, scheduler creation, timeouts, and failed assembly. |
+| `host/execution/run_assembly.lua` | Initialize one host runtime from package/project/options and an injected root `dwarfspec.ds` factory; construct its scheduler adapters, schedule activation, and retain cleanup probes produced during execution. | `host/execution/run_assembly_spec.lua`: dependency wiring, injected `ds` factory retention, scheduler creation, activation timeouts, and failed assembly. |
 | `host/execution/run_lifecycle.lua` | Begin, clean, finalize, and abort native execution; drain cleanup in order; record cleanup failures; and hand terminal state to the service scheduler. | `host/execution/run_lifecycle_spec.lua`: success, test failure, host error, timeout, abort, cleanup ordering, quarantine, and terminal handoff. |
-| `host/execution/transport_publication.lua` | Publish generation-guarded run events and encode canonical transport envelopes from service snapshots and journals. | `host/execution/transport_publication_spec.lua`: event sequence/payloads, generation checks, cursors, canonical schema, and JSON encoding failures. |
+| `host/execution/transport_publication.lua` | Create generation-bound run-event publishers and encode canonical transport envelopes supplied by the service snapshot and journal boundary. | `host/execution/transport_publication_spec.lua`: event payload forwarding, generation binding, canonical encoder options, and JSON encoding failures. |
 
 The service registry remains owned by `host/service/service.lua`; protocol
 validation remains in `protocol/`; snapshots remain in
@@ -108,10 +108,10 @@ flowchart TD
     host --> lifecycle["host/execution/run_lifecycle.lua"]
     host --> publication["host/execution/transport_publication.lua"]
     host -->|fresh-loads and injects| ds["ds.lua"]
-    ds --> assembly
+    ds -->|injected factory retained by| assembly
     executor --> examples
-    lifecycle --> scheduler["host/service/scheduler.lua"]
-    publication --> snapshots["host/service/snapshots.lua"]
+    lifecycle -->|terminal handoff through service| scheduler["host/service/scheduler.lua"]
+    snapshots["host/service/snapshots.lua"] -->|canonical envelopes| publication
 ```
 
 ## Service scheduler
