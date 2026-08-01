@@ -155,43 +155,50 @@ Phase 7 - Approve the late decomposition designs:
 Phase 8 - Decompose root ds.lua:
     ☐ Implement only the module boundaries approved in the `ds.lua` decomposition proposal.
     ☐ Retain run-scoped API construction and public command binding in root `ds.lua`.
-    ☐ Extract command argument validation, normalization, and driver-side adapters for mount, pointer, event, game-state, and wait behavior into their approved driver command modules.
+    ☐ Create `driver/commands/wait.lua`, `game_state.lua`, `view_position.lua`, `mount.lua`, `input.lua`, `pointer.lua`, and `capture.lua` with exactly the approved command-validation and adaptation responsibilities; keep event matching in the existing `await_event.lua`.
+    ☐ Create `driver/subjects/native_subject_source.lua` for native/overlay source construction and dual-root resolution.
+    ☐ Create `driver/render/command_observer.lua` for command events and bounded mount diagnostics.
     ☐ Preserve the public injected `ds` API and each local loader's cache and freshness behavior.
     ☐ Do not move or redesign host-owned save-game, overlay-registration, or diagnostic workflows; reserve that ownership change for the follow-up plan.
-    ☐ Add direct tests for each named responsibility rather than tests of the new file layout.
+    ☐ Add the approved direct behavioral specs for `wait`, `game_state`, `view_position`, `mount`, `input`, `pointer`, `capture`, `native_subject_source`, and `command_observer`; do not add file-existence tests.
     ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
     ☐ Complete the standard phase gate and the relevant focused live driver tests.
 
 Phase 9 - Decompose host execution:
     ☐ Implement only the module boundaries approved for `host/execution/host.lua`.
-    ☐ Separate run assembly, Busted execution, example lifecycle, module-environment audit, and transport publication into the approved named modules.
-    ☐ Preserve the host execution root's ownership of run construction and its documented load of root `dwarfspec.ds`.
+    ☐ Create `host/environment/module_environment.lua` for pinned/project module setup, restoration, eviction, and audit behavior.
+    ☐ Create `host/execution/suite_discovery.lua`, `example_lifecycle.lua`, `suite_executor.lua`, `run_assembly.lua`, `run_lifecycle.lua`, and `transport_publication.lua` with exactly the approved responsibilities.
+    ☐ Keep `host/execution/host.lua` as the service-facing orchestration facade and documented fresh loader of root `dwarfspec.ds`; inject that factory into `run_assembly.lua`.
     ☐ Preserve transport output, cleanup order, error handling, and module freshness behavior.
-    ☐ Add direct tests for every extracted responsibility.
+    ☐ Add the approved direct behavioral specs for `module_environment`, `suite_discovery`, `example_lifecycle`, `suite_executor`, `run_assembly`, `run_lifecycle`, and `transport_publication`.
     ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
     ☐ Complete the standard phase gate and focused host-execution live tests.
 
 Phase 10 - Decompose the scheduler:
     ☐ Implement only the module boundaries approved for `host/service/scheduler.lua`.
-    ☐ Separate queue selection, lease and quarantine policy, and transition recording into the approved named modules.
-    ☐ Keep one authoritative service-state owner and preserve scheduling, recovery, and persistence behavior.
-    ☐ Add direct tests for each policy and state transition responsibility.
+    ☐ Create `host/service/scheduler/request_validation.lua`, `admission.lua`, `queue.lua`, `leases.lua`, `transitions.lua`, and `recovery.lua` with exactly the approved validation, admission, FIFO, lease, mutation, and recovery responsibilities.
+    ☐ Keep `host/service/scheduler.lua` as the scheduler facade called by `service.lua`, keep the service registry as the one authoritative state object, and route every scheduler mutation and protocol event through `transitions.lua`.
+    ☐ Preserve admission, scheduling, cancellation, lease, abort, quarantine, acknowledgement, discard, recovery, and persistence-reservation behavior.
+    ☐ Add the approved direct behavioral specs for `request_validation`, `admission`, `queue`, `leases`, `transitions`, and `recovery`.
     ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
     ☐ Complete the standard phase gate and focused scheduler recovery live tests.
 
 Phase 11 - Decompose mount context:
     ☐ Implement only the module boundaries approved for `driver/mount/mount_context.lua`.
-    ☐ Separate resource ownership, subject resolution, command-execution diagnostics, and cleanup verification into the approved named modules.
+    ☐ Create `driver/mount/mount_resource_ownership.lua`, `mount_subject_resolution.lua`, `mount_command_execution.lua`, and `mount_cleanup_verification.lua` with exactly the approved responsibilities.
+    ☐ Keep `driver/mount/mount_context.lua` as the constructed context facade with its established method surface.
     ☐ Preserve mount lifecycle, teardown order, retained subject identity, diagnostic content, and cleanup confirmation.
-    ☐ Add direct tests for every extracted responsibility and failure path.
+    ☐ Add the approved direct behavioral specs for `mount_resource_ownership`, `mount_subject_resolution`, `mount_command_execution`, and `mount_cleanup_verification`, including their specified failure paths.
     ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
     ☐ Complete the standard phase gate and focused component/native mount live tests.
 
 Phase 12 - Decompose the controller runner:
     ☐ Implement only the module boundaries approved for `controller/execution/runner.lua`.
-    ☐ Separate command construction, process transport, polling, timeout and abort handling, and result interpretation into the approved named modules.
-    ☐ Preserve process invocation, failure kinds, status handling, recovery behavior, and result reporting.
-    ☐ Add direct tests for every extracted responsibility and failure path.
+    ☐ Create `controller/execution/command_builder.lua`, `transport_client.lua`, `run_poller.lua`, `run_recovery.lua`, and `result_interpreter.lua` with exactly the approved responsibilities.
+    ☐ Keep `controller/execution/runner.lua` as the public orchestration facade for run, abort, status, history, inspection, logs, and executor recovery.
+    ☐ Preserve `process.lua` as the subprocess authority, `report.lua` as the transport/schema authority, and `result_store.lua` as the safe-replacement authority; use `transport_client.lua` only for transport invocation and classification.
+    ☐ Preserve command arguments, polling cursors, queue/execution timeouts, cancellation, abort, acknowledgement, recovery, failure kinds, status handling, and result interpretation.
+    ☐ Add the approved direct behavioral specs for `command_builder`, `transport_client`, `run_poller`, `run_recovery`, and `result_interpreter`, including their specified failure paths.
     ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
     ☐ Complete the standard phase gate and focused CLI execution-path tests.
 
@@ -215,7 +222,7 @@ Phase 14 - Close full source organization:
     ☐ Rerun the Phase 0 source-declaration check and require the valid and invalid fixtures to retain their expected results.
     ☐ Reuse the Phase 13 full-unit, syntax, and dependency-review results if no source, declaration, test, or tool file changed afterward; otherwise rerun them.
     ☐ Run `git diff --check` after all final source, test, declaration, tool, planning, and documentation changes.
-    ☐ Run every focused live scope from Phase 0 and require it to pass with cleanup evidence reported separately.
+    ☐ Run every focused live scope from Phase 0, confirm it introduces no failures relative to the Phase 0 baseline, and report test results and cleanup evidence separately.
     ☐ Run the full non-destructive live suite and confirm it introduces no failures relative to Phase 0.
     ☐ Run `tools/Run-MultiProjectIntegration.ps1` and confirm it introduces no failures relative to Phase 0.
     ☐ Preserve and report any pre-existing baseline failure distinctly from the completed reorganization evidence.
