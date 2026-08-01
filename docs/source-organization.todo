@@ -176,29 +176,53 @@ Phase 9 - Decompose host execution:
 
 Phase 10 - Decompose the scheduler:
     ☐ Implement only the module boundaries approved for `host/service/scheduler.lua`.
-    ☐ Create `host/service/scheduler/request_validation.lua`, `admission.lua`, `queue.lua`, `leases.lua`, `transitions.lua`, and `recovery.lua` with exactly the approved validation, admission, FIFO, lease, mutation, and recovery responsibilities.
+    ☐ Extract request and authority validation into `host/service/scheduler/request_validation.lua`, including detached selections, request keys, owner kinds, lease settings, result paths, exact run identities, and mutation-free authorization.
+    ☐ Extract run admission into `host/service/scheduler/admission.lua`, including identity allocation, project/result-path gates, idempotent retries, queued-record construction, and queued-transition requests.
+    ☐ Extract FIFO queue policy into `host/service/scheduler/queue.lua`, including head selection/revalidation, activation or pre-execution rejection, queued cancellation, and queue-lease expiry.
+    ☐ Extract lease policy into `host/service/scheduler/leases.lua`, including external renewal, in-process heartbeat, lease-check scheduling, and expired-active abort requests.
+    ☐ Extract all scheduler mutations and protocol-event appends into `host/service/scheduler/transitions.lua`, covering queued, activated, running, cleaning, cancellation, terminal release, and quarantine transitions.
+    ☐ Extract scheduler recovery policy into `host/service/scheduler/recovery.lua`, including active abort authorization, quarantine verification/clearing, acknowledgement, operator discard, and reservation release.
     ☐ Keep `host/service/scheduler.lua` as the scheduler facade called by `service.lua`, keep the service registry as the one authoritative state object, and route every scheduler mutation and protocol event through `transitions.lua`.
     ☐ Preserve admission, scheduling, cancellation, lease, abort, quarantine, acknowledgement, discard, recovery, and persistence-reservation behavior.
-    ☐ Add the approved direct behavioral specs for `request_validation`, `admission`, `queue`, `leases`, `transitions`, and `recovery`.
+    ☐ Add `tests/unit/host/service/scheduler/request_validation_spec.lua` for malformed values, detached copies, idempotency matching, result-path conflicts, owner capabilities, and operator authority.
+    ☐ Add `tests/unit/host/service/scheduler/admission_spec.lua` for successful admission, collisions, outstanding-run gates, retries, event identity, and mutation only after validation.
+    ☐ Add `tests/unit/host/service/scheduler/queue_spec.lua` for FIFO ordering, incompatible projects, cancellation, queue expiry, blocked/quarantined executors, and activation handoff.
+    ☐ Add `tests/unit/host/service/scheduler/leases_spec.lua` for renewal ownership, timer replacement, heartbeat policy, expiry boundaries, and stale-generation rejection.
+    ☐ Add `tests/unit/host/service/scheduler/transitions_spec.lua` for the legal transition matrix, generation guards, event order, executor release, cleanup-confirmed versus quarantine, and atomic mutation.
+    ☐ Add `tests/unit/host/service/scheduler/recovery_spec.lua` for normal/operator abort, exact generations, successful and failed clean-state proof, acknowledgement, discard, and reservation release.
     ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
     ☐ Complete the standard phase gate and focused scheduler recovery live tests.
 
 Phase 11 - Decompose mount context:
     ☐ Implement only the module boundaries approved for `driver/mount/mount_context.lua`.
-    ☐ Create `driver/mount/mount_resource_ownership.lua`, `mount_subject_resolution.lua`, `mount_command_execution.lua`, and `mount_cleanup_verification.lua` with exactly the approved responsibilities.
+    ☐ Extract mount allocation and ownership into `driver/mount/mount_resource_ownership.lua`, including mount identities, owned/borrowed construction, the single-current-mount guard, cleanup registration, explicit unmount handoff, and construction rollback.
+    ☐ Extract subject registration and resolution into `driver/mount/mount_subject_resolution.lua`, including source registration, adapter refresh, path parsing/traversal, retained subjects, retained identity, and stale/ambiguous rejection.
+    ☐ Extract mounted command execution into `driver/mount/mount_command_execution.lua`, including current mount/subject resolution, command invocation, render-aware mutation waits, and enriched command/component diagnostics.
+    ☐ Extract teardown and proof into `driver/mount/mount_cleanup_verification.lua`, including subject release, observer/pointer detachment, owned-screen dismissal, mount cleanup, failure aggregation, and exact cleanup-state evidence.
     ☐ Keep `driver/mount/mount_context.lua` as the constructed context facade with its established method surface.
     ☐ Preserve mount lifecycle, teardown order, retained subject identity, diagnostic content, and cleanup confirmation.
-    ☐ Add the approved direct behavioral specs for `mount_resource_ownership`, `mount_subject_resolution`, `mount_command_execution`, and `mount_cleanup_verification`, including their specified failure paths.
+    ☐ Add `tests/unit/driver/mount/mount_resource_ownership_spec.lua` for owned/native mounts, duplicate mount rejection, identity, cleanup registration, explicit unmount, and construction rollback.
+    ☐ Add `tests/unit/driver/mount/mount_subject_resolution_spec.lua` for Lua/native/overlay sources, child paths, retained identity, replacement/removal, ambiguity, and bounded available-child diagnostics.
+    ☐ Add `tests/unit/driver/mount/mount_command_execution_spec.lua` for current-mount guards, command arguments/returns, synchronous and awaited mutations, render failure, timeout, and diagnostic preservation.
+    ☐ Add `tests/unit/driver/mount/mount_cleanup_verification_spec.lua` for LIFO teardown, borrowed-resource preservation, owned dismissal, pointer/render restoration, multiple failures, idempotence, and verified state.
     ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
     ☐ Complete the standard phase gate and focused component/native mount live tests.
 
 Phase 12 - Decompose the controller runner:
     ☐ Implement only the module boundaries approved for `controller/execution/runner.lua`.
-    ☐ Create `controller/execution/command_builder.lua`, `transport_client.lua`, `run_poller.lua`, `run_recovery.lua`, and `result_interpreter.lua` with exactly the approved responsibilities.
+    ☐ Extract command validation and construction into `controller/execution/command_builder.lua`, including package/entrypoint validation and exact probe, bootstrap, poll, query, acknowledgement, abort, and recovery argument vectors.
+    ☐ Extract transport invocation into `controller/execution/transport_client.lua`, including process invocation, connection/process failure classification, and canonical report parsing with expected identities and cursors.
+    ☐ Extract run polling into `controller/execution/run_poller.lua`, including queued/active polling, event formatting, lease renewal, cursor advancement, and distinct queue/execution timeout budgets.
+    ☐ Extract cancellation and recovery orchestration into `controller/execution/run_recovery.lua`, including queued cancellation, active abort, terminal acknowledgement, timed-out invocation recovery, and explicit executor recovery.
+    ☐ Extract result classification and persistence orchestration into `controller/execution/result_interpreter.lua`, including stable result states, invocation-result documents, and calls to the existing result-store policy.
     ☐ Keep `controller/execution/runner.lua` as the public orchestration facade for run, abort, status, history, inspection, logs, and executor recovery.
     ☐ Preserve `process.lua` as the subprocess authority, `report.lua` as the transport/schema authority, and `result_store.lua` as the safe-replacement authority; use `transport_client.lua` only for transport invocation and classification.
     ☐ Preserve command arguments, polling cursors, queue/execution timeouts, cancellation, abort, acknowledgement, recovery, failure kinds, status handling, and result interpretation.
-    ☐ Add the approved direct behavioral specs for `command_builder`, `transport_client`, `run_poller`, `run_recovery`, and `result_interpreter`, including their specified failure paths.
+    ☐ Add `tests/unit/controller/execution/command_builder_spec.lua` for source/installed paths, every command vector, options, repeated filters, missing dependencies, and unsafe values.
+    ☐ Add `tests/unit/controller/execution/transport_client_spec.lua` for exit codes, missing/malformed envelopes, identity mismatch, cursor checks, verbose output, and process exceptions.
+    ☐ Add `tests/unit/controller/execution/run_poller_spec.lua` for activation boundaries, cursor advancement, queue timeout, execution timeout, terminal results, lease renewal, and interruption.
+    ☐ Add `tests/unit/controller/execution/run_recovery_spec.lua` for queued/active selection, owner capabilities, original-error preservation, cleanup confirmation, acknowledgement failure, and quarantine recovery.
+    ☐ Add `tests/unit/controller/execution/result_interpreter_spec.lua` for every failure kind, pre-execution/native outcomes, interrupted/aborted states, persistence policies, write failures, and terminal metadata.
     ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
     ☐ Complete the standard phase gate and focused CLI execution-path tests.
 
@@ -209,7 +233,8 @@ Phase 13 - Decompose cli.lua near the end:
     ☐ Reduce root `cli.lua` to delegation to `controller.application`.
     ☐ Review the fully decomposed root `cli.lua` and confirm it imports only `controller.application`.
     ☐ Preserve all existing command names, options, validation, help output, exit behavior, and orchestration behavior.
-    ☐ Add direct tests for command-line parsing and application orchestration.
+    ☐ Add `tests/unit/controller/command_line_spec.lua` for argument parsing, option validation, help construction, invalid input, and stable parse results.
+    ☐ Add `tests/unit/controller/application_spec.lua` for command selection, controller orchestration, exit behavior, and error propagation.
     ☐ Verify `help`, `list`, `run`, status, abort, recovery, and inspection paths.
     ☐ Complete the standard phase gate.
 
