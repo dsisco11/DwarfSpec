@@ -1,0 +1,234 @@
+DwarfSpec Source Organization Implementation
+============================================
+
+Purpose:
+    ☐ Implement `docs/source-organization-proposal.md` without changing public DwarfSpec behavior.
+    ☐ Organize production code by execution boundary and role: controller, host, driver, protocol, and support.
+    ☐ Preserve the shallow `dwarfspec.cli`, `dwarfspec.layout`, and `dwarfspec.ds` root facades.
+    ☐ Mirror organized production namespaces beneath `tests/unit/`.
+    ☐ Decompose the six approved large-module hotspots only after the initial directory migration is complete.
+
+Completion contract:
+    ☐ Treat this checklist as the implementation source of truth and `docs/source-organization-proposal.md` as the authority for architectural intent and the initial Mermaid tree.
+    ☐ Complete every applicable implementation, test, documentation, cleanup, and evidence item below.
+    ☐ Stop and reconcile the proposal and this checklist before proceeding if repository facts invalidate a target ownership decision or dependency rule.
+    ☐ Preserve the public `dwarfspec` executable behavior and the injected run-scoped `ds` API.
+    ☐ Treat every Lua source module path as internal; move internal modules atomically and do not add forwarding shims at former paths.
+    ☐ Keep `src/ds.d.lua` at the source root and preserve its declaration behavior.
+    ☐ Preserve deliberate `loadfile()` freshness and cache behavior in each composition root; do not replace it with ordinary `require()` as part of this work.
+    ☐ Keep loading helpers local to `ds.lua` and the host composition root; do not introduce a shared `module_loader` system.
+    ☐ Do not add tests whose only purpose is to assert that particular production files exist.
+    ☐ Use a nested sentinel or test-count inventory only to prove that recursive Busted discovery is active.
+    ☐ Do not add packaged-source or archive verification; the source checkout is the verification target for this reorganization.
+    ☐ Do not combine this work with public API changes, TestBed implementation, test-runner UI behavior, or selector redesign.
+    ☐ Add LuaDoc-style comments for every method or class introduced during an approved decomposition.
+    ☐ Preserve unrelated worktree and index changes; do not stash, discard, or commit user changes.
+    ☐ Use `git mv` for tracked moves and keep directory moves, behavior fixes, and decompositions as separate reviewable changesets; do not create commits unless explicitly requested.
+    ☐ After each implementation phase, run affected focused tests, the full source-checkout unit suite, `tools/Check-Lua.ps1`, the dependency-boundary audit, and `git diff --check`.
+    ☐ Run live tests after a phase only when it changes host entry paths, dynamic loading, or live execution behavior; keep live success and `cleanup_confirmed` as separate evidence.
+    ☐ Reserve the full non-destructive live sweep for the two milestone phases and compare it with the Phase 0 baseline.
+
+Phase 0 - Initial test baseline:
+    ☐ Record the active checkout, branch, worktree state, and index state without modifying them.
+    ☐ Record the current production-module and unit-spec inventory needed to detect omissions during moves.
+    ☐ Inventory static `require()` calls, literal and constructed `loadfile()` targets, and host entry-script paths returned by `dwarfspec.layout`.
+    ☐ Run and record the full source-checkout unit suite with its executed test count.
+    ☐ Run and record `tools/Check-Lua.ps1`.
+    ☐ Run and record focused live baselines for component mounting, native-screen mounting, pointer input, events, save-game commands, cleanup, and scheduler recovery.
+    ☐ Run and record the full non-destructive live suite.
+    ☐ Record every pre-existing live failure separately so later gates can distinguish regressions from baseline failures.
+    ☐ Record `cleanup_confirmed` separately from test success for every live baseline.
+    ☐ Do not begin source moves until the baseline evidence is complete.
+
+Phase 1 - Establish recursive discovery, path authority, and boundary guards:
+    ☐ Remove Busted's `--no-recursive` argument from `tools/Run-UnitTests.ps1` and the repository CI unit-test invocation.
+    ☐ Search the remaining test tooling for Busted invocations and ensure none disables recursive discovery for `tests/unit/`.
+    ☐ Add one nested sentinel or inventory assertion that fails when nested unit specs are skipped, without asserting production-file existence.
+    ☐ Prove the recursive runner executes both existing top-level specs and the nested guard.
+    ☐ Extend `dwarfspec.layout` as the single authority for source and installed paths to host entry scripts.
+    ☐ Replace duplicated host entry-script path literals in controller callers and tests with the layout authority.
+    ☐ Keep small local loading functions in `ds.lua` and the host composition root.
+    ☐ Mechanically derive source paths from canonical module names where that removes paired module/path literals without changing freshness or cache rules.
+    ☐ Add or extend tests for source-versus-installed entry paths and both composition roots' loading semantics.
+    ☐ Add a static dependency audit that understands static `require()`, literal and mechanically constructed `loadfile()`, and entry paths returned by `layout.lua`.
+    ☐ Enforce the launcher and root rules: `bin/dwarfspec` loads only the CLI and layout facades, and `layout.lua` imports no organized runtime namespace.
+    ☐ Encode the namespace matrix so it is enforced as each target namespace appears.
+        ☐ `controller/` may import controller, protocol, and support modules.
+        ☐ `host/` may import host, driver, protocol, and support modules.
+        ☐ `driver/` may import driver, protocol, and support modules.
+        ☐ `protocol/` may import protocol and support modules.
+        ☐ `support/` may import support modules only.
+    ☐ Encode both directions of the temporary composition exception: `host/execution/host.lua` may load root `dwarfspec.ds`, and root `ds.lua` may load host and driver modules while otherwise using protocol and support.
+    ☐ Add isolated-load coverage preventing controller and protocol modules from acquiring DFHack-only dependencies transitively.
+    ☐ Complete the standard phase gate.
+
+Phase 2 - Extract protocol and support namespaces:
+    ☐ Create `src/dwarfspec/support/` and the matching `tests/unit/support/` tree.
+    ☐ Extract pure project path normalization into `support/project_paths.lua` before moving `result_store.lua`.
+    ☐ Move `glob.lua`, `identity_labels.lua`, and `immutable_enum.lua` into `support/` with their callers and tests.
+    ☐ Create `src/dwarfspec/protocol/configuration/` and move `error_formats.lua`, `settings.lua`, and `config_schema.lua` as `schema.lua` with their callers and tests.
+    ☐ Split host-aware event validation from the pure wire contract, then place the pure event contract in `protocol/events.lua`.
+    ☐ Keep pure shared schema logic in `protocol/schemas.lua`.
+    ☐ Create `protocol/diagnostics/` and move focus comparison values and payload validation into `base_screen_focus_comparisons.lua` and `focus.lua`.
+    ☐ Move the stable shared focus-warning formatter into `protocol/diagnostics/focus_warning.lua`; leave native focus observation for the host phase.
+    ☐ Move cross-runtime enums into `protocol/enums/`: event types, owner kinds, result policies, result states, runner failure kinds, run states, scheduler failure kinds, and test statuses.
+    ☐ Leave driver-only enums with the future driver namespace.
+    ☐ Update all callers, dynamic paths, and matching unit specs in the same cohesive moves.
+    ☐ Confirm protocol and support modules load without controller, host, driver, `df`, or `dfhack` dependencies.
+    ☐ Complete the standard phase gate.
+
+Phase 3 - Create the controller namespace:
+    ☐ Create the controller directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
+    ☐ Move external configuration loading into `controller/configuration/config.lua` and `controller/configuration/dotenv.lua`.
+    ☐ Move controller project discovery into `controller/discovery/project.lua` and consume only pure shared path operations from `support/project_paths.lua`.
+    ☐ Move `process.lua` and the still-monolithic `runner.lua` into `controller/execution/` without decomposing the runner yet.
+    ☐ Move `diagnostic_formatter.lua` and `report.lua` into `controller/reporting/`.
+    ☐ Move `result_store.lua` into `controller/` only after removing its dependency on host project state.
+    ☐ Keep root `cli.lua` as the existing facade and allow it to import controller, protocol, and support during the initial migration.
+    ☐ Update CLI callers, tests, and all matching unit-spec paths atomically.
+    ☐ Verify `help`, `list`, `run`, status, abort, recovery, and inspection commands resolve their host entry paths through `layout.lua`.
+    ☐ Confirm controller modules do not load host or driver code into the external interpreter.
+    ☐ Complete the standard phase gate.
+
+Phase 4 - Create the driver namespace:
+    ☐ Create the driver directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
+    ☐ Move built-in run-scoped commands into `driver/commands/`.
+    ☐ Move input state, mouse button, pointer anchor, pointer space, and pointer adapter modules into `driver/input/`.
+    ☐ Move component and mount lifecycle modules into `driver/mount/`, retaining monolithic `mount_context.lua` for later decomposition.
+    ☐ Move render observation and instrumentation modules into `driver/render/`.
+    ☐ Move subject, native lookup, interaction target, retained-identity, and view adapter modules into `driver/subjects/`.
+    ☐ Move driver-only screen-origin and state-change-event modules into `driver/`.
+    ☐ Keep root `ds.lua` as the composition root and update its local loader to the new canonical module names.
+    ☐ Do not move or redesign host-owned save-game, overlay-registration, scheduling, cleanup, or diagnostic workflows in this phase.
+    ☐ Update matching unit specs and all `require()` and `loadfile()` paths with each cohesive production move.
+    ☐ Confirm no module beneath `driver/` imports a module beneath `host/` or the old `automation/` namespace.
+    ☐ Run focused live coverage for mounting, native screens, pointer input, events, and cleanup.
+    ☐ Complete the remaining standard phase gate items.
+
+Phase 5 - Replace automation with the host namespace:
+    ☐ Create the host directory and matching unit-test subtrees from the proposal's initial Mermaid tree.
+    ☐ Move Busted lifecycle, cleanup, coroutine scheduling, suite identity, output handling, and monolithic host execution into `host/execution/`.
+    ☐ Move projects, the monolithic scheduler, service state, and snapshots into `host/service/`.
+    ☐ Move extensions, filesystem and system adapters, and the host project loader into `host/environment/`; rename the loader to `project_environment.lua`.
+    ☐ Move diagnostics, problem-source classification, and native focus observation into `host/diagnostics/`.
+    ☐ Update problem-source classification for the organized source tree without exposing absolute local paths.
+    ☐ Move overlay registration and save-game load, mount, and unload workflows into `host/game/`.
+    ☐ Move directly invoked scripts into `host/entrypoints/` last, preserving continuous `dfhack-run` invocation.
+    ☐ Keep only the tiny duplicated bootstrap needed for each entrypoint to derive the Lua module root; do not duplicate downstream host paths.
+    ☐ Update `layout.lua`, controller callers, dynamic loaders, integration helpers, and matching tests with each entrypoint move.
+    ☐ Remove the empty `src/dwarfspec/automation/` directory after all references have moved.
+    ☐ Confirm `host/execution/host.lua` and root `ds.lua` are the only uses of the documented composition exception.
+    ☐ Verify every CLI command path against the relocated host entrypoints.
+    ☐ Run focused live coverage for events, save-game commands, cleanup, scheduler recovery, and host execution.
+    ☐ Complete the remaining standard phase gate items.
+
+Phase 6 - Close the initial directory-migration milestone:
+    ☐ Compare the resulting production tree with the proposal's initial Mermaid tree and resolve every unexplained difference.
+    ☐ Confirm `src/ds.d.lua` remains at the source root and contains no stale organized-source paths.
+    ☐ Confirm unit specs mirror controller, host, driver, protocol, and support ownership beneath `tests/unit/`.
+    ☐ Keep live suites under `tests/automation/`, destructive suites under `tests/destructive/`, and multi-process scenarios under `tests/integration/`.
+    ☐ Do not move checked-in protocol fixtures or generated `.test-results` for visual symmetry.
+    ☐ Update `docs/architecture.md`, contributor guidance, and other affected documentation with the new boundaries and public-versus-internal contract.
+    ☐ Remove stale internal paths from source, tests, scripts, declarations, and documentation.
+    ☐ Reuse the Phase 5 full-unit, syntax, and boundary results if no source, declaration, test, or tool file changed afterward; otherwise rerun them and verify the recursive inventory.
+    ☐ Run every focused live scope recorded in Phase 0 and require it to pass with cleanup evidence reported separately.
+    ☐ Run the full non-destructive live suite and confirm it introduces no failures relative to Phase 0.
+    ☐ Document any still-present baseline failure without treating it as a regression or silently claiming a clean full pass.
+    ☐ Run `git diff --check` and confirm unrelated worktree and index state remains preserved.
+    ☐ Declare the initial directory migration complete only after every item in this phase is satisfied.
+
+Phase 7 - Approve the late decomposition designs:
+    ☐ Create a focused decomposition proposal for root `ds.lua`.
+    ☐ Create a focused decomposition proposal for `host/execution/host.lua`.
+    ☐ Create a focused decomposition proposal for `host/service/scheduler.lua`.
+    ☐ Create a focused decomposition proposal for `driver/mount/mount_context.lua`.
+    ☐ Create a focused decomposition proposal for `controller/execution/runner.lua`.
+    ☐ In each proposal, name every extracted module, its responsibility, dependency changes, direct tests, and updated Mermaid subtree.
+    ☐ Reject generic destinations such as `utils.lua`, `helpers.lua`, or `common.lua`.
+    ☐ Reconcile the proposals together so they do not assign the same responsibility to multiple modules.
+    ☐ Obtain explicit approval for all five proposals before implementing any late decomposition.
+
+Phase 8 - Decompose root ds.lua:
+    ☐ Implement only the module boundaries approved in the `ds.lua` decomposition proposal.
+    ☐ Retain run-scoped API construction and public command binding in root `ds.lua`.
+    ☐ Extract command argument validation, normalization, and driver-side adapters for mount, pointer, event, game-state, and wait behavior into their approved driver command modules.
+    ☐ Preserve the public injected `ds` API and each local loader's cache and freshness behavior.
+    ☐ Do not move or redesign host-owned save-game, overlay-registration, or diagnostic workflows; reserve that ownership change for the follow-up plan.
+    ☐ Add direct tests for each named responsibility rather than tests of the new file layout.
+    ☐ Update the proposal's Mermaid subtree to match the implemented approved design.
+    ☐ Complete the standard phase gate and the relevant focused live driver tests.
+
+Phase 9 - Decompose host execution:
+    ☐ Implement only the module boundaries approved for `host/execution/host.lua`.
+    ☐ Separate run assembly, Busted execution, example lifecycle, module-environment audit, and transport publication into the approved named modules.
+    ☐ Preserve the host execution root's ownership of run construction and its documented load of root `dwarfspec.ds`.
+    ☐ Preserve transport output, cleanup order, error handling, and module freshness behavior.
+    ☐ Add direct tests for every extracted responsibility.
+    ☐ Update the proposal's Mermaid subtree to match the implemented approved design.
+    ☐ Complete the standard phase gate and focused host-execution live tests.
+
+Phase 10 - Decompose the scheduler:
+    ☐ Implement only the module boundaries approved for `host/service/scheduler.lua`.
+    ☐ Separate queue selection, lease and quarantine policy, and transition recording into the approved named modules.
+    ☐ Keep one authoritative service-state owner and preserve scheduling, recovery, and persistence behavior.
+    ☐ Add direct tests for each policy and state transition responsibility.
+    ☐ Update the proposal's Mermaid subtree to match the implemented approved design.
+    ☐ Complete the standard phase gate and focused scheduler recovery live tests.
+
+Phase 11 - Decompose mount context:
+    ☐ Implement only the module boundaries approved for `driver/mount/mount_context.lua`.
+    ☐ Separate resource ownership, subject resolution, command-execution diagnostics, and cleanup verification into the approved named modules.
+    ☐ Preserve mount lifecycle, teardown order, retained subject identity, diagnostic content, and cleanup confirmation.
+    ☐ Add direct tests for every extracted responsibility and failure path.
+    ☐ Update the proposal's Mermaid subtree to match the implemented approved design.
+    ☐ Complete the standard phase gate and focused component/native mount live tests.
+
+Phase 12 - Decompose the controller runner:
+    ☐ Implement only the module boundaries approved for `controller/execution/runner.lua`.
+    ☐ Separate command construction, process transport, polling, timeout and abort handling, and result interpretation into the approved named modules.
+    ☐ Preserve process invocation, failure kinds, status handling, recovery behavior, and result reporting.
+    ☐ Add direct tests for every extracted responsibility and failure path.
+    ☐ Update the proposal's Mermaid subtree to match the implemented approved design.
+    ☐ Complete the standard phase gate and focused CLI execution-path tests.
+
+Phase 13 - Decompose cli.lua near the end:
+    ☐ Begin only after Phases 8 through 12 are complete.
+    ☐ Move argument parsing, option validation, and help construction into `controller/command_line.lua`.
+    ☐ Move command selection and orchestration into `controller/application.lua`.
+    ☐ Reduce root `cli.lua` to delegation to `controller.application`.
+    ☐ Tighten the root-facade boundary audit so fully decomposed `cli.lua` may import only `controller.application`.
+    ☐ Preserve all existing command names, options, validation, help output, exit behavior, and orchestration behavior.
+    ☐ Add direct tests for command-line parsing and application orchestration.
+    ☐ Verify `help`, `list`, `run`, status, abort, recovery, and inspection paths.
+    ☐ Complete the standard phase gate.
+
+Phase 14 - Close full source organization:
+    ☐ Confirm all six large-module decompositions are complete and match their approved Mermaid subtrees.
+    ☐ Confirm the full production tree equals the initial migration tree plus the approved decomposition subtrees and the two specified CLI modules.
+    ☐ Confirm all root-facade and namespace dependency rules pass, including both directions of the temporary composition exception.
+    ☐ Confirm every extracted responsibility has direct behavioral coverage and no generic dumping-ground module was introduced.
+    ☐ Confirm source declarations and documentation contain no stale paths or unsupported public module claims.
+    ☐ Reuse the Phase 13 full-unit, syntax, boundary, and diff results if no source, declaration, test, or tool file changed afterward; otherwise rerun them and verify the recursive inventory.
+    ☐ Run every focused live scope from Phase 0 and require it to pass with cleanup evidence reported separately.
+    ☐ Run the full non-destructive live suite and confirm it introduces no failures relative to Phase 0.
+    ☐ Preserve and report any pre-existing baseline failure distinctly from the completed reorganization evidence.
+    ☐ Confirm unrelated worktree and index state remains preserved.
+    ☐ Declare full source organization complete only after every item in this phase is satisfied.
+
+Phase 15 - Create the option 2 follow-up plan:
+    ☐ Create a separate planning document for removing the temporary root `ds.lua` composition exception; do not implement that ownership redesign in this checklist.
+    ☐ Inventory every host module still loaded by `ds.lua` after full source organization.
+    ☐ Define the narrow host capabilities required by driver-facing code.
+    ☐ Evaluate moving run-scoped save-game workflows, overlay registration, and interaction diagnostics under `driver/` according to ownership.
+    ☐ Define explicit injected interfaces for host scheduling, cleanup, project-environment, and service capabilities.
+    ☐ Preserve fresh `loadfile()` behavior and source-versus-installed loading in the proposed design.
+    ☐ Specify boundary tests proving modules beneath `driver/` do not import `host/`.
+    ☐ Specify incremental implementation and verification gates without changing the public `ds` API.
+    ☐ Obtain approval for the follow-up plan before any option 2 implementation begins.
+
+Final handoff:
+    ☐ Summarize the initial directory migration and each approved late decomposition.
+    ☐ Report focused unit, full unit, syntax/formatting, boundary, focused live, full live, cleanup, declaration-path, documentation, and diff evidence distinctly.
+    ☐ List pre-existing baseline failures separately from regressions and confirm no new full-live failures were introduced.
+    ☐ Identify the temporary `ds.lua` composition exception as remaining intentional architecture until the separately approved option 2 plan is implemented.
+    ☐ Confirm no required checklist item remains incomplete or record the exact blocker and affected items.
