@@ -99,6 +99,18 @@ The host execution root may load `dwarfspec.ds` to construct the run-scoped
 API; this is the other half of the documented composition exception. Modules
 beneath `driver/` must not require modules beneath `host/` directly.
 
+Files outside the organized namespaces have explicit dependency rules:
+
+- `bin/dwarfspec` may load only the root `dwarfspec.cli` and
+  `dwarfspec.layout` facades;
+- during the initial directory migration, root `cli.lua` may load controller,
+  protocol, and support modules directly; after its late decomposition, it may
+  load only `controller.application`;
+- root `layout.lua` remains standalone and does not import an organized
+  runtime namespace; and
+- root `ds.lua` follows only the temporary bidirectional composition exception
+  documented above, plus ordinary protocol and support dependencies.
+
 ### Stable entry points stay shallow
 
 Keep these existing module names during the cleanup:
@@ -133,7 +145,7 @@ Use names that distinguish the two current project concepts:
 Likewise, reserve `host/entrypoints/` for scripts invoked directly through
 `dfhack-run`; reusable host modules must not be placed there.
 
-## Proposed production tree
+## Initial directory-migration tree
 
 ```mermaid
 flowchart TB
@@ -143,8 +155,6 @@ flowchart TB
     root --> layout["layout.lua"]
 
     root --> controller["controller/"]
-    controller --> controller_application["application.lua"]
-    controller --> controller_command_line["command_line.lua"]
     controller --> controller_configuration["configuration/<br/>config.lua<br/>dotenv.lua"]
     controller --> controller_discovery["discovery/<br/>project.lua"]
     controller --> controller_execution["execution/<br/>process.lua<br/>runner.lua"]
@@ -178,6 +188,16 @@ flowchart TB
     root --> support["support/"]
     support --> support_files["glob.lua<br/>identity_labels.lua<br/>immutable_enum.lua<br/>project_paths.lua"]
 ```
+
+This graph is the required tree at the initial directory-migration milestone.
+It intentionally retains the large implementation modules that are decomposed
+later. The CLI split is already specified as `controller/application.lua` and
+`controller/command_line.lua`. Before implementing each other late
+decomposition, create and approve a focused proposal that names its extracted
+modules, dependency changes, direct tests, and updated Mermaid subtree. The
+full source-organization tree is the initial graph plus the CLI modules and
+those approved decomposition subtrees; it is not implied by unnamed helper
+modules.
 
 `ds.d.lua` remains at `src/ds.d.lua`. It is a declaration surface rather than
 an installed implementation module and should not be mixed into the runtime
@@ -252,8 +272,11 @@ cohesive modules without changing their behavior. Once the new dependency
 boundaries are enforced, split the six current hotspots:
 
 - `ds.lua` (about 2,000 lines): retain construction and public command binding
-  in the facade; move mount, pointer, event, game-state, and wait command
-  implementations into driver command modules.
+  in the facade; move command argument validation, normalization, and
+  driver-side adapters for mount, pointer, event, game-state, and wait behavior
+  into driver command modules. This extraction does not move or redesign the
+  underlying save-game, overlay-registration, or diagnostic workflows assigned
+  to `host/`; those ownership changes remain follow-up work.
 - `automation/host.lua` (about 1,400 lines): separate run assembly, Busted
   execution, example lifecycle, module-environment audit, and transport
   publication.
@@ -316,26 +339,30 @@ generated `.test-results` merely to make the tree look symmetric.
 
 ## Implementation sequence
 
-1. Record the current unit, syntax, and focused live baselines.
-2. Enable recursive Busted discovery and add the nested-test inventory guard
+0. **Phase 0 -- initial test baseline:** Record the current unit, syntax,
+   focused live, and full non-destructive live-suite results. Record cleanup
+   confirmation separately from test success.
+1. Enable recursive Busted discovery and add the nested-test inventory guard
    before moving any unit spec.
-3. Add dependency-boundary tests and centralize source/installed path
+2. Add dependency-boundary tests and centralize source/installed path
    resolution in the existing composition roots without moving modules.
-4. Split host-aware validation from the pure event and configuration
+3. Split host-aware validation from the pure event and configuration
    contracts, then move the remaining protocol and support modules with their
    callers and tests.
-5. Create `controller/`, retaining the three stable root facades.
-6. Move the run-scoped implementation into `driver/`.
-7. Replace `automation/` with `host/`, moving entry scripts last so external
+4. Create `controller/`, retaining the three stable root facades.
+5. Move the run-scoped implementation into `driver/`.
+6. Replace `automation/` with `host/`, moving entry scripts last so external
    invocation remains continuously testable.
-8. Update architecture and contributor documentation, including the explicit
+7. Update architecture and contributor documentation, including the explicit
    public-versus-internal source contract.
-9. Declare the initial directory migration complete.
-10. Decompose `ds.lua`, host execution, the scheduler, mount context, and the
-   runner in small, separately verified changes.
-11. As one of the final implementation steps, decompose `cli.lua` into
-   `controller/command_line.lua` and `controller/application.lua`, leaving the
-   stable root module as a thin facade.
+8. Declare the initial directory migration complete.
+9. Create and approve focused decomposition proposals for `ds.lua`, host
+    execution, the scheduler, mount context, and the runner, then implement them
+    in small, separately verified changes. Each proposal updates the relevant
+    Mermaid subtree before implementation.
+10. As one of the final implementation steps, decompose `cli.lua` into
+    `controller/command_line.lua` and `controller/application.lua`, leaving the
+    stable root module as a thin facade.
 
 The completion milestones are:
 
@@ -363,19 +390,26 @@ decompositions listed in the implementation sequence:
   `host/` imports host, driver, protocol, and support modules; `driver/`
   imports only driver, protocol, and support modules; `protocol/` imports only
   protocol and support modules; and `support/` imports only support modules;
+- the boundary audit enforces the launcher and root-facade rules:
+  `bin/dwarfspec` loads only `dwarfspec.cli` and `dwarfspec.layout`;
+  `layout.lua` imports no runtime namespace; initial-migration `cli.lua`
+  imports only controller, protocol, and support modules; and fully decomposed
+  `cli.lua` imports only `controller.application`;
 - the boundary audit covers static `require()` calls, literal and constructed
   `loadfile()` targets, and host entrypoint paths returned by `layout.lua`;
 - the dependency audit recognizes both directions of the sole composition
   exception: `host/execution/host.lua` may load the root `dwarfspec.ds`
-  facade, and that facade may load both host and driver modules;
+  facade, and that facade may load host and driver modules while otherwise
+  depending only on protocol and support;
 - the unit runner recursively discovers nested specs and verifies its expected
   test inventory;
 - the CLI `help`, `list`, `run`, status, abort, recovery, and inspection paths
   resolve the new host entrypoint locations;
-- focused live tests cover component mounting, native-screen mounting,
+- focused live tests pass for component mounting, native-screen mounting,
   pointer input, events, save-game commands, cleanup, and scheduler recovery;
-- the full non-destructive live suite passes with cleanup confirmation kept
-  distinct from test success;
+- the full non-destructive live suite is rerun with no new failures relative
+  to the Phase 0 baseline; any pre-existing failures remain documented, and
+  cleanup confirmation remains distinct from test success;
 - source declarations still validate against the organized source tree;
 - documentation contains no stale internal paths; and
 - `git diff --check` passes with unrelated worktree state preserved.
