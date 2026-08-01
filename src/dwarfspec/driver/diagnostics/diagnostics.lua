@@ -1,4 +1,4 @@
--- Production read-only diagnostics for live automation failures.
+-- Driver-owned read-only diagnostics for live automation failures.
 
 local M = {}
 
@@ -217,12 +217,14 @@ function M.capture_view_tree(view, options, adapter)
     return root
 end
 
----Captures a bounded plain screen-cell buffer through DFHack's read API.
+---Captures a bounded plain screen-cell buffer through injected native reads.
+---@param get_window_size function
+---@param read_tile function
 ---@param options table|nil
 ---@return table
-function M.capture_screen(options)
+local function capture_screen(get_window_size, read_tile, options)
     options = options or {}
-    local width, height = dfhack.screen.getWindowSize()
+    local width, height = get_window_size()
     local max_width = math.min(width, options.max_width or width)
     local max_height = math.min(height, options.max_height or height)
     assert(max_width >= 1 and max_height >= 1,
@@ -231,7 +233,7 @@ function M.capture_screen(options)
     for y = 0, max_height - 1 do
         local row = {}
         for x = 0, max_width - 1 do
-            local pen = dfhack.screen.readTile(x, y)
+            local pen = read_tile(x, y)
             row[x + 1] = pen and {
                 ch=pen.ch,
                 fg=pen.fg,
@@ -260,21 +262,23 @@ function M.summarize_tree(node, depth)
 end
 
 ---Captures bounded evidence for a failed mounted-component operation.
+---@param diagnostics table
 ---@param mount table
 ---@param operation string
 ---@param failure any
 ---@return table
-function M.capture_mount_failure(mount, operation, failure)
+local function capture_mount_failure(diagnostics, mount, operation, failure)
     local adapter = mount.subject_source and
         mount.subject_source.adapter or nil
     local root = adapter and adapter:root() or mount.root
     local tree = nil
     if root then
-        local ok, value = pcall(M.capture_view_tree, root, nil, adapter)
+        local ok, value = pcall(
+            diagnostics.capture_view_tree, root, nil, adapter)
         if ok then tree = value end
     end
     local screen = {width=0, height=0, cells={}}
-    local ok, value = pcall(M.capture_screen, {
+    local ok, value = pcall(diagnostics.capture_screen, {
         max_width=16,
         max_height=8,
     })
@@ -306,6 +310,47 @@ function M.format_mount_failure(evidence)
             tostring(evidence.category), evidence.selected_control_path,
             tostring(evidence.selected_mount_id), evidence.cause,
             tree_summary, evidence.screen.width, evidence.screen.height)
+end
+
+---Constructs driver diagnostics from native screen capabilities.
+---@param dependencies table
+---@return table
+function M.new(dependencies)
+    assert(type(dependencies) == 'table',
+        'DwarfSpec diagnostics require dependencies')
+    local get_window_size = assert(dependencies.get_window_size,
+        'DwarfSpec diagnostics require get_window_size()')
+    local read_tile = assert(dependencies.read_tile,
+        'DwarfSpec diagnostics require read_tile()')
+    assert(type(get_window_size) == 'function',
+        'DwarfSpec diagnostics require get_window_size()')
+    assert(type(read_tile) == 'function',
+        'DwarfSpec diagnostics require read_tile()')
+
+    local diagnostics = {
+        inspect_view=M.inspect_view,
+        capture_view_tree=M.capture_view_tree,
+        summarize_tree=M.summarize_tree,
+        format_mount_failure=M.format_mount_failure,
+    }
+
+    ---Captures a bounded plain native screen-cell buffer.
+    ---@param options table|nil
+    ---@return table
+    function diagnostics.capture_screen(options)
+        return capture_screen(get_window_size, read_tile, options)
+    end
+
+    ---Captures bounded evidence for a failed mounted operation.
+    ---@param mount table
+    ---@param operation string
+    ---@param failure any
+    ---@return table
+    function diagnostics.capture_mount_failure(mount, operation, failure)
+        return capture_mount_failure(diagnostics, mount, operation, failure)
+    end
+
+    return diagnostics
 end
 
 return M

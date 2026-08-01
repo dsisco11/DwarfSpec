@@ -2,8 +2,8 @@
 
 local cleanup = assert(loadfile(
     'src/dwarfspec/host/execution/cleanup.lua'))()
-local diagnostics = assert(loadfile(
-    'src/dwarfspec/host/diagnostics/diagnostics.lua'))()
+local diagnostics_module = assert(loadfile(
+    'src/dwarfspec/driver/diagnostics/diagnostics.lua'))()
 local pointer_adapter = assert(loadfile(
     'src/dwarfspec/driver/input/pointer_adapter.lua'))()
 local EPointerSpace = require('dwarfspec.driver.input.pointer_spaces')
@@ -99,6 +99,7 @@ end
 describe('automation interaction support', function()
     local original_dfhack
     local original_df
+    local diagnostics
 
     before_each(function()
         original_dfhack = rawget(_G, 'dfhack')
@@ -126,6 +127,14 @@ describe('automation interaction support', function()
                     mouse_mbut_lift=0,
                 },
             },
+        })
+        diagnostics = diagnostics_module.new({
+            get_window_size=function()
+                return dfhack.screen.getWindowSize()
+            end,
+            read_tile=function(x, y)
+                return dfhack.screen.readTile(x, y)
+            end,
         })
     end)
 

@@ -64,8 +64,8 @@ function M.new(package_root, project, scheduler_module, scheduler,
     assert(type(run_capabilities) == 'table',
         'DwarfSpec ds factory requires injected run capabilities')
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
-local diagnostics = load_automation_module(package_root,
-    'dwarfspec.host.diagnostics.diagnostics')
+local diagnostics_module = load_automation_module(package_root,
+    'dwarfspec.driver.diagnostics.diagnostics')
 local pointer_adapter_module = load_automation_module(package_root,
     'dwarfspec.driver.input.pointer_adapter')
 local overlay_registration = load_automation_module(package_root,
@@ -189,7 +189,6 @@ local command_observer_module = load_automation_module(package_root,
         scheduler_module=scheduler_module,
         cleanup_module=cleanup_module,
         cleanup_registry=cleanup_registry,
-        diagnostics=diagnostics,
         pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry, {
             get_geometry=get_pointer_geometry,
             screen=pointer_screen,
@@ -240,6 +239,12 @@ local command_observer_module = load_automation_module(package_root,
         game_pause_cleanup_entry=nil,
         game_speed_cleanup_entry=nil,
     }
+
+    local diagnostics = diagnostics_module.new({
+        get_window_size=context.get_window_size,
+        read_tile=context.read_tile,
+    })
+    context.diagnostics = diagnostics
 
     ---Dispatches one native input key through DFHack's GUI module.
     ---@param screen any

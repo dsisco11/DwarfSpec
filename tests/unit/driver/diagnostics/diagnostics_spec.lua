@@ -1,7 +1,13 @@
 -- Unit contracts for bounded live automation diagnostics.
 
-local diagnostics = assert(loadfile(
-    'src/dwarfspec/host/diagnostics/diagnostics.lua'))()
+local diagnostics_module = assert(loadfile(
+    'src/dwarfspec/driver/diagnostics/diagnostics.lua'))()
+local diagnostics = diagnostics_module.new({
+    get_window_size=function() return 3, 2 end,
+    read_tile=function(x, y)
+        return {ch=65 + x + y, fg=7, bg=0, bold=false}
+    end,
+})
 
 ---Builds a single-child view chain with stable propagated IDs.
 ---@param count integer
@@ -23,6 +29,15 @@ local function view_chain(count)
 end
 
 describe('automation mount diagnostics', function()
+    it('requires explicit native screen capabilities', function()
+        assert.has_error(function()
+            diagnostics_module.new({read_tile=function() end})
+        end, 'DwarfSpec diagnostics require get_window_size()')
+        assert.has_error(function()
+            diagnostics_module.new({get_window_size=function() end})
+        end, 'DwarfSpec diagnostics require read_tile()')
+    end)
+
     it('bounds recursive tree captures by depth', function()
         local tree = diagnostics.capture_view_tree(view_chain(20), {
             max_depth=3,
@@ -95,5 +110,18 @@ describe('automation mount diagnostics', function()
         assert.is_true(tree.capture_bounds.truncated)
         assert.equals(3, tree.capture_bounds.max_children)
         assert.equals(12, tree.capture_bounds.max_value_length)
+    end)
+
+    it('captures bounded native screen cells through injected reads',
+            function()
+        local capture = diagnostics.capture_screen({
+            max_width=2,
+            max_height=1,
+        })
+
+        assert.equals(2, capture.width)
+        assert.equals(1, capture.height)
+        assert.equals(65, capture.cells[1][1].ch)
+        assert.equals(66, capture.cells[1][2].ch)
     end)
 end)

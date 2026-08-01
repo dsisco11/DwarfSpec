@@ -16,7 +16,7 @@ Constraints:
     - Keep the retained host service registry, scheduler instance, cleanup registry, and project environment host-owned.
 
 Approval-time host-module inventory and migration state:
-    - `dwarfspec.host.diagnostics.diagnostics` provides subject inspection, bounded tree and screen capture, and mount-failure formatting.
+    - `dwarfspec.host.diagnostics.diagnostics` provided subject inspection, bounded tree and screen capture, and mount-failure formatting; moved to `dwarfspec.driver.diagnostics.diagnostics` in Phase 3.
     - `dwarfspec.host.game.overlay_registration` provides project-source resolution, DFHack overlay registration staging, and exact cleanup restoration.
     - `dwarfspec.host.game.save_game_mount` provided argument validation and same-save versus transition preflight; moved to `dwarfspec.driver.game.save_game_mount` in Phase 2.
     - `dwarfspec.host.game.save_game_load` provided the deterministic title-screen load workflow; moved to `dwarfspec.driver.game.save_game_load` in Phase 2.
@@ -55,12 +55,12 @@ Phase 2 - Move save-game behavior to driver ownership:
     ☑ Run focused same-save and transition live coverage and confirm cleanup.
 
 Phase 3 - Move interaction diagnostics to driver ownership:
-    ☐ Move subject inspection, bounded capture, and mount-failure formatting to a driver-owned diagnostics module with its behavioral spec.
-    ☐ Inject native screen reads and window geometry so the driver module does not acquire a host dependency.
-    ☐ Update driver commands and `ds.lua` composition to use the driver-owned diagnostics module.
-    ☐ Remove the `dwarfspec.host.diagnostics.diagnostics` import from `ds.lua` after its replacement tests pass.
-    ☐ Run the diagnostics and mount-command unit specs, then the complete unit suite.
-    ☐ Run focused failure-diagnostics and recovery coverage and confirm cleanup.
+    ☑ Move subject inspection, bounded capture, and mount-failure formatting to a driver-owned diagnostics module with its behavioral spec.
+    ☑ Inject native screen reads and window geometry so the driver module does not acquire a host dependency.
+    ☑ Update driver commands and `ds.lua` composition to use the driver-owned diagnostics module.
+    ☑ Remove the `dwarfspec.host.diagnostics.diagnostics` import from `ds.lua` after its replacement tests pass.
+    ☑ Run the diagnostics and mount-command unit specs, then the complete unit suite.
+    ☑ Run focused failure-diagnostics and recovery coverage and confirm cleanup.
 
 Phase 4 - Split overlay registration by ownership:
     ☐ Move the run-scoped stage, rollback, and cleanup workflow to a driver-owned module with its behavioral spec.
