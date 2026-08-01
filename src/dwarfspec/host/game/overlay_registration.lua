@@ -51,7 +51,7 @@ end
 
 ---Creates default DFHack services for registration and configuration cleanup.
 ---@return table
-local function default_services()
+function M.default_services()
     local overlay = require('plugins.overlay')
     return {
         destination_directory=dfhack.getDFPath() .. '/hack/scripts/gui',
@@ -201,7 +201,7 @@ function M.stage(project, source_path, logical_name, run_id, cleanup_module,
             'hyphens, or underscores')
     assert(type(run_id) == 'string' and run_id:match('^[%w_.-]+$'),
         'overlay staging requires a safe run id')
-    services = services or default_services()
+    services = services or M.default_services()
     assert(type(services.destination_directory) == 'string' and
         services.destination_directory ~= '',
         'overlay staging requires a destination directory')

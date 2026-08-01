@@ -16,6 +16,7 @@ describe('host suite executor', function()
             suite_exit=function() end, test_start=function() end,
             example_entry=function() end, example_exit=function() end}
         local run={
+            run_id='run-1',
             options={specs={'selected_spec.lua'}, repeat_count=3, seed=9},
             cleanup_registry={}, event_publisher={},
             cleanup_module={push=function(_, name, callback)
@@ -23,6 +24,9 @@ describe('host suite executor', function()
             end},
         }
         local project={}
+        local capabilities={run_id='run-1'}
+        local capability_options
+        local forwarded_capabilities
         local dependencies={
             configure_dependencies=function()
                 table.insert(calls, 'dependencies')
@@ -55,7 +59,15 @@ describe('host suite executor', function()
                 table.insert(calls, 'project_environment')
                 return function() end, {restored=false}
             end,
-            ds_factory={new=function()
+            new_run_capabilities=function(options)
+                capability_options = options
+                return capabilities
+            end,
+            create_overlay_services=function()
+                return {identity='overlay-services'}
+            end,
+            ds_factory={new=function(_, _, _, _, _, _, _, _, value)
+                forwarded_capabilities = value
                 table.insert(calls, 'ds')
                 return {}, function() end
             end},
@@ -86,6 +98,9 @@ describe('host suite executor', function()
         assert.same({'selected'}, run.discovered_files)
         assert.same({repeat_count=3,
             options={seed=9, shuffle=false, sort=true}}, executed)
+        assert.equals('run-1', capability_options.run_id)
+        assert.equals(project, capability_options.project)
+        assert.equals(capabilities, forwarded_capabilities)
         assert.same({'dependencies', 'busted', 'project_environment', 'ds',
             'export:ds', 'entry', 'exit', 'output', 'filter', 'discovery',
             'execute', 'publish:exit'}, calls)
@@ -110,7 +125,8 @@ describe('host suite executor', function()
     end)
 
     it('rejects an injected ds factory failure without running Busted', function()
-        local run = {options={specs={'test.lua'}, repeat_count=1},
+        local run = {run_id='run-2',
+            options={specs={'test.lua'}, repeat_count=1},
             cleanup_registry={}, cleanup_module={push=function() end},
             event_publisher={}}
         local project_module = {new=function() return {} end}
@@ -128,6 +144,8 @@ describe('host suite executor', function()
                 filesystem={}, configure_project=function()
                     return function() end, {}
                 end,
+                new_run_capabilities=function() return {} end,
+                create_overlay_services=function() return {} end,
                 ds_factory={new=function() error('ds assembly failed') end},
             })
         end, 'ds assembly failed')
@@ -146,6 +164,7 @@ describe('host suite executor', function()
             example_entry=function() end, example_exit=function() end}
         assert.has_error(function()
             module.execute('package', 'project', {
+                run_id='run-3',
                 options={specs={'spec.lua'}, repeat_count=1},
                 cleanup_registry={}, event_publisher={},
                 cleanup_module={push=function()
@@ -169,6 +188,8 @@ describe('host suite executor', function()
                 configure_project=function()
                     return function() end, {}
                 end,
+                new_run_capabilities=function() return {} end,
+                create_overlay_services=function() return {} end,
                 ds_factory={new=function() return {}, function() end end},
                 new_lifecycle=function() return lifecycle end,
                 install_entry=function() end, install_exit=function() end,

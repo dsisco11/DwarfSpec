@@ -56,9 +56,13 @@ end
 ---@param cleanup_registry table
 ---@param extensions table
 ---@param mount_dependencies table|nil
+---@param run_capabilities table
 ---@return table
 function M.new(package_root, project, scheduler_module, scheduler,
-        cleanup_module, cleanup_registry, extensions, mount_dependencies)
+        cleanup_module, cleanup_registry, extensions, mount_dependencies,
+        run_capabilities)
+    assert(type(run_capabilities) == 'table',
+        'DwarfSpec ds factory requires injected run capabilities')
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
 local diagnostics = load_automation_module(package_root,
     'dwarfspec.host.diagnostics.diagnostics')

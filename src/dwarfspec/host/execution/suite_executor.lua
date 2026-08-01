@@ -33,9 +33,19 @@ function M.execute(package_root, project_root, run, scheduler_module,
             run.options.test_glob or discovery.test_glob)
     end
 
+    local run_capabilities = dependencies.new_run_capabilities({
+        run_id=run.run_id,
+        scheduler_module=scheduler_module,
+        scheduler=scheduler,
+        cleanup_module=run.cleanup_module,
+        cleanup_registry=run.cleanup_registry,
+        project_module=project_module,
+        project=project,
+        overlay_services=dependencies.create_overlay_services(),
+    })
     local ds, reset = dependencies.ds_factory.new(package_root, project,
         scheduler_module, scheduler, run.cleanup_module,
-        run.cleanup_registry, extensions)
+        run.cleanup_registry, extensions, nil, run_capabilities)
     busted.export('ds', ds)
     local lifecycle_adapter = dependencies.load_module(package_root,
         'dwarfspec.host.execution.busted_lifecycle_adapter')

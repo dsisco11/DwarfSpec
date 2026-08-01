@@ -37,14 +37,14 @@ Phase 0 baseline recorded 2026-08-01:
     - `.\tools\Run-AutomationTests.ps1 --no-results`: 51 successes, 0 failures, 0 errors, 0 pending, cleanup confirmed.
 
 Phase 1 - Introduce explicit host capability interfaces:
-    ☐ Define one internal run-capabilities table passed by host execution into `dwarfspec.ds.new()`.
-    ☐ Provide bounded `wait_until()` and `wait_frames()` scheduling functions without exposing the scheduler implementation.
-    ☐ Provide cleanup mark, labeled registration, and rollback-to-mark functions without exposing the cleanup registry.
-    ☐ Provide validated project Lua-source resolution without exposing the project-environment module.
-    ☐ Provide overlay file, rescan, registration-query, and path operations without exposing the retained service registry.
-    ☐ Provide the immutable run identifier required for owned integration artifact names.
-    ☐ Add unit coverage for capability construction, validation, and forwarding while leaving all five host imports in `ds.lua` temporarily.
-    ☐ Run the unit suite.
+    ☑ Define one internal run-capabilities table passed by host execution into `dwarfspec.ds.new()`.
+    ☑ Provide bounded `wait_until()` and `wait_frames()` scheduling functions without exposing the scheduler implementation.
+    ☑ Provide cleanup mark, labeled registration, and rollback-to-mark functions without exposing the cleanup registry.
+    ☑ Provide validated project Lua-source resolution without exposing the project-environment module.
+    ☑ Provide overlay file, rescan, registration-query, and path operations without exposing the retained service registry.
+    ☑ Provide the immutable run identifier required for owned integration artifact names.
+    ☑ Add unit coverage for capability construction, validation, and forwarding while leaving all five host imports in `ds.lua` temporarily.
+    ☑ Run the unit suite.
 
 Phase 2 - Move save-game behavior to driver ownership:
     ☐ Move save-game argument/preflight behavior to a driver-owned module and move its behavioral spec with it.

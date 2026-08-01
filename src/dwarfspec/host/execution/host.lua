@@ -19,6 +19,8 @@ local suite_discovery_module =
 local transport_publication =
     require('dwarfspec.host.execution.transport_publication')
 local run_assembly = require('dwarfspec.host.execution.run_assembly')
+local run_capabilities_module =
+    require('dwarfspec.host.execution.run_capabilities')
 local example_lifecycle_module = require('dwarfspec.host.execution.example_lifecycle')
 local suite_executor_module = require('dwarfspec.host.execution.suite_executor')
 local run_lifecycle_module = require('dwarfspec.host.execution.run_lifecycle')
@@ -349,6 +351,14 @@ end
 ---@param scheduler table
 local function execute_suite(package_root, project_root, run, scheduler_module,
         scheduler)
+    ---Creates the native overlay services injected into this run.
+    ---@return table
+    local function create_overlay_services()
+        return load_automation_module(package_root,
+            'dwarfspec.host.game.overlay_registration')
+                .default_services()
+    end
+
     return suite_executor_module.execute(package_root, project_root, run,
         scheduler_module, scheduler, {
             configure_dependencies=configure_dependencies,
@@ -357,6 +367,8 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
             filesystem=dfhack.filesystem,
             gui=dfhack.gui,
             ds_factory=run.ds_factory,
+            new_run_capabilities=run_capabilities_module.new,
+            create_overlay_services=create_overlay_services,
             new_lifecycle=M.new_focus_lifecycle,
             install_entry=M.install_ds_example_entry,
             install_exit=M.install_ds_example_exit,

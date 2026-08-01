@@ -560,7 +560,7 @@ describe('DwarfSpec public mount commands', function()
                         end,
                     }
                 end,
-            })
+            }, {run_id=run.run_id})
     end)
 
     it('resets the implicit mount before and after examples idempotently',
