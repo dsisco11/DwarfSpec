@@ -560,7 +560,48 @@ describe('DwarfSpec public mount commands', function()
                         end,
                     }
                 end,
-            }, {run_id=run.run_id})
+            }, {
+                run_id=run.run_id,
+                project={
+                    resolve_lua_source=function(source_path)
+                        return {
+                            relative_path=source_path,
+                            absolute_path=source_path,
+                        }
+                    end,
+                },
+                cleanup={
+                    mark=function() return cleanup.mark(registry) end,
+                    register=function(name, action)
+                        return cleanup.push(registry, name, action)
+                    end,
+                    rollback=function(marker, reason)
+                        return cleanup.run_from(registry, marker, reason)
+                    end,
+                },
+                overlay={
+                    destination_directory='unused/overlay',
+                    config_path='unused/overlay.json',
+                    isfile=function() return false end,
+                    read_file=function()
+                        error('unexpected overlay file read')
+                    end,
+                    write_file=function()
+                        error('unexpected overlay file write')
+                    end,
+                    remove_file=function()
+                        error('unexpected overlay file removal')
+                    end,
+                    rescan=function()
+                        error('unexpected overlay rescan')
+                    end,
+                    registered_names=function() return {} end,
+                    is_enabled=function() return false end,
+                    disable=function()
+                        error('unexpected overlay disable')
+                    end,
+                },
+            })
     end)
 
     it('resets the implicit mount before and after examples idempotently',

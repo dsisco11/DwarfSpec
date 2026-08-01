@@ -17,7 +17,7 @@ Constraints:
 
 Approval-time host-module inventory and migration state:
     - `dwarfspec.host.diagnostics.diagnostics` provided subject inspection, bounded tree and screen capture, and mount-failure formatting; moved to `dwarfspec.driver.diagnostics.diagnostics` in Phase 3.
-    - `dwarfspec.host.game.overlay_registration` provides project-source resolution, DFHack overlay registration staging, and exact cleanup restoration.
+    - `dwarfspec.host.game.overlay_registration` provided project-source resolution, DFHack overlay registration staging, and exact cleanup restoration; the workflow moved to `dwarfspec.driver.overlay.overlay_registration` and external operations moved to `dwarfspec.host.game.overlay_services` in Phase 4.
     - `dwarfspec.host.game.save_game_mount` provided argument validation and same-save versus transition preflight; moved to `dwarfspec.driver.game.save_game_mount` in Phase 2.
     - `dwarfspec.host.game.save_game_load` provided the deterministic title-screen load workflow; moved to `dwarfspec.driver.game.save_game_load` in Phase 2.
     - `dwarfspec.host.game.save_game_unload` provided the deterministic no-save unload workflow; moved to `dwarfspec.driver.game.save_game_unload` in Phase 2.
@@ -63,12 +63,12 @@ Phase 3 - Move interaction diagnostics to driver ownership:
     ☑ Run focused failure-diagnostics and recovery coverage and confirm cleanup.
 
 Phase 4 - Split overlay registration by ownership:
-    ☐ Move the run-scoped stage, rollback, and cleanup workflow to a driver-owned module with its behavioral spec.
-    ☐ Keep project path resolution and external DFHack overlay/file operations behind the host-injected capabilities from Phase 1.
-    ☐ Update `ds.stage_overlay_registration()` to delegate without changing its arguments, result, failure text, or cleanup guarantees.
-    ☐ Remove the `dwarfspec.host.game.overlay_registration` import from `ds.lua` after its replacement tests pass.
-    ☐ Run the overlay-registration unit specs, then the complete unit suite.
-    ☐ Run focused overlay registration, restoration, failure-recovery, and cleanup coverage.
+    ☑ Move the run-scoped stage, rollback, and cleanup workflow to a driver-owned module with its behavioral spec.
+    ☑ Keep project path resolution and external DFHack overlay/file operations behind the host-injected capabilities from Phase 1.
+    ☑ Update `ds.stage_overlay_registration()` to delegate without changing its arguments, result, failure text, or cleanup guarantees.
+    ☑ Remove the `dwarfspec.host.game.overlay_registration` import from `ds.lua` after its replacement tests pass.
+    ☑ Run the overlay-registration unit specs, then the complete unit suite.
+    ☑ Run focused overlay registration, restoration, failure-recovery, and cleanup coverage.
 
 Phase 5 - Remove and enforce the exception:
     ☐ Add one Busted dependency-rule spec that inspects declared static imports beneath `driver/` and rejects `dwarfspec.host` targets without replacing or intercepting Lua loading.

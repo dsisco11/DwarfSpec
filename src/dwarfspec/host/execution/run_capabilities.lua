@@ -121,14 +121,20 @@ function M.new(dependencies)
 
     ---Resolves one validated project-relative Lua source.
     ---@param source_path string
+    ---@param purpose string|nil Optional diagnostic ownership label.
     ---@return table
-    local function resolve_lua_source(source_path)
+    local function resolve_lua_source(source_path, purpose)
+        assert(purpose == nil or
+                type(purpose) == 'string' and purpose ~= '',
+            'project source purpose must be a nonempty string')
+        local source_label = purpose and purpose .. ' source' or
+            'project Lua source'
         local relative_path = relative_path_impl(source_path)
         assert(relative_path:match('%.lua$'),
-            'project Lua source must name one Lua module: ' .. relative_path)
+            source_label .. ' must name one Lua module: ' .. relative_path)
         local absolute_path = join_impl(project.project_root, relative_path)
         assert(project.filesystem.isfile(absolute_path),
-            'project Lua source was not found: ' .. relative_path)
+            source_label .. ' was not found: ' .. relative_path)
         return {
             relative_path=relative_path,
             absolute_path=absolute_path,

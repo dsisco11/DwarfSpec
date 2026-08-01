@@ -1,87 +1,6 @@
--- Production staging boundary for real DFHack overlay registration tests.
+-- Driver-owned staging workflow for real overlay registration tests.
 
 local M = {}
-
----Resolves one directly imported overlay registration source module.
----@param project table
----@param source_path string
----@return table
-local function resolve_source(project, source_path)
-    local ok, project_module = pcall(require,
-        'dwarfspec.host.environment.project_environment')
-    if not ok then
-        project_module = assert(loadfile(project.package_root ..
-            '/src/dwarfspec/host/environment/project_environment.lua'))()
-    end
-    local relative_path = project_module.relative_path(source_path)
-    assert(relative_path:match('%.lua$'),
-        'overlay registration source must name one Lua module: ' ..
-            relative_path)
-    local absolute_path = project_module.join(project.project_root,
-        relative_path)
-    assert(project.filesystem.isfile(absolute_path),
-        'overlay registration source was not found: ' .. relative_path)
-    return {
-        relative_path=relative_path,
-        absolute_path=absolute_path,
-    }
-end
-
----Reads one complete binary file or raises its operating-system error.
----@param path string
----@return string
-local function read_file(path)
-    local file, open_error = io.open(path, 'rb')
-    assert(file, open_error)
-    local contents = file:read('*a')
-    file:close()
-    return contents
-end
-
----Writes one complete binary file or raises its operating-system error.
----@param path string
----@param contents string
-local function write_file(path, contents)
-    local file, open_error = io.open(path, 'wb')
-    assert(file, open_error)
-    local written, write_error = file:write(contents)
-    file:close()
-    assert(written, write_error)
-end
-
----Creates default DFHack services for registration and configuration cleanup.
----@return table
-function M.default_services()
-    local overlay = require('plugins.overlay')
-    return {
-        destination_directory=dfhack.getDFPath() .. '/hack/scripts/gui',
-        config_path=dfhack.getDFPath() .. '/dfhack-config/overlay.json',
-        isfile=dfhack.filesystem.isfile,
-        read_file=read_file,
-        write_file=write_file,
-        remove_file=os.remove,
-        rescan=function() overlay.rescan() end,
-        registered_names=function(script_name)
-            local prefix = 'gui/' .. script_name .. '.'
-            local names = {}
-            for name in pairs(overlay.get_state().db) do
-                if name:sub(1, #prefix) == prefix then
-                    table.insert(names, name)
-                end
-            end
-            table.sort(names)
-            return names
-        end,
-        is_enabled=function(name)
-            return not not overlay.isOverlayEnabled(name)
-        end,
-        disable=function(name)
-            overlay.overlay_command({'disable', name}, true)
-            assert(not overlay.isOverlayEnabled(name),
-                'overlay remained enabled after disable: ' .. name)
-        end,
-    }
-end
 
 ---Runs one cleanup operation while retaining failures for later aggregation.
 ---@param failures string[]
@@ -185,30 +104,29 @@ local function restore(staged, services, source_contents, config_existed,
 end
 
 ---Stages one real overlay registration and owns exact external restoration.
----@param project table
 ---@param source_path string
 ---@param logical_name string
 ---@param run_id string
----@param cleanup_module table
----@param cleanup_registry table
----@param services table|nil
+---@param project table
+---@param cleanup table
+---@param services table
 ---@return table
-function M.stage(project, source_path, logical_name, run_id, cleanup_module,
-        cleanup_registry, services)
+local function stage(source_path, logical_name, run_id, project, cleanup,
+        services)
     assert(type(logical_name) == 'string' and
         logical_name:match('^[a-z][a-z0-9_-]*$'),
         'overlay registration name must contain lowercase letters, digits, ' ..
             'hyphens, or underscores')
     assert(type(run_id) == 'string' and run_id:match('^[%w_.-]+$'),
         'overlay staging requires a safe run id')
-    services = services or M.default_services()
     assert(type(services.destination_directory) == 'string' and
         services.destination_directory ~= '',
         'overlay staging requires a destination directory')
     assert(type(services.config_path) == 'string' and
         services.config_path ~= '',
         'overlay staging requires an overlay configuration path')
-    local source = resolve_source(project, source_path)
+    local source = project.resolve_lua_source(
+        source_path, 'overlay registration')
     local leaf = ('dwarfspec_%s_%s.lua'):format(run_id, logical_name)
     local separator = package.config:sub(1, 1)
     local destination = services.destination_directory .. separator .. leaf
@@ -227,8 +145,8 @@ function M.stage(project, source_path, logical_name, run_id, cleanup_module,
         registered_names={},
         cleanup_state={complete=false},
     }
-    local marker = cleanup_module.mark(cleanup_registry)
-    cleanup_module.push(cleanup_registry,
+    local marker = cleanup.mark()
+    cleanup.register(
         'restore overlay registration ' .. logical_name, function()
             restore(staged, services, source_contents, config_existed,
                 config_contents)
@@ -242,8 +160,8 @@ function M.stage(project, source_path, logical_name, run_id, cleanup_module,
             'staged script did not register any OVERLAY_WIDGETS')
     end, debug.traceback)
     if not ok then
-        local cleanup_ok, cleanup_failures = cleanup_module.run_from(
-            cleanup_registry, marker, 'failed overlay registration staging')
+        local cleanup_ok, cleanup_failures = cleanup.rollback(
+            marker, 'failed overlay registration staging')
         local message = 'overlay registration staging failed: ' ..
             tostring(failure)
         if not cleanup_ok then
@@ -257,6 +175,47 @@ function M.stage(project, source_path, logical_name, run_id, cleanup_module,
         error(message, 2)
     end
     return staged
+end
+
+---Constructs one run-scoped overlay registration workflow.
+---@param capabilities table
+---@return table
+function M.new(capabilities)
+    assert(type(capabilities) == 'table',
+        'overlay registration requires run capabilities')
+    local run_id = assert(capabilities.run_id,
+        'overlay registration requires a run id')
+    local project = assert(capabilities.project,
+        'overlay registration requires project capabilities')
+    local cleanup = assert(capabilities.cleanup,
+        'overlay registration requires cleanup capabilities')
+    local services = assert(capabilities.overlay,
+        'overlay registration requires overlay capabilities')
+    assert(type(project.resolve_lua_source) == 'function',
+        'overlay registration requires project.resolve_lua_source()')
+    for _, name in ipairs({'mark', 'register', 'rollback'}) do
+        assert(type(cleanup[name]) == 'function',
+            'overlay registration requires cleanup.' .. name .. '()')
+    end
+    for _, name in ipairs({
+            'isfile', 'read_file', 'write_file', 'remove_file', 'rescan',
+            'registered_names', 'is_enabled', 'disable'}) do
+        assert(type(services[name]) == 'function',
+            'overlay registration requires overlay.' .. name .. '()')
+    end
+
+    local workflow = {}
+
+    ---Stages one run-owned overlay registration source.
+    ---@param source_path string
+    ---@param logical_name string
+    ---@return table
+    function workflow.stage(source_path, logical_name)
+        return stage(source_path, logical_name, run_id, project, cleanup,
+            services)
+    end
+
+    return workflow
 end
 
 return M

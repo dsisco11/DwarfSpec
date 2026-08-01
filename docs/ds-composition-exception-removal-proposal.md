@@ -26,12 +26,13 @@ At approval, root `ds.lua` fresh-loaded these five host modules:
 - `dwarfspec.host.game.save_game_load`; and
 - `dwarfspec.host.game.save_game_unload`.
 
-The save-game modules have since moved to `driver/game`, and interaction
-diagnostics have moved to `driver/diagnostics`. The remaining root host import
-is overlay registration.
+The save-game modules have since moved to `driver/game`, interaction
+diagnostics have moved to `driver/diagnostics`, and overlay registration has
+been split between `driver/overlay` workflow ownership and host-owned external
+services. Root `ds.lua` now imports no host module.
 
-The host execution root also fresh-loads `dwarfspec.ds`. This creates the sole
-temporary bidirectional composition relationship.
+The host execution root still fresh-loads `dwarfspec.ds`; composition is now
+one-way from the host through injected capabilities into the root factory.
 
 ## Proposed ownership
 

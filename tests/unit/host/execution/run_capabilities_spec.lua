@@ -173,5 +173,10 @@ describe('host run capabilities', function()
         assert.has_error(function()
             capabilities.project.resolve_lua_source('tests/missing.lua')
         end, 'project Lua source was not found: tests/missing.lua')
+        assert.has_error(function()
+            capabilities.project.resolve_lua_source(
+                'tests/readme.txt', 'overlay registration')
+        end, 'overlay registration source must name one Lua module: ' ..
+            'tests/readme.txt')
     end)
 end)

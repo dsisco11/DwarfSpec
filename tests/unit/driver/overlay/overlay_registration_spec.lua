@@ -2,14 +2,15 @@
 
 local cleanup = assert(loadfile(
     'src/dwarfspec/host/execution/cleanup.lua'))()
-local overlay_registration = assert(loadfile(
-    'src/dwarfspec/host/game/overlay_registration.lua'))()
+local overlay_registration_module = assert(loadfile(
+    'src/dwarfspec/driver/overlay/overlay_registration.lua'))()
 
 describe('DwarfSpec overlay registration integration support', function()
     local files
     local rescans
-    local descriptor
     local services
+    local registry
+    local overlay_registration
     local enabled
     local registered
     local fail_next_rescan
@@ -32,15 +33,6 @@ describe('DwarfSpec overlay registration integration support', function()
         enabled = {}
         registered = {}
         fail_next_rescan = false
-        descriptor = {
-            project_root='project',
-            package_root='.',
-            filesystem={
-                isfile=function(path)
-                    return files[normalize(path)] ~= nil
-                end,
-            },
-        }
         services = {
             destination_directory='game/hack/scripts/gui',
             config_path=config_path,
@@ -84,14 +76,42 @@ describe('DwarfSpec overlay registration integration support', function()
                 files[config_path] = '{"test":"disabled"}\n'
             end,
         }
+        registry = cleanup.new({})
+        overlay_registration = overlay_registration_module.new({
+            run_id='run-1',
+            project={
+                resolve_lua_source=function(source_path, purpose)
+                    local relative_path = normalize(source_path)
+                    local label = purpose or 'project Lua'
+                    assert(relative_path:match('%.lua$'),
+                        label .. ' source must name one Lua module: ' ..
+                            relative_path)
+                    local absolute_path = 'project/' .. relative_path
+                    assert(files[absolute_path] ~= nil,
+                        label .. ' source was not found: ' .. relative_path)
+                    return {
+                        relative_path=relative_path,
+                        absolute_path=absolute_path,
+                    }
+                end,
+            },
+            cleanup={
+                mark=function() return cleanup.mark(registry) end,
+                register=function(name, action)
+                    return cleanup.push(registry, name, action)
+                end,
+                rollback=function(marker, reason)
+                    return cleanup.run_from(registry, marker, reason)
+                end,
+            },
+            overlay=services,
+        })
     end)
 
     it('restores script, registration, enablement, and exact configuration',
             function()
-        local registry = cleanup.new({})
-        local staged = overlay_registration.stage(descriptor,
-            'custom/probe_overlay.lua', 'probe', 'run-1', cleanup, registry,
-            services)
+        local staged = overlay_registration.stage(
+            'custom/probe_overlay.lua', 'probe')
         local registered_name = 'gui/dwarfspec_run-1_probe.probe'
 
         assert.equals('dwarfspec_run-1_probe', staged.script_name)
@@ -123,9 +143,7 @@ describe('DwarfSpec overlay registration integration support', function()
     it('refuses to overwrite an existing staged path', function()
         files['game/hack/scripts/gui/dwarfspec_run-1_probe.lua'] = 'owned'
         assert.has_error(function()
-            overlay_registration.stage(descriptor,
-                'custom/probe_overlay.lua', 'probe', 'run-1', cleanup,
-                cleanup.new({}), services)
+            overlay_registration.stage('custom/probe_overlay.lua', 'probe')
         end, 'refusing to overwrite an existing overlay registration ' ..
             'script: game/hack/scripts/gui' .. package.config:sub(1, 1) ..
             'dwarfspec_run-1_probe.lua')
@@ -134,9 +152,7 @@ describe('DwarfSpec overlay registration integration support', function()
     it('removes a partial stage when the initial rescan fails', function()
         fail_next_rescan = true
         local ok, message = pcall(function()
-            overlay_registration.stage(descriptor,
-                'custom/probe_overlay.lua', 'probe', 'run-1', cleanup,
-                cleanup.new({}), services)
+            overlay_registration.stage('custom/probe_overlay.lua', 'probe')
         end)
         assert.is_false(ok)
         assert.matches('overlay registration staging failed:', message,
@@ -150,10 +166,8 @@ describe('DwarfSpec overlay registration integration support', function()
     end)
 
     it('does not delete a staged path whose contents changed', function()
-        local registry = cleanup.new({})
-        local staged = overlay_registration.stage(descriptor,
-            'custom/probe_overlay.lua', 'probe', 'run-1', cleanup, registry,
-            services)
+        local staged = overlay_registration.stage(
+            'custom/probe_overlay.lua', 'probe')
         files['game/hack/scripts/gui/dwarfspec_run-1_probe.lua'] =
             'replacement contents'
         files[config_path] = '{"test":"mutated"}\n'
@@ -176,10 +190,8 @@ describe('DwarfSpec overlay registration integration support', function()
     it('removes a configuration file created during registration testing',
             function()
         files[config_path] = nil
-        local registry = cleanup.new({})
-        local staged = overlay_registration.stage(descriptor,
-            'custom/probe_overlay.lua', 'probe', 'run-1', cleanup, registry,
-            services)
+        local staged = overlay_registration.stage(
+            'custom/probe_overlay.lua', 'probe')
         files[config_path] = '{"test":"created"}\n'
 
         assert.is_true(cleanup.run(registry, 'test completion'))

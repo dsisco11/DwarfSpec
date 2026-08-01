@@ -355,8 +355,7 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     ---@return table
     local function create_overlay_services()
         return load_automation_module(package_root,
-            'dwarfspec.host.game.overlay_registration')
-                .default_services()
+            'dwarfspec.host.game.overlay_services').new()
     end
 
     return suite_executor_module.execute(package_root, project_root, run,

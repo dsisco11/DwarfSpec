@@ -68,8 +68,8 @@ local diagnostics_module = load_automation_module(package_root,
     'dwarfspec.driver.diagnostics.diagnostics')
 local pointer_adapter_module = load_automation_module(package_root,
     'dwarfspec.driver.input.pointer_adapter')
-local overlay_registration = load_automation_module(package_root,
-    'dwarfspec.host.game.overlay_registration')
+local overlay_registration_module = load_automation_module(package_root,
+    'dwarfspec.driver.overlay.overlay_registration')
 local component_module = load_automation_module(package_root,
     'dwarfspec.driver.mount.component')
 local mount_context_module = load_automation_module(package_root,
@@ -628,14 +628,16 @@ local command_observer_module = load_automation_module(package_root,
             context.mount_context.current.render_observer ~= nil
         return state
     end
+    local overlay_registration =
+        overlay_registration_module.new(run_capabilities)
+
     ---Stages one real overlay-registration source through run-owned cleanup.
     ---@param source_path string
     ---@param logical_name string
     ---@return table
     local function stage_overlay_registration_integration(
             source_path, logical_name)
-        return overlay_registration.stage(project, source_path, logical_name,
-            context.run.run_id, cleanup_module, cleanup_registry)
+        return overlay_registration.stage(source_path, logical_name)
     end
     context.run.overlay_registration_integration =
         stage_overlay_registration_integration
