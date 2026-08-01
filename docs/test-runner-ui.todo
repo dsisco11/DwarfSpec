@@ -271,53 +271,104 @@ Phase 2: Build the generic component system
           failed=BROWN.
 
 2.2 Generic component: Status Badge:
-    ☐ Create a Status Badge component that composes Status Indicator with a short text label and optional border.
-    ☐ Define compact, bordered, and unbordered presentations only where each has a demonstrated reuse.
-    ☐ Pair symbol, color, and text so status meaning never depends on color alone.
-    ☐ Use Status Badge for connection, host responsiveness, dirty-host, and similarly compact status summaries.
-    ☐ Do not encode DwarfSpec aggregation rules inside Status Badge.
-    ☐ Create a dedicated component page for Status Badge and its variants.
+    ☒ Create a Status Badge component that composes Status Indicator with a short text label and optional border.
+    ☒ Define compact, bordered, and unbordered presentations only where each has a demonstrated reuse.
+        - Compact deferred: no demonstrated reuse point at this phase. Two
+          presentations defined: bordered (status bar, prominent summary) and
+          unbordered (inline panel use).
+    ☒ Pair symbol, color, and text so status meaning never depends on color alone.
+    ☒ Use Status Badge for connection, host responsiveness, dirty-host, and similarly compact status summaries.
+    ☒ Do not encode DwarfSpec aggregation rules inside Status Badge.
+    ☒ Create a dedicated component page for Status Badge and its variants.
+        - Evidence: Penpot "Component - Status Badge" page. Variant component
+          "Status Badge" with Border property (bordered/unbordered). Composes
+          linked Status Indicator instance + VT323 label text, both in the same
+          palette color. Specimen shows four runner use cases in each
+          presentation: connected (passed/LIGHTGREEN), unresponsive
+          (errored/LIGHTRED), dirty (cleanup-failed/BROWN), disconnected
+          (host-disconnected/GREY).
 
 2.3 Generic component: Tree Row With Columns:
-    ☐ Extract Tree Row With Columns from the existing Tree View With Columns master.
-    ☐ Make the row own its expander slot, label slot, arbitrary column slots, selection state, and integrated right-side status slot.
-    ☐ Keep all row content inside the tree's shared scroll viewport.
-    ☐ Define leaf, collapsed-parent, expanded-parent, selected, focused, and disabled row presentations.
-    ☐ Use existing CP437 expander assets.
-    ☐ Do not add column headers to Tree Row With Columns or Tree View With Columns.
-    ☐ Refactor Tree View With Columns to repeat component-linked Tree Row With Columns instances.
-    ☐ Verify that refactoring the master preserves all existing linked instances.
-    ☐ Create a dedicated component page for Tree Row With Columns and its variants.
+    ☒ Extract Tree Row With Columns from the existing Tree View With Columns master.
+    ☒ Make the row own its expander slot, label slot, arbitrary column slots, selection state, and integrated right-side status slot.
+    ☒ Keep all row content inside the tree's shared scroll viewport.
+    ☒ Define leaf, collapsed-parent, expanded-parent, selected, focused, and disabled row presentations.
+    ☒ Use existing CP437 expander assets.
+        - collapsed-parent: CP437 016 (►) YELLOW. expanded-parent: `-` text YELLOW
+          (no ▼ asset available in library; distinct from collapsed by glyph).
+    ☒ Do not add column headers to Tree Row With Columns or Tree View With Columns.
+    ☒ Refactor Tree View With Columns to repeat component-linked Tree Row With Columns instances.
+    ☒ Verify that refactoring the master preserves all existing linked instances.
+        - No external instances of Tree View With Columns existed at refactor time.
+    ☒ Create a dedicated component page for Tree Row With Columns and its variants.
+        - Evidence: Penpot "Component - Tree Row With Columns" page. Variant
+          component "Tree Row With Columns" with Presentation property and 6
+          values: leaf (WHITE label), collapsed-parent (► expander + WHITE label),
+          expanded-parent (- expander + WHITE label), selected (WHITE bg + BLACK
+          label), focused (LIGHTCYAN border + LIGHTCYAN label), disabled (DARKGREY
+          label). Status Indicator slot at pX=286 in every variant. Tree View With
+          Columns viewport now contains 10 linked Tree Row With Columns instances
+          with SI variant overrides (passed/errored per row).
 
 2.4 Generic components: Table Cell, Table Row, and Sortable Header Cell:
-    ☐ Extract Table Cell from the existing Generic Table View master.
-    ☐ Make Table Cell own standard padding, clipping, alignment, and text overflow.
-    ☐ Extract Table Row as an arbitrary collection of Table Cell instances.
-    ☐ Define normal, selected, focused, disabled, and alternate-row presentations only if the table uses them.
-    ☐ Extract Sortable Header Cell from the existing Generic Table View master.
-    ☐ Define none, ascending, and descending sort presentations.
-    ☐ Use existing CP437 up and down arrow assets for sort indicators.
-    ☐ Keep header styling within the black, white, and brown palette.
-    ☐ Keep default none sorting equivalent to the original order supplied by the view-model.
-    ☐ Refactor Generic Table View to compose Sortable Header Cell, Table Row, Table Cell, and the normal Scrollbar.
-    ☐ Keep Generic Table View configurable for arbitrary columns and rows.
-    ☐ Do not encode DwarfSpec column names, statuses, or ordering rules in Generic Table View.
-    ☐ Verify that refactoring the master preserves all existing linked instances.
-    ☐ Create dedicated component pages for Table Cell, Table Row, and Sortable Header Cell.
+    ☒ Extract Table Cell from the existing Generic Table View master.
+    ☒ Make Table Cell own standard padding, clipping, alignment, and text overflow.
+        - 6px left padding, clipContent=true, VT323 lineHeight=1.1, 22px height.
+    ☒ Extract Table Row as an arbitrary collection of Table Cell instances.
+    ☒ Define normal, selected, focused, disabled, and alternate-row presentations only if the table uses them.
+        - Only normal and selected are used in the GTV. Focused, disabled, and
+          alternate-row are absent from the existing master and have no demonstrated
+          reuse point; deferred.
+    ☒ Extract Sortable Header Cell from the existing Generic Table View master.
+    ☒ Define none, ascending, and descending sort presentations.
+    ☒ Use existing CP437 up and down arrow assets for sort indicators.
+        - CP437 024 (↑) and 025 (↓) inline atlas crops from cp437-gutter-row-01.png.
+          No library cp437.024/cp437.025 components exist; crops cloned from GTV.
+    ☒ Keep header styling within the black, white, and brown palette.
+    ☒ Keep default none sorting equivalent to the original order supplied by the view-model.
+    ☒ Refactor Generic Table View to compose Sortable Header Cell, Table Row, Table Cell, and the normal Scrollbar.
+    ☒ Keep Generic Table View configurable for arbitrary columns and rows.
+    ☒ Do not encode DwarfSpec column names, statuses, or ordering rules in Generic Table View.
+    ☒ Verify that refactoring the master preserves all existing linked instances.
+        - No external GTV instances existed at refactor time.
+    ☒ Create dedicated component pages for Table Cell, Table Row, and Sortable Header Cell.
+        - Evidence: Penpot pages "Component - Table Cell" (normal/selected variants),
+          "Component - Sortable Header Cell" (none/ascending/descending variants),
+          "Component - Table Row" (normal/selected variants, 5 linked Table Cell
+          instances + row divider). GTV header row now has 5 linked Sortable Header
+          Cell instances; viewport now has 9 linked Table Row instances (R03
+          selected/DARKGREY, rest normal/BLACK), all preserving original cell text.
 
 2.5 Generic components: Dropdown Field, Menu Panel, and Menu Item:
-    ☐ Retain the existing closed and open Dropdown Control components.
-    ☐ Document why Dropdown Control is required for a use case instead of CycleHotkeyLabel.
-    ☐ Extract or formalize the shared Dropdown Field used by both closed and open states.
-    ☐ Keep the static label, selected value, and CP437 downward-triangle button inside Dropdown Field.
-    ☐ Keep the triangle button free of surrounding brackets.
-    ☐ Show the triangle in the established normal color when closed and orange when open.
-    ☐ Extract Dropdown Menu Panel with the same border treatment as Dropdown Field.
-    ☐ Extract Dropdown Menu Item for normal, focused, selected, and disabled states.
-    ☐ Show a selected menu item with cyan text on a black background.
-    ☐ Refactor Dropdown Control Open to compose Dropdown Field, Dropdown Menu Panel, and repeated Dropdown Menu Item instances.
-    ☐ Verify that refactoring the masters preserves all existing linked instances.
-    ☐ Create dedicated component pages for Dropdown Field, Dropdown Menu Panel, and Dropdown Menu Item.
+    ☒ Retain the existing closed and open Dropdown Control components.
+    ☒ Document why Dropdown Control is required for a use case instead of CycleHotkeyLabel.
+        - Dropdown is required when the complete option set must be visible to the
+          user at selection time and the option count or label length makes cycling
+          impractical. CycleHotkeyLabel is preferred for small, known finite sets.
+    ☒ Extract or formalize the shared Dropdown Field used by both closed and open states.
+    ☒ Keep the static label, selected value, and CP437 downward-triangle button inside Dropdown Field.
+    ☒ Keep the triangle button free of surrounding brackets.
+        - The existing Closed used a TextButton overlay (brackets visually hidden by
+          BLACK fill). Dropdown Field uses a bare trigger area board with no TextButton.
+    ☒ Show the triangle in the established normal color when closed and orange when open.
+        - closed: 1px GREY stroke annotation on the CP437 031 board.
+        - open: 1px LIGHTRED (#FF7111) stroke annotation on the CP437 031 board.
+    ☒ Extract Dropdown Menu Panel with the same border treatment as Dropdown Field.
+        - 280×94px, BLACK fill, 1px BROWN inner stroke.
+    ☒ Extract Dropdown Menu Item for normal, focused, selected, and disabled states.
+    ☒ Show a selected menu item with cyan text on a black background.
+        - selected: COLOR_CYAN (#71BBB0) text on BLACK background.
+    ☒ Refactor Dropdown Control Open to compose Dropdown Field, Dropdown Menu Panel, and repeated Dropdown Menu Item instances.
+    ☒ Verify that refactoring the masters preserves all existing linked instances.
+        - No external Open or Closed instances existed at refactor time.
+    ☒ Create dedicated component pages for Dropdown Field, Dropdown Menu Panel, and Dropdown Menu Item.
+        - Evidence: Penpot pages "Component - Dropdown Field" (State=closed/open
+          variants; closed=GREY triangle, open=LIGHTRED triangle), "Component -
+          Dropdown Menu Panel" (single component, BROWN border matching field),
+          "Component - Dropdown Menu Item" (Presentation=normal/focused/selected/
+          disabled; selected=CYAN text on BLACK). Dropdown Control Open refactored
+          to compose linked Dropdown Field (open), Dropdown Menu Panel, and 4
+          Dropdown Menu Item instances (options 1/2/4 normal, option 3 selected).
 
 2.6 Official DFHack widgets: Tab, TabBar, and Pages application:
     ☐ Reuse TabBar for raw-output and diagnostic navigation.
