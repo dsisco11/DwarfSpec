@@ -88,15 +88,19 @@ Implementation must retain the existing public `ds` functions, enums, return
 values, failures, cleanup order, and live behavior. Both composition roots keep
 their current local fresh-loading helpers and installed-package fallback.
 
-Unit tests will cover each relocated workflow using injected fakes and will add
-one Busted dependency-rule spec that examines declared static imports beneath
-`driver/` and rejects any `dwarfspec.host` target. This test will not override
-Lua loading and will not assert that named files merely exist. Focused and full
-live gates will verify save-game behavior, overlay restoration, diagnostics,
-scheduler behavior, and cleanup before the exception is removed from the
-source-organization documentation.
+Unit tests cover each relocated workflow using injected fakes. One Busted
+dependency-rule spec examines declared static imports beneath `driver/` and
+rejects any `dwarfspec.host` target. This test does not override Lua loading or
+assert that named files merely exist. Focused and full live gates verify
+save-game behavior, overlay restoration, diagnostics, scheduler behavior, and
+cleanup. The completed source-organization proposal and decomposition contract
+were previously retired; their surviving architecture contract now records
+the final one-way dependency boundary.
 
 ## Approval
 
 Status: approved on 2026-08-01. Implementation remains separate from the
 completed source-organization checklist.
+
+Implementation status: the composition exception has been removed and the
+driver-to-host dependency rule is enforced by the unit suite.

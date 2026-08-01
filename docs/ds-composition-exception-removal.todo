@@ -71,12 +71,12 @@ Phase 4 - Split overlay registration by ownership:
     ☑ Run focused overlay registration, restoration, failure-recovery, and cleanup coverage.
 
 Phase 5 - Remove and enforce the exception:
-    ☐ Add one Busted dependency-rule spec that inspects declared static imports beneath `driver/` and rejects `dwarfspec.host` targets without replacing or intercepting Lua loading.
-    ☐ Confirm root `ds.lua` loads no module beneath `host/` and retains its local fresh-loading helper.
-    ☐ Review that host execution still uses its unchanged local helper to fresh-load root `dwarfspec.ds` from source with installed-package fallback; do not add packaged-source or file-existence verification.
-    ☐ Remove superseded host files and specs only after all behavior has moved and all references are gone.
-    ☐ Update the source-organization proposal and decomposition contract to remove the temporary composition exception.
-    ☐ Run syntax, formatting, declaration, and complete unit validation.
+    ☑ Add one Busted dependency-rule spec that inspects declared static imports beneath `driver/` and rejects `dwarfspec.host` targets without replacing or intercepting Lua loading.
+    ☑ Confirm root `ds.lua` loads no module beneath `host/` and retains its local fresh-loading helper.
+    ☑ Review that host execution still uses its unchanged local helper to fresh-load root `dwarfspec.ds` from source with installed-package fallback; do not add packaged-source or file-existence verification.
+    ☑ Remove superseded host files and specs only after all behavior has moved and all references are gone.
+    ☑ Update the authoritative architecture contract to remove the temporary composition exception; the completed source-organization proposal and decomposition contract were already retired and are not resurrected.
+    ☑ Run syntax, formatting, declaration, and complete unit validation.
 
 Phase 6 - Final runtime verification:
     ☐ Run the focused save-game, overlay-registration, diagnostics, scheduler, failure-recovery, and cleanup live sets.

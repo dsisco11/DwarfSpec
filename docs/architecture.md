@@ -10,13 +10,21 @@ DwarfSpec has five internal namespaces and three shallow root facades:
 
 `dwarfspec.controller` owns the external command, configuration, discovery,
 execution, reporting, and result persistence. `dwarfspec.host` owns the
-in-DFHack service, execution lifecycle, environment adapters, diagnostics,
-game integration, and command entrypoints. `dwarfspec.driver` owns
-run-scoped UI operations. `dwarfspec.protocol` contains cross-boundary
-schemas, enums, and events; `dwarfspec.support` contains neutral shared
-helpers. The root `cli`, `layout`, and `ds` modules are composition facades.
-They are internal implementation modules; the executable and injected `ds`
-API are the product surfaces.
+in-DFHack service, execution lifecycle, environment and external-service
+adapters, and command entrypoints. `dwarfspec.driver` owns run-scoped UI and
+game workflows, subject diagnostics, and exact cleanup coordination through
+injected capabilities. `dwarfspec.protocol` contains cross-boundary schemas,
+enums, and events; `dwarfspec.support` contains neutral shared helpers. The
+root `cli`, `layout`, and `ds` modules are composition facades. They are
+internal implementation modules; the executable and injected `ds` API are the
+product surfaces.
+
+Host execution fresh-loads the root `dwarfspec.ds` factory from the source
+checkout when available and falls back to the installed module. It supplies
+narrow scheduling, cleanup, project-resolution, and external overlay-service
+capabilities. Root `ds.lua` retains its own local source-or-installed loader
+for driver, protocol, and support modules, but imports no module beneath
+`dwarfspec.host`. Modules beneath `driver/` likewise do not import `host/`.
 
 Busted remains responsible for test discovery, test structure, hooks,
 assertions, and result classification. DwarfSpec does not implement a second
