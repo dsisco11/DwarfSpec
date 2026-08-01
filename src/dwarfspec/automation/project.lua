@@ -1,8 +1,8 @@
 -- Production resolver for consumer-project test assets.
 
-local glob_ok, glob = pcall(require, 'dwarfspec.glob')
+local glob_ok, glob = pcall(require, 'dwarfspec.support.glob')
 if not glob_ok then
-    glob = assert(loadfile('src/dwarfspec/glob.lua'))()
+glob = assert(loadfile('src/dwarfspec/support/glob.lua'))()
 end
 
 local M = {}

@@ -1,6 +1,6 @@
 -- Deterministic one-line CLI diagnostic rendering for DwarfSpec problems.
 
-local ErrorFormat = require('dwarfspec.error_formats')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 
 ---@class DwarfSpecDiagnosticFormatter
 local M = {}

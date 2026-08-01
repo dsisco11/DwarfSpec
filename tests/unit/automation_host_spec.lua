@@ -2,13 +2,13 @@
 
 local host_path = 'src/dwarfspec/automation/host.lua'
 local EComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
 local FileSuiteIdentity =
     require('dwarfspec.automation.file_suite_identity')
-local EventType = require('dwarfspec.automation.event_types')
-local RunState = require('dwarfspec.automation.run_states')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 describe('automation host ownership', function()
     local original_dfhack

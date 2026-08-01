@@ -1,7 +1,7 @@
 -- Detached base-game screen and focus observations for pollution detection.
 
 local EComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
 
 local M = {}
 

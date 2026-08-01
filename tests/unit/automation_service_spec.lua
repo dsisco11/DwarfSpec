@@ -1,10 +1,10 @@
 -- Unit contracts for the multi-project automation service runtime.
 
 local projects = require('dwarfspec.automation.projects')
-local events = require('dwarfspec.automation.events')
-local EventType = require('dwarfspec.automation.event_types')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local RunState = require('dwarfspec.automation.run_states')
+local events = require('dwarfspec.protocol.events')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 local service_path = 'src/dwarfspec/automation/service.lua'
 
 describe('multi-project automation service', function()

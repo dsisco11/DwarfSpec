@@ -1,6 +1,6 @@
 -- Immutable string enum for project result-persistence policies.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecResultPolicy
 return immutable_enum.define({

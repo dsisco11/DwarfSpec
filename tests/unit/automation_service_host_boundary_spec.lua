@@ -1,10 +1,10 @@
 -- Unit contracts for service-owned host transitions and stale callbacks.
 
 local service = require('dwarfspec.automation.service')
-local EventType = require('dwarfspec.automation.event_types')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local RunState = require('dwarfspec.automation.run_states')
-local TestStatus = require('dwarfspec.automation.test_statuses')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local RunState = require('dwarfspec.protocol.enums.run_states')
+local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
 
 ---Creates one deterministic service with an activated run.
 ---@return table, table

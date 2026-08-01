@@ -1,6 +1,6 @@
 -- Immutable failure kinds for native game-UI path resolution.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecENativeResolutionFailureKind
 return immutable_enum.define({

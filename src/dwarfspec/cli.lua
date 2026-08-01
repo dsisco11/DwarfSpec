@@ -1,11 +1,11 @@
 -- Command-line parsing and dispatch for the DwarfSpec executable.
 
 local argparse = require('argparse')
-local glob = require('dwarfspec.glob')
+local glob = require('dwarfspec.support.glob')
 local config = require('dwarfspec.config')
 local dotenv = require('dwarfspec.dotenv')
 local project = require('dwarfspec.project')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 local result_store = require('dwarfspec.automation.result_store')
 local runner = require('dwarfspec.runner')
 

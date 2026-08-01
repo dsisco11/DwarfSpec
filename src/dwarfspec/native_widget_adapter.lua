@@ -5,7 +5,7 @@ local EResolutionStage =
     require('dwarfspec.native_resolution_stages')
 local EResolutionFailureKind =
     require('dwarfspec.native_resolution_failure_kinds')
-local identity_labels = require('dwarfspec.identity_labels')
+local identity_labels = require('dwarfspec.support.identity_labels')
 local subject_paths = require('dwarfspec.subject_paths')
 
 local M = {}

@@ -1,6 +1,6 @@
 -- Immutable string enum for classified scheduler outcomes.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecSchedulerFailureKind
 return immutable_enum.define({

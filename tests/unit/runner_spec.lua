@@ -4,11 +4,11 @@ local json = require('dkjson')
 local runner = require('dwarfspec.runner')
 local layout = require('dwarfspec.layout')
 local EComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
-local EventType = require('dwarfspec.automation.event_types')
-local ErrorFormat = require('dwarfspec.error_formats')
-local ResultState = require('dwarfspec.automation.result_states')
-local RunState = require('dwarfspec.automation.run_states')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
+local ResultState = require('dwarfspec.protocol.enums.result_states')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 
 local RUN_STATE_TERMINAL = {
     [RunState.QUEUED]=false,

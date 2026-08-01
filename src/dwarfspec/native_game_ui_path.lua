@@ -1,6 +1,6 @@
 -- Deterministic structural-to-widget path resolution for native game UI.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 local EFailureKind =
     require('dwarfspec.native_resolution_failure_kinds')
 local EResolutionStage =

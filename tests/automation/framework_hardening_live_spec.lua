@@ -1,7 +1,7 @@
 -- Live resilience contracts for reusable automation-host infrastructure.
 
 local widgets = require('gui.widgets')
-local RunState = require('dwarfspec.automation.run_states')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 
 ---@class tests.FailingMountWidget: widgets.Panel
 local FailingMountWidget = defclass(nil, widgets.Panel)

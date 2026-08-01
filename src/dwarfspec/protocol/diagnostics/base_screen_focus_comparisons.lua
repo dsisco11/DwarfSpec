@@ -1,6 +1,6 @@
 -- Immutable numeric outcomes for base-screen and focus comparisons.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecEBaseScreenFocusComparison
 return immutable_enum.define_numeric({

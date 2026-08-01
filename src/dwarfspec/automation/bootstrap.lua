@@ -138,9 +138,9 @@ end
 
 local root, lua_root = package_root()
 local json = require('json')
-local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
+local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 ---Removes an incidental Lua source location from an adapter error.
 ---@param value any
@@ -177,7 +177,7 @@ end
 ---Registers one run without emitting a partial success response.
 ---@return table
 local function register()
-    local ResultPolicy = require('dwarfspec.automation.result_policies')
+    local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
     local options = parse_options(arguments, ResultPolicy)
     local host = load_host(root, lua_root)
     options.defer_activation = true

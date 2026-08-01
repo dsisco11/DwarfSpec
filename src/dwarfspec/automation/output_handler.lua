@@ -1,8 +1,8 @@
 -- In-memory Busted output handler for live automation runs.
 
-local EventType = require('dwarfspec.automation.event_types')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 local problem_source = require('dwarfspec.automation.problem_source')
-local TestStatus = require('dwarfspec.automation.test_statuses')
+local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
 
 local M = {}
 

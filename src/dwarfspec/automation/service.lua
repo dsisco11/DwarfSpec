@@ -1,11 +1,11 @@
 -- Process-wide multi-project automation service runtime and public boundary.
 
 local projects = require('dwarfspec.automation.projects')
-local events = require('dwarfspec.automation.events')
-local OwnerKind = require('dwarfspec.automation.owner_kinds')
-local RunState = require('dwarfspec.automation.run_states')
+local events = require('dwarfspec.protocol.events')
+local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 local scheduler = require('dwarfspec.automation.scheduler')
-local schemas = require('dwarfspec.automation.schemas')
+local schemas = require('dwarfspec.protocol.schemas')
 local snapshots = require('dwarfspec.automation.snapshots')
 
 local M = {

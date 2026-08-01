@@ -1,6 +1,6 @@
 -- Immutable string enum for persisted invocation result states.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecResultState
 return immutable_enum.define({

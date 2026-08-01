@@ -1,10 +1,10 @@
 -- Unit contracts for canonical identity globs, discovery, and CLI dispatch.
 
 local cli = require('dwarfspec.cli')
-local ErrorFormat = require('dwarfspec.error_formats')
-local glob = require('dwarfspec.glob')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
+local glob = require('dwarfspec.support.glob')
 local project = require('dwarfspec.project')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 
 ---Creates one append-only stream compatible with the CLI writer.
 ---@return table

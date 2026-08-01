@@ -1,6 +1,6 @@
 -- Unit contracts for bounded non-serializing diagnostic identities.
 
-local identity_labels = require('dwarfspec.identity_labels')
+local identity_labels = require('dwarfspec.support.identity_labels')
 
 describe('DwarfSpec diagnostic identity labels', function()
     it('uses stable opaque labels without invoking compound serialization',

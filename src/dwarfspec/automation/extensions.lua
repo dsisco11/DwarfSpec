@@ -1,8 +1,8 @@
 -- Production consumer configuration, command, and diagnostic extension loader.
 
-local config_schema = require('dwarfspec.config_schema')
+local config_schema = require('dwarfspec.protocol.configuration.schema')
 local M = {}
-local settings_validator = require('dwarfspec.settings')
+local settings_validator = require('dwarfspec.protocol.configuration.settings')
 
 ---Registers one validated command map without permitting duplicates.
 ---@param target table

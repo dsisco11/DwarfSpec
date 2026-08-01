@@ -1,6 +1,6 @@
 -- Immutable string enum for Busted test completion statuses.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecTestStatus
 return immutable_enum.define({

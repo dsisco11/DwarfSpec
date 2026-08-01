@@ -1,6 +1,6 @@
 -- Immutable string enum for structured automation event identifiers.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecEventType
 return immutable_enum.define({

@@ -99,7 +99,7 @@ local subject_paths_module = load_automation_module(package_root,
 local subject_requests_module = load_automation_module(package_root,
     'dwarfspec.subject_requests')
 local identity_labels = load_automation_module(package_root,
-    'dwarfspec.identity_labels')
+    'dwarfspec.support.identity_labels')
 local EResolutionStage = load_automation_module(package_root,
     'dwarfspec.native_resolution_stages')
 local EMouseButton = load_automation_module(package_root,
@@ -117,9 +117,9 @@ local ESubjectSource = load_automation_module(package_root,
 local EEvent = load_automation_module(package_root,
     'dwarfspec.state_change_events')
 local EventType = load_automation_module(package_root,
-    'dwarfspec.automation.event_types')
+    'dwarfspec.protocol.enums.event_types')
 local TestStatus = load_automation_module(package_root,
-    'dwarfspec.automation.test_statuses')
+    'dwarfspec.protocol.enums.test_statuses')
 local save_game_mount_module = load_automation_module(package_root,
     'dwarfspec.automation.save_game_mount')
 local save_game_unload_module = load_automation_module(package_root,

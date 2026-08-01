@@ -4,7 +4,7 @@ local subject_paths = require('dwarfspec.subject_paths')
 local ESubjectSource = require('dwarfspec.subject_sources')
 local EResolutionStage =
     require('dwarfspec.native_resolution_stages')
-local identity_labels = require('dwarfspec.identity_labels')
+local identity_labels = require('dwarfspec.support.identity_labels')
 
 local M = {}
 

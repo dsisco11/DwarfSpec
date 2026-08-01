@@ -2,13 +2,13 @@
 
 local service = require('dwarfspec.automation.service')
 local EComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
-local EventType = require('dwarfspec.automation.event_types')
-local OwnerKind = require('dwarfspec.automation.owner_kinds')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local RunState = require('dwarfspec.automation.run_states')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 local builders = assert(loadfile('tests/support/service_builders.lua'))()
 
 local PROJECT_ROOTS = {

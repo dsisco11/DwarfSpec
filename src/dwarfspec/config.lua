@@ -1,9 +1,9 @@
 -- External consumer configuration needed before live test discovery.
 
-local ErrorFormat = require('dwarfspec.error_formats')
-local config_schema = require('dwarfspec.config_schema')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
+local config_schema = require('dwarfspec.protocol.configuration.schema')
 local project = require('dwarfspec.project')
-local settings_validator = require('dwarfspec.settings')
+local settings_validator = require('dwarfspec.protocol.configuration.settings')
 
 local M = {
     default_test_glob=project.default_test_glob,

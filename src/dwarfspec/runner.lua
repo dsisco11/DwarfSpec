@@ -3,12 +3,12 @@
 local process = require('dwarfspec.process')
 local project = require('dwarfspec.project')
 local reports = require('dwarfspec.report')
-local ErrorFormat = require('dwarfspec.error_formats')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local ResultState = require('dwarfspec.automation.result_states')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local ResultState = require('dwarfspec.protocol.enums.result_states')
 local result_store = require('dwarfspec.automation.result_store')
-local RunState = require('dwarfspec.automation.run_states')
-local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
+local RunState = require('dwarfspec.protocol.enums.run_states')
+local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
 
 local M = {}
 

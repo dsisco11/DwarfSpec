@@ -3,8 +3,8 @@
 local process = require('dwarfspec.process')
 local report = require('dwarfspec.report')
 local EComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
-local RunState = require('dwarfspec.automation.run_states')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 
 ---Reads one version 2 checked-in contract fixture.
 ---@param name string

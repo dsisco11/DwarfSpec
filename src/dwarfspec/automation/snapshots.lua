@@ -1,8 +1,8 @@
 -- Immutable public snapshots derived from service-owned automation state.
 
-local events = require('dwarfspec.automation.events')
-local OwnerKind = require('dwarfspec.automation.owner_kinds')
-local schemas = require('dwarfspec.automation.schemas')
+local events = require('dwarfspec.protocol.events')
+local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
+local schemas = require('dwarfspec.protocol.schemas')
 
 local M = {}
 

@@ -4,7 +4,7 @@ local M = {}
 
 local EResolutionStage =
     require('dwarfspec.native_resolution_stages')
-local identity_labels = require('dwarfspec.identity_labels')
+local identity_labels = require('dwarfspec.support.identity_labels')
 
 local DIAGNOSTIC_LABEL_LIMIT = 256
 

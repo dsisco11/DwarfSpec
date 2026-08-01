@@ -1,6 +1,6 @@
 -- Immutable identifiers for external CLI problem rendering formats.
 
-local define = require('dwarfspec.immutable_enum').define
+local define = require('dwarfspec.support.immutable_enum').define
 
 ---@enum DwarfSpecErrorFormat
 return define({

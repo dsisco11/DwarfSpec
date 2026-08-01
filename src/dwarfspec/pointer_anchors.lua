@@ -1,6 +1,6 @@
 -- Immutable anchors for pointer placement within subject bounds.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecEPointerAnchor
 return immutable_enum.define({

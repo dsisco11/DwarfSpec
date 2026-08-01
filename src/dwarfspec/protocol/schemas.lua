@@ -1,10 +1,10 @@
 -- Versioned schema validators for automation service data contracts.
 
-local events = require('dwarfspec.automation.events')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local ResultState = require('dwarfspec.automation.result_states')
-local RunState = require('dwarfspec.automation.run_states')
-local OwnerKind = require('dwarfspec.automation.owner_kinds')
+local events = require('dwarfspec.protocol.events')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local ResultState = require('dwarfspec.protocol.enums.result_states')
+local RunState = require('dwarfspec.protocol.enums.run_states')
+local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
 
 local M = {
     protocol_version=2,

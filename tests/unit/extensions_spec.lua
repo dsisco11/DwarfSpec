@@ -4,7 +4,7 @@ local project_module = assert(loadfile(
     'src/dwarfspec/automation/project.lua'))()
 local extensions = assert(loadfile(
     'src/dwarfspec/automation/extensions.lua'))()
-local ErrorFormat = require('dwarfspec.error_formats')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 
 describe('DwarfSpec consumer extensions', function()
     local modules

@@ -1,12 +1,12 @@
 -- Structured, bounded, append-only event journals for automation runs.
 
-local EventType = require('dwarfspec.automation.event_types')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 local focus_diagnostics =
-    require('dwarfspec.automation.focus_diagnostics')
-local RunState = require('dwarfspec.automation.run_states')
+    require('dwarfspec.protocol.diagnostics.focus')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
-local TestStatus = require('dwarfspec.automation.test_statuses')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
+local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
 
 local M = {
     schema='dwarfspec.event.v1',

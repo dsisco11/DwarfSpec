@@ -1,7 +1,7 @@
 -- Unit contracts for standard one-line DwarfSpec diagnostic formats.
 
 local formatter = require('dwarfspec.diagnostic_formatter')
-local ErrorFormat = require('dwarfspec.error_formats')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 
 local ESC = string.char(27)
 

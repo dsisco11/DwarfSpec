@@ -1,6 +1,6 @@
 -- Immutable stages for native subject resolution diagnostics.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecENativeResolutionStage
 return immutable_enum.define({

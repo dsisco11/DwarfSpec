@@ -1,13 +1,13 @@
 -- Global FIFO admission and executor ownership for the automation service.
 
-local events = require('dwarfspec.automation.events')
-local EventType = require('dwarfspec.automation.event_types')
-local OwnerKind = require('dwarfspec.automation.owner_kinds')
+local events = require('dwarfspec.protocol.events')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
 local projects = require('dwarfspec.automation.projects')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local RunState = require('dwarfspec.automation.run_states')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 local M = {
     failure_kinds=SchedulerFailureKind,

@@ -1,7 +1,7 @@
 -- Unit contracts for Busted event collection in the in-process host.
 
 local output_handler = require('dwarfspec.automation.output_handler')
-local EventType = require('dwarfspec.automation.event_types')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 
 ---Returns the ordered type names published by one handler.
 ---@param published table[]

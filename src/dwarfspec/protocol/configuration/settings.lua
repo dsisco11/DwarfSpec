@@ -1,7 +1,7 @@
 -- Shared validation for external and in-process project settings.
 
-local ErrorFormat = require('dwarfspec.error_formats')
-local glob = require('dwarfspec.glob')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
+local glob = require('dwarfspec.support.glob')
 
 local M = {
     default_error_format=ErrorFormat.MSBUILD,

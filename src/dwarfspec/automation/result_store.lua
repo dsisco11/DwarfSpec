@@ -2,8 +2,9 @@
 
 local json = require('dkjson')
 local project = require('dwarfspec.project')
+local project_paths = require('dwarfspec.support.project_paths')
 local projects = require('dwarfspec.automation.projects')
-local schemas = require('dwarfspec.automation.schemas')
+local schemas = require('dwarfspec.protocol.schemas')
 
 local M = {
     default_relative_path='tests/.test-results/dwarfspec/results.json',
@@ -17,11 +18,12 @@ local M = {
 function M.resolve_path(project_root, configured_path, filesystem)
     if configured_path == false then return nil end
     configured_path = configured_path or M.default_relative_path
-    if not project.is_absolute(project_root) then
-        if project.is_absolute(configured_path) then
-            return project.normalize(configured_path)
+    if not project_paths.is_absolute(project_root) then
+        if project_paths.is_absolute(configured_path) then
+            return project_paths.normalize(configured_path)
         end
-        return project.normalize(project.join(project_root, configured_path))
+        return project_paths.normalize(project_paths.join(project_root,
+            configured_path))
     end
     return projects.normalize_file_path(configured_path, project_root,
         filesystem)

@@ -1,11 +1,11 @@
 -- Unit contracts for versioned automation schemas and immutable snapshots.
 
-local events = require('dwarfspec.automation.events')
-local EventType = require('dwarfspec.automation.event_types')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local ResultState = require('dwarfspec.automation.result_states')
-local RunState = require('dwarfspec.automation.run_states')
-local schemas = require('dwarfspec.automation.schemas')
+local events = require('dwarfspec.protocol.events')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local ResultState = require('dwarfspec.protocol.enums.result_states')
+local RunState = require('dwarfspec.protocol.enums.run_states')
+local schemas = require('dwarfspec.protocol.schemas')
 local snapshots = require('dwarfspec.automation.snapshots')
 
 ---Returns one valid internal run record.

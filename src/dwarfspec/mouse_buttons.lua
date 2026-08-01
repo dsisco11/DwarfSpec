@@ -1,6 +1,6 @@
 -- Immutable identifiers for supported mouse buttons and wheel directions.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecEMouseButton
 return immutable_enum.define({

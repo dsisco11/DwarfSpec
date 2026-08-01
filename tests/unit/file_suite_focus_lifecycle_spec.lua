@@ -1,8 +1,8 @@
 -- Unit contracts for file-suite base-screen focus pollution detection.
 
 local EComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
-local EventType = require('dwarfspec.automation.event_types')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 local FileSuiteIdentity =
     require('dwarfspec.automation.file_suite_identity')
 

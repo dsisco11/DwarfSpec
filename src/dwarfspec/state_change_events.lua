@@ -1,6 +1,6 @@
 -- Immutable identifiers for supported DFHack state-change events.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecEEvent
 return immutable_enum.define({

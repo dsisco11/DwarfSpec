@@ -1,15 +1,17 @@
 -- Native-host JSON report parsing, validation, and result-file persistence.
 
 local M = {}
-local events = require('dwarfspec.automation.events')
-local EventType = require('dwarfspec.automation.event_types')
+local events = require('dwarfspec.protocol.events')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 local diagnostic_formatter = require('dwarfspec.diagnostic_formatter')
-local focus_diagnostics =
-    require('dwarfspec.automation.focus_diagnostics')
-local schemas = require('dwarfspec.automation.schemas')
+local focus =
+    require('dwarfspec.protocol.diagnostics.focus')
+local focus_warning =
+    require('dwarfspec.protocol.diagnostics.focus_warning')
+local schemas = require('dwarfspec.protocol.schemas')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
-local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
+local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
 
 local PREFIX = 'DWARFSPEC_JSON '
 local OWNER_PREFIX = 'DWARFSPEC_OWNER '
@@ -349,8 +351,8 @@ local function format_event(event, options)
         return ('%s %s: %s'):format(payload.kind:upper(),
             payload.name, payload.message)
     elseif event.type == EventType.DIAGNOSTIC_RECORDED and
-            payload.kind == focus_diagnostics.CHANGE_KIND then
-        return focus_diagnostics.format_warning(payload)
+            payload.kind == focus.CHANGE_KIND then
+        return focus_warning.format_warning(payload)
     elseif event.type == EventType.CLEANUP_STARTED then
         return ('CLEANUP started (%d pending)'):format(
             payload.pending_action_count)

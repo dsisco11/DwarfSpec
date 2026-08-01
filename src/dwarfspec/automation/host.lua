@@ -1,14 +1,16 @@
 -- Service-owned Busted host for DFHack core-context automation.
 
-local RunState = require('dwarfspec.automation.run_states')
-local EventType = require('dwarfspec.automation.event_types')
-local events = require('dwarfspec.automation.events')
+local RunState = require('dwarfspec.protocol.enums.run_states')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local events = require('dwarfspec.protocol.events')
 local focus_diagnostics =
-    require('dwarfspec.automation.focus_diagnostics')
-local OwnerKind = require('dwarfspec.automation.owner_kinds')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
+    require('dwarfspec.protocol.diagnostics.focus')
+local focus_warning =
+    require('dwarfspec.protocol.diagnostics.focus_warning')
+local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 local service = require('dwarfspec.automation.service')
 
 local M = {
@@ -505,7 +507,7 @@ function M.new_focus_lifecycle(run, reset, guard)
             EventType.DIAGNOSTIC_RECORDED, diagnostic)
         if diagnostic.kind == focus_diagnostics.CHANGE_KIND then
             table.insert(run.output_lines,
-                focus_diagnostics.format_warning(diagnostic))
+                focus_warning.format_warning(diagnostic))
         end
     end
 

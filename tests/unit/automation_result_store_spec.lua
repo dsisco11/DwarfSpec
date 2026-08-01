@@ -2,10 +2,10 @@
 
 local json = require('dkjson')
 local lfs = require('lfs')
-local ResultState = require('dwarfspec.automation.result_states')
+local ResultState = require('dwarfspec.protocol.enums.result_states')
 local result_store = require('dwarfspec.automation.result_store')
-local events = require('dwarfspec.automation.events')
-local EventType = require('dwarfspec.automation.event_types')
+local events = require('dwarfspec.protocol.events')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 
 ---Builds one complete terminal result fixture.
 ---@param root string

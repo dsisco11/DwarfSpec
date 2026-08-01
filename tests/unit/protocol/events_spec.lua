@@ -1,13 +1,13 @@
 -- Unit contracts for bounded structured automation event journals.
 
-local events = require('dwarfspec.automation.events')
+local events = require('dwarfspec.protocol.events')
 local EComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
-local EventType = require('dwarfspec.automation.event_types')
-local RunState = require('dwarfspec.automation.run_states')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
-local TestStatus = require('dwarfspec.automation.test_statuses')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
+local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
 
 ---Returns one deterministic journal identity.
 ---@return table

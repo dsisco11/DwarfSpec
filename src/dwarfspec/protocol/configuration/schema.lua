@@ -1,6 +1,6 @@
 -- Shared schema validation for tests/dwarfspec/config.lua modules.
 
-local settings_validator = require('dwarfspec.settings')
+local settings_validator = require('dwarfspec.protocol.configuration.settings')
 
 local M = {}
 

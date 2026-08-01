@@ -11,7 +11,7 @@ local interaction_target = assert(loadfile(
     'src/dwarfspec/interaction_target.lua'))()
 local lua_view_adapter = assert(loadfile(
     'src/dwarfspec/lua_view_adapter.lua'))()
-local EventType = require('dwarfspec.automation.event_types')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 local EMouseButton = require('dwarfspec.mouse_buttons')
 local EInputState = require('dwarfspec.input_states')
 local EPointerSpace = require('dwarfspec.pointer_spaces')
@@ -20,7 +20,7 @@ local EScreenOrigin = require('dwarfspec.screen_origins')
 local EEvent = require('dwarfspec.state_change_events')
 local EFieldMode =
     require('dwarfspec.native_game_ui_path').EFieldMode
-local TestStatus = require('dwarfspec.automation.test_statuses')
+local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
 ---@param parent table|nil

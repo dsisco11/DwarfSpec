@@ -1,6 +1,6 @@
 -- Internal copy-on-write project registry operations for the automation service.
 
-local ResultPolicy = require('dwarfspec.automation.result_policies')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 
 local M = {}
 

@@ -63,20 +63,20 @@ Phase 1 - Establish recursive discovery and path authority:
     ☑ Complete the standard phase gate.
 
 Phase 2 - Extract protocol and support namespaces:
-    ☐ Create `src/dwarfspec/protocol/configuration/` and move `error_formats.lua`, `settings.lua`, and `config_schema.lua` as `schema.lua` with their callers and tests.
-    ☐ Move the current pure event contract, validation, and journal operations together into `protocol/events.lua`; do not invent a host-side event-validation module.
-    ☐ Keep pure shared schema logic in `protocol/schemas.lua`.
-    ☐ Create `protocol/diagnostics/` and move focus comparison values and payload validation into `base_screen_focus_comparisons.lua` and `focus.lua`.
-    ☐ Move the stable shared focus-warning formatter into `protocol/diagnostics/focus_warning.lua`; leave native focus observation for the host phase.
-    ☐ Move cross-runtime enums into `protocol/enums/`: event types, owner kinds, result policies, result states, runner failure kinds, run states, scheduler failure kinds, and test statuses.
-    ☐ Leave driver-only enums with the future driver namespace.
-    ☐ Create `src/dwarfspec/support/` and the matching `tests/unit/support/` tree.
-    ☐ Extract pure project path normalization into `support/project_paths.lua` before moving `result_store.lua`.
-    ☐ Move `glob.lua`, `identity_labels.lua`, and `immutable_enum.lua` into `support/` with their callers and tests.
-    ☐ Update all callers, dynamic paths, and matching unit specs in the same cohesive moves.
-    ☐ Confirm protocol and support modules load without controller, host, driver, `df`, or `dfhack` dependencies.
-    ☐ Review the moved modules' `require()` and `loadfile()` dependencies against the protocol and support ownership rules.
-    ☐ Complete the standard phase gate.
+    ☑ Create `src/dwarfspec/protocol/configuration/` and move `error_formats.lua`, `settings.lua`, and `config_schema.lua` as `schema.lua` with their callers and tests.
+    ☑ Move the current pure event contract, validation, and journal operations together into `protocol/events.lua`; do not invent a host-side event-validation module.
+    ☑ Keep pure shared schema logic in `protocol/schemas.lua`.
+    ☑ Create `protocol/diagnostics/` and move focus comparison values and payload validation into `base_screen_focus_comparisons.lua` and `focus.lua`.
+    ☑ Move the stable shared focus-warning formatter into `protocol/diagnostics/focus_warning.lua`; leave native focus observation for the host phase.
+    ☑ Move cross-runtime enums into `protocol/enums/`: event types, owner kinds, result policies, result states, runner failure kinds, run states, scheduler failure kinds, and test statuses.
+    ☑ Leave driver-only enums with the future driver namespace.
+    ☑ Create `src/dwarfspec/support/` and the matching `tests/unit/support/` tree.
+    ☑ Extract pure project path normalization into `support/project_paths.lua` before moving `result_store.lua`.
+    ☑ Move `glob.lua`, `identity_labels.lua`, and `immutable_enum.lua` into `support/` with their callers and tests.
+    ☑ Update all callers, dynamic paths, and matching unit specs in the same cohesive moves.
+    ☑ Confirm protocol and support modules load without controller, host, driver, `df`, or `dfhack` dependencies.
+    ☑ Review the moved modules' `require()` and `loadfile()` dependencies against the protocol and support ownership rules.
+    ☑ Complete the standard phase gate.
 
 Phase 3 - Create the controller namespace:
     ☐ Create the controller directory and matching unit-test subtrees from the proposal's initial Mermaid tree.

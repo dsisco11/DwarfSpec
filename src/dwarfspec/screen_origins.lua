@@ -1,6 +1,6 @@
 -- Immutable anchors for map tiles positioned within the visible map viewport.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 
 ---@enum DwarfSpecEScreenOrigin
 return immutable_enum.define({

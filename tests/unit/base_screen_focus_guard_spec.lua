@@ -3,8 +3,8 @@
 local guard_module =
     require('dwarfspec.automation.base_screen_focus_guard')
 local EComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
-local events = require('dwarfspec.automation.events')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
+local events = require('dwarfspec.protocol.events')
 
 ---Returns one fake screen with a stable diagnostic class name.
 ---@param name string
