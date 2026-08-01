@@ -61,8 +61,11 @@ reduce the number of files visible in one directory.
 
 A module that directly uses `df`, `dfhack`, or DFHack-provided modules belongs
 under `host/` or `driver/`. A module that invokes `dfhack-run`, reads the local
-project, or formats terminal output belongs under `controller/`. A module used
-on both sides must be pure Lua and belongs under `protocol/` or `support/`.
+project, or performs controller-specific terminal presentation belongs under
+`controller/`. A module used on both sides must be pure Lua and belongs under
+`protocol/` or `support/`. A canonical formatter required in both runtimes to
+preserve one serialized diagnostic representation may remain beside that
+protocol contract; broader terminal composition remains controller-owned.
 
 ### Dependencies point inward
 
@@ -71,7 +74,8 @@ The intended dependency direction is:
 ```mermaid
 flowchart LR
     cli["cli.lua"] --> controller["controller/"]
-    entry["host entry scripts"] --> host["host/"]
+    controller -.->|invokes by path| entry["host entry scripts"]
+    entry --> host["host/"]
     controller --> protocol["protocol/"]
     controller --> support["support/"]
     host --> driver["driver/"]
@@ -143,8 +147,8 @@ flowchart TB
     host --> host_execution["execution/<br/>busted_lifecycle_adapter.lua<br/>cleanup.lua<br/>coroutine_scheduler.lua<br/>file_suite_identity.lua<br/>host.lua<br/>output_handler.lua"]
     host --> host_service["service/<br/>projects.lua<br/>scheduler.lua<br/>service.lua<br/>snapshots.lua"]
     host --> host_environment["environment/<br/>extensions.lua<br/>lfs_adapter.lua<br/>project_environment.lua<br/>system_adapter.lua"]
-    host --> host_diagnostics["diagnostics/<br/>base_screen_focus_comparisons.lua<br/>diagnostics.lua<br/>focus_diagnostics.lua<br/>problem_source.lua"]
-    host --> host_game["game/<br/>base_screen_focus_guard.lua<br/>overlay_registration.lua<br/>save_game_load.lua<br/>save_game_mount.lua<br/>save_game_unload.lua"]
+    host --> host_diagnostics["diagnostics/<br/>base_screen_focus_guard.lua<br/>diagnostics.lua<br/>problem_source.lua"]
+    host --> host_game["game/<br/>overlay_registration.lua<br/>save_game_load.lua<br/>save_game_mount.lua<br/>save_game_unload.lua"]
 
     root --> driver["driver/"]
     driver --> driver_commands["commands/<br/>await_event.lua<br/>save_game_load.lua<br/>save_game_unload.lua<br/>text_search.lua"]
@@ -159,12 +163,16 @@ flowchart TB
     protocol --> protocol_events["events.lua"]
     protocol --> protocol_schemas["schemas.lua"]
     protocol --> protocol_configuration["configuration/<br/>error_formats.lua<br/>schema.lua<br/>settings.lua"]
-    protocol --> protocol_diagnostics["diagnostics/<br/>focus.lua"]
+    protocol --> protocol_diagnostics["diagnostics/<br/>base_screen_focus_comparisons.lua<br/>focus.lua<br/>focus_warning.lua"]
     protocol --> protocol_enums["enums/<br/>event_types.lua<br/>owner_kinds.lua<br/>result_policies.lua<br/>result_states.lua<br/>runner_failure_kinds.lua<br/>run_states.lua<br/>scheduler_failure_kinds.lua<br/>test_statuses.lua"]
 
     root --> support["support/"]
-    support --> support_files["glob.lua<br/>identity_labels.lua<br/>immutable_enum.lua<br/>project_paths.lua"]
+    support --> support_files["glob.lua<br/>identity_labels.lua<br/>immutable_enum.lua<br/>module_loader.lua<br/>project_paths.lua"]
 ```
+
+The graph shows the steady-state implementation tree. Temporary forwarding
+modules retained at old paths during the compatibility window are intentionally
+omitted; they are removed before the steady-state tree is reached.
 
 `ds.d.lua` remains at `src/ds.d.lua`. It is a declaration surface rather than
 an installed implementation module and should not be mixed into the runtime
@@ -184,22 +192,25 @@ hierarchy.
 | `automation/host.lua`, lifecycle and coroutine modules | `host/execution/` | This is embedded Busted execution, not the service model. |
 | automation scheduler, service, projects, and snapshots | `host/service/` | Snapshots project mutable service registries and therefore remain host-owned. |
 | automation project and extension loaders | `host/environment/` | Rename the host-side `project.lua` to remove ambiguity. |
-| automation diagnostic, focus-capture, and problem-source modules | `host/diagnostics/` | Keep host capture separate from external formatting and the pure focus wire validator in `protocol/diagnostics/`. |
+| automation diagnostic, focus-observation, and problem-source modules | `host/diagnostics/` | Move `base_screen_focus_guard.lua` here as the host observer. Split the existing focus diagnostic module instead of treating it as capture code. |
 | automation save-game and registration modules | `host/game/` | These perform DFHack state transitions. |
 | `component.lua`, mount modules | `driver/mount/` | These own the mounted resource lifecycle. |
 | subject, native lookup, and view adapter modules | `driver/subjects/` | These implement selection and retained identity. |
 | render modules | `driver/render/` | These implement invalidation and completed-render observation. |
 | `commands/` | `driver/commands/` | Built-in commands are part of the run-scoped driver. |
 | `automation/pointer_adapter.lua` | `driver/input/` | Pointer movement is interaction behavior, not run orchestration. |
-| event, schema, state, policy, and cross-runtime failure vocabulary | `protocol/` | These values cross the controller/host boundary. Split focus-diagnostic capture from its pure wire validator before moving events. Driver-only enums stay with the driver. |
+| event, schema, state, policy, and cross-runtime failure vocabulary | `protocol/` | These values cross the controller/host boundary. Move focus comparison values and validation here, and keep stable shared warning formatting in `protocol/diagnostics/focus_warning.lua`. Driver-only enums stay with the driver. |
 | immutable enum and identity-label helpers | `support/` | Keep this directory small and dependency-free. |
 
 `result_store.lua` remains in `controller/`, but its current dependency on
 host-owned project state must be removed first. Extract the pure path
 normalization it needs into `support/project_paths.lua`; do not move the host
 project registry into the controller. Split `events.lua` so its wire contract
-and validation are pure protocol code while focus capture remains under
-`host/diagnostics/`. `schemas.lua` then remains protocol code, and
+and validation are pure protocol code. Move the focus comparison enum and
+payload validator into `protocol/diagnostics/`, move the shared stable warning
+formatter into `protocol/diagnostics/focus_warning.lua`, and keep native focus
+observation in `host/diagnostics/base_screen_focus_guard.lua`. `schemas.lua`
+then remains protocol code, and
 `snapshots.lua` remains under `host/service/` because it projects mutable host
 registries.
 
@@ -214,8 +225,9 @@ Before moving modules:
 
 1. Extend `dwarfspec.layout` into the single authority for source and installed
    paths to host entry scripts.
-2. Add a small internal loader that accepts a canonical module name and derives
-   its source-tree path. Remove paired arguments such as
+2. Add `support/module_loader.lua`, a runtime-neutral loader that accepts a
+   canonical module name and derives its source-tree path. Remove paired
+   arguments such as
    `('dwarfspec.component', '/src/dwarfspec/component.lua')`.
 3. Keep cache-bypass behavior explicit for modules that must be reloaded in
    DFHack. Do not replace deliberate `loadfile()` calls with ordinary
@@ -224,7 +236,8 @@ Before moving modules:
    to recognize the organized tree without exposing absolute local paths.
 5. Add a package-layout test that resolves every registered entry point and
    every driver module from both a source checkout and an installed-tree
-   fixture.
+   fixture. Exercise `support/module_loader.lua` through ordinary cached loads
+   and explicit cache-bypassing loads.
 
 The entrypoint scripts need a tiny duplicated bootstrap that derives the Lua
 module root before normal module loading is available. That exception is
@@ -284,12 +297,15 @@ Rename unit specs to match the target module path, for example:
   `tests/unit/driver/mount/mount_context_spec.lua`;
 - `tests/unit/automation_service_spec.lua` becomes
   `tests/unit/host/service/service_spec.lua`; and
-- `tests/unit/config_spec.lua` becomes
-  `tests/unit/controller/configuration/config_spec.lua`.
+- `tests/unit/config_spec.lua` is split by ownership: configuration-file
+  loading remains in `tests/unit/controller/configuration/config_spec.lua`,
+  while schema, settings, and error-format cases move to focused specs under
+  `tests/unit/protocol/configuration/`.
 
-Move tests after their production modules so failures remain attributable.
-Do not move checked-in protocol fixtures or generated `.test-results` merely
-to make the tree look symmetric.
+Move each production dependency cluster atomically with all corresponding
+`require()` paths, `loadfile()` paths, forwarding modules, and unit-test paths.
+Every migration commit must remain testable. Do not move checked-in protocol
+fixtures or generated `.test-results` merely to make the tree look symmetric.
 
 ## Implementation sequence
 
@@ -310,8 +326,10 @@ to make the tree look symmetric.
    audit are complete.
 10. Decompose the large modules in small, separately verified changes.
 
-Every move should use `git mv` and update one cohesive dependency cluster.
-Do not combine this work with public API changes, new test-runner UI behavior,
+Every move should use `git mv` and update one cohesive dependency cluster in
+the same commit, including callers and tests. Keep behavior changes and
+large-module decomposition separate from these atomic migration commits. Do
+not combine this work with public API changes, new test-runner UI behavior,
 TestBed implementation, or selector redesign.
 
 ## Verification gates
@@ -326,6 +344,10 @@ demonstrated:
   `host/` imports host, driver, protocol, and support modules; `driver/`
   imports only driver, protocol, and support modules; `protocol/` imports only
   protocol and support modules; and `support/` imports only support modules;
+- the boundary audit covers static `require()` calls, literal and constructed
+  `loadfile()` targets, every entry in the centralized module loader or module
+  catalog, host entrypoint paths returned by `layout.lua`, and temporary
+  compatibility forwarding modules;
 - the dependency audit recognizes only the documented root `ds.lua`
   composition exception for loading both host and driver modules;
 - the unit runner recursively discovers nested specs and verifies its expected
@@ -355,7 +377,9 @@ first and add source/installed layout tests before any bulk move.
 
 Pure-Lua unit tests can accidentally load a DFHack-only module through a new
 dependency. Add a static import audit and isolated-load tests for `protocol/`
-and `controller/`.
+and `controller/`. Supplement the static scan with catalog and runtime layout
+tests so dynamically constructed `loadfile()` paths cannot bypass the allowed
+dependency matrix.
 
 ### Stale installed modules
 
@@ -372,8 +396,10 @@ are stable after the compatibility window.
 
 ### Review noise
 
-Moves plus behavior edits obscure history. Keep path-only moves, require-path
-updates, test moves, and later decompositions in distinct commits.
+Moves plus behavior edits obscure history. Keep each move, its require/load
+path changes, compatibility forwarding modules, and corresponding test moves
+together so the commit remains green. Keep behavioral changes and later
+decompositions in distinct commits.
 
 ## Follow-up work
 
