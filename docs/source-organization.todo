@@ -153,16 +153,16 @@ Phase 7 - Approve the late decomposition designs:
     ☑ Obtain explicit approval for all five proposals before implementing any late decomposition.
 
 Phase 8 - Decompose root ds.lua:
-    ☐ Implement only the module boundaries approved in the `ds.lua` decomposition proposal.
-    ☐ Retain run-scoped API construction and public command binding in root `ds.lua`.
-    ☐ Create `driver/commands/wait.lua`, `game_state.lua`, `view_position.lua`, `mount.lua`, `input.lua`, `pointer.lua`, and `capture.lua` with exactly the approved command-validation and adaptation responsibilities; keep event matching in the existing `await_event.lua`.
-    ☐ Create `driver/subjects/native_subject_source.lua` for native/overlay source construction and dual-root resolution.
-    ☐ Create `driver/render/command_observer.lua` for command events and bounded mount diagnostics.
-    ☐ Preserve the public injected `ds` API and each local loader's cache and freshness behavior.
-    ☐ Do not move or redesign host-owned save-game, overlay-registration, or diagnostic workflows; reserve that ownership change for the follow-up plan.
-    ☐ Add the approved direct behavioral specs for `wait`, `game_state`, `view_position`, `mount`, `input`, `pointer`, `capture`, `native_subject_source`, and `command_observer`; do not add file-existence tests.
-    ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
-    ☐ Complete the standard phase gate and the relevant focused live driver tests.
+    ☑ Implement only the module boundaries approved in the `ds.lua` decomposition proposal.
+    ☑ Retain run-scoped API construction and public command binding in root `ds.lua`.
+    ☑ Create `driver/commands/wait.lua`, `game_state.lua`, `view_position.lua`, `mount.lua`, `input.lua`, `pointer.lua`, and `capture.lua` with exactly the approved command-validation and adaptation responsibilities; keep event matching in the existing `await_event.lua`.
+    ☑ Create `driver/subjects/native_subject_source.lua` for native/overlay source construction and dual-root resolution.
+    ☑ Create `driver/render/command_observer.lua` for command events and bounded mount diagnostics.
+    ☑ Preserve the public injected `ds` API and each local loader's cache and freshness behavior.
+    ☑ Do not move or redesign host-owned save-game, overlay-registration, or diagnostic workflows; reserve that ownership change for the follow-up plan.
+    ☑ Add the approved direct behavioral specs for `wait`, `game_state`, `view_position`, `mount`, `input`, `pointer`, `capture`, `native_subject_source`, and `command_observer`; do not add file-existence tests.
+    ☑ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
+    ☑ Complete the standard phase gate and the relevant focused live driver tests.
 
 Phase 9 - Decompose host execution:
     ☐ Implement only the module boundaries approved for `host/execution/host.lua`.

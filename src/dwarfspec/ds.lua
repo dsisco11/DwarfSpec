@@ -134,6 +134,24 @@ local await_event_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.await_event')
 local text_search_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.text_search')
+local wait_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.wait')
+local game_state_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.game_state')
+local view_position_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.view_position')
+local capture_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.capture')
+local mount_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.mount')
+local input_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.input')
+local pointer_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.pointer')
+local native_subject_source_module = load_automation_module(package_root,
+    'dwarfspec.driver.subjects.native_subject_source')
+local command_observer_module = load_automation_module(package_root,
+    'dwarfspec.driver.render.command_observer')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
@@ -346,6 +364,8 @@ local text_search_command = load_automation_module(package_root,
             })
         end
     end
+    command_observer = command_observer_module.new(
+        publisher, EventType, TestStatus)
     ---Creates one private render tracker using the run's wait settings.
     ---@return table
     local function new_render_tracker()
@@ -847,6 +867,15 @@ local text_search_command = load_automation_module(package_root,
                 bounded_text(game_failure)), 0)
     end
 
+    local native_subject_sources = native_subject_source_module.new({
+        sources=ESubjectSource,
+        mount_context=context.mount_context,
+        is_native_widget_root=is_native_widget_root,
+        native_factory=native_subject_source_factory,
+        overlay_factory=overlay_subject_source_factory,
+        resolve_implicit_path=resolve_implicit_native_path,
+    })
+
     ---Copies caller wait options and applies project-wide defaults.
     ---@param options table|nil
     ---@param include_frame_budget boolean
@@ -1288,7 +1317,7 @@ local text_search_command = load_automation_module(package_root,
             return context.mount_context:root()
         end
         local request = subject_requests_module.root(options)
-        local source = select_subject_source(mount, request)
+        local source = native_subject_sources.select(mount, request)
         if source == mount.subject_source then
             return context.mount_context:root()
         end
@@ -1315,7 +1344,7 @@ local text_search_command = load_automation_module(package_root,
         if mount.subject_source.kind == ESubjectSource.NATIVE then
             local request = subject_requests_module.get(
                 control_path, options)
-            source = select_subject_source(mount, request)
+            source = native_subject_sources.select(mount, request)
             path_segments = request.path_segments
             use_implicit_native_roots =
                 request.source == ESubjectSource.NATIVE and
@@ -1336,7 +1365,7 @@ local text_search_command = load_automation_module(package_root,
         local selected_path_segments = path_segments
         local ok, selected = pcall(function()
             if use_implicit_native_roots then
-                return resolve_implicit_native_path(
+                return native_subject_sources.resolve_implicit_path(
                     mount, path_segments, diagnostic_path)
             end
             if path_segments then
@@ -1440,7 +1469,7 @@ local text_search_command = load_automation_module(package_root,
         local source = mount.subject_source
         if mount.subject_source.kind == ESubjectSource.NATIVE then
             local request = subject_requests_module.tree(options)
-            source = select_subject_source(mount, request)
+            source = native_subject_sources.select(mount, request)
         else
             assert(options == nil,
                 'component mounts do not accept subject source options')
@@ -1957,6 +1986,52 @@ local text_search_command = load_automation_module(package_root,
         return stage_overlay_registration_integration(
             source_path, logical_name)
     end
+
+    wait_command.bind(ds, {
+        scheduler_module=scheduler_module,
+        scheduler=scheduler,
+        wait_settings=wait_settings,
+        await_event=await_event,
+    })
+    game_state_command.bind(ds, {
+        context=context,
+        cleanup_module=cleanup_module,
+        cleanup_registry=cleanup_registry,
+    })
+    view_position_command.bind(ds, {
+        context=context,
+        cleanup_module=cleanup_module,
+        cleanup_registry=cleanup_registry,
+        origins=EScreenOrigin,
+    })
+    capture_command.bind(ds, {run=context.run, diagnostics=diagnostics})
+    local mount_commands = mount_command.new({
+        context=context,
+        subject_source=ESubjectSource,
+        requests=subject_requests_module,
+        paths=subject_paths_module,
+        native_attachment=native_attachment,
+        diagnostics=diagnostics,
+        resolve_target=resolve_interaction_target,
+        select_source=native_subject_sources.select,
+        resolve_implicit_path=native_subject_sources.resolve_implicit_path,
+    })
+    for name, command in pairs(mount_commands) do ds[name] = command end
+    local input_commands = input_command.new({
+        context=context,
+        resolve_target=resolve_interaction_target,
+        simulate_input=simulate_input,
+    })
+    ds.input = input_commands.input
+    ds.type = input_commands.type
+    local pointer_commands = pointer_command.new({
+        move_pointer=ds.move_pointer,
+        hover=ds.hover,
+        click=ds.click,
+        mouseInput=ds.mouseInput,
+        mouseWheel=ds.mouseWheel,
+    })
+    for name, command in pairs(pointer_commands) do ds[name] = command end
 
     for name, command in pairs(extensions.commands) do
         local callback = command.callback
