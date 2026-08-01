@@ -15,12 +15,12 @@ Constraints:
     - Do not add file-existence-only tests, packaged-source/archive verification, or a separate source-boundary script.
     - Keep the retained host service registry, scheduler instance, cleanup registry, and project environment host-owned.
 
-Current host-module inventory:
+Approval-time host-module inventory and migration state:
     - `dwarfspec.host.diagnostics.diagnostics` provides subject inspection, bounded tree and screen capture, and mount-failure formatting.
     - `dwarfspec.host.game.overlay_registration` provides project-source resolution, DFHack overlay registration staging, and exact cleanup restoration.
-    - `dwarfspec.host.game.save_game_mount` provides argument validation and same-save versus transition preflight.
-    - `dwarfspec.host.game.save_game_load` provides the deterministic title-screen load workflow.
-    - `dwarfspec.host.game.save_game_unload` provides the deterministic no-save unload workflow.
+    - `dwarfspec.host.game.save_game_mount` provided argument validation and same-save versus transition preflight; moved to `dwarfspec.driver.game.save_game_mount` in Phase 2.
+    - `dwarfspec.host.game.save_game_load` provided the deterministic title-screen load workflow; moved to `dwarfspec.driver.game.save_game_load` in Phase 2.
+    - `dwarfspec.host.game.save_game_unload` provided the deterministic no-save unload workflow; moved to `dwarfspec.driver.game.save_game_unload` in Phase 2.
 
 Phase 0 - Lock the behavioral baseline:
     ☑ Run the existing unit suite and record only its command and result in the implementation handoff.
@@ -47,12 +47,12 @@ Phase 1 - Introduce explicit host capability interfaces:
     ☑ Run the unit suite.
 
 Phase 2 - Move save-game behavior to driver ownership:
-    ☐ Move save-game argument/preflight behavior to a driver-owned module and move its behavioral spec with it.
-    ☐ Move the load and unload workflows to driver-owned modules and move their behavioral specs with them.
-    ☐ Update the existing driver save-game commands to construct the workflows from injected scheduling and native-game capabilities.
-    ☐ Remove the three `dwarfspec.host.game.save_game_*` imports from `ds.lua` after their replacement tests pass.
-    ☐ Run the save-game unit specs, then the complete unit suite.
-    ☐ Run focused same-save and transition live coverage and confirm cleanup.
+    ☑ Move save-game argument/preflight behavior to a driver-owned module and move its behavioral spec with it.
+    ☑ Move the load and unload workflows to driver-owned modules and move their behavioral specs with them.
+    ☑ Update the existing driver save-game commands to construct the workflows from injected scheduling and native-game capabilities.
+    ☑ Remove the three `dwarfspec.host.game.save_game_*` imports from `ds.lua` after their replacement tests pass.
+    ☑ Run the save-game unit specs, then the complete unit suite.
+    ☑ Run focused same-save and transition live coverage and confirm cleanup.
 
 Phase 3 - Move interaction diagnostics to driver ownership:
     ☐ Move subject inspection, bounded capture, and mount-failure formatting to a driver-owned diagnostics module with its behavioral spec.

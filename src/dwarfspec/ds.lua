@@ -125,11 +125,11 @@ local EventType = load_automation_module(package_root,
 local TestStatus = load_automation_module(package_root,
     'dwarfspec.protocol.enums.test_statuses')
 local save_game_mount_module = load_automation_module(package_root,
-    'dwarfspec.host.game.save_game_mount')
+    'dwarfspec.driver.game.save_game_mount')
 local save_game_unload_module = load_automation_module(package_root,
-    'dwarfspec.host.game.save_game_unload')
+    'dwarfspec.driver.game.save_game_unload')
 local save_game_load_module = load_automation_module(package_root,
-    'dwarfspec.host.game.save_game_load')
+    'dwarfspec.driver.game.save_game_load')
 local save_game_unload_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.save_game_unload')
 local save_game_load_command = load_automation_module(package_root,
@@ -241,16 +241,41 @@ local command_observer_module = load_automation_module(package_root,
         game_speed_cleanup_entry=nil,
     }
 
+    ---Dispatches one native input key through DFHack's GUI module.
+    ---@param screen any
+    ---@param key string
+    ---@return any
+    local function simulate_native_input(screen, key)
+        return require('gui').simulateInput(screen, key)
+    end
+
+    ---Returns the current native main-interface options.
+    ---@return any
+    local function get_native_options()
+        return df.global.game.main_interface.options
+    end
+
+    local native_game = {
+        is_world_loaded=dfhack.isWorldLoaded,
+        read_world_folder=dfhack.world.ReadWorldFolder,
+        get_focus=dfhack.gui.getCurFocus,
+        current_viewscreen=context.current_viewscreen,
+        get_window_size=context.get_window_size,
+        simulate_input=simulate_native_input,
+        get_options=get_native_options,
+        title_screen_type=df.viewscreen_titlest,
+        title_mode_type=df.title_mode_type,
+        load_screen_type=df.viewscreen_loadgamest,
+        main_choice_type=df.main_choice_type,
+        main_menu_option_type=df.main_menu_option_type,
+    }
+
     local save_game_unloader =
         mount_dependencies.save_game_unloader or save_game_unload_command.new({
             workflow=save_game_unload_module,
-            scheduler_module=scheduler_module,
-            scheduler=scheduler,
+            scheduling=run_capabilities.scheduling,
             wait_settings=wait_settings,
-            dfhack=dfhack,
-            df=df,
-            current_viewscreen=context.current_viewscreen,
-            get_window_size=context.get_window_size,
+            native_game=native_game,
             pointer_adapter=pointer_adapter_module,
             pointer=context.pointer,
         })
@@ -288,13 +313,9 @@ local command_observer_module = load_automation_module(package_root,
     local save_game_loader =
         mount_dependencies.save_game_loader or save_game_load_command.new({
             workflow=save_game_load_module,
-            scheduler_module=scheduler_module,
-            scheduler=scheduler,
+            scheduling=run_capabilities.scheduling,
             wait_settings=wait_settings,
-            dfhack=dfhack,
-            df=df,
-            current_viewscreen=context.current_viewscreen,
-            get_window_size=context.get_window_size,
+            native_game=native_game,
             pointer_adapter=pointer_adapter_module,
             pointer=context.pointer,
             events=EEvent,

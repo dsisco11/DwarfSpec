@@ -10,18 +10,24 @@ function M.new(dependencies)
         'DwarfSpec save-game unload command requires dependencies')
     local workflow = assert(dependencies.workflow,
         'DwarfSpec save-game unload command requires its workflow')
-    local scheduler_module = assert(dependencies.scheduler_module,
-        'DwarfSpec save-game unload command requires a scheduler module')
-    local scheduler = assert(dependencies.scheduler,
-        'DwarfSpec save-game unload command requires a scheduler')
-    local dfhack_api = assert(dependencies.dfhack,
-        'DwarfSpec save-game unload command requires DFHack')
-    local df_api = assert(dependencies.df,
-        'DwarfSpec save-game unload command requires Dwarf Fortress types')
-    local current_viewscreen = assert(dependencies.current_viewscreen,
-        'DwarfSpec save-game unload command requires viewscreen access')
-    local get_window_size = assert(dependencies.get_window_size,
-        'DwarfSpec save-game unload command requires window geometry')
+    local scheduling = assert(dependencies.scheduling,
+        'DwarfSpec save-game unload command requires scheduling capabilities')
+    assert(type(scheduling.wait_until) == 'function' and
+            type(scheduling.wait_frames) == 'function',
+        'DwarfSpec save-game unload command requires wait capabilities')
+    local native_game = assert(dependencies.native_game,
+        'DwarfSpec save-game unload command requires native-game capabilities')
+    for _, name in ipairs({
+            'is_world_loaded', 'read_world_folder', 'get_focus',
+            'current_viewscreen', 'get_window_size', 'simulate_input',
+            'get_options'}) do
+        assert(type(native_game[name]) == 'function',
+            'DwarfSpec save-game unload command requires native_game.' ..
+                name .. '()')
+    end
+    assert(native_game.main_menu_option_type ~= nil,
+        'DwarfSpec save-game unload command requires ' ..
+            'native_game.main_menu_option_type')
     local pointer_adapter = assert(dependencies.pointer_adapter,
         'DwarfSpec save-game unload command requires a pointer adapter')
     local pointer = assert(dependencies.pointer,
@@ -34,8 +40,7 @@ function M.new(dependencies)
     local function simulate_native_input(screen, key)
         assert(screen ~= nil,
             'DwarfSpec save-game input requires a native viewscreen')
-        local gui = dependencies.gui or require('gui')
-        return gui.simulateInput(screen, key)
+        return native_game.simulate_input(screen, key)
     end
 
     ---Moves DFHack's virtual native pointer to one UI-grid cell.
@@ -59,7 +64,7 @@ function M.new(dependencies)
     ---@param query function
     ---@return any
     local function wait_for_save_game_state(description, query)
-        return scheduler_module.wait_until(scheduler, description, query, {
+        return scheduling.wait_until(description, query, {
             timeout_ms=wait_settings.timeout_ms,
             frame_budget=wait_settings.frame_budget,
         })
@@ -68,24 +73,20 @@ function M.new(dependencies)
     ---Returns the current native focus string for diagnostics.
     ---@return string
     local function current_native_focus()
-        local focus = dfhack_api.gui.getCurFocus()
+        local focus = native_game.get_focus()
         return type(focus) == 'table' and focus[1] or tostring(focus)
     end
 
     return workflow.new({
-        is_world_loaded=function() return dfhack_api.isWorldLoaded() end,
-        read_world_folder=function()
-            return dfhack_api.world.ReadWorldFolder()
-        end,
-        get_options=function()
-            return df_api.global.game.main_interface.options
-        end,
-        get_screen=current_viewscreen,
-        main_menu_option_type=df_api.main_menu_option_type,
+        is_world_loaded=native_game.is_world_loaded,
+        read_world_folder=native_game.read_world_folder,
+        get_options=native_game.get_options,
+        get_screen=native_game.current_viewscreen,
+        main_menu_option_type=native_game.main_menu_option_type,
         open_options=function(screen)
             simulate_native_input(screen, 'OPTIONS')
         end,
-        get_window_size=get_window_size,
+        get_window_size=native_game.get_window_size,
         move_pointer=move_native_pointer,
         click_left=click_native,
         capture_input_state=function()
@@ -93,11 +94,11 @@ function M.new(dependencies)
         end,
         wait_until=wait_for_save_game_state,
         wait_frames=function(count)
-            return scheduler_module.wait_frames(scheduler, count)
+            return scheduling.wait_frames(count)
         end,
         get_focus=current_native_focus,
         get_viewscreen=function()
-            local screen = current_viewscreen()
+            local screen = native_game.current_viewscreen()
             return screen and screen._type
         end,
     })

@@ -18,13 +18,16 @@ later. It is neither required nor authorized by this plan.
 
 ## Current exception
 
-Root `ds.lua` currently fresh-loads these five host modules:
+At approval, root `ds.lua` fresh-loaded these five host modules:
 
 - `dwarfspec.host.diagnostics.diagnostics`;
 - `dwarfspec.host.game.overlay_registration`;
 - `dwarfspec.host.game.save_game_mount`;
 - `dwarfspec.host.game.save_game_load`; and
 - `dwarfspec.host.game.save_game_unload`.
+
+The save-game modules have since moved to `driver/game`. The remaining root
+imports are diagnostics and overlay registration.
 
 The host execution root also fresh-loads `dwarfspec.ds`. This creates the sole
 temporary bidirectional composition relationship.

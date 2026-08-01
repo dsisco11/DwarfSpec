@@ -13,23 +13,18 @@ describe('save-game unload command binding', function()
                 return sentinel
             end,
         }
-        local scheduler = {}
         local wait_calls = {}
         local frame_calls = {}
-        local scheduler_module = {
-            wait_until=function(actual_scheduler, description, query, options)
+        local scheduling = {
+            wait_until=function(description, query, options)
                 table.insert(wait_calls, {
-                    scheduler=actual_scheduler,
                     description=description,
                     options=options,
                 })
                 return query()
             end,
-            wait_frames=function(actual_scheduler, count)
-                table.insert(frame_calls, {
-                    scheduler=actual_scheduler,
-                    count=count,
-                })
+            wait_frames=function(count)
+                table.insert(frame_calls, {count=count})
                 return count
             end,
         }
@@ -94,16 +89,22 @@ describe('save-game unload command binding', function()
 
         local result = command.new({
             workflow=workflow,
-            scheduler_module=scheduler_module,
-            scheduler=scheduler,
+            scheduling=scheduling,
             wait_settings={timeout_ms=321, frame_budget=654},
-            dfhack=dfhack_api,
-            df=df_api,
-            current_viewscreen=function() return screen end,
-            get_window_size=function() return 80, 25 end,
+            native_game={
+                is_world_loaded=dfhack_api.isWorldLoaded,
+                read_world_folder=dfhack_api.world.ReadWorldFolder,
+                get_focus=dfhack_api.gui.getCurFocus,
+                current_viewscreen=function() return screen end,
+                get_window_size=function() return 80, 25 end,
+                simulate_input=gui.simulateInput,
+                get_options=function()
+                    return df_api.global.game.main_interface.options
+                end,
+                main_menu_option_type=df_api.main_menu_option_type,
+            },
             pointer_adapter=pointer_adapter,
             pointer=pointer,
-            gui=gui,
         })
 
         assert.equals(sentinel, result)
@@ -143,11 +144,10 @@ describe('save-game unload command binding', function()
         assert.equals('ready', captured.wait_until('wait for unload',
             function() return 'ready' end))
         assert.same({
-            scheduler=scheduler,
             description='wait for unload',
             options={timeout_ms=321, frame_budget=654},
         }, wait_calls[1])
         assert.equals(3, captured.wait_frames(3))
-        assert.same({scheduler=scheduler, count=3}, frame_calls[1])
+        assert.same({count=3}, frame_calls[1])
     end)
 end)

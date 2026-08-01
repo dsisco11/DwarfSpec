@@ -1,4 +1,4 @@
--- Loads one requested save through the native title interface.
+-- Driver-owned save loading through the native title interface.
 
 local M = {}
 

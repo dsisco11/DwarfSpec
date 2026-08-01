@@ -1,7 +1,7 @@
 -- Unit contracts for native requested-save loading and confirmation.
 
 local save_game_load = assert(loadfile(
-    'src/dwarfspec/host/game/save_game_load.lua'))()
+    'src/dwarfspec/driver/game/save_game_load.lua'))()
 
 describe('save-game load adapter', function()
     local world_loaded

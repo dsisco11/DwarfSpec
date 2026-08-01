@@ -1,4 +1,4 @@
--- Discards one loaded save through an injected native options adapter.
+-- Driver-owned save unloading through an injected native options adapter.
 
 local M = {}
 

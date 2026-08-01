@@ -1,7 +1,7 @@
 -- Unit contracts for native discard without saving.
 
 local save_game_unload = assert(loadfile(
-    'src/dwarfspec/host/game/save_game_unload.lua'))()
+    'src/dwarfspec/driver/game/save_game_unload.lua'))()
 
 describe('save-game unload adapter', function()
     local world_loaded

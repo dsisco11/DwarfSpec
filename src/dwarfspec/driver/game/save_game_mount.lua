@@ -1,4 +1,4 @@
--- Preflight validation for save-game mounting without changing game state.
+-- Driver-owned preflight validation for save-game mounting.
 
 local M = {}
 

@@ -1,7 +1,7 @@
 -- Unit contracts for save-game mount validation and current-world preflight.
 
 local save_game_mount = assert(loadfile(
-    'src/dwarfspec/host/game/save_game_mount.lua'))()
+    'src/dwarfspec/driver/game/save_game_mount.lua'))()
 
 describe('save-game mount preflight', function()
     local world_loaded
