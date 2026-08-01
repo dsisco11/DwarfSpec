@@ -254,12 +254,21 @@ Phase 2: Build the generic component system
     ☐ Exit with linked, DwarfSpec-independent generic components whose responsibilities, reuse points, and dependency direction are documented and verified.
 
 2.1 Generic component: Status Indicator:
-    ☐ Create a Status Indicator component that owns only a CP437 status asset and palette-linked color.
-    ☐ Define queued, running, passed, failed, errored, skipped, cancelled, not-run, flaky, cleanup-failed, and host-disconnected statuses.
-    ☐ Assign every status an existing CP437 asset.
-    ☐ Assign every status an established DF palette preset.
-    ☐ Do not make Status Indicator calculate aggregate status or cleanup precedence.
-    ☐ Create a dedicated component page for Status Indicator and its variants.
+    ☒ Create a Status Indicator component that owns only a CP437 status asset and palette-linked color.
+    ☒ Define queued, running, passed, failed, errored, skipped, cancelled, not-run, flaky, cleanup-failed, and host-disconnected statuses.
+    ☒ Assign every status an existing CP437 asset.
+    ☒ Assign every status an established DF palette preset.
+    ☒ Do not make Status Indicator calculate aggregate status or cleanup precedence.
+    ☒ Create a dedicated component page for Status Indicator and its variants.
+        - Evidence: Penpot "Component - Status Indicator" page. Variant component
+          "Status Indicator" with Status property and 11 values. All 11 statuses
+          have distinct glyphs. CP437 assets: running=CP437 016 (►), passed=
+          CP437 251 (√), failed=CP437 015 (☼), errored=CP437 009 (○), cancelled=
+          CP437 219 (█). Text via font.baseGame: queued=_/skipped=-/not-run=./
+          flaky=*/cleanup-failed=!/host-disconnected=X. Colors: queued/not-run=
+          DARKGREY, running=YELLOW, passed=LIGHTGREEN, failed=RED, errored=
+          LIGHTRED, skipped/cancelled/host-disconnected=GREY, flaky/cleanup-
+          failed=BROWN.
 
 2.2 Generic component: Status Badge:
     ☐ Create a Status Badge component that composes Status Indicator with a short text label and optional border.
