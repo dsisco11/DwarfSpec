@@ -313,9 +313,7 @@ flowchart LR
 
 Update `tools/Run-UnitTests.ps1` before moving any unit specs. Remove Busted's
 `--no-recursive` option so its normal recursive discovery includes every
-nested spec beneath `tests/unit/`. Add an inventory assertion or a nested
-sentinel spec so the repository gate fails if recursive discovery is disabled
-again or silently executes only the top-level files.
+nested spec beneath `tests/unit/`.
 
 Keep live suites under `tests/automation/`, destructive live suites under
 `tests/destructive/`, and multi-process scenarios under `tests/integration/`.
@@ -344,10 +342,9 @@ generated `.test-results` merely to make the tree look symmetric.
    source-declaration, focused live, full non-destructive live-suite, and
    multi-process integration results. Record cleanup confirmation separately
    from test success.
-1. Enable recursive Busted discovery and add the nested-test inventory guard
-   before moving any unit spec.
-2. Add dependency-boundary tests and centralize source/installed path
-   resolution in the existing composition roots without moving modules.
+1. Enable recursive Busted discovery before moving any unit spec.
+2. Centralize source/installed path resolution in the existing composition
+   roots without moving modules.
 3. Move the pure event and configuration contracts, then move the remaining
    protocol and support modules with their callers and tests.
 4. Create `controller/`, retaining the three stable root facades.
@@ -387,24 +384,23 @@ decompositions listed in the implementation sequence:
 
 - all unit tests pass from the source checkout;
 - Lua syntax and repository formatting checks pass;
-- dependency-boundary tests enforce the complete allowed-import matrix:
+- source review confirms the complete allowed-import matrix:
   `controller/` imports only controller, protocol, and support modules;
   `host/` imports host, driver, protocol, and support modules; `driver/`
   imports only driver, protocol, and support modules; `protocol/` imports only
   protocol and support modules; and `support/` imports only support modules;
-- the boundary audit enforces the launcher and root-facade rules:
+- source review confirms the launcher and root-facade rules:
   `bin/dwarfspec` loads only `dwarfspec.cli` and `dwarfspec.layout`;
   `layout.lua` imports no runtime namespace; initial-migration `cli.lua`
   imports only controller, protocol, and support modules; and fully decomposed
   `cli.lua` imports only `controller.application`;
-- the boundary audit covers static `require()` calls, literal and constructed
+- the review covers static `require()` calls, literal and constructed
   `loadfile()` targets, and host entrypoint paths returned by `layout.lua`;
-- the dependency audit recognizes both directions of the sole composition
+- the review recognizes both directions of the sole composition
   exception: `host/execution/host.lua` may load the root `dwarfspec.ds`
   facade, and that facade may load host and driver modules while otherwise
   depending only on protocol and support;
-- the unit runner recursively discovers nested specs and verifies its expected
-  test inventory;
+- the unit runner recursively discovers specs beneath `tests/unit/`;
 - the CLI `help`, `list`, `run`, status, abort, recovery, and inspection paths
   resolve the new host entrypoint locations;
 - focused live tests pass for component mounting, native-screen mounting,
@@ -430,11 +426,11 @@ each move.
 
 ### Runtime boundary violations
 
-Pure-Lua unit tests can accidentally load a DFHack-only module through a new
-dependency. Add a static import audit and isolated-load tests for `protocol/`
-and `controller/`. Include literal and mechanically constructed `loadfile()`
-targets in the audit so dynamic loading cannot bypass the allowed dependency
-matrix.
+Pure-Lua modules can accidentally acquire a DFHack-only dependency. Review the
+affected `require()` calls and literal or constructed `loadfile()` targets as
+each namespace moves, using the approved source tree and dependency matrix as
+the authority. Do not introduce dependency-auditing machinery that replaces,
+wraps, intercepts, or overrides Lua loading behavior.
 
 ### Accidental internal API expansion
 

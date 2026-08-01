@@ -2,6 +2,7 @@
 
 local json = require('dkjson')
 local runner = require('dwarfspec.runner')
+local layout = require('dwarfspec.layout')
 local EComparison =
     require('dwarfspec.automation.base_screen_focus_comparisons')
 local EventType = require('dwarfspec.automation.event_types')
@@ -250,6 +251,7 @@ end
 local function options(run_id)
     return {
         package_root='.',
+        host_scripts=layout.current().host_scripts,
         project_root='tests/framework/minimal_project',
         test_glob='tests/automation/*.lua',
         identities={'tests/automation/minimal_spec.lua'},

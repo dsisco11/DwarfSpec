@@ -1,5 +1,7 @@
 -- Unit contracts for the cursor-based status transport adapter.
 
+local layout = require('dwarfspec.layout')
+
 describe('automation status formatting', function()
     local original_dfhack
     local original_print
@@ -90,7 +92,7 @@ describe('automation status formatting', function()
         local run = host.start('.', '.', options())
         run.output_lines = {'line one\nline two'}
 
-        assert(loadfile('./src/dwarfspec/automation/status.lua'))('status-run',
+        assert(loadfile(layout.current().host_scripts.status))('status-run',
             run.owner_capability, '0')
 
         assert.matches('DWARFSPEC protocol=2 run_id=status-run ' ..

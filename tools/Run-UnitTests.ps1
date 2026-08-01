@@ -82,7 +82,7 @@ try {
     }
 
     & lua $bustedRunner '--defer-print' '-o' 'plainTerminal' `
-        @BustedArgs '--no-recursive' $testsRoot
+        @BustedArgs $testsRoot
     $testExitCode = $LASTEXITCODE
 }
 finally {

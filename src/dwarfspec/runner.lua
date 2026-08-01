@@ -99,10 +99,12 @@ end
 ---@param name string
 ---@return string
 local function host_script(options, name)
-    local scripts = options.host_scripts or {}
-    if scripts[name] then return scripts[name] end
-    return project.join(options.package_root,
-        'src/dwarfspec/automation/' .. name .. '.lua')
+    local scripts = assert(options.host_scripts,
+        'DwarfSpec host entry-script layout is required')
+    local path = scripts[name]
+    assert(path,
+        'DwarfSpec layout does not define host entry script: ' .. name)
+    return path
 end
 
 ---Resolves the shared Lua module root for source and installed layouts.

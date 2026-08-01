@@ -1,5 +1,14 @@
 -- Unit contract for version 2 bootstrap, recovery, and acknowledgement.
 
+local layout = require('dwarfspec.layout')
+
+---Loads one direct DFHack entrypoint through the package layout authority.
+---@param name string
+---@return function
+local function load_host_script(name)
+    return assert(loadfile(layout.current().host_scripts[name]))
+end
+
 describe('version 2 automation entrypoint contract', function()
     local original_dfhack
     local original_print
@@ -91,8 +100,7 @@ describe('version 2 automation entrypoint contract', function()
     it('reports an unloaded service without creating a registry', function()
         local root = require('lfs').currentdir()
 
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/scheduler_status.lua'))()
+        load_host_script('scheduler_status')()
 
         assert.equals('DWARFSPEC_JSON {"encoded":true}', lines[1])
         assert.equals('dwarfspec.status.v1', encoded[1].schema)
@@ -105,8 +113,7 @@ describe('version 2 automation entrypoint contract', function()
     it('starts and aborts through version 2 transport entrypoints',
             function()
         local root = require('lfs').currentdir()
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/bootstrap.lua'))(
+        load_host_script('bootstrap')(
             'entrypoint-contract',
             '--project-root=tests/framework/service project beta',
             '--repeat=2',
@@ -137,7 +144,7 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals(2, encoded[1].protocol)
 
         lines = {}
-        assert(loadfile(root .. '/src/dwarfspec/automation/abort.lua'))(
+        load_host_script('abort')(
             'entrypoint-contract', run.owner_capability)
 
         assert.is_nil(registry.active_run_id)
@@ -156,8 +163,7 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals(2, encoded[2].protocol)
 
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/acknowledge.lua'))(
+        load_host_script('acknowledge')(
             'entrypoint-contract', tostring(run.generation),
             run.owner_capability, tostring(#run.event_journal.events))
         assert.is_true(run.acknowledged)
@@ -168,8 +174,7 @@ describe('version 2 automation entrypoint contract', function()
 
         registry.package_version = '0.1.3'
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/bootstrap.lua'))(
+        load_host_script('bootstrap')(
             'entrypoint-version-rejection')
         assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
         assert.equals('dwarfspec.error.v1', encoded[4].schema)
@@ -188,8 +193,7 @@ describe('version 2 automation entrypoint contract', function()
             reason='cleanup was not confirmed',
         }
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/bootstrap.lua'))(
+        load_host_script('bootstrap')(
             'entrypoint-quarantine-rejection')
         assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
         assert.equals('dwarfspec.error.v1', encoded[5].schema)
@@ -215,7 +219,7 @@ describe('version 2 automation entrypoint contract', function()
                 lease_check_frames=4,
             })
 
-        assert(loadfile(root .. '/src/dwarfspec/automation/cancel.lua'))(
+        load_host_script('cancel')(
             queued.run_id, queued.owner_capability, '0', 'fixture cancel')
         assert.equals('cancelled', queued.state)
         assert.equals('dwarfspec.transport.v2',
@@ -223,7 +227,7 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals('cancelled', encoded[#encoded].snapshot.state)
 
         lines = {}
-        assert(loadfile(root .. '/src/dwarfspec/automation/event_read.lua'))(
+        load_host_script('event_read')(
             queued.run_id, tostring(encoded[#encoded].last_sequence))
         assert.equals(1, #lines)
         assert.equals('dwarfspec.transport.v2',
@@ -231,24 +235,21 @@ describe('version 2 automation entrypoint contract', function()
         assert.same({}, encoded[#encoded].events)
 
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/scheduler_status.lua'))(
+        load_host_script('scheduler_status')(
             queued.run_id, tostring(encoded[#encoded].last_sequence))
         assert.equals('dwarfspec.scheduler.v2',
             encoded[#encoded].scheduler.schema)
         local query_cursor = encoded[#encoded].last_sequence
 
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/run_query.lua'))('history')
+        load_host_script('run_query')('history')
         assert.equals('dwarfspec.history.v1', encoded[#encoded].schema)
         assert.is_true(encoded[#encoded].service_loaded)
         assert.equals(1, #encoded[#encoded].runs)
         assert.equals(queued.run_id, encoded[#encoded].runs[1].run_id)
 
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/run_query.lua'))(
+        load_host_script('run_query')(
             'show', queued.run_id)
         assert.equals('dwarfspec.run-inspection.v1',
             encoded[#encoded].schema)
@@ -256,8 +257,7 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals(queued.run_id, encoded[#encoded].snapshot.run_id)
 
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/run_query.lua'))(
+        load_host_script('run_query')(
             'logs', queued.run_id)
         assert.equals('dwarfspec.run-logs.v1', encoded[#encoded].schema)
         assert.is_true(encoded[#encoded].found)
@@ -267,14 +267,13 @@ describe('version 2 automation entrypoint contract', function()
         assert.same({'CANCELLED fixture cancel'}, queued.output_lines)
 
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/run_query.lua'))(
+        load_host_script('run_query')(
             'show', 'missing-run')
         assert.is_false(encoded[#encoded].found)
         assert.is_nil(encoded[#encoded].snapshot)
 
         lines = {}
-        assert(loadfile(root .. '/src/dwarfspec/automation/discard.lua'))(
+        load_host_script('discard')(
             queued.run_id, tostring(queued.generation),
             tostring(query_cursor), 'fixture discard')
         assert.is_true(queued.discarded)
@@ -290,7 +289,7 @@ describe('version 2 automation entrypoint contract', function()
             })
         local cursor = #active.event_journal.events
         lines = {}
-        assert(loadfile(root .. '/src/dwarfspec/automation/recover.lua'))(
+        load_host_script('recover')(
             active.run_id, active.owner_capability, tostring(cursor),
             'fixture recovery')
         assert.equals('aborted', active.state)
@@ -300,8 +299,7 @@ describe('version 2 automation entrypoint contract', function()
 
         dfhack.dwarfspec.quarantine = {active=false}
         lines = {}
-        assert(loadfile(root ..
-            '/src/dwarfspec/automation/scheduler_status.lua'))()
+        load_host_script('scheduler_status')()
         assert.equals('DWARFSPEC_JSON {"encoded":true}', lines[1])
         assert.equals('dwarfspec.status.v1',
             encoded[#encoded].schema)

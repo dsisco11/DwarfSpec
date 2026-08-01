@@ -62,11 +62,10 @@ end
 ---Loads an installed DwarfSpec module or its source-tree equivalent.
 ---@param package_root string
 ---@param module_name string
----@param source_relative string
 ---@return table
-local function load_automation_module(package_root, module_name,
-        source_relative)
-    local source_path = join_path(package_root, source_relative)
+local function load_automation_module(package_root, module_name)
+    local source_path = join_path(package_root,
+        'src/' .. module_name:gsub('%.', '/') .. '.lua')
     local source_file = io.open(source_path, 'rb')
     if source_file then
         source_file:close()
@@ -312,11 +311,9 @@ local function configure_dependencies(package_root, configured_lua_root)
     M.clear_dependency_modules()
 
     local system_adapter = load_automation_module(package_root,
-        'dwarfspec.automation.system_adapter',
-        'src/dwarfspec/automation/system_adapter.lua')
+        'dwarfspec.automation.system_adapter')
     local lfs_adapter = load_automation_module(package_root,
-        'dwarfspec.automation.lfs_adapter',
-        'src/dwarfspec/automation/lfs_adapter.lua')
+        'dwarfspec.automation.lfs_adapter')
     package.preload.system = function() return system_adapter end
     package.preload.lfs = function() return lfs_adapter end
     package.loaded.system = system_adapter
@@ -633,13 +630,11 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
     local busted = require('busted.core')()
     require('busted')(busted)
     local project_module = load_automation_module(package_root,
-        'dwarfspec.automation.project',
-        'src/dwarfspec/automation/project.lua')
+        'dwarfspec.automation.project')
     local project = project_module.new(project_root, package_root,
         dfhack.filesystem)
     local extensions_module = load_automation_module(package_root,
-        'dwarfspec.automation.extensions',
-        'src/dwarfspec/automation/extensions.lua')
+        'dwarfspec.automation.extensions')
     local restore_project_modules, module_audit =
         M.configure_project_modules(project_root, dependency_entries)
     run.module_environment_audit = module_audit
@@ -653,17 +648,14 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
             discovery.test_glob
         specs = project_module.discover_specs(project, configured_glob)
     end
-    local ds_factory = load_automation_module(package_root, 'dwarfspec.ds',
-        'src/dwarfspec/ds.lua')
+    local ds_factory = load_automation_module(package_root, 'dwarfspec.ds')
     local ds, reset = ds_factory.new(package_root, project, scheduler_module,
         scheduler, run.cleanup_module, run.cleanup_registry, extensions)
     busted.export('ds', ds)
     local lifecycle_adapter = load_automation_module(package_root,
-        'dwarfspec.automation.busted_lifecycle_adapter',
-        'src/dwarfspec/automation/busted_lifecycle_adapter.lua')
+        'dwarfspec.automation.busted_lifecycle_adapter')
     local guard_factory = load_automation_module(package_root,
-        'dwarfspec.automation.base_screen_focus_guard',
-        'src/dwarfspec/automation/base_screen_focus_guard.lua')
+        'dwarfspec.automation.base_screen_focus_guard')
     local focus_lifecycle = M.new_focus_lifecycle(
         run, reset, guard_factory.new(dfhack.gui))
     run.focus_lifecycle = focus_lifecycle
@@ -679,8 +671,7 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
         lifecycle_adapter, busted, focus_lifecycle)
 
     local output_factory = load_automation_module(package_root,
-        'dwarfspec.automation.output_handler',
-        'src/dwarfspec/automation/output_handler.lua')
+        'dwarfspec.automation.output_handler')
     output_factory.new(busted, run, run.event_publisher)
     require('busted.modules.filter_loader')()(busted,
         M.filter_options(run.options))
@@ -912,8 +903,7 @@ local function begin_queued_run(package_root, project_root, registry, run)
     run.started_ms = dfhack.getTickCount()
     run.started_frame = current_frame()
     local scheduler_module = load_automation_module(package_root,
-        'dwarfspec.automation.coroutine_scheduler',
-        'src/dwarfspec/automation/coroutine_scheduler.lua')
+        'dwarfspec.automation.coroutine_scheduler')
     local scheduler
     scheduler = scheduler_module.new(run, {
         is_current=function()
@@ -1003,8 +993,7 @@ end
 ---@param options table
 local function initialize_runtime(run, package_root, project_root, options)
     local cleanup_module = load_automation_module(package_root,
-        'dwarfspec.automation.cleanup',
-        'src/dwarfspec/automation/cleanup.lua')
+        'dwarfspec.automation.cleanup')
     local created_ms = dfhack.getTickCount()
     run.package_root = package_root
     run.project_root = project_root

@@ -17,8 +17,8 @@ Completion contract:
     ☐ Keep `src/ds.d.lua` at the source root and preserve its declaration behavior.
     ☐ Preserve deliberate `loadfile()` freshness and cache behavior in each composition root; do not replace it with ordinary `require()` as part of this work.
     ☐ Keep loading helpers local to `ds.lua` and the host composition root; do not introduce a shared `module_loader` system.
+    ☐ Do not introduce dependency-auditing machinery that replaces, wraps, intercepts, or overrides `require()`, `loadfile()`, `dofile()`, package searchers, or module environments.
     ☐ Do not add tests whose only purpose is to assert that particular production files exist.
-    ☐ Use a nested sentinel or test-count inventory only to prove that recursive Busted discovery is active.
     ☐ Do not add packaged-source or archive verification; the source checkout is the verification target for this reorganization.
     ☐ Validate declarations from the source checkout only; do not use an installed rock or packaged declaration tree for this gate.
     ☐ Do not combine this work with public API changes, TestBed implementation, test-runner UI behavior, or selector redesign.
@@ -28,9 +28,8 @@ Completion contract:
 
 Standard phase gate:
     ☐ Run the affected focused tests.
-    ☐ Run the full source-checkout unit suite and verify the recursive test inventory.
+    ☐ Run the full recursive source-checkout unit suite.
     ☐ Run `tools/Check-Lua.ps1`.
-    ☐ Run the dependency-boundary audit.
     ☐ Run `git diff --check`.
     ☐ If the phase changed host entry paths, dynamic loading, or live execution behavior, run the affected focused live tests and report test success and `cleanup_confirmed` separately.
     ☐ Do not rerun the full non-destructive live suite here; after Phase 0, that sweep is reserved for the two milestone phases and is compared with the Phase 0 baseline.
@@ -53,27 +52,15 @@ Phase 0 - Initial test baseline:
     ☑ Record the completed baseline and known failures in `docs/source-organization-phase0-baseline.md`.
     ☑ Do not begin source moves until the baseline evidence is complete.
 
-Phase 1 - Establish recursive discovery, path authority, and boundary guards:
-    ☐ Remove Busted's `--no-recursive` argument from `tools/Run-UnitTests.ps1` and the repository CI unit-test invocation.
-    ☐ Search the remaining test tooling for Busted invocations and ensure none disables recursive discovery for `tests/unit/`.
-    ☐ Add one nested sentinel or inventory assertion that fails when nested unit specs are skipped, without asserting production-file existence.
-    ☐ Prove the recursive runner executes both existing top-level specs and the nested guard.
-    ☐ Extend `dwarfspec.layout` as the single authority for source and installed paths to host entry scripts.
-    ☐ Replace duplicated host entry-script path literals in controller callers and tests with the layout authority.
-    ☐ Keep small local loading functions in `ds.lua` and the host composition root.
-    ☐ Mechanically derive source paths from canonical module names where that removes paired module/path literals without changing freshness or cache rules.
-    ☐ Add or extend tests for source-versus-installed entry paths and both composition roots' loading semantics.
-    ☐ Add a static dependency audit that understands static `require()`, literal and mechanically constructed `loadfile()`, and entry paths returned by `layout.lua`.
-    ☐ Enforce the launcher and root rules: `bin/dwarfspec` loads only the CLI and layout facades, and `layout.lua` imports no organized runtime namespace.
-    ☐ Encode the namespace matrix so it is enforced as each target namespace appears.
-        ☐ `controller/` may import controller, protocol, and support modules.
-        ☐ `host/` may import host, driver, protocol, and support modules.
-        ☐ `driver/` may import driver, protocol, and support modules.
-        ☐ `protocol/` may import protocol and support modules.
-        ☐ `support/` may import support modules only.
-    ☐ Encode both directions of the temporary composition exception: `host/execution/host.lua` may load root `dwarfspec.ds`, and root `ds.lua` may load host and driver modules while otherwise using protocol and support.
-    ☐ Add a reusable isolated-load test harness that can reject transitive DFHack-only dependencies once organized production namespaces exist.
-    ☐ Complete the standard phase gate.
+Phase 1 - Establish recursive discovery and path authority:
+    ☑ Remove Busted's `--no-recursive` argument from `tools/Run-UnitTests.ps1` and the repository CI unit-test invocation.
+    ☑ Search the remaining test tooling for Busted invocations and ensure none disables recursive discovery for `tests/unit/`.
+    ☑ Extend `dwarfspec.layout` as the single authority for source and installed paths to host entry scripts.
+    ☑ Replace duplicated host entry-script path literals in controller callers and tests with the layout authority.
+    ☑ Keep small local loading functions in `ds.lua` and the host composition root.
+    ☑ Mechanically derive source paths from canonical module names where that removes paired module/path literals without changing freshness or cache rules.
+    ☑ Extend tests for source-versus-installed host entry paths.
+    ☑ Complete the standard phase gate.
 
 Phase 2 - Extract protocol and support namespaces:
     ☐ Create `src/dwarfspec/protocol/configuration/` and move `error_formats.lua`, `settings.lua`, and `config_schema.lua` as `schema.lua` with their callers and tests.
@@ -88,7 +75,7 @@ Phase 2 - Extract protocol and support namespaces:
     ☐ Move `glob.lua`, `identity_labels.lua`, and `immutable_enum.lua` into `support/` with their callers and tests.
     ☐ Update all callers, dynamic paths, and matching unit specs in the same cohesive moves.
     ☐ Confirm protocol and support modules load without controller, host, driver, `df`, or `dfhack` dependencies.
-    ☐ Use the Phase 1 isolated-load harness to test every protocol production module against transitive DFHack-only dependencies.
+    ☐ Review the moved modules' `require()` and `loadfile()` dependencies against the protocol and support ownership rules.
     ☐ Complete the standard phase gate.
 
 Phase 3 - Create the controller namespace:
@@ -102,7 +89,7 @@ Phase 3 - Create the controller namespace:
     ☐ Update CLI callers, tests, and all matching unit-spec paths atomically.
     ☐ Verify `help`, `list`, `run`, status, abort, recovery, and inspection commands resolve their host entry paths through `layout.lua`.
     ☐ Confirm controller modules do not load host or driver code into the external interpreter.
-    ☐ Use the Phase 1 isolated-load harness to test every controller production module against transitive DFHack-only dependencies.
+    ☐ Review controller `require()` and `loadfile()` dependencies and confirm they do not reach host, driver, or DFHack-only modules.
     ☐ Complete the standard phase gate.
 
 Phase 4 - Create the driver namespace:
@@ -146,7 +133,7 @@ Phase 6 - Close the initial directory-migration milestone:
     ☐ Update `docs/architecture.md`, contributor guidance, and other affected documentation with the new boundaries and public-versus-internal contract.
     ☐ Remove stale internal paths from source, tests, scripts, declarations, and documentation.
     ☐ Rerun the Phase 0 source-declaration check and require the valid and invalid fixtures to retain their expected results.
-    ☐ Reuse the Phase 5 full-unit, syntax, and boundary results if no source, declaration, test, or tool file changed afterward; otherwise rerun them and verify the recursive inventory.
+    ☐ Reuse the Phase 5 full-unit, syntax, and dependency-review results if no source, declaration, test, or tool file changed afterward; otherwise rerun them.
     ☐ Run every focused live scope recorded in Phase 0 and require it to pass with cleanup evidence reported separately.
     ☐ Run the full non-destructive live suite and confirm it introduces no failures relative to Phase 0.
     ☐ Run `tools/Run-MultiProjectIntegration.ps1` and confirm it introduces no failures relative to Phase 0.
@@ -213,7 +200,7 @@ Phase 13 - Decompose cli.lua near the end:
     ☐ Move argument parsing, option validation, and help construction into `controller/command_line.lua`.
     ☐ Move command selection and orchestration into `controller/application.lua`.
     ☐ Reduce root `cli.lua` to delegation to `controller.application`.
-    ☐ Tighten the root-facade boundary audit so fully decomposed `cli.lua` may import only `controller.application`.
+    ☐ Review the fully decomposed root `cli.lua` and confirm it imports only `controller.application`.
     ☐ Preserve all existing command names, options, validation, help output, exit behavior, and orchestration behavior.
     ☐ Add direct tests for command-line parsing and application orchestration.
     ☐ Verify `help`, `list`, `run`, status, abort, recovery, and inspection paths.
@@ -226,7 +213,7 @@ Phase 14 - Close full source organization:
     ☐ Confirm every extracted responsibility has direct behavioral coverage and no generic dumping-ground module was introduced.
     ☐ Confirm source declarations and documentation contain no stale paths or unsupported public module claims.
     ☐ Rerun the Phase 0 source-declaration check and require the valid and invalid fixtures to retain their expected results.
-    ☐ Reuse the Phase 13 full-unit, syntax, and boundary results if no source, declaration, test, or tool file changed afterward; otherwise rerun them and verify the recursive inventory.
+    ☐ Reuse the Phase 13 full-unit, syntax, and dependency-review results if no source, declaration, test, or tool file changed afterward; otherwise rerun them.
     ☐ Run `git diff --check` after all final source, test, declaration, tool, planning, and documentation changes.
     ☐ Run every focused live scope from Phase 0 and require it to pass with cleanup evidence reported separately.
     ☐ Run the full non-destructive live suite and confirm it introduces no failures relative to Phase 0.

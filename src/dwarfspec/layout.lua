@@ -2,6 +2,21 @@
 
 local M = {}
 
+local host_script_names = {
+    'bootstrap',
+    'status',
+    'recover',
+    'recover_executor',
+    'scheduler_status',
+    'run_query',
+    'abort',
+    'acknowledge',
+    'probe',
+    'cancel',
+    'discard',
+    'event_read',
+}
+
 ---Returns whether one path names a readable file.
 ---@param path string
 ---@return boolean
@@ -26,6 +41,19 @@ local function join(root, relative_path)
     return root .. separator() .. relative_path:gsub('[/\\]', separator())
 end
 
+---Builds the direct DFHack entry-script paths beneath one package root.
+---@param package_root string
+---@param namespace_root string
+---@return table<string, string>
+local function host_scripts(package_root, namespace_root)
+    local scripts = {}
+    for _, name in ipairs(host_script_names) do
+        scripts[name] = join(package_root,
+            namespace_root .. '/' .. name .. '.lua')
+    end
+    return scripts
+end
+
 ---Derives the Lua module root containing the installed dwarfspec namespace.
 ---@return string
 function M.lua_root()
@@ -44,26 +72,8 @@ function M.current()
     if source_suffix_count == 1 then
         return {
             package_root=package_root,
-            host_scripts={
-                bootstrap=join(package_root,
-                    'src/dwarfspec/automation/bootstrap.lua'),
-                status=join(package_root,
-                    'src/dwarfspec/automation/status.lua'),
-                recover=join(package_root,
-                    'src/dwarfspec/automation/recover.lua'),
-                recover_executor=join(package_root,
-                    'src/dwarfspec/automation/recover_executor.lua'),
-                scheduler_status=join(package_root,
-                    'src/dwarfspec/automation/scheduler_status.lua'),
-                run_query=join(package_root,
-                    'src/dwarfspec/automation/run_query.lua'),
-                abort=join(package_root,
-                    'src/dwarfspec/automation/abort.lua'),
-                acknowledge=join(package_root,
-                    'src/dwarfspec/automation/acknowledge.lua'),
-                probe=join(package_root,
-                    'src/dwarfspec/automation/probe.lua'),
-            },
+            host_scripts=host_scripts(package_root,
+                'src/dwarfspec/automation'),
         }
     end
 
@@ -72,21 +82,7 @@ function M.current()
     if is_file(installed_bootstrap) then
         return {
             package_root=lua_root,
-            host_scripts={
-                bootstrap=installed_bootstrap,
-                status=join(lua_root, 'dwarfspec/automation/status.lua'),
-                recover=join(lua_root, 'dwarfspec/automation/recover.lua'),
-                recover_executor=join(lua_root,
-                    'dwarfspec/automation/recover_executor.lua'),
-                scheduler_status=join(lua_root,
-                    'dwarfspec/automation/scheduler_status.lua'),
-                run_query=join(lua_root,
-                    'dwarfspec/automation/run_query.lua'),
-                abort=join(lua_root, 'dwarfspec/automation/abort.lua'),
-                acknowledge=join(lua_root,
-                    'dwarfspec/automation/acknowledge.lua'),
-                probe=join(lua_root, 'dwarfspec/automation/probe.lua'),
-            },
+            host_scripts=host_scripts(lua_root, 'dwarfspec/automation'),
         }
     end
 
