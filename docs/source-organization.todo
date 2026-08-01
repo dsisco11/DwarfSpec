@@ -215,22 +215,30 @@ Phase 11 - Decompose mount context:
     ☑ Recheck the corrected implementation against the approved Mermaid dependencies, then rerun the standard phase gate and focused component/native mount live tests with cleanup confirmation reported separately.
 
 Phase 12 - Decompose the controller runner:
-    ☐ Implement only the module boundaries approved for `controller/execution/runner.lua`.
-    ☐ Extract command validation and construction into `controller/execution/command_builder.lua`, including package/entrypoint validation and exact probe, bootstrap, poll, query, acknowledgement, abort, and recovery argument vectors.
-    ☐ Extract transport invocation into `controller/execution/transport_client.lua`, including process invocation, connection/process failure classification, and canonical report parsing with expected identities and cursors.
-    ☐ Extract run polling into `controller/execution/run_poller.lua`, including queued/active polling, event formatting, lease renewal, cursor advancement, and distinct queue/execution timeout budgets.
-    ☐ Extract cancellation and recovery orchestration into `controller/execution/run_recovery.lua`, including queued cancellation, active abort, terminal acknowledgement, timed-out invocation recovery, and explicit executor recovery.
-    ☐ Extract result classification and persistence orchestration into `controller/execution/result_interpreter.lua`, including stable result states, invocation-result documents, and calls to the existing result-store policy.
-    ☐ Keep `controller/execution/runner.lua` as the public orchestration facade for run, abort, status, history, inspection, logs, and executor recovery.
-    ☐ Preserve `process.lua` as the subprocess authority, `report.lua` as the transport/schema authority, and `result_store.lua` as the safe-replacement authority; use `transport_client.lua` only for transport invocation and classification.
-    ☐ Preserve command arguments, polling cursors, queue/execution timeouts, cancellation, abort, acknowledgement, recovery, failure kinds, status handling, and result interpretation.
-    ☐ Add `tests/unit/controller/execution/command_builder_spec.lua` for source/installed paths, every command vector, options, repeated filters, missing dependencies, and unsafe values.
-    ☐ Add `tests/unit/controller/execution/transport_client_spec.lua` for exit codes, missing/malformed envelopes, identity mismatch, cursor checks, verbose output, and process exceptions.
-    ☐ Add `tests/unit/controller/execution/run_poller_spec.lua` for activation boundaries, cursor advancement, queue timeout, execution timeout, terminal results, lease renewal, and interruption.
-    ☐ Add `tests/unit/controller/execution/run_recovery_spec.lua` for queued/active selection, owner capabilities, original-error preservation, cleanup confirmation, acknowledgement failure, and quarantine recovery.
-    ☐ Add `tests/unit/controller/execution/result_interpreter_spec.lua` for every failure kind, pre-execution/native outcomes, interrupted/aborted states, persistence policies, write failures, and terminal metadata.
-    ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
-    ☐ Complete the standard phase gate and focused CLI execution-path tests.
+    ☑ Implement only the module boundaries approved for `controller/execution/runner.lua`.
+    ☑ Extract command validation and construction into `controller/execution/command_builder.lua`, including package/entrypoint validation and exact probe, bootstrap, poll, query, acknowledgement, abort, and recovery argument vectors.
+    ☑ Extract transport invocation into `controller/execution/transport_client.lua`, including process invocation, connection/process failure classification, and canonical report parsing with expected identities and cursors.
+    ☑ Extract run polling into `controller/execution/run_poller.lua`, including queued/active polling, event formatting, lease renewal, cursor advancement, and distinct queue/execution timeout budgets.
+    ☑ Extract cancellation and recovery orchestration into `controller/execution/run_recovery.lua`, including queued cancellation, active abort, terminal acknowledgement, timed-out invocation recovery, and explicit executor recovery.
+    ☑ Extract result classification and persistence orchestration into `controller/execution/result_interpreter.lua`, including stable result states, invocation-result documents, and calls to the existing result-store policy.
+    ☑ Keep `controller/execution/runner.lua` as the public orchestration facade for run, abort, status, history, inspection, logs, and executor recovery.
+    ☑ Preserve `process.lua` as the subprocess authority, `report.lua` as the transport/schema authority, and `result_store.lua` as the safe-replacement authority; use `transport_client.lua` only for transport invocation and classification.
+    ☑ Preserve command arguments, polling cursors, queue/execution timeouts, cancellation, abort, acknowledgement, recovery, failure kinds, status handling, and result interpretation.
+    ☑ Add `tests/unit/controller/execution/command_builder_spec.lua` for source/installed paths, every command vector, options, repeated filters, missing dependencies, and unsafe values.
+    ☑ Add `tests/unit/controller/execution/transport_client_spec.lua` for exit codes, missing/malformed envelopes, identity mismatch, cursor checks, verbose output, and process exceptions.
+    ☑ Add `tests/unit/controller/execution/run_poller_spec.lua` for activation boundaries, cursor advancement, queue timeout, execution timeout, terminal results, lease renewal, and interruption.
+    ☑ Add `tests/unit/controller/execution/run_recovery_spec.lua` for queued/active selection, owner capabilities, original-error preservation, cleanup confirmation, acknowledgement failure, and quarantine recovery.
+    ☑ Add `tests/unit/controller/execution/result_interpreter_spec.lua` for every failure kind, pre-execution/native outcomes, interrupted/aborted states, persistence policies, write failures, and terminal metadata.
+    ☑ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
+    ☑ Complete the standard phase gate and focused CLI execution-path tests.
+    ☑ Move native terminal-outcome classification, including aborted, cancelled, failed, passed-without-cleanup, and successful outcomes, from `controller/execution/runner.lua` into `controller/execution/result_interpreter.lua` so the facade only sequences the approved services.
+    ☑ Restrict `controller/execution/transport_client.lua` to transport invocation, failure classification, and calls to the existing report authority; move verbose runner presentation back to the facade and make event formatting an explicit polling dependency owned by `controller/execution/run_poller.lua` without violating the approved Mermaid dependencies.
+    ☑ Expand `tests/unit/controller/execution/command_builder_spec.lua` to verify the complete bootstrap vector and all configured options, plus actual source-layout and installed-layout dependency and entrypoint resolution.
+    ☑ Expand `tests/unit/controller/execution/transport_client_spec.lua` to classify process exceptions from ordinary transport, bootstrap, scheduler-status, and retained-run query invocations in addition to probe failures.
+    ☑ Expand `tests/unit/controller/execution/run_poller_spec.lua` to prove exact owner-capability lease renewal, cursor and expectation forwarding, one-time activation at the queued-to-active boundary, ordered event formatting/emission, and observation persistence.
+    ☑ Expand `tests/unit/controller/execution/run_recovery_spec.lua` to prove queued cancellation versus active recovery selection, owner-capability and identity/cursor forwarding, successful and failed cleanup confirmation, original-error preservation, acknowledgement failure, and quarantine recovery.
+    ☑ Expand `tests/unit/controller/execution/result_interpreter_spec.lua` to cover every applicable runner failure kind, native terminal classification, no-file and file persistence policies, write failures, and complete terminal metadata.
+    ☑ Recheck the corrected implementation against the approved responsibility table and Mermaid subtree, then rerun the standard phase gate, focused CLI execution-path tests, and focused live execution with cleanup confirmation reported separately.
 
 Phase 13 - Decompose cli.lua near the end:
     ☐ Begin only after Phases 8 through 12 are complete.

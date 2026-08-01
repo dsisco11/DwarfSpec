@@ -1,13 +1,12 @@
 -- External DwarfSpec orchestration over the supported dfhack-run bridge.
 
-local process = require('dwarfspec.controller.execution.process')
-local project = require('dwarfspec.controller.discovery.project')
-local reports = require('dwarfspec.controller.reporting.report')
+local command_builder_module = require('dwarfspec.controller.execution.command_builder')
+local transport_client_module = require('dwarfspec.controller.execution.transport_client')
+local run_poller_module = require('dwarfspec.controller.execution.run_poller')
+local run_recovery_module = require('dwarfspec.controller.execution.run_recovery')
+local result_interpreter_module = require('dwarfspec.controller.execution.result_interpreter')
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
-local ResultState = require('dwarfspec.protocol.enums.result_states')
-local result_store = require('dwarfspec.controller.result_store')
-local RunState = require('dwarfspec.protocol.enums.run_states')
 local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
 
 local M = {}
@@ -84,131 +83,6 @@ local function clean_message(value)
     return tostring(value):gsub('^.-:%d+: ', '')
 end
 
----Returns whether a file can be opened for reading.
----@param path string
----@return boolean
-local function is_file(path)
-    local file = io.open(path, 'rb')
-    if not file then return false end
-    file:close()
-    return true
-end
-
----Returns one installed or source-tree host entry script path.
----@param options table
----@param name string
----@return string
-local function host_script(options, name)
-    local scripts = assert(options.host_scripts,
-        'DwarfSpec host entry-script layout is required')
-    local path = scripts[name]
-    assert(path,
-        'DwarfSpec layout does not define host entry script: ' .. name)
-    return path
-end
-
----Resolves the shared Lua module root for source and installed layouts.
----@param package_root string
----@return string
-local function lua_module_root(package_root)
-    if is_file(project.join(package_root, 'busted/core.lua')) then
-        return package_root
-    end
-    local lua_version = assert(_VERSION:match('Lua (%d+%.%d+)'),
-        'could not determine the active Lua version from ' .. tostring(_VERSION))
-    return project.join(package_root,
-        '.luarocks/share/lua/' .. lua_version)
-end
-
----Validates pure-Lua dependencies required by the in-process host.
----@param options table
-local function validate_dependencies(options)
-    local lua_root = lua_module_root(options.package_root)
-    for _, path in ipairs({
-            project.join(lua_root, 'busted/core.lua'),
-            project.join(lua_root, 'busted/init.lua'),
-            project.join(lua_root, 'luassert/init.lua'),
-            host_script(options, 'bootstrap'),
-            host_script(options, 'status'),
-            host_script(options, 'recover'),
-            host_script(options, 'recover_executor'),
-            host_script(options, 'scheduler_status'),
-            host_script(options, 'run_query'),
-            host_script(options, 'abort'),
-            host_script(options, 'acknowledge'),
-            host_script(options, 'probe')}) do
-        if not is_file(path) then
-            fail(RunnerFailureKind.DEPENDENCY,
-                'DwarfSpec dependency was not found: ' .. path)
-        end
-    end
-end
-
----Appends one repeated bootstrap option for every caller value.
----@param arguments string[]
----@param name string
----@param values string[]|nil
-local function append_values(arguments, name, values)
-    for _, value in ipairs(values or {}) do
-        table.insert(arguments, '--' .. name .. '=' .. value)
-    end
-end
-
----Builds in-process bootstrap arguments for one selected run.
----@param options table
----@param run_id string
----@return string[]
-local function bootstrap_arguments(options, run_id)
-    local result_policy = options.result_path and
-        ResultPolicy.FILE or ResultPolicy.NONE
-    local arguments = {
-        'lua', '-f', host_script(options, 'bootstrap'),
-        run_id,
-        '--project-root=' .. options.project_root,
-        '--repeat=' .. tostring(options.repeat_count),
-        '--defer-frames=' .. tostring(options.startup_delay_frames),
-        '--lease-timeout-ms=' .. tostring(options.lease_timeout_ms),
-        '--lease-check-frames=' .. tostring(options.lease_check_frames),
-        '--test-glob=' .. tostring(options.test_glob or '*.ds.lua'),
-        '--lua-module-root=' .. lua_module_root(options.package_root),
-        '--result-policy=' .. result_policy,
-    }
-    if options.result_path then
-        table.insert(arguments, '--result-path=' .. options.result_path)
-    end
-    append_values(arguments, 'filter', options.filters)
-    append_values(arguments, 'filter-out', options.filter_out)
-    append_values(arguments, 'name', options.names)
-    append_values(arguments, 'tag', options.tags)
-    append_values(arguments, 'exclude-tag', options.exclude_tags)
-    for _, identity in ipairs(options.identities) do
-        table.insert(arguments, '--spec=' .. project.host_spec(identity))
-    end
-    return arguments
-end
-
----Verifies a healthy DFHack core context before starting a run.
----@param runner string
----@param options table
----@param invoke function
-local function verify_connection(runner, options, invoke)
-    local ok, result = pcall(invoke, runner, {
-        'lua', '-f', host_script(options, 'probe'),
-    })
-    if not ok then
-        fail(RunnerFailureKind.CONNECTION,
-            'could not contact DFHack through ' .. runner .. ': ' ..
-                clean_message(result))
-    end
-    if result.exit_code ~= 0 or
-            result.lines[#result.lines] ~=
-                'DWARFSPEC_PROBE protocol=2 core=true timeout=function' then
-        fail(RunnerFailureKind.CONNECTION,
-            'DFHack is not running or did not provide a healthy core Lua ' ..
-                'context')
-    end
-end
-
 ---Returns an externally unique and host-safe run identifier.
 ---@param now number
 ---@return string
@@ -225,38 +99,36 @@ local function timestamp(options)
     return os.date('!%Y-%m-%dT%H:%M:%SZ')
 end
 
----Maps a classified runner failure to its persisted invocation state.
----@param runner_error table
----@param native_report table|nil
----@param interrupted boolean
----@return DwarfSpecResultState
-local function failure_result_state(runner_error, native_report, interrupted)
-    if interrupted then return ResultState.INTERRUPTED end
-    if runner_error.kind == RunnerFailureKind.DEPENDENCY then
-        return ResultState.DEPENDENCY_ERROR
-    elseif runner_error.kind == RunnerFailureKind.CONNECTION then
-        return ResultState.CONNECTION_ERROR
-    elseif runner_error.kind == RunnerFailureKind.QUEUE_TIMEOUT then
-        return ResultState.QUEUE_TIMEOUT
-    elseif runner_error.kind == RunnerFailureKind.EXECUTOR_QUARANTINED then
-        return ResultState.EXECUTOR_QUARANTINED
-    elseif runner_error.kind == RunnerFailureKind.TIMEOUT then
-        return ResultState.TIMEOUT
-    elseif runner_error.kind == RunnerFailureKind.REGISTRATION then
-        return ResultState.REGISTRATION_ERROR
-    elseif runner_error.kind == RunnerFailureKind.ABORTED and
-            native_report and native_report.state == RunState.ABORTED then
-        return ResultState.ABORTED
-    elseif runner_error.kind == RunnerFailureKind.CANCELLED then
-        return ResultState.CANCELLED
-    elseif runner_error.kind == RunnerFailureKind.TEST and native_report then
-        if native_report.state == RunState.PASSED then
-            return ResultState.FAILED
-        end
-        return native_report.state
-    end
-    return ResultState.HOST_ERROR
-end
+local builder = command_builder_module.new({
+    fail=fail,
+    dependency_kind=RunnerFailureKind.DEPENDENCY,
+})
+local client = transport_client_module.new({
+    builder=builder,
+    failure=failure,
+    failure_kinds=RunnerFailureKind,
+    clean_message=clean_message,
+})
+local interpreter = result_interpreter_module.new({
+    failure_kinds=RunnerFailureKind,
+    exit_codes=exit_codes,
+})
+local poller = run_poller_module.new({
+    builder=builder,
+    client=client,
+    fail=fail,
+    failure_kinds=RunnerFailureKind,
+    clean_message=clean_message,
+    format_events=client.event_formatter(),
+})
+local recovery = run_recovery_module.new({
+    builder=builder,
+    client=client,
+    failure=failure,
+    failure_kinds=RunnerFailureKind,
+    exit_codes=exit_codes,
+    clean_message=clean_message,
+})
 
 ---Adds actionable guidance to one host registration rejection.
 ---@param message string
@@ -270,155 +142,12 @@ local function registration_message(message)
     return result
 end
 
----Returns whether a native report has entered the executor.
----@param report table
----@return boolean
-local function entered_executor(report)
-    return report.state ~= RunState.QUEUED and
-        report.activated_at_ms ~= nil
-end
-
----Constructs one persisted invocation view from current runner state.
----@param options table
----@param native_report table|nil
----@param state DwarfSpecResultState
----@param terminal boolean
----@param exit_code integer|nil
----@param submitted_at string
----@param activated_at string|nil
----@param finished_at string|nil
----@param runner_error table|nil
----@param journal table[]|nil
----@return table
-local function invocation_result(options, native_report, state, terminal,
-        exit_code, submitted_at, activated_at, finished_at, runner_error,
-        journal)
-    local identity = native_report and native_report.service_instance_id ~= nil
-    return result_store.build({
-        service_instance_id=identity and
-            native_report.service_instance_id or nil,
-        project_id=identity and native_report.project_id or nil,
-        run_id=identity and native_report.run_id or nil,
-        generation=identity and native_report.generation or nil,
-        state=state,
-        terminal=terminal,
-        exit_code=exit_code,
-        project_root=project.normalize(options.project_root),
-        selection={identities=options.identities},
-        submitted_at=submitted_at,
-        activated_at=activated_at,
-        finished_at=finished_at,
-        queue_wait_ms=native_report and native_report.queue_wait_ms or nil,
-        error=runner_error and {
-            kind=runner_error.kind,
-            message=runner_error.message,
-        } or nil,
-        host_report=native_report and entered_executor(native_report) and
-            native_report or nil,
-        events=journal or {},
-    })
-end
-
----Validates and optionally replaces the configured latest-result file.
----@param options table
----@param result table
-local function persist_result(options, result)
-    if not options.result_path then return end
-    local store = options.result_store or result_store
-    store.write(options.result_path, result, {
-        filesystem=options.filesystem,
-        open_file=options.open_result_file,
-        remove_file=options.remove_result_file,
-        replace_file=options.replace_result_file,
-        encode=options.encode_result,
-    })
-end
-
----Attempts state-aware recovery without replacing the original failure.
----@param runner string
----@param options table
----@param run_id string
----@param owner_capability string|nil
----@param expected table|nil
----@param after_sequence integer
----@param invoke function
----@return table|nil, string|nil, string|nil
-local function recover_run(runner, options, run_id, owner_capability,
-        expected, after_sequence, invoke)
-    local script = owner_capability and 'recover' or 'abort'
-    local arguments = {
-        'lua', '-f', host_script(options, script), run_id,
-    }
-    if owner_capability ~= nil then
-        table.insert(arguments, owner_capability)
-        table.insert(arguments, tostring(after_sequence))
-        table.insert(arguments, 'external runner recovery')
-    else
-        table.insert(arguments, '')
-        table.insert(arguments, tostring(after_sequence))
-    end
-    local invoked, result = pcall(invoke, runner, arguments)
-    if not invoked then
-        return nil, 'recovery bridge failed: ' .. clean_message(result), nil
-    end
-    if result.exit_code ~= 0 then
-        return nil, 'recovery exited with ' .. result.exit_code, nil
-    end
-    local parse_expected = {}
-    for name, value in pairs(expected or {run_id=run_id}) do
-        parse_expected[name] = value
-    end
-    parse_expected.after_sequence = after_sequence
-    local ok, transport, payload = pcall(reports.parse_transport,
-        result.lines, parse_expected, options.decode_json)
-    local report = ok and transport.snapshot or transport
-    if not ok then return nil, tostring(report), nil end
-    if not report.terminal then
-        return transport, 'recovery left the run nonterminal', payload
-    end
-    if report.state == RunState.ABORTED and
-            not report.cleanup_confirmed then
-        return transport, 'recovery abort did not confirm cleanup', payload
-    end
-    if report.state ~= RunState.CANCELLED and
-            not report.cleanup_confirmed then
-        return transport, 'recovery terminal cleanup was not confirmed',
-            payload
-    end
-    return transport, nil, payload
-end
-
----Acknowledges one persisted terminal generation through its owner capability.
----@param runner string
----@param options table
----@param run_id string
----@param generation integer
----@param owner_capability string
----@param expected table
----@param after_sequence integer
----@param invoke function
-local function acknowledge_terminal(runner, options, run_id, generation,
-        owner_capability, expected, after_sequence, invoke)
-    local result = invoke(runner, {
-        'lua', '-f', host_script(options, 'acknowledge'),
-        run_id, tostring(generation), owner_capability,
-        tostring(after_sequence),
-    })
-    assert(result.exit_code == 0,
-        'DwarfSpec acknowledgement exited with ' .. result.exit_code)
-    local parse_expected = {}
-    for name, value in pairs(expected) do parse_expected[name] = value end
-    parse_expected.after_sequence = after_sequence
-    reports.parse_transport(result.lines, parse_expected,
-        options.decode_json)
-end
 
 ---Runs selected live specifications and returns a stable command outcome.
 ---@param options table
 ---@return table
 function M.run(options)
     local system = options.system or require('system')
-    local invoke = options.invoke or process.invoke
     local emit = options.emit or print
     local now = options.now or system.monotime
     local sleep = options.sleep or system.sleep
@@ -431,7 +160,7 @@ function M.run(options)
             ResultPolicy.FILE)
     options.result_policy = configured_policy
     options.result_path = configured_policy == ResultPolicy.FILE and
-        result_store.resolve_path(options.project_root, options.result_path,
+        interpreter.resolve_path(options.project_root, options.result_path,
             options.filesystem) or nil
     local runner
     local native_report
@@ -452,19 +181,17 @@ function M.run(options)
     ---Persists one observed native state before continuing orchestration.
     ---@param report table
     local function persist_observation(report)
-        if activated_at == nil and entered_executor(report) then
+        if activated_at == nil and interpreter.entered_executor(report) then
             activated_at = timestamp(options)
             execution_started_at = now()
         end
-        local observed = invocation_result(options, report, report.state,
+        local observed = interpreter.build(options, report, report.state,
             report.terminal, report.terminal and
-                (report.state == RunState.PASSED and
-                    exit_codes[RunnerFailureKind.SUCCESS] or
-                    exit_codes[RunnerFailureKind.TEST]) or nil,
+                interpreter.native_exit_code(report) or nil,
             submitted_at, activated_at,
             report.terminal and timestamp(options) or nil, nil,
             event_journal)
-        persist_result(options, observed)
+        interpreter.persist(options, observed)
         persisted_result = observed
     end
 
@@ -473,31 +200,29 @@ function M.run(options)
     ---@param persist boolean
     ---@param render boolean|nil
     local function consume_transport(transport, persist, render)
-        for _, event in ipairs(transport.events) do
-            table.insert(event_journal, event)
-        end
-        event_cursor = transport.last_sequence
-        native_report = transport.snapshot
-        if activated_at == nil and entered_executor(native_report) then
-            activated_at = timestamp(options)
-            execution_started_at = now()
-        end
-        if render ~= false then
-            local formatted, lines = pcall(reports.format_events,
-                transport.events, {
-                    error_format=error_format,
-                    project_root=options.project_root,
-                    diagnostic_formatter=options.diagnostic_formatter,
-                })
-            if not formatted then
-                diagnostic_formatting_failed = true
-                fail(RunnerFailureKind.HOST,
-                    'DwarfSpec diagnostic formatting failed: ' ..
-                        clean_message(lines))
-            end
-            for _, line in ipairs(lines) do emit(line) end
-        end
-        if persist then persist_observation(native_report) end
+        local consumed = poller.consume({
+            options=options, journal=event_journal,
+            execution_started_at=execution_started_at,
+            activated_at=function() return activated_at end,
+            entered_executor=interpreter.entered_executor,
+            activate=function()
+                activated_at = timestamp(options)
+                execution_started_at = now()
+                return execution_started_at
+            end,
+            now=now, error_format=error_format, emit=emit,
+            observe=function(report, cursor, execution_started)
+                native_report = report
+                event_cursor = cursor
+                execution_started_at = execution_started
+            end,
+            formatting_failed=function() diagnostic_formatting_failed=true end,
+            persist=persist_observation,
+        }, transport, persist, render)
+        event_cursor = consumed.cursor
+        native_report = consumed.report
+        execution_started_at = consumed.execution_started_at
+        return consumed
     end
 
     ---Returns a copy of the exact transport identity with one cursor.
@@ -516,43 +241,31 @@ function M.run(options)
     ---Submits idempotently and tolerates one ambiguous bridge response.
     ---@return table
     local function bootstrap_transport()
-        local arguments = bootstrap_arguments(options, run_id)
+        local arguments = builder.bootstrap(options, run_id)
         local last_error
         queue_started_at = now()
         for attempt = 1, 2 do
-            local invoked, start = pcall(invoke, runner, arguments)
-            if invoked and start.exit_code ~= 0 then
-                fail(RunnerFailureKind.REGISTRATION,
-                    'DwarfSpec bootstrap exited with ' .. start.exit_code)
-            end
+            local invoked, transport, capability, response_error = pcall(
+                client.bootstrap_response,
+                options, runner, arguments, transport_expectation(0))
             if invoked then
-                local parsed, transport, capability, response_error =
-                    pcall(function()
-                        local response, _, adapter_error =
-                            reports.parse_transport_response(start.lines,
-                                transport_expectation(0),
-                                options.decode_json)
-                        if adapter_error then
-                            return nil, nil, adapter_error
-                        end
-                        return response,
-                            reports.owner_capability(start.lines), nil
-                end)
-                if parsed then
-                    if response_error then
-                        bootstrap_rejected = true
-                        local message = response_error.kind ==
-                            RunnerFailureKind.REGISTRATION and
-                            registration_message(response_error.message) or
-                            response_error.message
-                        fail(response_error.kind, message)
-                    end
-                    owner_capability = capability
-                    return transport
+                if response_error then
+                    bootstrap_rejected = true
+                    local message = response_error.kind ==
+                        RunnerFailureKind.REGISTRATION and
+                        registration_message(response_error.message) or
+                        response_error.message
+                    fail(response_error.kind, message)
                 end
-                last_error = transport
+                owner_capability = capability
+                return transport
             else
-                last_error = start
+                if type(transport) == 'table' and transport.exit_code and
+                        not transport.retryable then
+                    error(transport, 0)
+                end
+                last_error = type(transport) == 'table' and
+                    transport.message or transport
             end
             if attempt == 1 and options.verbose then
                 emit('DwarfSpec bootstrap response was ambiguous; ' ..
@@ -565,18 +278,12 @@ function M.run(options)
     end
 
     local ok, caught = xpcall(function()
-        validate_dependencies(options)
-        local resolved, resolve_error
-        resolved, runner = pcall(process.resolve_runner, options,
-            options.environment)
-        if not resolved then
-            resolve_error = runner
-            runner = nil
-            fail(RunnerFailureKind.DEPENDENCY,
-                clean_message(resolve_error))
-        end
+        builder.validate_dependencies(options)
+        local resolve_error
+        runner, resolve_error = client.resolve(options)
+        if not runner then error(resolve_error, 0) end
         if options.verbose then emit('DFHack runner: ' .. runner) end
-        verify_connection(runner, options, invoke)
+        client.verify_connection(options, runner)
 
         bootstrap_attempted = true
         local initial = bootstrap_transport()
@@ -588,54 +295,35 @@ function M.run(options)
         }
         consume_transport(initial, true)
 
-        while not native_report.terminal do
-            local current_time = now()
-            if native_report.state == RunState.QUEUED and
-                    options.queue_timeout_seconds ~= nil and
-                    current_time - queue_started_at >=
-                        options.queue_timeout_seconds then
-                fail(RunnerFailureKind.QUEUE_TIMEOUT,
-                    ('DwarfSpec queue wait timed out after %s seconds')
-                        :format(options.queue_timeout_seconds))
-            end
-            if execution_started_at ~= nil and
-                    current_time - execution_started_at >=
-                        options.timeout_seconds then
-                fail(RunnerFailureKind.TIMEOUT,
-                    ('DwarfSpec execution timed out after %s seconds')
-                        :format(options.timeout_seconds))
-            end
-            sleep(options.poll_interval_ms / 1000)
-            local status = invoke(runner, {
-                'lua', '-f', host_script(options, 'status'),
-                run_id, owner_capability, tostring(event_cursor),
-            })
-            if status.exit_code ~= 0 then
-                fail(RunnerFailureKind.HOST,
-                    'DwarfSpec status exited with ' .. status.exit_code)
-            end
-            local transport = reports.parse_transport(status.lines,
-                transport_expectation(event_cursor), options.decode_json)
-            consume_transport(transport, true)
-        end
+        local polled = poller.until_terminal({
+            options=options, runner=runner, run_id=run_id,
+            owner_capability=owner_capability, report=native_report,
+            cursor=event_cursor, queue_started_at=queue_started_at,
+            execution_started_at=execution_started_at, now=now, sleep=sleep,
+            expectation=transport_expectation, journal=event_journal,
+            activated_at=function() return activated_at end,
+            entered_executor=interpreter.entered_executor,
+            activate=function()
+                activated_at = timestamp(options)
+                execution_started_at = now()
+                return execution_started_at
+            end,
+            error_format=error_format, emit=emit,
+            observe=function(report, cursor, execution_started)
+                native_report = report
+                event_cursor = cursor
+                execution_started_at = execution_started
+            end,
+            formatting_failed=function() diagnostic_formatting_failed=true end,
+            persist=persist_observation,
+        })
+        native_report = polled.report
+        event_cursor = polled.cursor
+        execution_started_at = polled.execution_started_at
 
-        local native_state = native_report.state
-        if native_state == RunState.ABORTED then
-            fail(RunnerFailureKind.ABORTED, 'DwarfSpec run was aborted')
-        end
-        if native_state == RunState.CANCELLED then
-            fail(RunnerFailureKind.CANCELLED,
-                'DwarfSpec run was cancelled before activation')
-        end
-        if native_state ~= RunState.PASSED then
-            fail(RunnerFailureKind.TEST,
-                'DwarfSpec run finished with state ' ..
-                    tostring(native_report.state))
-        end
-        if not native_report.cleanup_confirmed then
-            fail(RunnerFailureKind.TEST,
-                'DwarfSpec run passed without confirmed cleanup')
-        end
+        local native_kind, native_message =
+            interpreter.classify_native(native_report)
+        if native_kind then fail(native_kind, native_message) end
     end, function(value) return value end)
 
     if not ok then
@@ -652,29 +340,26 @@ function M.run(options)
         if runner and bootstrap_attempted and
                 not bootstrap_rejected and
                 (not native_report or not native_report.terminal) then
-            local recovered, recovery_error = recover_run(
-                runner, options, run_id, owner_capability,
-                expected_identity, event_cursor, invoke)
+            local recovered, recovery_error = recovery.after_failure(
+                options, runner, run_id, owner_capability,
+                expected_identity, event_cursor)
             if recovered then
                 consume_transport(recovered, false,
                     not diagnostic_formatting_failed)
             end
-            if recovery_error then
-                runner_error.message = runner_error.message ..
-                    '; recovery failed: ' .. recovery_error
-            end
+            runner_error = recovery.preserve_error(runner_error, recovery_error)
         end
     end
 
     local final_exit_code = runner_error and runner_error.exit_code or
         exit_codes[RunnerFailureKind.SUCCESS]
-    local final_state = runner_error and failure_result_state(
+    local final_state = runner_error and interpreter.failure_state(
         runner_error, native_report, interrupted) or
         native_report.state
-    local final_result = invocation_result(options, native_report,
+    local final_result = interpreter.build(options, native_report,
         final_state, true, final_exit_code, submitted_at, activated_at,
         timestamp(options), runner_error, event_journal)
-    local write_ok, write_error = pcall(persist_result, options, final_result)
+    local write_ok, write_error = pcall(interpreter.persist, options, final_result)
     if write_ok then
         persisted_result = final_result
     else
@@ -686,8 +371,8 @@ function M.run(options)
         end
         runner_error = failure(RunnerFailureKind.HOST,
             persistence_message)
-        persisted_result = invocation_result(options, native_report,
-            ResultState.PERSISTENCE_ERROR, true, runner_error.exit_code,
+        persisted_result = interpreter.build(options, native_report,
+            interpreter.states.PERSISTENCE_ERROR, true, runner_error.exit_code,
             submitted_at, activated_at, timestamp(options), runner_error,
             event_journal)
     end
@@ -695,9 +380,9 @@ function M.run(options)
     if write_ok and native_report and native_report.terminal and
             owner_capability ~= nil then
         local acknowledge_ok, acknowledge_error = pcall(
-            acknowledge_terminal, runner, options, run_id,
+            recovery.acknowledge, options, runner, run_id,
             native_report.generation, owner_capability, expected_identity,
-            event_cursor, invoke)
+            event_cursor)
         if not acknowledge_ok and not runner_error then
             runner_error = failure(RunnerFailureKind.HOST,
                 tostring(acknowledge_error))
@@ -725,19 +410,15 @@ end
 ---@param run_id string
 ---@return table
 function M.abort(options, run_id)
-    local invoke = options.invoke or process.invoke
-    local ok, runner = pcall(process.resolve_runner, options,
-        options.environment)
-    if not ok then
-        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
-            error=failure(RunnerFailureKind.DEPENDENCY,
-                clean_message(runner))}
+    local runner, resolve_error = client.resolve(options)
+    if not runner then
+        return {exit_code=resolve_error.exit_code, error=resolve_error}
     end
     if options.verbose and options.emit then
         options.emit('DFHack runner: ' .. runner)
     end
-    local connected, connection_error = pcall(verify_connection, runner,
-        options, invoke)
+    local connected, connection_error = pcall(client.verify_connection,
+        options, runner)
     if not connected then
         local detail = type(connection_error) == 'table' and
             connection_error or
@@ -745,59 +426,26 @@ function M.abort(options, run_id)
                 clean_message(connection_error))
         return {exit_code=detail.exit_code, error=detail}
     end
-    local result = invoke(runner, {
-        'lua', '-f', host_script(options, 'abort'), run_id,
-    })
-    if result.exit_code ~= 0 then
-        return {exit_code=exit_codes[RunnerFailureKind.HOST],
-            error=failure(RunnerFailureKind.HOST,
-                'DwarfSpec abort exited with ' .. result.exit_code)}
-    end
-    local ok, transport = pcall(reports.parse_transport, result.lines, {
-        run_id=run_id,
-        after_sequence=0,
-    }, options.decode_json)
-    if not ok then
-        return {exit_code=exit_codes[RunnerFailureKind.HOST],
-            error=failure(RunnerFailureKind.HOST, tostring(transport))}
-    end
-    local report = transport.snapshot
-    if report.state == RunState.CANCELLED then
-        return {exit_code=exit_codes[RunnerFailureKind.SUCCESS],
-            report=report, events=transport.events}
-    end
-    if report.state ~= RunState.ABORTED or not report.cleanup_confirmed then
-        return {exit_code=exit_codes[RunnerFailureKind.TEST], report=report,
-            error=failure(RunnerFailureKind.TEST,
-                'abort did not confirm cleanup')}
-    end
-    return {exit_code=exit_codes[RunnerFailureKind.SUCCESS], report=report,
-        events=transport.events}
+    return recovery.abort(options, runner, run_id)
 end
 
 ---Reads the process-wide scheduler without changing service state.
 ---@param options table
 ---@return table
 function M.status(options)
-    local invoke = options.invoke or process.invoke
-    local status_script = host_script(options, 'scheduler_status')
-    if not is_file(status_script) then
+    local exists, status_script = builder.has_script(options, 'scheduler_status')
+    if not exists then
         return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
             error=failure(RunnerFailureKind.DEPENDENCY,
                 'DwarfSpec dependency was not found: ' .. status_script)}
     end
-    local ok, runner = pcall(process.resolve_runner, options,
-        options.environment)
-    if not ok then
-        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
-            error=failure(RunnerFailureKind.DEPENDENCY,
-                clean_message(runner))}
-    end
+    local runner, resolve_error = client.resolve(options)
+    if not runner then return {exit_code=resolve_error.exit_code, error=resolve_error} end
     if options.verbose and options.emit then
         options.emit('DFHack runner: ' .. runner)
     end
-    local connected, connection_error = pcall(verify_connection, runner,
-        options, invoke)
+    local connected, connection_error = pcall(client.verify_connection,
+        options, runner)
     if not connected then
         local detail = type(connection_error) == 'table' and
             connection_error or
@@ -805,16 +453,7 @@ function M.status(options)
                 clean_message(connection_error))
         return {exit_code=detail.exit_code, error=detail}
     end
-    local result = invoke(runner, {
-        'lua', '-f', status_script,
-    })
-    if result.exit_code ~= 0 then
-        return {exit_code=exit_codes[RunnerFailureKind.HOST],
-            error=failure(RunnerFailureKind.HOST,
-                'DwarfSpec status exited with ' .. result.exit_code)}
-    end
-    local parsed, status = pcall(reports.parse_status, result.lines,
-        options.decode_json)
+    local parsed, status = pcall(client.scheduler_status, options, runner)
     if not parsed then
         return {exit_code=exit_codes[RunnerFailureKind.HOST],
             error=failure(RunnerFailureKind.HOST,
@@ -831,28 +470,23 @@ end
 ---@param options table
 ---@param operation string
 ---@param run_id string|nil
----@param parser function
 ---@return table
-local function read_run_query(options, operation, run_id, parser)
-    local invoke = options.invoke or process.invoke
-    local query_script = host_script(options, 'run_query')
-    if not is_file(query_script) then
+local function read_run_query(options, operation, run_id)
+    local exists, query_script = builder.has_script(options, 'run_query')
+    if not exists then
         return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
             error=failure(RunnerFailureKind.DEPENDENCY,
                 'DwarfSpec dependency was not found: ' .. query_script)}
     end
-    local ok, resolved_runner = pcall(process.resolve_runner, options,
-        options.environment)
-    if not ok then
-        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
-            error=failure(RunnerFailureKind.DEPENDENCY,
-                clean_message(resolved_runner))}
+    local resolved_runner, resolve_error = client.resolve(options)
+    if not resolved_runner then
+        return {exit_code=resolve_error.exit_code, error=resolve_error}
     end
     if options.verbose and options.emit then
         options.emit('DFHack runner: ' .. resolved_runner)
     end
-    local connected, connection_error = pcall(verify_connection,
-        resolved_runner, options, invoke)
+    local connected, connection_error = pcall(client.verify_connection,
+        options, resolved_runner)
     if not connected then
         local detail = type(connection_error) == 'table' and
             connection_error or
@@ -860,17 +494,8 @@ local function read_run_query(options, operation, run_id, parser)
                 clean_message(connection_error))
         return {exit_code=detail.exit_code, error=detail}
     end
-    local arguments = {'lua', '-f', query_script, operation}
-    if run_id ~= nil then table.insert(arguments, run_id) end
-    local result = invoke(resolved_runner, arguments)
-    if result.exit_code ~= 0 then
-        return {exit_code=exit_codes[RunnerFailureKind.HOST],
-            error=failure(RunnerFailureKind.HOST,
-                ('DwarfSpec %s query exited with %d'):format(
-                    operation, result.exit_code))}
-    end
-    local parsed, response = pcall(parser, result.lines,
-        options.decode_json)
+    local parsed, response = pcall(client.query, options, resolved_runner,
+        operation, run_id)
     if not parsed then
         return {exit_code=exit_codes[RunnerFailureKind.HOST],
             error=failure(RunnerFailureKind.HOST,
@@ -895,8 +520,7 @@ end
 ---@param options table
 ---@return table
 function M.history(options)
-    local outcome = read_run_query(options, 'history', nil,
-        reports.parse_run_history)
+    local outcome = read_run_query(options, 'history', nil)
     outcome.history = outcome.response
     return outcome
 end
@@ -906,8 +530,7 @@ end
 ---@param run_id string
 ---@return table
 function M.inspect(options, run_id)
-    local outcome = read_run_query(options, 'show', run_id,
-        reports.parse_run_inspection)
+    local outcome = read_run_query(options, 'show', run_id)
     outcome.inspection = outcome.response
     return outcome
 end
@@ -917,8 +540,7 @@ end
 ---@param run_id string
 ---@return table
 function M.logs(options, run_id)
-    local outcome = read_run_query(options, 'logs', run_id,
-        reports.parse_run_logs)
+    local outcome = read_run_query(options, 'logs', run_id)
     outcome.logs = outcome.response
     return outcome
 end
@@ -930,25 +552,19 @@ end
 ---@param reason string
 ---@return table
 function M.recover_executor(options, run_id, generation, reason)
-    local invoke = options.invoke or process.invoke
-    local recovery_script = host_script(options, 'recover_executor')
-    if not is_file(recovery_script) then
+    local exists, recovery_script = builder.has_script(options, 'recover_executor')
+    if not exists then
         return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
             error=failure(RunnerFailureKind.DEPENDENCY,
                 'DwarfSpec dependency was not found: ' .. recovery_script)}
     end
-    local ok, runner = pcall(process.resolve_runner, options,
-        options.environment)
-    if not ok then
-        return {exit_code=exit_codes[RunnerFailureKind.DEPENDENCY],
-            error=failure(RunnerFailureKind.DEPENDENCY,
-                clean_message(runner))}
-    end
+    local runner, resolve_error = client.resolve(options)
+    if not runner then return {exit_code=resolve_error.exit_code, error=resolve_error} end
     if options.verbose and options.emit then
         options.emit('DFHack runner: ' .. runner)
     end
-    local connected, connection_error = pcall(verify_connection, runner,
-        options, invoke)
+    local connected, connection_error = pcall(client.verify_connection,
+        options, runner)
     if not connected then
         local detail = type(connection_error) == 'table' and
             connection_error or
@@ -956,36 +572,7 @@ function M.recover_executor(options, run_id, generation, reason)
                 clean_message(connection_error))
         return {exit_code=detail.exit_code, error=detail}
     end
-    local result = invoke(runner, {
-        'lua', '-f', recovery_script,
-        run_id, tostring(generation), '0', reason,
-    })
-    if result.exit_code ~= 0 then
-        return {exit_code=exit_codes[RunnerFailureKind.HOST],
-            error=failure(RunnerFailureKind.HOST,
-                'DwarfSpec executor recovery exited with ' ..
-                    result.exit_code)}
-    end
-    local parsed, transport = pcall(reports.parse_transport, result.lines, {
-        run_id=run_id,
-        generation=generation,
-        after_sequence=0,
-    }, options.decode_json)
-    if not parsed then
-        return {exit_code=exit_codes[RunnerFailureKind.HOST],
-            error=failure(RunnerFailureKind.HOST,
-                clean_message(transport))}
-    end
-    if not transport.scheduler or transport.scheduler.quarantine.active then
-        return {exit_code=exit_codes[RunnerFailureKind.HOST],
-            error=failure(RunnerFailureKind.HOST,
-                'DwarfSpec executor recovery did not clear quarantine')}
-    end
-    return {
-        exit_code=exit_codes[RunnerFailureKind.SUCCESS],
-        report=transport.snapshot,
-        scheduler=transport.scheduler,
-    }
+    return recovery.recover_executor(options, runner, run_id, generation, reason)
 end
 
 return M
