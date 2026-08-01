@@ -194,7 +194,7 @@ It intentionally retains the large implementation modules that are decomposed
 later. The CLI split is already specified as `controller/application.lua` and
 `controller/command_line.lua`. Before implementing each other late
 decomposition, create and approve a focused proposal that names its extracted
-modules, dependency changes, direct tests, and updated Mermaid subtree. The
+modules, dependency changes, direct tests, and proposed Mermaid subtree. The
 full source-organization tree is the initial graph plus the CLI modules and
 those approved decomposition subtrees; it is not implied by unnamed helper
 modules.
@@ -231,8 +231,9 @@ hierarchy.
 `result_store.lua` remains in `controller/`, but its current dependency on
 host-owned project state must be removed first. Extract the pure path
 normalization it needs into `support/project_paths.lua`; do not move the host
-project registry into the controller. Split `events.lua` so its wire contract
-and validation are pure protocol code. Move the focus comparison enum and
+project registry into the controller. Move the current pure event contract,
+validation, and journal operations together into `protocol/events.lua`; do not
+invent a host-side event-validation module. Move the focus comparison enum and
 payload validator into `protocol/diagnostics/`, move the shared stable warning
 formatter into `protocol/diagnostics/focus_warning.lua`, and keep native focus
 observation in `host/diagnostics/base_screen_focus_guard.lua`. `schemas.lua`
@@ -340,15 +341,14 @@ generated `.test-results` merely to make the tree look symmetric.
 ## Implementation sequence
 
 0. **Phase 0 -- initial test baseline:** Record the current unit, syntax,
-   focused live, and full non-destructive live-suite results. Record cleanup
-   confirmation separately from test success.
+   source-declaration, focused live, and full non-destructive live-suite
+   results. Record cleanup confirmation separately from test success.
 1. Enable recursive Busted discovery and add the nested-test inventory guard
    before moving any unit spec.
 2. Add dependency-boundary tests and centralize source/installed path
    resolution in the existing composition roots without moving modules.
-3. Split host-aware validation from the pure event and configuration
-   contracts, then move the remaining protocol and support modules with their
-   callers and tests.
+3. Move the pure event and configuration contracts, then move the remaining
+   protocol and support modules with their callers and tests.
 4. Create `controller/`, retaining the three stable root facades.
 5. Move the run-scoped implementation into `driver/`.
 6. Replace `automation/` with `host/`, moving entry scripts last so external
@@ -358,7 +358,7 @@ generated `.test-results` merely to make the tree look symmetric.
 8. Declare the initial directory migration complete.
 9. Create and approve focused decomposition proposals for `ds.lua`, host
     execution, the scheduler, mount context, and the runner, then implement them
-    in small, separately verified changes. Each proposal updates the relevant
+    in small, separately verified changes. Each proposal contains its proposed
     Mermaid subtree before implementation.
 10. As one of the final implementation steps, decompose `cli.lua` into
     `controller/command_line.lua` and `controller/application.lua`, leaving the
@@ -410,7 +410,9 @@ decompositions listed in the implementation sequence:
 - the full non-destructive live suite is rerun with no new failures relative
   to the Phase 0 baseline; any pre-existing failures remain documented, and
   cleanup confirmation remains distinct from test success;
-- source declarations still validate against the organized source tree;
+- source declarations still validate against the organized source tree using
+  the source LuaLS configuration and its valid and invalid fixtures, without
+  installed-rock or packaged-source verification;
 - documentation contains no stale internal paths; and
 - `git diff --check` passes with unrelated worktree state preserved.
 
