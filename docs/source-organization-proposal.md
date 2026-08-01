@@ -103,19 +103,23 @@ beneath `driver/` must not require modules beneath `host/` directly.
 
 Keep these existing module names during the cleanup:
 
-- `dwarfspec.cli` for the installed executable;
-- `dwarfspec.layout` for source-versus-installed path resolution; and
-- `dwarfspec.ds` for host construction of the run-scoped `ds` object.
+- `dwarfspec.cli` as the executable's internal facade;
+- `dwarfspec.layout` as the internal source-versus-installed path resolver;
+  and
+- `dwarfspec.ds` as the internal host factory for the run-scoped `ds` object.
 
 They should become thin facades over the organized implementation. Retaining
-them avoids coupling the executable, host bootstrap, consumers, and package
-layout to the internal directory structure.
+them keeps the executable and host bootstrap decoupled from the internal
+directory structure.
 
-No other internal module path should be treated as public without evidence
-that a consumer uses it. Before removing an old path, search the repository,
-documentation, and known consumer projects. When external use cannot be ruled
-out, leave a one-release forwarding module that returns the replacement
-module.
+The public product surfaces are the `dwarfspec` executable and the run-scoped
+`ds` API injected into live specifications. Source module paths, including
+`dwarfspec.cli`, `dwarfspec.layout`, and `dwarfspec.ds`, are internal
+implementation details and have no compatibility guarantee. Future modules
+become public only through an explicit API decision; planned work such as
+`dwarfspec.testbed` does not make a module public before it is implemented and
+declared supported. Internal modules move atomically without forwarding
+modules at their former paths.
 
 ### One concept, one name
 
@@ -172,12 +176,8 @@ flowchart TB
     protocol --> protocol_enums["enums/<br/>event_types.lua<br/>owner_kinds.lua<br/>result_policies.lua<br/>result_states.lua<br/>runner_failure_kinds.lua<br/>run_states.lua<br/>scheduler_failure_kinds.lua<br/>test_statuses.lua"]
 
     root --> support["support/"]
-    support --> support_files["glob.lua<br/>identity_labels.lua<br/>immutable_enum.lua<br/>module_loader.lua<br/>project_paths.lua"]
+    support --> support_files["glob.lua<br/>identity_labels.lua<br/>immutable_enum.lua<br/>project_paths.lua"]
 ```
-
-The graph shows the steady-state implementation tree. Temporary forwarding
-modules retained at old paths during the compatibility window are intentionally
-omitted; they are removed before the steady-state tree is reached.
 
 `ds.d.lua` remains at `src/ds.d.lua`. It is a declaration surface rather than
 an installed implementation module and should not be mixed into the runtime
@@ -231,18 +231,15 @@ Before moving modules:
 
 1. Extend `dwarfspec.layout` into the single authority for source and installed
    paths to host entry scripts.
-2. Add `support/module_loader.lua`, a runtime-neutral loader that accepts a
-   canonical module name and derives its source-tree path. Remove paired
-   arguments such as
+2. Keep small local loading functions in the `ds.lua` and host composition
+   roots. Where appropriate, derive a source path mechanically from the
+   canonical module name instead of repeating paired arguments such as
    `('dwarfspec.component', '/src/dwarfspec/component.lua')`.
-3. Keep cache-bypass behavior explicit for modules that must be reloaded in
-   DFHack. Do not replace deliberate `loadfile()` calls with ordinary
-   `require()` calls as part of the directory cleanup.
+3. Preserve each composition root's explicit cache and freshness behavior.
+   Do not replace deliberate `loadfile()` calls with ordinary `require()` calls
+   as part of the directory cleanup.
 4. Update source-identity classification in `host/diagnostics/problem_source`
    to recognize the organized tree without exposing absolute local paths.
-5. Add source-level module-resolution tests for every registered entry point
-   and driver module. Exercise `support/module_loader.lua` through ordinary
-   cached loads and explicit cache-bypassing loads.
 
 The entrypoint scripts need a tiny duplicated bootstrap that derives the Lua
 module root before normal module loading is available. That exception is
@@ -313,18 +310,17 @@ Rename unit specs to match the target module path, for example:
   `tests/unit/protocol/configuration/`.
 
 Move each production dependency cluster atomically with all corresponding
-`require()` paths, `loadfile()` paths, forwarding modules, and unit-test paths.
-Every migration commit must remain testable. Do not move checked-in protocol
-fixtures or generated `.test-results` merely to make the tree look symmetric.
+`require()` paths, `loadfile()` paths, and unit-test paths. Every migration
+commit must remain testable. Do not move checked-in protocol fixtures or
+generated `.test-results` merely to make the tree look symmetric.
 
 ## Implementation sequence
 
 1. Record the current unit, syntax, and focused live baselines.
 2. Enable recursive Busted discovery and add the nested-test inventory guard
    before moving any unit spec.
-3. Create the `support/` skeleton and `support/module_loader.lua`, add
-   dependency-boundary tests, and centralize source/installed path resolution
-   without moving existing modules.
+3. Add dependency-boundary tests and centralize source/installed path
+   resolution in the existing composition roots without moving modules.
 4. Split host-aware validation from the pure event and configuration
    contracts, then move the remaining protocol and support modules with their
    callers and tests.
@@ -332,30 +328,21 @@ fixtures or generated `.test-results` merely to make the tree look symmetric.
 6. Move the run-scoped implementation into `driver/`.
 7. Replace `automation/` with `host/`, moving entry scripts last so external
    invocation remains continuously testable.
-8. Update architecture and contributor documentation and complete the
-   consumer-path audit.
-9. Declare the initial migration complete with any intentional compatibility
-   forwarding modules still present.
+8. Update architecture and contributor documentation, including the explicit
+   public-versus-internal source contract.
+9. Declare the initial directory migration complete.
 10. Decompose `ds.lua`, host execution, the scheduler, mount context, and the
    runner in small, separately verified changes.
 11. As one of the final implementation steps, decompose `cli.lua` into
    `controller/command_line.lua` and `controller/application.lua`, leaving the
    stable root module as a thin facade.
 
-Forwarding modules are removed in later maintenance only after the promised
-compatibility window and consumer audit are complete. Their deferred removal
-does not block completion of the initial source-organization migration.
-
 The completion milestones are:
 
 - **Initial directory migration:** the namespace moves, recursive test-tree
-  migration, documentation updates, and source gates are complete; temporary
-  forwarding modules may still exist.
+  migration, documentation updates, and source gates are complete.
 - **Full source organization:** the late large-module decompositions,
   including the final CLI split, are complete and the full source gates pass.
-- **Deferred compatibility cleanup:** forwarding modules are removed after
-  their compatibility window; this is later maintenance and does not reopen
-  either completed milestone.
 
 Every move should use `git mv` and update one cohesive dependency cluster in
 the same commit, including callers and tests. Keep behavior changes and
@@ -377,9 +364,7 @@ decompositions listed in the implementation sequence:
   imports only driver, protocol, and support modules; `protocol/` imports only
   protocol and support modules; and `support/` imports only support modules;
 - the boundary audit covers static `require()` calls, literal and constructed
-  `loadfile()` targets, every entry in the centralized module loader or module
-  catalog, host entrypoint paths returned by `layout.lua`, and temporary
-  compatibility forwarding modules;
+  `loadfile()` targets, and host entrypoint paths returned by `layout.lua`;
 - the dependency audit recognizes both directions of the sole composition
   exception: `host/execution/host.lua` may load the root `dwarfspec.ds`
   facade, and that facade may load both host and driver modules;
@@ -400,30 +385,29 @@ decompositions listed in the implementation sequence:
 ### Hidden path coupling
 
 Tests and host adapters use direct `loadfile()` paths. Centralize those paths
-first and add source-level loader and entrypoint-resolution tests before any
-bulk move.
+first, and update the existing composition-root and entrypoint tests alongside
+each move.
 
 ### Runtime boundary violations
 
 Pure-Lua unit tests can accidentally load a DFHack-only module through a new
 dependency. Add a static import audit and isolated-load tests for `protocol/`
-and `controller/`. Supplement the static scan with catalog and runtime layout
-tests so dynamically constructed `loadfile()` paths cannot bypass the allowed
-dependency matrix.
+and `controller/`. Include literal and mechanically constructed `loadfile()`
+targets in the audit so dynamic loading cannot bypass the allowed dependency
+matrix.
 
-### Compatibility ambiguity
+### Accidental internal API expansion
 
-Internal module names have not been declared as a supported API, but consumers
-may still require them. Search known consumers and use forwarding modules when
-uncertain. Document that only the root facades and the run-scoped `ds` surface
-are stable after the compatibility window.
+Installing a Lua module does not by itself make its source path public.
+Document the executable and injected run-scoped `ds` surface as public and the
+source module tree as internal. Require an explicit API decision before future
+work exposes a new require-able module to consumers.
 
 ### Review noise
 
 Moves plus behavior edits obscure history. Keep each move, its require/load
-path changes, compatibility forwarding modules, and corresponding test moves
-together so the commit remains green. Keep behavioral changes and later
-decompositions in distinct commits.
+path changes, and corresponding test moves together so the commit remains
+green. Keep behavioral changes and later decompositions in distinct commits.
 
 ## Follow-up work
 
@@ -442,8 +426,7 @@ The follow-up plan must:
 - preserve fresh `loadfile()` behavior and source-versus-installed loading;
 - add boundary tests proving modules beneath `driver/` do not import
   `host/`; and
-- provide incremental migration and compatibility gates without changing the
-  public `ds` API.
+- provide incremental migration gates without changing the public `ds` API.
 
 Until that plan is approved and implemented, `ds.lua` remains the sole
 documented composition root allowed to load both namespaces.
