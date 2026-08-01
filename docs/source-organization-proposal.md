@@ -7,10 +7,11 @@ implementation or change any public DwarfSpec behavior.
 
 ## Summary
 
-Organize production modules first by the Lua runtime in which they execute,
-then by responsibility within that runtime. Keep a small set of stable
-top-level entry points, move shared wire contracts into a runtime-neutral
-namespace, and make the unit-test tree mirror the production tree.
+Organize production modules by execution boundary and role: external
+controller, in-process host, run-scoped driver, shared protocol, and shared
+support. Keep a small set of stable top-level entry points, move shared wire
+contracts into a runtime-neutral namespace, and make the unit-test tree mirror
+the production tree.
 
 The recommended top-level production layout is:
 
@@ -55,7 +56,7 @@ reduce the number of files visible in one directory.
 
 ## Design rules
 
-### Runtime comes first
+### Execution boundary and role come first
 
 A module that directly uses `df`, `dfhack`, or DFHack-provided modules belongs
 under `host/` or `driver/`. A module that invokes `dfhack-run`, reads the local
@@ -67,18 +68,22 @@ on both sides must be pure Lua and belongs under `protocol/` or `support/`.
 The intended dependency direction is:
 
 ```text
-cli.lua -> controller -> protocol -> support
-                       ^
-host entry scripts -> host -> protocol -> support
-                           -> driver -> protocol -> support
-ds.lua --------------------------------^
+cli.lua -> controller -------> protocol -> support
+host entry scripts -> host ---> protocol -> support
+                        |
+                        +-----> driver ---> protocol -> support
+
+ds.lua (composition root) ---> host
+                         +---> driver
 ```
 
 `controller/` must not require `host/` or `driver/`. The controller may select
 and invoke host entry scripts by path, but it must not load their code into the
 external interpreter. `protocol/` and `support/` must not depend on either
 runtime. `driver/` may use DFHack but must not own run scheduling or service
-persistence.
+persistence. As an explicit temporary exception, the root `ds.lua` facade is
+the composition root that may load both host services and driver modules.
+Modules beneath `driver/` must not require modules beneath `host/` directly.
 
 ### Stable entry points stay shallow
 
@@ -102,9 +107,10 @@ the replacement module.
 
 Use names that distinguish the two current project concepts:
 
-- `controller/project.lua` describes the project selected by the CLI; and
-- `host/project_environment.lua` loads project configuration and modules in
-  the DFHack process.
+- `controller/discovery/project.lua` describes the project selected by the
+  CLI; and
+- `host/environment/project_environment.lua` loads project configuration and
+  modules in the DFHack process.
 
 Likewise, reserve `host/entrypoints/` for scripts invoked directly through
 `dfhack-run`; reusable host modules must not be placed there.
@@ -120,11 +126,8 @@ src/dwarfspec/
   controller/
     configuration/
       config.lua
-      schema.lua
-      settings.lua
       dotenv.lua
     discovery/
-      glob.lua
       project.lua
     execution/
       process.lua
@@ -159,6 +162,7 @@ src/dwarfspec/
       projects.lua
       scheduler.lua
       service.lua
+      snapshots.lua
     environment/
       extensions.lua
       lfs_adapter.lua
@@ -216,7 +220,12 @@ src/dwarfspec/
   protocol/
     events.lua
     schemas.lua
-    snapshots.lua
+    configuration/
+      error_formats.lua
+      schema.lua
+      settings.lua
+    diagnostics/
+      focus.lua
     enums/
       event_types.lua
       owner_kinds.lua
@@ -228,8 +237,10 @@ src/dwarfspec/
       test_statuses.lua
 
   support/
+    glob.lua
     identity_labels.lua
     immutable_enum.lua
+    project_paths.lua
 ```
 
 `ds.d.lua` remains at `src/ds.d.lua`. It is a declaration surface rather than
@@ -240,29 +251,34 @@ hierarchy.
 
 | Current area | Target area | Notes |
 |---|---|---|
-| `cli.lua`, `config*.lua`, `settings.lua`, `dotenv.lua` | facade plus `controller/configuration/` | Keep only `cli.lua` at the root. |
-| `glob.lua`, root `project.lua` | `controller/discovery/` | These operate on the caller's project from the external process. |
+| `config.lua`, `dotenv.lua` | `controller/configuration/` | These load external process configuration and environment values. |
+| `config_schema.lua`, `settings.lua`, `error_formats.lua` | `protocol/configuration/` | Both the controller and host validate the same consumer configuration contract. |
+| `glob.lua` | `support/` | Glob compilation is pure and is used by both controller and host project discovery. |
+| root `project.lua` | `controller/discovery/` plus `support/project_paths.lua` | Keep controller project discovery external and extract only the pure path operations needed across runtimes. |
 | `runner.lua`, `process.lua`, `runner_failure_kinds.lua` | `controller/execution/` and `protocol/enums/` | Runner failure data stays runtime-neutral because the host emits it. |
 | `report.lua`, `diagnostic_formatter.lua` | `controller/reporting/` | Formatting belongs to the external presentation boundary. |
 | automation entry scripts | `host/entrypoints/` | These remain standalone scripts callable by absolute path. |
 | `automation/host.lua`, lifecycle and coroutine modules | `host/execution/` | This is embedded Busted execution, not the service model. |
-| automation scheduler, service, and projects | `host/service/` | Keep queue ownership and service state together. |
+| automation scheduler, service, projects, and snapshots | `host/service/` | Snapshots project mutable service registries and therefore remain host-owned. |
 | automation project and extension loaders | `host/environment/` | Rename the host-side `project.lua` to remove ambiguity. |
-| automation diagnostic and focus modules | `host/diagnostics/` | Keep diagnostic capture separate from external formatting. |
+| automation diagnostic, focus-capture, and problem-source modules | `host/diagnostics/` | Keep host capture separate from external formatting and the pure focus wire validator in `protocol/diagnostics/`. |
 | automation save-game and registration modules | `host/game/` | These perform DFHack state transitions. |
 | `component.lua`, mount modules | `driver/mount/` | These own the mounted resource lifecycle. |
 | subject, native lookup, and view adapter modules | `driver/subjects/` | These implement selection and retained identity. |
 | render modules | `driver/render/` | These implement invalidation and completed-render observation. |
 | `commands/` | `driver/commands/` | Built-in commands are part of the run-scoped driver. |
 | `automation/pointer_adapter.lua` | `driver/input/` | Pointer movement is interaction behavior, not run orchestration. |
-| event, schema, state, policy, and cross-runtime failure vocabulary | `protocol/` | These values cross the controller/host boundary. Driver-only enums stay with the driver. |
+| event, schema, state, policy, and cross-runtime failure vocabulary | `protocol/` | These values cross the controller/host boundary. Split focus-diagnostic capture from its pure wire validator before moving events. Driver-only enums stay with the driver. |
 | immutable enum and identity-label helpers | `support/` | Keep this directory small and dependency-free. |
 
-The exact placement of `result_store.lua`, `events.lua`, `schemas.lua`, and
-`snapshots.lua` must be confirmed with dependency tests before moving them.
-The rule is more important than the table: serialization contracts belong in
-`protocol/`; filesystem persistence belongs in `controller/`; mutable host
-state belongs in `host/`.
+`result_store.lua` remains in `controller/`, but its current dependency on
+host-owned project state must be removed first. Extract the pure path
+normalization it needs into `support/project_paths.lua`; do not move the host
+project registry into the controller. Split `events.lua` so its wire contract
+and validation are pure protocol code while focus capture remains under
+`host/diagnostics/`. `schemas.lua` then remains protocol code, and
+`snapshots.lua` remains under `host/service/` because it projects mutable host
+registries.
 
 ## Path and loading strategy
 
@@ -328,6 +344,12 @@ tests/unit/
   support/
 ```
 
+Update `tools/Run-UnitTests.ps1` before moving any unit specs. Remove Busted's
+`--no-recursive` option so its normal recursive discovery includes every
+nested spec beneath `tests/unit/`. Add an inventory assertion or a nested
+sentinel spec so the repository gate fails if recursive discovery is disabled
+again or silently executes only the top-level files.
+
 Keep live suites under `tests/automation/`, destructive live suites under
 `tests/destructive/`, and multi-process scenarios under `tests/integration/`.
 Those directories describe execution cost and environment, which is useful to
@@ -351,12 +373,14 @@ to make the tree look symmetric.
 1. Record the current unit, syntax, package, and focused live baselines.
 2. Add dependency-boundary tests and centralize source/installed path
    resolution without moving files.
-3. Create `protocol/` and `support/`, move pure modules, and update all callers.
+3. Split host-aware validation from the pure event and configuration
+   contracts, then create `protocol/` and `support/` and update all callers.
 4. Create `controller/`, retaining the three stable root facades.
 5. Move the run-scoped implementation into `driver/`.
 6. Replace `automation/` with `host/`, moving entry scripts last so external
    invocation remains continuously testable.
-7. Mirror unit-test paths and update direct `loadfile()` fixtures.
+7. Enable recursive Busted discovery, then mirror unit-test paths and update
+   direct `loadfile()` fixtures.
 8. Update architecture and contributor documentation, publish a package, and
    inspect the archive for the exact expected module tree.
 9. Remove forwarding modules only after the compatibility window and consumer
@@ -374,8 +398,15 @@ demonstrated:
 
 - all unit tests pass from the source checkout;
 - Lua syntax and repository formatting checks pass;
-- dependency-boundary tests reject controller-to-host and protocol-to-runtime
-  imports;
+- dependency-boundary tests enforce the complete allowed-import matrix:
+  `controller/` imports only controller, protocol, and support modules;
+  `host/` imports host, driver, protocol, and support modules; `driver/`
+  imports only driver, protocol, and support modules; `protocol/` imports only
+  protocol and support modules; and `support/` imports only support modules;
+- the dependency audit recognizes only the documented root `ds.lua`
+  composition exception for loading both host and driver modules;
+- the unit runner recursively discovers nested specs and verifies its expected
+  test inventory;
 - the CLI `help`, `list`, `run`, status, abort, recovery, and inspection paths
   resolve the new host entrypoint locations;
 - focused live tests cover component mounting, native-screen mounting,
@@ -421,10 +452,33 @@ are stable after the compatibility window.
 Moves plus behavior edits obscure history. Keep path-only moves, require-path
 updates, test moves, and later decompositions in distinct commits.
 
+## Follow-up work
+
+Create a separate implementation plan to remove the temporary `ds.lua`
+composition exception. That plan should evaluate moving driver-facing
+save-game workflows, overlay registration, and interaction diagnostics under
+`driver/`, with host scheduling, cleanup, project-environment, and service
+capabilities supplied through explicit injected interfaces.
+
+The follow-up plan must:
+
+- inventory every host module currently loaded by `ds.lua`;
+- define the narrow capabilities the driver actually needs from each module;
+- place run-scoped game operations according to ownership rather than their
+  historical `automation/` location;
+- preserve fresh `loadfile()` behavior and source-versus-installed loading;
+- add boundary tests proving modules beneath `driver/` do not import
+  `host/`; and
+- provide incremental migration and compatibility gates without changing the
+  public `ds` API.
+
+Until that plan is approved and implemented, `ds.lua` remains the sole
+documented composition root allowed to load both namespaces.
+
 ## Decision
 
-Adopt the runtime-first organization above. Do not retain `automation/` as the
-general home for all live-test code: it hides the important distinction
-between host orchestration and the driver that a test uses. Preserve shallow
-facades and source/installed loading semantics, then enforce the new boundaries
-with tests before decomposing large files.
+Adopt the execution-boundary-and-role organization above. Do not retain
+`automation/` as the general home for all live-test code: it hides the
+important distinction between host orchestration and the driver that a test
+uses. Preserve shallow facades and source/installed loading semantics, then
+enforce the new boundaries with tests before decomposing large files.
