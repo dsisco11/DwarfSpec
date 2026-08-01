@@ -175,23 +175,23 @@ Phase 9 - Decompose host execution:
     ☑ Complete the standard phase gate and focused host-execution live tests.
 
 Phase 10 - Decompose the scheduler:
-    ☐ Implement only the module boundaries approved for `host/service/scheduler.lua`.
-    ☐ Extract request and authority validation into `host/service/scheduler/request_validation.lua`, including detached selections, request keys, owner kinds, lease settings, result paths, exact run identities, and mutation-free authorization.
-    ☐ Extract run admission into `host/service/scheduler/admission.lua`, including identity allocation, project/result-path gates, idempotent retries, queued-record construction, and queued-transition requests.
-    ☐ Extract FIFO queue policy into `host/service/scheduler/queue.lua`, including head selection/revalidation, activation or pre-execution rejection, queued cancellation, and queue-lease expiry.
-    ☐ Extract lease policy into `host/service/scheduler/leases.lua`, including external renewal, in-process heartbeat, lease-check scheduling, and expired-active abort requests.
-    ☐ Extract all scheduler mutations and protocol-event appends into `host/service/scheduler/transitions.lua`, covering queued, activated, running, cleaning, cancellation, terminal release, and quarantine transitions.
-    ☐ Extract scheduler recovery policy into `host/service/scheduler/recovery.lua`, including active abort authorization, quarantine verification/clearing, acknowledgement, operator discard, and reservation release.
-    ☐ Keep `host/service/scheduler.lua` as the scheduler facade called by `service.lua`, keep the service registry as the one authoritative state object, and route every scheduler mutation and protocol event through `transitions.lua`.
-    ☐ Preserve admission, scheduling, cancellation, lease, abort, quarantine, acknowledgement, discard, recovery, and persistence-reservation behavior.
-    ☐ Add `tests/unit/host/service/scheduler/request_validation_spec.lua` for malformed values, detached copies, idempotency matching, result-path conflicts, owner capabilities, and operator authority.
-    ☐ Add `tests/unit/host/service/scheduler/admission_spec.lua` for successful admission, collisions, outstanding-run gates, retries, event identity, and mutation only after validation.
-    ☐ Add `tests/unit/host/service/scheduler/queue_spec.lua` for FIFO ordering, incompatible projects, cancellation, queue expiry, blocked/quarantined executors, and activation handoff.
-    ☐ Add `tests/unit/host/service/scheduler/leases_spec.lua` for renewal ownership, timer replacement, heartbeat policy, expiry boundaries, and stale-generation rejection.
-    ☐ Add `tests/unit/host/service/scheduler/transitions_spec.lua` for the legal transition matrix, generation guards, event order, executor release, cleanup-confirmed versus quarantine, and atomic mutation.
-    ☐ Add `tests/unit/host/service/scheduler/recovery_spec.lua` for normal/operator abort, exact generations, successful and failed clean-state proof, acknowledgement, discard, and reservation release.
-    ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
-    ☐ Complete the standard phase gate and focused scheduler recovery live tests.
+    ☑ Implement only the module boundaries approved for `host/service/scheduler.lua`.
+    ☑ Extract request and authority validation into `host/service/scheduler/request_validation.lua`, including detached selections, request keys, owner kinds, lease settings, result paths, exact run identities, and mutation-free authorization.
+    ☑ Extract run admission into `host/service/scheduler/admission.lua`, including identity allocation, project/result-path gates, idempotent retries, queued-record construction, and queued-transition requests.
+    ☑ Extract FIFO queue policy into `host/service/scheduler/queue.lua`, including head selection/revalidation, activation or pre-execution rejection, queued cancellation, and queue-lease expiry.
+    ☑ Extract lease policy into `host/service/scheduler/leases.lua`, including external renewal, in-process heartbeat, lease-check scheduling, and expired-active abort requests.
+    ☑ Extract all scheduler mutations and protocol-event appends into `host/service/scheduler/transitions.lua`, covering queued, activated, running, cleaning, cancellation, terminal release, and quarantine transitions.
+    ☑ Extract scheduler recovery policy into `host/service/scheduler/recovery.lua`, including active abort authorization, quarantine verification/clearing, acknowledgement, operator discard, and reservation release.
+    ☑ Keep `host/service/scheduler.lua` as the scheduler facade called by `service.lua`, keep the service registry as the one authoritative state object, and route every scheduler mutation and protocol event through `transitions.lua`.
+    ☑ Preserve admission, scheduling, cancellation, lease, abort, quarantine, acknowledgement, discard, recovery, and persistence-reservation behavior.
+    ☑ Add `tests/unit/host/service/scheduler/request_validation_spec.lua` for malformed values, detached copies, idempotency matching, result-path conflicts, owner capabilities, and operator authority.
+    ☑ Add `tests/unit/host/service/scheduler/admission_spec.lua` for successful admission, collisions, outstanding-run gates, retries, event identity, and mutation only after validation.
+    ☑ Add `tests/unit/host/service/scheduler/queue_spec.lua` for FIFO ordering, incompatible projects, cancellation, queue expiry, blocked/quarantined executors, and activation handoff.
+    ☑ Add `tests/unit/host/service/scheduler/leases_spec.lua` for renewal ownership, timer replacement, heartbeat policy, expiry boundaries, and stale-generation rejection.
+    ☑ Add `tests/unit/host/service/scheduler/transitions_spec.lua` for the legal transition matrix, generation guards, event order, executor release, cleanup-confirmed versus quarantine, and atomic mutation.
+    ☑ Add `tests/unit/host/service/scheduler/recovery_spec.lua` for normal/operator abort, exact generations, successful and failed clean-state proof, acknowledgement, discard, and reservation release.
+    ☑ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
+    ☑ Complete the standard phase gate and focused scheduler recovery live tests.
 
 Phase 11 - Decompose mount context:
     ☐ Implement only the module boundaries approved for `driver/mount/mount_context.lua`.

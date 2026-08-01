@@ -142,12 +142,17 @@ central without turning it into an unnamed general-purpose helper.
 ```mermaid
 flowchart TD
     scheduler["host/service/scheduler.lua<br/>facade"]
-    scheduler --> validation["scheduler/request_validation.lua"]
     scheduler --> admission["scheduler/admission.lua"]
     scheduler --> queue["scheduler/queue.lua"]
     scheduler --> leases["scheduler/leases.lua"]
     scheduler --> recovery["scheduler/recovery.lua"]
-    admission --> transitions["scheduler/transitions.lua<br/>sole state mutation"]
+    scheduler --> transitions["scheduler/transitions.lua<br/>sole state mutation"]
+    admission --> validation["scheduler/request_validation.lua"]
+    queue --> validation
+    leases --> validation
+    recovery --> validation
+    transitions --> validation
+    admission --> transitions
     queue --> transitions
     leases --> transitions
     recovery --> transitions

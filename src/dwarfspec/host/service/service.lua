@@ -109,6 +109,13 @@ local function scheduler_context(dependencies)
             dependencies.verify_clean_state or nil,
         authorize_operator=dependencies and
             dependencies.authorize_operator or nil,
+        schedule_lease_timer=dependencies and
+            dependencies.schedule_lease_timer or nil,
+        cancel_lease_timer=dependencies and
+            dependencies.cancel_lease_timer or nil,
+        expire_leases=function()
+            return M.expire_leases(dependencies)
+        end,
     }
 end
 
@@ -154,94 +161,6 @@ local function require_registry(dependencies)
     assert(registry ~= nil, 'automation service has not been bootstrapped')
     validate_registry(registry)
     return registry
-end
-
----Returns the currently renewable lease for one nonterminal run.
----@param run table
----@return table|nil
-local function current_lease(run)
-    if run.state == RunState.QUEUED then return run.queue_lease end
-    if run.state == RunState.STARTING or run.state == RunState.RUNNING then
-        return run.execution_lease
-    end
-    return nil
-end
-
----Cancels one service-owned lease timer without touching lease state.
----@param run table
----@param dependencies table|nil
-local function cancel_lease_timer(run, dependencies)
-    local timer_id = run.lease_timer_id
-    run.lease_timer_id = nil
-    run.lease_timer_generation = (run.lease_timer_generation or 0) + 1
-    if timer_id ~= nil and dependencies and
-            type(dependencies.cancel_lease_timer) == 'function' then
-        dependencies.cancel_lease_timer(timer_id)
-    end
-end
-
-local arm_lease_timer
-
----Handles one exact service-owned lease timer callback.
----@param run_id string
----@param generation integer
----@param timer_generation integer
----@param dependencies table
-local function lease_timer_fired(run_id, generation, timer_generation,
-        dependencies)
-    local registry = require_registry(dependencies)
-    local run = registry.runs[run_id]
-    if run == nil or run.generation ~= generation or
-            run.lease_timer_generation ~= timer_generation then
-        return
-    end
-    run.lease_timer_id = nil
-    local ok, failure = xpcall(function()
-        if run.owner_kind == OwnerKind.IN_PROCESS and
-                run.execution_lease.active then
-            M.heartbeat({
-                service_instance_id=registry.service_instance_id,
-                project_id=run.project_id,
-                run_id=run.run_id,
-                generation=run.generation,
-            }, dependencies)
-            return
-        end
-        M.expire_leases(dependencies)
-        if registry.runs[run_id] == run and not run.terminal then
-            arm_lease_timer(registry, run, dependencies)
-        end
-    end, debug.traceback)
-    if not ok then run.lease_timer_error = tostring(failure) end
-end
-
----Arms the timer for one currently renewable queue or execution lease.
----@param registry table
----@param run table
----@param dependencies table|nil
-arm_lease_timer = function(registry, run, dependencies)
-    cancel_lease_timer(run, dependencies)
-    local lease = current_lease(run)
-    if lease == nil or not lease.active or not dependencies or
-            type(dependencies.schedule_lease_timer) ~= 'function' then
-        return
-    end
-    local timestamp_ms = now_ms(dependencies)
-    local delay_ms
-    if run.owner_kind == OwnerKind.IN_PROCESS then
-        delay_ms = math.max(1, math.floor(lease.timeout_ms / 2))
-    else
-        delay_ms = math.max(1, lease.expires_at_ms - timestamp_ms)
-    end
-    local timer_generation = run.lease_timer_generation
-    local timer_id = dependencies.schedule_lease_timer(
-        run, delay_ms, function()
-            lease_timer_fired(run.run_id, run.generation,
-                timer_generation, dependencies)
-        end)
-    assert(timer_id ~= nil,
-        'automation service lease timer was rejected')
-    run.lease_timer_id = timer_id
 end
 
 ---Counts keys in one service-owned record map.
@@ -509,7 +428,8 @@ function M.submit(project_id, request, dependencies)
     local outcome = scheduler.submit(registry, project_id, request,
         scheduler_context(dependencies))
     if outcome.accepted and not outcome.reused then
-        arm_lease_timer(registry, outcome.run, dependencies)
+        scheduler.arm_lease_timer(registry, outcome.run,
+            scheduler_context(dependencies))
     end
     local response = {
         accepted=outcome.accepted,
@@ -534,7 +454,8 @@ function M.activate_next(dependencies)
     local outcome = scheduler.activate_next(registry,
         scheduler_context(dependencies))
     if outcome.activated then
-        arm_lease_timer(registry, outcome.run, dependencies)
+        scheduler.arm_lease_timer(registry, outcome.run,
+            scheduler_context(dependencies))
     end
     return {
         activated=outcome.activated,
@@ -570,7 +491,7 @@ function M.begin_cleanup(run_id, generation, reason, pending_action_count,
     local registry = require_registry(dependencies)
     local run = scheduler.begin_cleanup(registry, run_id, generation,
         reason, pending_action_count, scheduler_context(dependencies))
-    cancel_lease_timer(run, dependencies)
+    scheduler.cancel_lease_timer(run, scheduler_context(dependencies))
     return snapshots.run(run, registry)
 end
 
@@ -596,7 +517,7 @@ function M.renew(request, dependencies)
     local registry = require_registry(dependencies)
     local run = scheduler.renew(registry, request,
         scheduler_context(dependencies))
-    arm_lease_timer(registry, run, dependencies)
+    scheduler.arm_lease_timer(registry, run, scheduler_context(dependencies))
     return snapshots.run(run, registry)
 end
 
@@ -608,7 +529,7 @@ function M.heartbeat(request, dependencies)
     local registry = require_registry(dependencies)
     local run = scheduler.heartbeat(registry, request,
         scheduler_context(dependencies))
-    arm_lease_timer(registry, run, dependencies)
+    scheduler.arm_lease_timer(registry, run, scheduler_context(dependencies))
     return snapshots.run(run, registry)
 end
 
@@ -620,7 +541,8 @@ function M.cancel(request, dependencies)
     local registry = require_registry(dependencies)
     local outcome = scheduler.cancel(registry, request,
         scheduler_context(dependencies))
-    cancel_lease_timer(outcome.run, dependencies)
+    scheduler.cancel_lease_timer(outcome.run,
+        scheduler_context(dependencies))
     return {
         cancelled=outcome.cancelled,
         identity=outcome.identity,
@@ -636,7 +558,8 @@ function M.operator_cancel(request, dependencies)
     local registry = require_registry(dependencies)
     local outcome = scheduler.operator_cancel(registry, request,
         scheduler_context(dependencies))
-    cancel_lease_timer(outcome.run, dependencies)
+    scheduler.cancel_lease_timer(outcome.run,
+        scheduler_context(dependencies))
     return {
         cancelled=outcome.cancelled,
         identity=outcome.identity,
@@ -696,7 +619,8 @@ function M.expire_leases(dependencies)
         registry, scheduler_context(dependencies))
     local expired_queue = {}
     for _, outcome in ipairs(queue_outcomes) do
-        cancel_lease_timer(outcome.run, dependencies)
+        scheduler.cancel_lease_timer(outcome.run,
+            scheduler_context(dependencies))
         table.insert(expired_queue, outcome.identity)
     end
 
@@ -704,7 +628,7 @@ function M.expire_leases(dependencies)
         registry, scheduler_context(dependencies))
     local active_identity
     if active ~= nil then
-        cancel_lease_timer(active, dependencies)
+        scheduler.cancel_lease_timer(active, scheduler_context(dependencies))
         active_identity = {
             service_instance_id=active.service_instance_id,
             project_id=active.project_id,
@@ -744,7 +668,8 @@ function M.complete_active(run_id, generation, terminal_state,
     local outcome = scheduler.finish_active(registry, run_id, generation,
         terminal_state, cleanup_confirmed, reason,
         scheduler_context(dependencies))
-    cancel_lease_timer(outcome.run, dependencies)
+    scheduler.cancel_lease_timer(outcome.run,
+        scheduler_context(dependencies))
     return {
         finished=outcome.finished,
         identity=outcome.identity,
