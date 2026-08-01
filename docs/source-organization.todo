@@ -194,19 +194,25 @@ Phase 10 - Decompose the scheduler:
     ☑ Complete the standard phase gate and focused scheduler recovery live tests.
 
 Phase 11 - Decompose mount context:
-    ☐ Implement only the module boundaries approved for `driver/mount/mount_context.lua`.
-    ☐ Extract mount allocation and ownership into `driver/mount/mount_resource_ownership.lua`, including mount identities, owned/borrowed construction, the single-current-mount guard, cleanup registration, explicit unmount handoff, and construction rollback.
-    ☐ Extract subject registration and resolution into `driver/mount/mount_subject_resolution.lua`, including source registration, adapter refresh, path parsing/traversal, retained subjects, retained identity, and stale/ambiguous rejection.
-    ☐ Extract mounted command execution into `driver/mount/mount_command_execution.lua`, including current mount/subject resolution, command invocation, render-aware mutation waits, and enriched command/component diagnostics.
-    ☐ Extract teardown and proof into `driver/mount/mount_cleanup_verification.lua`, including subject release, observer/pointer detachment, owned-screen dismissal, mount cleanup, failure aggregation, and exact cleanup-state evidence.
-    ☐ Keep `driver/mount/mount_context.lua` as the constructed context facade with its established method surface.
-    ☐ Preserve mount lifecycle, teardown order, retained subject identity, diagnostic content, and cleanup confirmation.
-    ☐ Add `tests/unit/driver/mount/mount_resource_ownership_spec.lua` for owned/native mounts, duplicate mount rejection, identity, cleanup registration, explicit unmount, and construction rollback.
-    ☐ Add `tests/unit/driver/mount/mount_subject_resolution_spec.lua` for Lua/native/overlay sources, child paths, retained identity, replacement/removal, ambiguity, and bounded available-child diagnostics.
-    ☐ Add `tests/unit/driver/mount/mount_command_execution_spec.lua` for current-mount guards, command arguments/returns, synchronous and awaited mutations, render failure, timeout, and diagnostic preservation.
-    ☐ Add `tests/unit/driver/mount/mount_cleanup_verification_spec.lua` for LIFO teardown, borrowed-resource preservation, owned dismissal, pointer/render restoration, multiple failures, idempotence, and verified state.
-    ☐ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
-    ☐ Complete the standard phase gate and focused component/native mount live tests.
+    ☑ Implement only the module boundaries approved for `driver/mount/mount_context.lua`.
+    ☑ Extract mount allocation and ownership into `driver/mount/mount_resource_ownership.lua`, including mount identities, owned/borrowed construction, the single-current-mount guard, cleanup registration, explicit unmount handoff, and construction rollback.
+    ☑ Extract subject registration and resolution into `driver/mount/mount_subject_resolution.lua`, including source registration, adapter refresh, path parsing/traversal, retained subjects, retained identity, and stale/ambiguous rejection.
+    ☑ Extract mounted command execution into `driver/mount/mount_command_execution.lua`, including current mount/subject resolution, command invocation, render-aware mutation waits, and enriched command/component diagnostics.
+    ☑ Extract teardown and proof into `driver/mount/mount_cleanup_verification.lua`, including subject release, observer/pointer detachment, owned-screen dismissal, mount cleanup, failure aggregation, and exact cleanup-state evidence.
+    ☑ Keep `driver/mount/mount_context.lua` as the constructed context facade with its established method surface.
+    ☑ Preserve mount lifecycle, teardown order, retained subject identity, diagnostic content, and cleanup confirmation.
+    ☑ Add `tests/unit/driver/mount/mount_resource_ownership_spec.lua` for owned/native mounts, duplicate mount rejection, identity, cleanup registration, explicit unmount, and construction rollback.
+    ☑ Add `tests/unit/driver/mount/mount_subject_resolution_spec.lua` for Lua/native/overlay sources, child paths, retained identity, replacement/removal, ambiguity, and bounded available-child diagnostics.
+    ☑ Add `tests/unit/driver/mount/mount_command_execution_spec.lua` for current-mount guards, command arguments/returns, synchronous and awaited mutations, render failure, timeout, and diagnostic preservation.
+    ☑ Add `tests/unit/driver/mount/mount_cleanup_verification_spec.lua` for LIFO teardown, borrowed-resource preservation, owned dismissal, pointer/render restoration, multiple failures, idempotence, and verified state.
+    ☑ Confirm the implementation matches the approved decomposition proposal and its Mermaid subtree.
+    ☑ Complete the standard phase gate and focused component/native mount live tests.
+    ☑ Replace the broad `M.install(context)` service-locator pattern with narrow, explicit dependency contracts for each extracted mount module, including explicit command-to-subject and command-to-render dependencies.
+    ☑ Remove the extraction-only `_subject_adapter` method from the mount-context facade and confirm its method surface exactly matches the pre-decomposition surface.
+    ☑ Expand `mount_subject_resolution_spec.lua` to exercise actual native and overlay resolution behavior, including their path traversal, retained identity, replacement/removal, and ambiguity contracts instead of only registering differently labeled fake sources.
+    ☑ Expand `mount_command_execution_spec.lua` to cover render failure and render timeout as distinct direct behaviors with preserved diagnostics.
+    ☑ Correct `mount_cleanup_verification_spec.lua` to model an actual borrowed mounted screen and prove that cleanup preserves it while continuing to dismiss owned screens.
+    ☑ Recheck the corrected implementation against the approved Mermaid dependencies, then rerun the standard phase gate and focused component/native mount live tests with cleanup confirmation reported separately.
 
 Phase 12 - Decompose the controller runner:
     ☐ Implement only the module boundaries approved for `controller/execution/runner.lua`.
