@@ -36,21 +36,22 @@ Standard phase gate:
     ☐ Do not rerun the full non-destructive live suite here; after Phase 0, that sweep is reserved for the two milestone phases and is compared with the Phase 0 baseline.
 
 Phase 0 - Initial test baseline:
-    ☐ Record the active checkout, branch, worktree state, and index state without modifying them.
-    ☐ Record the current production-module and unit-spec inventory needed to detect omissions during moves.
-    ☐ Inventory static `require()` calls, literal and constructed `loadfile()` targets, and host entry-script paths returned by `dwarfspec.layout`.
-    ☐ Run and record the full source-checkout unit suite with its executed test count.
-    ☐ Run and record `tools/Check-Lua.ps1`.
-    ☐ Establish one reproducible source-declaration check using `tests/declarations/source.luarc.json` before production files move.
-        ☐ Require `tests/declarations/valid/` to produce no unexpected LuaLS diagnostics.
-        ☐ Require `tests/declarations/invalid/` to produce the expected bounded diagnostic set so the check detects declarations that become missing or too permissive.
-        ☐ Record the LuaLS version, invocation, and baseline results without loading an installed or packaged DwarfSpec tree.
-    ☐ Run and record focused live baselines for component mounting, native-screen mounting, pointer input, events, save-game commands, cleanup, and scheduler recovery.
-    ☐ Run and record the full non-destructive live suite.
-    ☐ Run and record `tools/Run-MultiProjectIntegration.ps1` as the multi-process integration baseline.
-    ☐ Record every pre-existing live or multi-process integration failure separately so later gates can distinguish regressions from baseline failures.
-    ☐ Record `cleanup_confirmed` separately from test success for every live baseline.
-    ☐ Do not begin source moves until the baseline evidence is complete.
+    ☑ Record the active checkout, branch, worktree state, and index state without modifying them.
+    ☑ Record the current production-module and unit-spec inventory needed to detect omissions during moves.
+    ☑ Inventory static `require()` calls, literal and constructed `loadfile()` targets, and host entry-script paths returned by `dwarfspec.layout`.
+    ☑ Run and record the full source-checkout unit suite with its executed test count.
+    ☑ Run and record `tools/Check-Lua.ps1`.
+    ☑ Establish one reproducible source-declaration check using `tests/declarations/source.luarc.json` before production files move.
+        ☑ Require `tests/declarations/valid/` to produce no unexpected LuaLS diagnostics.
+        ☑ Require `tests/declarations/invalid/` to produce the expected bounded diagnostic set so the check detects declarations that become missing or too permissive.
+        ☑ Record the LuaLS version, invocation, and baseline results without loading an installed or packaged DwarfSpec tree.
+    ☑ Run and record focused live baselines for component mounting, native-screen mounting, pointer input, events, save-game commands, cleanup, and scheduler recovery.
+    ☑ Run and record the full non-destructive live suite.
+    ☑ Run and record `tools/Run-MultiProjectIntegration.ps1` as the multi-process integration baseline.
+    ☑ Record every pre-existing live or multi-process integration failure separately so later gates can distinguish regressions from baseline failures.
+    ☑ Record `cleanup_confirmed` separately from test success for every live baseline.
+    ☑ Record the completed baseline and known failures in `docs/source-organization-phase0-baseline.md`.
+    ☑ Do not begin source moves until the baseline evidence is complete.
 
 Phase 1 - Establish recursive discovery, path authority, and boundary guards:
     ☐ Remove Busted's `--no-recursive` argument from `tools/Run-UnitTests.ps1` and the repository CI unit-test invocation.
