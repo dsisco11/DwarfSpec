@@ -241,16 +241,16 @@ Phase 12 - Decompose the controller runner:
     ☑ Recheck the corrected implementation against the approved responsibility table and Mermaid subtree, then rerun the standard phase gate, focused CLI execution-path tests, and focused live execution with cleanup confirmation reported separately.
 
 Phase 13 - Decompose cli.lua near the end:
-    ☐ Begin only after Phases 8 through 12 are complete.
-    ☐ Move argument parsing, option validation, and help construction into `controller/command_line.lua`.
-    ☐ Move command selection and orchestration into `controller/application.lua`.
-    ☐ Reduce root `cli.lua` to delegation to `controller.application`.
-    ☐ Review the fully decomposed root `cli.lua` and confirm it imports only `controller.application`.
-    ☐ Preserve all existing command names, options, validation, help output, exit behavior, and orchestration behavior.
-    ☐ Add `tests/unit/controller/command_line_spec.lua` for argument parsing, option validation, help construction, invalid input, and stable parse results.
-    ☐ Add `tests/unit/controller/application_spec.lua` for command selection, controller orchestration, exit behavior, and error propagation.
-    ☐ Verify `help`, `list`, `run`, status, abort, recovery, and inspection paths.
-    ☐ Complete the standard phase gate.
+    ☑ Begin only after Phases 8 through 12 are complete.
+    ☑ Move argument parsing, option validation, and help construction into `controller/command_line.lua`.
+    ☑ Move command selection and orchestration into `controller/application.lua`.
+    ☑ Reduce root `cli.lua` to delegation to `controller.application`.
+    ☑ Review the fully decomposed root `cli.lua` and confirm it imports only `controller.application`.
+    ☑ Preserve all existing command names, options, validation, help output, exit behavior, and orchestration behavior.
+    ☑ Add `tests/unit/controller/command_line_spec.lua` for argument parsing, option validation, help construction, invalid input, and stable parse results.
+    ☑ Add `tests/unit/controller/application_spec.lua` for command selection, controller orchestration, exit behavior, and error propagation.
+    ☑ Verify `help`, `list`, `run`, status, abort, recovery, and inspection paths.
+    ☑ Complete the standard phase gate.
 
 Phase 14 - Close full source organization:
     ☐ Confirm the five proposal-driven decompositions match their approved Mermaid subtrees and the CLI matches its specified two-module split.
