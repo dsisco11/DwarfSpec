@@ -189,33 +189,37 @@ Phase 2: Validate and freeze TestBed configuration
           and Check-Lua passed for 298 files on 2026-08-02.
 
 Phase 3: Build deterministic path and source resolution
-    ☐ Exit with isolated module/script search rules that match the proposal without mutating host paths or inventing containment guarantees.
+    ☒ Exit with isolated module/script search rules that match the proposal without mutating host paths or inventing containment guarantees.
+        - Evidence: `tests/unit/testbed/paths_spec.lua` covers deterministic
+          module/script/source resolution, private paths, diagnostics, and
+          traversal semantics; 16 focused TestBed examples, 786 full unit
+          examples, and Check-Lua for 300 files passed on 2026-08-02.
 
 3.1 Module roots and private path:
-    ☐ Resolve every relative default or explicitly configured module root against the effective consumer root, never the DwarfSpec checkout.
-    ☐ Normalize absolute and resolved module roots without imposing physical containment.
-    ☐ Expand every effective module root into ordinary ?.lua and ?/init.lua templates in order.
-    ☐ Construct the initial private package.path without changing process package.path.
-    ☐ Provide a compatible private package.searchpath implementation over an explicitly supplied or private path.
-    ☐ Preserve normal Lua path-template behavior, including explicit paths, parent traversal, and symlink traversal.
-    ☐ Record the normalized selected source filename so fixed-root precedence is observable through source/result records and Lua 5.4 loader data without adding graph inspection.
+    ☒ Resolve every relative default or explicitly configured module root against the effective consumer root, never the DwarfSpec checkout.
+    ☒ Normalize absolute and resolved module roots without imposing physical containment.
+    ☒ Expand every effective module root into ordinary ?.lua and ?/init.lua templates in order.
+    ☒ Construct the initial private package.path without changing process package.path.
+    ☒ Provide a compatible private package.searchpath implementation over an explicitly supplied or private path.
+    ☒ Preserve normal Lua path-template behavior, including explicit paths, parent traversal, and symlink traversal.
+    ☒ Record the normalized selected source filename so fixed-root precedence is observable through source/result records and Lua 5.4 loader data without adding graph inspection.
 
 3.2 Script roots:
-    ☐ Resolve every relative default or explicitly configured script root against the effective consumer root.
-    ☐ Resolve logical script names deterministically across script_roots using the documented DFHack-style filename mapping.
-    ☐ Keep the script search namespace separate from ordinary modules even when names are textually equal.
-    ☐ Resolve relative use_source paths against the effective consumer root and retain absolute use_source paths unchanged.
-    ☐ Ensure use_source paths load exactly that resolved file instead of being remapped through roots.
-    ☐ Report missing scripts with the logical name, effective roots, and attempted candidates.
+    ☒ Resolve every relative default or explicitly configured script root against the effective consumer root.
+    ☒ Resolve logical script names deterministically across script_roots using the documented DFHack-style filename mapping.
+    ☒ Keep the script search namespace separate from ordinary modules even when names are textually equal.
+    ☒ Resolve relative use_source paths against the effective consumer root and retain absolute use_source paths unchanged.
+    ☒ Ensure use_source paths load exactly that resolved file instead of being remapped through roots.
+    ☒ Report missing scripts with the logical name, effective roots, and attempted candidates.
 
 3.3 Focused verification:
-    ☐ Test default-root order, missing default directories, explicit replacement roots, empty roots, ?.lua, and ?/init.lua.
-    ☐ Place duplicate logical modules in multiple roots and prove the selected source follows fixed precedence and is reported by the documented loader data.
-    ☐ Test private package.path replacement and mutation affecting only later loads in that bed.
-    ☐ Test standalone-current-directory and live-supplied roots for relative module_roots, script_roots, and use_source paths.
-    ☐ Test explicit absolute source paths and symlink-capable behavior without a containment rejection.
-    ☐ Test missing-module errors that report the effective project root/current directory, effective roots, attempted resolution, and bounded dependency chain.
-    ☐ Assert process package.path remains byte-for-byte unchanged.
+    ☒ Test default-root order, missing default directories, explicit replacement roots, empty roots, ?.lua, and ?/init.lua.
+    ☒ Place duplicate logical modules in multiple roots and prove the selected source follows fixed precedence and is reported by the documented loader data.
+    ☒ Test private package.path replacement and mutation affecting only later loads in that bed.
+    ☒ Test standalone-current-directory and live-supplied roots for relative module_roots, script_roots, and use_source paths.
+    ☒ Test explicit absolute source paths and symlink-capable behavior without a containment rejection.
+    ☒ Test missing-module errors that report the effective project root/current directory, effective roots, attempted resolution, and bounded dependency chain.
+    ☒ Assert process package.path remains byte-for-byte unchanged.
 
 Phase 4: Construct the TestBed base environment and protected facades
     ☐ Exit with stable bed-owned base and dfhack facade factories that accept later package/loader closures, expose only documented base bindings, and never fall through dynamically to host state.
