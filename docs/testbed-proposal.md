@@ -553,15 +553,46 @@ values obtained through that layer remain borrowed state.
 Configured `globals` are shallow-copied into the bed base and can replace
 ordinary runtime-base values, including `df`, constants, and test-specific
 facades. They must not replace loader-owned `_G`, `require`, `reqscript`,
-`mkmodule`, `package`, `load`, `loadfile`, `dofile`, or script-owned
-`dfhack_flags`. A configured `dfhack` table is a delegated facade: TestBed must
-wrap it rather than expose it directly so `dfhack.reqscript` remains bed-local.
-Tables supplied through `globals` are borrowed mutable state and are not reset
-by `bed:close()`.
+`mkmodule`, `package`, `load`, `loadfile`, `dofile`, `reload`,
+`script_environment`, or script-owned `dfhack_flags`. A configured `dfhack`
+table is a delegated facade: TestBed must wrap it rather than expose it
+directly so TestBed can retain ownership of import-oriented fields. Tables
+supplied through `globals` are borrowed mutable state and are not reset by
+`bed:close()`.
 
 Bed-local `load`, `loadfile`, and `dofile` behavior must not silently execute a
 chunk in process `_G`. They should either preserve the current bed environment
 and allowed-root checks or fail with a clear unsupported-operation error.
+
+Every import-oriented entry point visible through the bed base, the restricted
+`package` facade, or the delegated `dfhack` facade must either remain inside the
+bed graph or fail clearly. None may silently fall through to the host loader.
+The initial contract has these explicit policies:
+
+| Entry point | TestBed behavior |
+|---|---|
+| `require` | Resolve through the bed-local ordinary-module graph. |
+| `mkmodule` | Return the stable environment owned by this bed and module name. |
+| `reqscript` and `dfhack.reqscript` | Resolve through the bed-local script-module graph. |
+| `load`, `loadfile`, and `dofile` | Preserve the current bed environment and allowed-root checks, or fail as unsupported. |
+| `reload` and `dfhack.reload`, if present | Fail as unsupported; a bed-local reload API is deferred. |
+| `script_environment` and `dfhack.script_environment`, if present | Fail as unsupported; they must not bypass `reqscript` annotation and cache rules. |
+| `package.loaded`, `package.path`, and `package.searchpath` | Use the restricted bed-local facade. |
+| `package.preload`, `package.searchers`, `package.cpath`, and `package.loadlib` | Not exposed by the initial facade. |
+
+The live adapter must install raw bed-owned functions or explicit rejecting
+functions for these names before adding any `dfhack.BASE_G` read-through. A
+configured or live `dfhack` facade must likewise shadow import-oriented fields
+before delegating other fields. This prevents a missing bed-local field from
+reaching a similarly named host function through a metatable fallback.
+
+`dfhack.run_script`, `dfhack.run_command`, and comparable command-execution
+APIs are not dependency imports. A live adapter may delegate them when a test
+intentionally exercises real host behavior, but any scripts they execute and
+all resulting native, registration, file, timer, plugin, input, or gameplay
+effects are outside the bed graph and are not reversed by `bed:close()`.
+Standalone beds expose no such live execution functions unless the caller
+supplies an explicit fake through configured globals.
 
 This is compatibility isolation, not a security boundary. The `debug` library,
 borrowed mutable tables, userdata, and native functions can still escape or
@@ -625,7 +656,8 @@ Every TestBed-loaded module and script environment must receive the bed-local
 `reqscript` function so production code can use the ordinary unqualified form.
 The `dfhack` value visible inside the bed must also expose the same bed-local
 operation as `dfhack.reqscript` without modifying the borrowed process-global
-`dfhack` table. Other `dfhack` fields may delegate through the configured or
+`dfhack` table. Import-oriented `dfhack` fields follow the explicit loader
+policy above; only non-import fields may delegate through the configured or
 live DFHack facade.
 
 Bed-local script resolution must be deterministic:
@@ -743,6 +775,7 @@ dependencies or replaceable module imports.
 | A conventional default root selects an unintended duplicate module. | Use a fixed documented precedence, report the selected source, and allow explicit roots to replace the convention. |
 | The runner starts outside the consumer project. | Fail with the effective current directory and attempted roots; require standalone Busted to start at the consumer project root. |
 | A module escapes through global `require`, `package`, `loadfile`, or `_G`. | Install bed-local functions and a restricted package facade in every source environment. |
+| A module escapes through DFHack `reload`, `script_environment`, or another host import function. | Shadow every import-oriented base and `dfhack` field with a bed-local implementation or an explicit unsupported-operation failure before adding live-runtime fallback. |
 | A fake silently masks a misspelled production module. | Validate names, freeze configuration, and report whether each module came from a value, source, root, or host import. |
 | Circular imports return inconsistent state. | Track loading chains explicitly; support only documented semantics and fail with the complete cycle otherwise. |
 | A borrowed GUI class and a bed-loaded copy have incompatible identities. | Borrow DFHack framework modules exactly and warn against loading them from source roots. |
@@ -814,6 +847,8 @@ The first usable increment should contain:
 - bed-local `reqscript` and `dfhack.reqscript`, with annotation validation,
   `dfhack_flags.module`, a separate script cache, and supported circular script
   imports;
+- explicit masking of host `reload`, `script_environment`, and every other
+  import-oriented fallback not implemented by the bed;
 - immutable configuration after first load;
 - idempotent `close`;
 - module and script dependency-chain plus resolution-source diagnostics;
@@ -876,6 +911,13 @@ A prototype is successful only if it demonstrates all of the following:
   normal cache entries created when requiring TestBed itself;
 - the bed-local `package` facade does not expose nonfunctional preload
   registration;
+- real host sentinels for `reload`, `dfhack.reload`, `script_environment`, and
+  `dfhack.script_environment` are never invoked by TestBed-loaded code and
+  instead produce the documented unsupported-operation failures;
+- no import-oriented field omitted from the bed base or delegated `dfhack`
+  facade can fall through to `dfhack.BASE_G` or the process-global loader;
+- delegated live command-execution APIs are reported as host effects rather
+  than as members of the isolated module graph;
 - `mkmodule` returns stable state within one bed and fresh state across beds;
 - `bed:reqscript` and TestBed-local `dfhack.reqscript` return the same
   bed-owned script environment for one script name;
