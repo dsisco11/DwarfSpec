@@ -296,56 +296,59 @@ Phase 5: Create module-environment and dynamic-loader primitives
     ☒ Defer transitive source-module, cache, provider, and circular-import claims to Phases 6 and 7.
 
 Phase 6: Implement the private package, bed-local require, and mkmodule
-    ☐ Exit with Lua-compatible non-reserved source-module loading through the Phase 5 environment factory, deterministic loader data, private mutable package state, mkmodule, and bounded dependency failures.
+    ☒ Exit with Lua-compatible non-reserved source-module loading through the Phase 5 environment factory, deterministic loader data, private mutable package state, mkmodule, and bounded dependency failures.
+        - Evidence: `tests/unit/testbed/package_state_spec.lua` and the
+          existing TestBed suite passed 36 focused examples; 806 full unit
+          examples and Check-Lua for 305 files passed on 2026-08-02.
 
 6.1 Private package state:
-    ☐ Create bed-owned package.loaded, package.preload, package.searchers, package.path, package.config, and package.searchpath fields.
-    ☐ Match package.config and package.searchpath behavior to the running Lua version.
-    ☐ Retain bounded internal source-selection and result records needed for deterministic errors without exposing a public graph-inspection API.
-    ☐ Initialize searchers in the documented order: private preload, exact-provider integration point, then Lua source.
-    ☐ Make entry mutations in loaded and preload authoritative for later non-reserved requires.
-    ☐ Make replacement or mutation of searchers and path authoritative for later non-reserved requires.
-    ☐ Match native Lua behavior when code assigns a different table to package.loaded or package.preload: retain the internal cache/preload tables used by require.
-    ☐ Provide no working package.cpath or package.loadlib route to host native loading.
+    ☒ Create bed-owned package.loaded, package.preload, package.searchers, package.path, package.config, and package.searchpath fields.
+    ☒ Match package.config and package.searchpath behavior to the running Lua version.
+    ☒ Retain bounded internal source-selection and result records needed for deterministic errors without exposing a public graph-inspection API.
+    ☒ Initialize searchers in the documented order: private preload, exact-provider integration point, then Lua source.
+    ☒ Make entry mutations in loaded and preload authoritative for later non-reserved requires.
+    ☒ Make replacement or mutation of searchers and path authoritative for later non-reserved requires.
+    ☒ Match native Lua behavior when code assigns a different table to package.loaded or package.preload: retain the internal cache/preload tables used by require.
+    ☒ Provide no working package.cpath or package.loadlib route to host native loading.
 
 6.2 Require algorithm:
-    ☐ Validate every TestBed:require name as a string before cache or searcher access; allow empty strings to follow ordinary require resolution semantics.
-    ☐ Resolve module name dfhack to the exact facade installed as the initial global before consulting cache, preload, searchers, providers, or paths.
-    ☐ Apply running-Lua cache semantics for all non-reserved names, including false values and loader-written package.loaded values.
-    ☐ Invoke mutable searchers in order and aggregate their errors in native-compatible form with the TestBed dependency chain.
-    ☐ Pass each searcher's loader data to its loader as the second argument.
-    ☐ Compile every root-loaded Lua source file through the Phase 5 owning-environment factory.
-    ☐ Preserve loader return values and package.loaded decisions according to native require behavior.
-    ☐ On Lua 5.4, return deterministic loader data only when a searcher actually loads the module; return no second result on a cache hit.
-    ☐ On Lua 5.3, preserve its native return shape while retaining source compatibility.
-    ☐ Use exactly ":preload:" for private preload loader data.
-    ☐ Use the normalized resolved filename for root-loaded Lua source and use_source loader data.
-    ☐ Use ":testbed:use_value:<kind>:<name>", ":testbed:use_host:<kind>:<name>", and ":testbed:use_existing:<kind>:<name>" for provider loader data; the alias reports its own token rather than its target's loader data.
+    ☒ Validate every TestBed:require name as a string before cache or searcher access; allow empty strings to follow ordinary require resolution semantics.
+    ☒ Resolve module name dfhack to the exact facade installed as the initial global before consulting cache, preload, searchers, providers, or paths.
+    ☒ Apply running-Lua cache semantics for all non-reserved names, including false values and loader-written package.loaded values.
+    ☒ Invoke mutable searchers in order and aggregate their errors in native-compatible form with the TestBed dependency chain.
+    ☒ Pass each searcher's loader data to its loader as the second argument.
+    ☒ Compile every root-loaded Lua source file through the Phase 5 owning-environment factory.
+    ☒ Preserve loader return values and package.loaded decisions according to native require behavior.
+    ☒ On Lua 5.4, return deterministic loader data only when a searcher actually loads the module; return no second result on a cache hit.
+    ☒ On Lua 5.3, preserve its native return shape while retaining source compatibility.
+    ☒ Use exactly ":preload:" for private preload loader data.
+    ☒ Use the normalized resolved filename for root-loaded Lua source and use_source loader data.
+    ☒ Use ":testbed:use_value:<kind>:<name>", ":testbed:use_host:<kind>:<name>", and ":testbed:use_existing:<kind>:<name>" for provider loader data; the alias reports its own token rather than its target's loader data.
 
 6.3 mkmodule:
-    ☐ Validate every mkmodule name as a string without inventing a non-empty restriction.
-    ☐ Return a stable module environment for repeated mkmodule(name) calls within one bed.
-    ☐ Immediately publish the environment into private package.loaded.
-    ☐ Allow ordinary circular imports to observe that published environment.
-    ☐ Return a fresh environment for the same module name in a different bed.
-    ☐ Do not invent cache-conflict behavior not defined by the proposal; if implementation reveals an unresolved host-compatibility case, update the proposal before adding a rule.
+    ☒ Validate every mkmodule name as a string without inventing a non-empty restriction.
+    ☒ Return a stable module environment for repeated mkmodule(name) calls within one bed.
+    ☒ Immediately publish the environment into private package.loaded.
+    ☒ Allow ordinary circular imports to observe that published environment.
+    ☒ Return a fresh environment for the same module name in a different bed.
+    ☒ Do not invent cache-conflict behavior not defined by the proposal; if implementation reveals an unresolved host-compatibility case, update the proposal before adding a rule.
 
 6.4 Cycle, failure, and isolation verification:
-    ☐ Track active non-reserved module loads by logical name and dependency chain only after ordinary cache lookup.
-    ☐ Allow cycles that observe a non-nil, non-false value already published in private package.loaded.
-    ☐ Fail an unpublished cycle with a deterministic bounded circular-require chain instead of waiting for a recursion-limit error.
-    ☐ Clear active-loading markers on success and every error path.
-    ☐ Preserve loader-written cache state on failure exactly as native Lua would; do not add an automatic rollback policy.
-    ☐ Permit retry after failure whenever the ordinary cache state does not already provide a result.
-    ☐ Prove two beds load the same stateful source into distinct graph state.
-    ☐ Prove nested dependencies use the same owning environment and bed.
-    ☐ Prove package mutations in one bed do not affect another bed or the process package tables.
-    ☐ Test missing modules, malformed searchers, loader errors, false cache values, custom preload entries, custom searchers, and source shadowing.
-    ☐ Test require('') through ordinary cache/searcher resolution, including an exact empty-name provider and the normal missing-module chain when none exists.
-    ☐ Prove package.loaded.dfhack mutation, package.preload.dfhack installation, replacement searchers, and matching source paths cannot redirect require('dfhack') or invoke host require.
-    ☐ Document and test that externally supplied preload functions and replacement searchers retain whatever globals and dependencies their closures already captured.
-    ☐ Bound dependency chains and error formatting so diagnostics never dump unbounded tables or source text.
-    ☐ Add a Lua 5.4 require-conformance matrix covering cache, return, exact loader-data, and package.loaded edge cases.
+    ☒ Track active non-reserved module loads by logical name and dependency chain only after ordinary cache lookup.
+    ☒ Allow cycles that observe a non-nil, non-false value already published in private package.loaded.
+    ☒ Fail an unpublished cycle with a deterministic bounded circular-require chain instead of waiting for a recursion-limit error.
+    ☒ Clear active-loading markers on success and every error path.
+    ☒ Preserve loader-written cache state on failure exactly as native Lua would; do not add an automatic rollback policy.
+    ☒ Permit retry after failure whenever the ordinary cache state does not already provide a result.
+    ☒ Prove two beds load the same stateful source into distinct graph state.
+    ☒ Prove nested dependencies use the same owning environment and bed.
+    ☒ Prove package mutations in one bed do not affect another bed or the process package tables.
+    ☒ Test missing modules, malformed searchers, loader errors, false cache values, custom preload entries, custom searchers, and source shadowing.
+    ☒ Test require('') through ordinary cache/searcher resolution, including an exact empty-name provider and the normal missing-module chain when none exists.
+    ☒ Prove package.loaded.dfhack mutation, package.preload.dfhack installation, replacement searchers, and matching source paths cannot redirect require('dfhack') or invoke host require.
+    ☒ Document and test that externally supplied preload functions and replacement searchers retain whatever globals and dependencies their closures already captured.
+    ☒ Bound dependency chains and error formatting so diagnostics never dump unbounded tables or source text.
+    ☒ Add a Lua 5.4 require-conformance matrix covering cache, return, exact loader-data, and package.loaded edge cases.
 
 Phase 7: Implement ordinary-module TestBedImport provider resolution
     ☐ Exit with all four provider strategies resolved for the module namespace through one exact-token registry, source providers using the Phase 5 environment factory, host borrowing explicit, and namespace-neutral hooks ready for Phase 8 script resolution.

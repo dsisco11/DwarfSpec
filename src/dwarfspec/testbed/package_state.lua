@@ -1,0 +1,236 @@
+-- TestBed-private Lua package state and module loader.
+
+local ModuleEnvironment = require('dwarfspec.testbed.base_environment').ModuleEnvironment
+
+local M = {}
+
+---Limits retained diagnostic text without preserving arbitrary source paths.
+---@type integer
+local MAX_CHAIN_LENGTH = 16
+
+---Limits retained source-selection text in private loader diagnostics.
+---@type integer
+local MAX_RECORD_TEXT_LENGTH = 160
+
+---Returns one bounded logical dependency chain.
+---@param chain string[]
+---@param name string
+---@return string
+local function format_chain(chain, name)
+    local values, first = {}, math.max(1, #chain - MAX_CHAIN_LENGTH + 2)
+    if first > 1 then table.insert(values, '...') end
+    for index = first, #chain do table.insert(values, chain[index]) end
+    if name ~= '' then table.insert(values, name) end
+    return table.concat(values, ' -> ')
+end
+
+---Returns a bounded diagnostic fragment without retaining caller-owned values.
+---@param value any
+---@return string|nil
+local function bounded_text(value)
+    if type(value) ~= 'string' then return nil end
+    if #value <= MAX_RECORD_TEXT_LENGTH then return value end
+    return value:sub(1, MAX_RECORD_TEXT_LENGTH - 3) .. '...'
+end
+
+---Returns a native-compatible private preload search failure.
+---@param name string
+---@return string
+local function preload_error(name)
+    return "\n\tno field package.preload['" .. name .. "']"
+end
+
+---Owns mutable package tables and private source-loader state for one bed.
+---@class dwarfspec.testbed.PackageState
+---@field package table
+---@field loaded table<string, any>
+---@field preload table<string, function>
+---@field active table<string, boolean>
+---@field chain string[]
+---@field record table|nil
+---@field normalized table
+---@field paths dwarfspec.testbed.Paths
+---@field base table|nil
+local PackageState = {}
+PackageState.__index = PackageState
+
+---Constructs private package tables before the owning base environment exists.
+---@param normalized table
+---@param paths dwarfspec.testbed.Paths
+---@return dwarfspec.testbed.PackageState
+function PackageState.new(normalized, paths)
+    assert(type(normalized) == 'table', 'TestBed package state requires normalized configuration')
+    assert(type(paths) == 'table', 'TestBed package state requires paths')
+    local loaded, preload = {}, {}
+    local state = setmetatable({loaded=loaded, preload=preload, active={}, chain={},
+        normalized=normalized, paths=paths}, PackageState)
+    local private_package = {loaded=loaded, preload=preload, path=paths.package_path,
+        config=package.config}
+    private_package.searchpath = function(name, path, separator, replacement)
+        return paths:searchpath(name, path, separator, replacement)
+    end
+    private_package.searchers = {
+        function(name) return state:search_preload(name) end,
+        function(name) return state:search_provider(name) end,
+        function(name) return state:search_source(name) end,
+    }
+    state.package = private_package
+    return state
+end
+
+---Attaches the stable base facade used by subsequently compiled module environments.
+---@param base table
+function PackageState:set_base(base)
+    assert(type(base) == 'table', 'TestBed package state base must be a table')
+    assert(self.base == nil, 'TestBed package state base is already attached')
+    self.base = base
+end
+
+---Returns the bed-local dfhack facade without consulting mutable package state.
+---@return table
+function PackageState:dfhack()
+    assert(self.base ~= nil, 'TestBed package state base is not attached')
+    return self.base.dfhack
+end
+
+---Searches the authoritative private preload table.
+---@param name string
+---@return function|string
+function PackageState:search_preload(name)
+    local loader = self.preload[name]
+    if loader ~= nil then
+        if type(loader) ~= 'function' then
+            error(('TestBed package.preload[%q] must be a function'):format(name), 2)
+        end
+        return loader, ':preload:'
+    end
+    return preload_error(name)
+end
+
+---Builds a loader-data string for one exact provider token.
+---@param strategy string
+---@param name string
+---@return string
+local function provider_data(strategy, name)
+    return (':testbed:%s:module:%s'):format(strategy, name)
+end
+
+---Searches immutable module providers before mutable source paths.
+---@param name string
+---@return function|string
+function PackageState:search_provider(name)
+    local provider = self.normalized.provider_registry.module[name]
+    if provider == nil then return "\n\tno TestBed provider for module '" .. name .. "'" end
+    if provider.use_value ~= nil or provider.use_value == false then
+        return function() return provider.use_value end, provider_data('use_value', name)
+    end
+    if provider.use_existing ~= nil then
+        local target = provider.use_existing.name
+        return function() return self:require(target) end, provider_data('use_existing', name)
+    end
+    if provider.use_host then
+        return function()
+            return self.normalized.host_importer('module', name)
+        end, provider_data('use_host', name)
+    end
+    local filename = self.paths:resolve_source(provider.use_source)
+    return self:source_loader(filename), filename
+end
+
+---Creates one loader that compiles a source file inside a fresh owning environment.
+---@param filename string
+---@return function
+function PackageState:source_loader(filename)
+    return function()
+        assert(self.base ~= nil, 'TestBed package state base is not attached')
+        local environment = ModuleEnvironment.new(self.base, {package=self.package,
+            require=function(name) return self:require(name) end,
+            reqscript=function() error('TestBed reqscript is unavailable until its script loader is installed', 2) end,
+            mkmodule=function(name) return self:mkmodule(name) end,
+        })
+        local chunk, message = environment.values.loadfile(filename)
+        if not chunk then error(message, 0) end
+        return chunk()
+    end
+end
+
+---Searches the mutable private Lua source path.
+---@param name string
+---@return function|string
+function PackageState:search_source(name)
+    local filename, message = self.paths:searchpath(name, self.package.path)
+    if not filename then return message end
+    return self:source_loader(filename), filename
+end
+
+---Loads one non-reserved module with bounded dependency-cycle detection.
+---@param name string
+---@return any value
+---@return any? loader_data
+function PackageState:require(name)
+    if type(name) ~= 'string' then error('TestBed require name must be a string', 2) end
+    if name == 'dfhack' then return self:dfhack() end
+    local cached = self.loaded[name]
+    if cached ~= nil and cached ~= false then return cached end
+    if self.active[name] then
+        error('TestBed circular require: ' .. format_chain(self.chain, name), 2)
+    end
+    self.active[name] = true
+    table.insert(self.chain, name)
+    local function perform()
+        local errors = {}
+        local searchers = self.package.searchers
+        local index = 1
+        while true do
+            local searcher = searchers[index]
+            if searcher == nil then break end
+            if type(searcher) ~= 'function' then
+                error(('TestBed package.searchers[%d] must be a function'):format(index), 0)
+            end
+            local loader, data = searcher(name)
+            if type(loader) == 'function' then
+                local record = {name=bounded_text(name), loader_data=bounded_text(data)}
+                self.record = record
+                local result = loader(name, data)
+                if result ~= nil then self.loaded[name] = result end
+                if self.loaded[name] == nil then self.loaded[name] = true end
+                record.result_type = type(self.loaded[name])
+                self.record = record
+                return self.loaded[name], data
+            end
+            if type(loader) ~= 'string' then
+                error(('TestBed package.searchers[%d] must return a loader or error string'):format(index), 0)
+            end
+            table.insert(errors, loader)
+            index = index + 1
+        end
+        error(('module %q not found:%s\n\tTestBed dependency chain: %s'):format(name,
+            table.concat(errors), format_chain(self.chain, '')), 0)
+    end
+    local results = table.pack(xpcall(perform, function(message) return message end))
+    self.active[name] = nil
+    table.remove(self.chain)
+    if not results[1] then error(results[2], 2) end
+    return results[2], results[3]
+end
+
+---Creates or returns a stable bed-local module environment and publishes it immediately.
+---@param name string
+---@return table
+function PackageState:mkmodule(name)
+    if type(name) ~= 'string' then error('TestBed mkmodule name must be a string', 2) end
+    local existing = self.loaded[name]
+    if existing ~= nil and existing ~= false then return existing end
+    assert(self.base ~= nil, 'TestBed package state base is not attached')
+    local environment = ModuleEnvironment.new(self.base, {package=self.package,
+        require=function(module_name) return self:require(module_name) end,
+        reqscript=function() error('TestBed reqscript is unavailable until its script loader is installed', 2) end,
+        mkmodule=function(module_name) return self:mkmodule(module_name) end,
+    })
+    self.loaded[name] = environment.values
+    return environment.values
+end
+
+M.PackageState = PackageState
+
+return M
