@@ -101,32 +101,37 @@ Phase 0: Freeze the implementation map and baseline
         - No pre-existing failures were observed.
 
 Phase 1: Establish canonical authoring types and the framework-neutral module boundary
-    ☐ Exit with the public type vocabulary and load-safe module skeleton present, documented, and testable without DFHack.
+    ☒ Exit with the public type vocabulary and load-safe module skeleton present, documented, and testable without DFHack.
+        - Evidence: `tests/unit/testbed/testbed_spec.lua` verifies the
+          standalone entry point with absent DFHack globals and a dependency
+          spy; 2 focused and 770 full unit examples passed on 2026-08-02.
 
 1.1 Canonical runtime annotations:
-    ☐ Add dwarfspec.TestBedImportKind with only "module" and "script".
-    ☐ Add dwarfspec.TestBedImportToken with kind and logical name.
-    ☐ Add dwarfspec.TestBedNonNilValue as boolean|number|string|function|table|thread|userdata so use_value=false remains representable while nil is excluded.
-    ☐ Add value, source, host, and existing provider variants and the dwarfspec.TestBedImport union.
-    ☐ Add dwarfspec.TestBedGlobals, dwarfspec.TestBedConfig, and dwarfspec.TestBed.
-    ☐ Annotate TestBed.new(config?), TestBed:require(name), TestBed:reqscript(name), and TestBed:close().
-    ☐ Annotate TestBed:require with a second optional loader-data return instead of pretending every supported Lua version returns it.
-    ☐ Annotate TestBed:reqscript as returning a table and TestBed:close as returning no graph or diagnostic object.
-    ☐ Add documentation comments describing ownership, borrowing, mutability, and failure behavior for every public API.
+    ☒ Add dwarfspec.TestBedImportKind with only "module" and "script".
+    ☒ Add dwarfspec.TestBedImportToken with kind and logical name.
+    ☒ Add dwarfspec.TestBedNonNilValue as boolean|number|string|function|table|thread|userdata so use_value=false remains representable while nil is excluded.
+    ☒ Add value, source, host, and existing provider variants and the dwarfspec.TestBedImport union.
+    ☒ Add dwarfspec.TestBedGlobals, dwarfspec.TestBedConfig, and dwarfspec.TestBed.
+    ☒ Annotate TestBed.new(config?), TestBed:require(name), TestBed:reqscript(name), and TestBed:close().
+    ☒ Annotate TestBed:require with a second optional loader-data return instead of pretending every supported Lua version returns it.
+    ☒ Annotate TestBed:reqscript as returning a table and TestBed:close as returning no graph or diagnostic object.
+    ☒ Add documentation comments describing ownership, borrowing, mutability, and failure behavior for every public API.
 
 1.2 Entry-point dependency boundary:
-    ☐ Add src/dwarfspec/testbed.lua without importing df, dfhack, gui, DwarfSpec host, scheduler, mount, ds, or Busted modules.
-    ☐ Keep live capabilities injectable through a private adapter contract rather than discovered from process globals by the standalone entry point.
-    ☐ Ensure requiring dwarfspec.testbed does not modify process package.path, package.preload, or unrelated package.loaded entries.
-    ☐ Add a focused module-load test that removes DFHack globals and asserts that require('dwarfspec.testbed') succeeds.
-    ☐ Add a dependency-spy test proving the entry point does not load live-only or test-framework modules.
+    ☒ Add src/dwarfspec/testbed.lua without importing df, dfhack, gui, DwarfSpec host, scheduler, mount, ds, or Busted modules.
+    ☒ Keep live capabilities injectable through a private adapter contract rather than discovered from process globals by the standalone entry point.
+        - The entry point has no runtime imports or global capability lookup;
+          the private live adapter remains the sole later integration seam.
+    ☒ Ensure requiring dwarfspec.testbed does not modify process package.path, package.preload, or unrelated package.loaded entries.
+    ☒ Add a focused module-load test that removes DFHack globals and asserts that require('dwarfspec.testbed') succeeds.
+    ☒ Add a dependency-spy test proving the entry point does not load live-only or test-framework modules.
 
 1.3 Declaration ownership:
-    ☐ Make production TestBed annotations authoritative.
-    ☐ Define dwarfspec.ComponentClass as the callable class-table authoring type and define module/script component descriptors with exact kind, name, and optional export fields at the appropriate public declaration surface.
-    ☐ Define dwarfspec.TestBedComponentSource as only the module- and script-descriptor union.
-    ☐ Update src/ds.d.lua to reference canonical TestBed types instead of declaring a second provider/config schema.
-    ☐ Express the two-argument ordinary class overload separately from the optional-third-argument descriptor overload.
+    ☒ Make production TestBed annotations authoritative.
+    ☒ Define dwarfspec.ComponentClass as the callable class-table authoring type and define module/script component descriptors with exact kind, name, and optional export fields at the appropriate public declaration surface.
+    ☒ Define dwarfspec.TestBedComponentSource as only the module- and script-descriptor union.
+    ☒ Update src/ds.d.lua to reference canonical TestBed types instead of declaring a second provider/config schema.
+    ☒ Express the two-argument ordinary class overload separately from the optional-third-argument descriptor overload.
 
 Phase 2: Validate and freeze TestBed configuration
     ☐ Exit with a configuration normalizer that accepts the canonical schema, rejects ambiguous input, and produces an immutable normalized construction snapshot ready for TestBed.new in Phase 9.
