@@ -115,6 +115,28 @@ local function provider_data(strategy, name)
     return (':testbed:%s:module:%s'):format(strategy, name)
 end
 
+---Wraps one provider loader with its exact token, strategy, and ownership context.
+---@param name string
+---@param strategy string
+---@param borrowed_host boolean
+---@param loader function
+---@return function
+function PackageState:provider_loader(name, strategy, borrowed_host, loader)
+    return function(...)
+        local arguments = table.pack(...)
+        local results = table.pack(xpcall(function()
+            return loader(table.unpack(arguments, 1, arguments.n))
+        end,
+            function(message) return message end))
+        if not results[1] then
+            local ownership = borrowed_host and ', borrowed host value' or ''
+            error(('TestBed module provider %q (%s%s) failed: %s'):format(name,
+                strategy, ownership, tostring(results[2])), 0)
+        end
+        return table.unpack(results, 2, results.n)
+    end
+end
+
 ---Searches immutable module providers before mutable source paths.
 ---@param name string
 ---@return function|string
@@ -122,19 +144,22 @@ function PackageState:search_provider(name)
     local provider = self.normalized.provider_registry.module[name]
     if provider == nil then return "\n\tno TestBed provider for module '" .. name .. "'" end
     if provider.use_value ~= nil or provider.use_value == false then
-        return function() return provider.use_value end, provider_data('use_value', name)
+        return self:provider_loader(name, 'use_value', false,
+            function() return provider.use_value end), provider_data('use_value', name)
     end
     if provider.use_existing ~= nil then
         local target = provider.use_existing.name
-        return function() return self:require(target) end, provider_data('use_existing', name)
+        return self:provider_loader(name, 'use_existing', false,
+            function() return self:require(target) end), provider_data('use_existing', name)
     end
     if provider.use_host then
-        return function()
-            return self.normalized.host_importer('module', name)
-        end, provider_data('use_host', name)
+        return self:provider_loader(name, 'use_host', true,
+            function() return self.normalized.host_importer('module', name) end),
+            provider_data('use_host', name)
     end
     local filename = self.paths:resolve_source(provider.use_source)
-    return self:source_loader(filename), filename
+    return self:provider_loader(name, 'use_source', false,
+        self:source_loader(filename)), filename
 end
 
 ---Creates one loader that compiles a source file inside a fresh owning environment.
@@ -195,6 +220,8 @@ function PackageState:require(name)
                 if result ~= nil then self.loaded[name] = result end
                 if self.loaded[name] == nil then self.loaded[name] = true end
                 record.result_type = type(self.loaded[name])
+                record.borrowed_host = type(data) == 'string' and
+                    data:find(':testbed:use_host:module:', 1, true) == 1 or nil
                 self.record = record
                 return self.loaded[name], data
             end

@@ -351,30 +351,35 @@ Phase 6: Implement the private package, bed-local require, and mkmodule
     ☒ Add a Lua 5.4 require-conformance matrix covering cache, return, exact loader-data, and package.loaded edge cases.
 
 Phase 7: Implement ordinary-module TestBedImport provider resolution
-    ☐ Exit with all four provider strategies resolved for the module namespace through one exact-token registry, source providers using the Phase 5 environment factory, host borrowing explicit, and namespace-neutral hooks ready for Phase 8 script resolution.
+    ☒ Exit with all four provider strategies resolved for the module namespace through one exact-token registry, source providers using the Phase 5 environment factory, host borrowing explicit, and namespace-neutral hooks ready for Phase 8 script resolution.
+        - Evidence: `tests/unit/testbed/package_state_spec.lua` covers all
+          module strategies, aliases, source environments, host borrowing,
+          plugin providers, error context, and same-name script-token
+          separation; 10 focused and 809 full unit examples plus Check-Lua
+          for 305 files passed on 2026-08-02.
 
 7.1 Provider searcher:
-    ☐ Install the ordinary-module provider searcher into the exact-provider slot established in Phase 6.
-    ☐ Resolve module providers only for the exact module namespace and logical name requested.
-    ☐ Keep module providers ahead of source search so an explicit provider reserves its exact name.
-    ☐ Return use_value payloads by exact identity and retain native false-module reload behavior.
-    ☐ Load module use_source files through the Phase 5 owning-environment factory.
-    ☐ Route module use_host only through a live require importer injected at construction.
-    ☐ Mark/document use_host results and applicable loader errors as borrowed host values whose host caches and side effects are outside TestBed ownership.
-    ☐ Resolve module use_existing recursively in the module namespace and cache the exact target identity under the alias.
+    ☒ Install the ordinary-module provider searcher into the exact-provider slot established in Phase 6.
+    ☒ Resolve module providers only for the exact module namespace and logical name requested.
+    ☒ Keep module providers ahead of source search so an explicit provider reserves its exact name.
+    ☒ Return use_value payloads by exact identity and retain native false-module reload behavior.
+    ☒ Load module use_source files through the Phase 5 owning-environment factory.
+    ☒ Route module use_host only through a live require importer injected at construction.
+    ☒ Mark/document use_host results and applicable loader errors as borrowed host values whose host caches and side effects are outside TestBed ownership.
+    ☒ Resolve module use_existing recursively in the module namespace and cache the exact target identity under the alias.
 
 7.2 Provider cycles and failures:
-    ☐ Detect module alias-only cycles with a bounded chain.
-    ☐ Include the provider token and strategy in actionable resolution errors.
-    ☐ Preserve ordinary module cache rules when a provider target fails.
-    ☐ Prove the provider registry retains distinct module and script tokens with the same name without prematurely resolving the script token.
-    ☐ On Lua 5.4, test the exact use_value, use_source, use_host, and use_existing loader-data strings and prove a provider cache hit returns no second result.
+    ☒ Detect module alias-only cycles with a bounded chain.
+    ☒ Include the provider token and strategy in actionable resolution errors.
+    ☒ Preserve ordinary module cache rules when a provider target fails.
+    ☒ Prove the provider registry retains distinct module and script tokens with the same name without prematurely resolving the script token.
+    ☒ On Lua 5.4, test the exact use_value, use_source, use_host, and use_existing loader-data strings and prove a provider cache hit returns no second result.
 
 7.3 Native plugin behavior:
-    ☐ Permit genuine plugins.* modules through explicit use_host.
-    ☐ Permit plugins.* fakes through use_value.
-    ☐ Permit pure-Lua plugins.* shims through use_source without invoking native loading.
-    ☐ Add host-spy tests proving only explicit module use_host routes invoke host require.
+    ☒ Permit genuine plugins.* modules through explicit use_host.
+    ☒ Permit plugins.* fakes through use_value.
+    ☒ Permit pure-Lua plugins.* shims through use_source without invoking native loading.
+    ☒ Add host-spy tests proving only explicit module use_host routes invoke host require.
 
 Phase 8: Implement modern bed-local reqscript
     ☐ Exit with a separate script graph that supports annotated module scripts, exact providers, aliases, circular imports, and retryable failures without host cache leakage.

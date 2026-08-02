@@ -54,10 +54,13 @@ end
 ---Builds one wired private package state with a private base facade.
 ---@param root string
 ---@param input? table
+---@param options? table
 ---@return dwarfspec.testbed.PackageState
-local function new_state(root, input)
-    local normalized = config.normalize(input, {consumer_root=root,
-        directory_exists=function() return true end})
+local function new_state(root, input, options)
+    options = options or {}
+    options.consumer_root = root
+    options.directory_exists = function() return true end
+    local normalized = config.normalize(input, options)
     local paths = Paths.new(normalized)
     local state = PackageState.new(normalized, paths)
     local base = BaseEnvironment.new(normalized, {loaders={package=state.package,
@@ -141,6 +144,97 @@ describe('TestBed package state', function()
         assert.equals(root .. '/source/shadow.lua',
             state.package.searchpath('shadow', state.package.path))
         assert.has_error(function() state.package.searchpath('shadow') end)
+        remove_tree(root)
+    end)
+
+    it('resolves each module provider strategy with exact data and identities', function()
+        local root = temporary_directory()
+        write_file(root, 'shim.lua', 'return {source=true, package=package}')
+        local host_calls, host_value = {}, {host=true}
+        local state = new_state(root, {imports={
+            {provide={kind='module', name='value'}, use_value=false},
+            {provide={kind='module', name='source'}, use_source='shim.lua'},
+            {provide={kind='module', name='host'}, use_host=true},
+            {provide={kind='module', name='alias'}, use_existing={kind='module', name='source'}},
+            {provide={kind='script', name='source'}, use_value={script=true}},
+        }}, {
+            host_importer=function(kind, name)
+                table.insert(host_calls, {kind=kind, name=name})
+                return host_value
+            end,
+        })
+        local value, value_data = state:require('value')
+        local source, source_data = state:require('source')
+        local host, host_data = state:require('host')
+        local borrowed_host = state.record.borrowed_host
+        local alias, alias_data = state:require('alias')
+        local cached, cached_data = state:require('host')
+
+        assert.is_false(value)
+        assert.equals(':testbed:use_value:module:value', value_data)
+        assert.is_true(source.source)
+        assert.equals(root .. '/shim.lua', source_data)
+        assert.equals(state.package, source.package)
+        assert.equals(host_value, host)
+        assert.equals(':testbed:use_host:module:host', host_data)
+        assert.is_true(borrowed_host)
+        assert.equals(source, alias)
+        assert.equals(':testbed:use_existing:module:alias', alias_data)
+        assert.equals(host, cached)
+        assert.is_nil(cached_data)
+        assert.same({{kind='module', name='host'}}, host_calls)
+        assert.is_nil(state.normalized.provider_registry.module.source.script)
+        assert.is_true(state.normalized.provider_registry.script.source.use_value.script)
+        remove_tree(root)
+    end)
+
+    it('reports provider strategy failures and bounds alias-only cycles', function()
+        local root = temporary_directory()
+        local host_calls = 0
+        local state = new_state(root, {imports={
+            {provide={kind='module', name='first'}, use_existing={kind='module', name='second'}},
+            {provide={kind='module', name='second'}, use_existing={kind='module', name='first'}},
+            {provide={kind='module', name='plugins.native'}, use_host=true},
+        }}, {
+            host_importer=function(_, name)
+                host_calls = host_calls + 1
+                error('host unavailable: ' .. name)
+            end,
+        })
+        local cycle_ok, cycle_message = pcall(function() state:require('first') end)
+        local host_ok, host_message = pcall(function() state:require('plugins.native') end)
+
+        assert.is_false(cycle_ok)
+        assert.is_truthy(cycle_message:find('TestBed circular require: first -> second -> first', 1, true))
+        assert.is_truthy(cycle_message:find('module provider "first" (use_existing)', 1, true))
+        assert.is_false(host_ok)
+        assert.is_truthy(host_message:find('module provider "plugins.native" (use_host, borrowed host value)', 1, true))
+        assert.equals(1, host_calls)
+        assert.is_nil(state.active.first)
+        assert.is_nil(state.active.second)
+        assert.is_nil(state.active['plugins.native'])
+        remove_tree(root)
+    end)
+
+    it('keeps plugin fakes and source shims away from the host importer', function()
+        local root = temporary_directory()
+        write_file(root, 'plugin_shim.lua', 'return {shim=true}')
+        local host_calls, fake = 0, {fake=true}
+        local state = new_state(root, {imports={
+            {provide={kind='module', name='plugins.fake'}, use_value=fake},
+            {provide={kind='module', name='plugins.shim'}, use_source='plugin_shim.lua'},
+            {provide={kind='module', name='plugins.native'}, use_host=true},
+        }}, {
+            host_importer=function(_, name)
+                host_calls = host_calls + 1
+                return {native=name}
+            end,
+        })
+
+        assert.equals(fake, state:require('plugins.fake'))
+        assert.is_true(state:require('plugins.shim').shim)
+        assert.equals('plugins.native', state:require('plugins.native').native)
+        assert.equals(1, host_calls)
         remove_tree(root)
     end)
 
