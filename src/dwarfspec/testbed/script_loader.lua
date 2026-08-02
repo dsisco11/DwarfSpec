@@ -75,6 +75,7 @@ end
 ---@param name string
 ---@return function|nil
 function ScriptLoader:provider(name)
+    self.package_state:ensure_open()
     local provider = self.package_state.normalized.provider_registry.script[name]
     if provider == nil then return nil end
     if provider.use_value ~= nil then
@@ -98,12 +99,14 @@ end
 ---@param filename string
 ---@return table
 function ScriptLoader:load_source(name, filename)
+    self.package_state:ensure_open()
     validate_annotation(filename)
     local state = self.package_state
     local environment = ModuleEnvironment.new(state.base, {package=state.package,
         require=function(module_name) return state:require(module_name) end,
         reqscript=function(script_name) return self:reqscript(script_name) end,
         mkmodule=function(module_name) return state:mkmodule(module_name) end,
+        ensure_open=function() return state:ensure_open() end,
     })
     rawset(environment.values, 'dfhack_flags', {module=true})
     self.scripts[name] = environment.values
@@ -117,6 +120,7 @@ end
 ---@param name string
 ---@return table
 function ScriptLoader:reqscript(name)
+    self.package_state:ensure_open()
     if type(name) ~= 'string' then error('TestBed reqscript name must be a string', 2) end
     local cached = self.scripts[name]
     if cached ~= nil then return cached end
@@ -146,6 +150,12 @@ function ScriptLoader:reqscript(name)
         error(value, 2)
     end
     return value
+end
+
+---Clears script cache references after the owning TestBed has closed.
+function ScriptLoader:close()
+    for key in pairs(self.scripts) do self.scripts[key] = nil end
+    self.active, self.chain, self.package_state = {}, {}, nil
 end
 
 M.ScriptLoader = ScriptLoader

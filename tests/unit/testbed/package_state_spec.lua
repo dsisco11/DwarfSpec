@@ -63,7 +63,7 @@ local function new_state(root, input, options)
     options.directory_exists = function() return true end
     local normalized = config.normalize(input, options)
     local paths = Paths.new(normalized)
-    local state = PackageState.new(normalized, paths)
+    local state = PackageState.new(normalized, paths, {closed=false})
     local base = BaseEnvironment.new(normalized, {loaders={package=state.package,
         require=function(name) return state:require(name) end,
         reqscript=function(name) return state:reqscript(name) end,

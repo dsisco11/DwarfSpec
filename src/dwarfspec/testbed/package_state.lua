@@ -52,18 +52,21 @@ end
 ---@field paths dwarfspec.testbed.Paths
 ---@field base table|nil
 ---@field script_loader dwarfspec.testbed.ScriptLoader|nil
+---@field guard table
 local PackageState = {}
 PackageState.__index = PackageState
 
 ---Constructs private package tables before the owning base environment exists.
 ---@param normalized table
 ---@param paths dwarfspec.testbed.Paths
+---@param guard table
 ---@return dwarfspec.testbed.PackageState
-function PackageState.new(normalized, paths)
+function PackageState.new(normalized, paths, guard)
     assert(type(normalized) == 'table', 'TestBed package state requires normalized configuration')
     assert(type(paths) == 'table', 'TestBed package state requires paths')
     local loaded, preload = {}, {}
-    local state = setmetatable({loaded=loaded, preload=preload, active={}, chain={},
+    assert(type(guard) == 'table', 'TestBed package state requires a close guard')
+    local state = setmetatable({loaded=loaded, preload=preload, active={}, chain={}, guard=guard,
         normalized=normalized, paths=paths}, PackageState)
     local private_package = {loaded=loaded, preload=preload, path=paths.package_path,
         config=package.config}
@@ -79,9 +82,23 @@ function PackageState.new(normalized, paths)
     return state
 end
 
+---Raises the shared closed-TestBed error before accessing retained graph state.
+function PackageState:ensure_open()
+    if self.guard.closed then error('TestBed is closed', 2) end
+end
+
+---Clears private graph references while retaining only the shared close guard.
+function PackageState:close()
+    for key in pairs(self.loaded) do self.loaded[key] = nil end
+    for key in pairs(self.preload) do self.preload[key] = nil end
+    self.active, self.chain, self.record = {}, {}, nil
+    self.normalized, self.paths, self.base, self.script_loader, self.package = nil, nil, nil, nil, nil
+end
+
 ---Attaches the stable base facade used by subsequently compiled module environments.
 ---@param base table
 function PackageState:set_base(base)
+    self:ensure_open()
     assert(type(base) == 'table', 'TestBed package state base must be a table')
     assert(self.base == nil, 'TestBed package state base is already attached')
     self.base = base
@@ -90,6 +107,7 @@ end
 ---Installs the one bed-local script loader used by source module environments.
 ---@param loader dwarfspec.testbed.ScriptLoader
 function PackageState:set_script_loader(loader)
+    self:ensure_open()
     assert(type(loader) == 'table', 'TestBed script loader must be a table')
     assert(self.script_loader == nil, 'TestBed script loader is already attached')
     self.script_loader = loader
@@ -99,6 +117,7 @@ end
 ---@param name string
 ---@return table
 function PackageState:reqscript(name)
+    self:ensure_open()
     assert(self.script_loader ~= nil, 'TestBed script loader is not attached')
     return self.script_loader:reqscript(name)
 end
@@ -106,6 +125,7 @@ end
 ---Returns the bed-local dfhack facade without consulting mutable package state.
 ---@return table
 function PackageState:dfhack()
+    self:ensure_open()
     assert(self.base ~= nil, 'TestBed package state base is not attached')
     return self.base.dfhack
 end
@@ -114,6 +134,7 @@ end
 ---@param name string
 ---@return function|string
 function PackageState:search_preload(name)
+    self:ensure_open()
     local loader = self.preload[name]
     if loader ~= nil then
         if type(loader) ~= 'function' then
@@ -158,6 +179,7 @@ end
 ---@param name string
 ---@return function|string
 function PackageState:search_provider(name)
+    self:ensure_open()
     local provider = self.normalized.provider_registry.module[name]
     if provider == nil then return "\n\tno TestBed provider for module '" .. name .. "'" end
     if provider.use_value ~= nil or provider.use_value == false then
@@ -184,11 +206,13 @@ end
 ---@return function
 function PackageState:source_loader(filename)
     return function()
+        self:ensure_open()
         assert(self.base ~= nil, 'TestBed package state base is not attached')
         local environment = ModuleEnvironment.new(self.base, {package=self.package,
             require=function(name) return self:require(name) end,
             reqscript=function(name) return self:reqscript(name) end,
             mkmodule=function(name) return self:mkmodule(name) end,
+            ensure_open=function() return self:ensure_open() end,
         })
         local chunk, message = environment.values.loadfile(filename)
         if not chunk then error(message, 0) end
@@ -200,6 +224,7 @@ end
 ---@param name string
 ---@return function|string
 function PackageState:search_source(name)
+    self:ensure_open()
     local filename, message = self.paths:searchpath(name, self.package.path)
     if not filename then return message end
     return self:source_loader(filename), filename
@@ -210,6 +235,7 @@ end
 ---@return any value
 ---@return any? loader_data
 function PackageState:require(name)
+    self:ensure_open()
     if type(name) ~= 'string' then error('TestBed require name must be a string', 2) end
     if name == 'dfhack' then return self:dfhack() end
     local cached = self.loaded[name]
@@ -262,6 +288,7 @@ end
 ---@param name string
 ---@return table
 function PackageState:mkmodule(name)
+    self:ensure_open()
     if type(name) ~= 'string' then error('TestBed mkmodule name must be a string', 2) end
     local existing = self.loaded[name]
     if existing ~= nil and existing ~= false then return existing end
@@ -270,6 +297,7 @@ function PackageState:mkmodule(name)
         require=function(module_name) return self:require(module_name) end,
         reqscript=function(script_name) return self:reqscript(script_name) end,
         mkmodule=function(module_name) return self:mkmodule(module_name) end,
+        ensure_open=function() return self:ensure_open() end,
     })
     self.loaded[name] = environment.values
     return environment.values

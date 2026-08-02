@@ -91,6 +91,10 @@ local function validate_module_loaders(loaders)
         assert(type(loaders[name]) == 'function',
             ('TestBed module environment %s must be a function'):format(name))
     end
+    if loaders.ensure_open ~= nil then
+        assert(type(loaders.ensure_open) == 'function',
+            'TestBed module environment ensure_open must be a function')
+    end
 end
 
 ---Constructs a fresh source-module environment from a base facade and loaders.
@@ -102,6 +106,7 @@ function ModuleEnvironment.new(base, loaders)
     validate_module_loaders(loaders)
     local values = {}
     local environment = setmetatable({values=values, base=base}, ModuleEnvironment)
+    local ensure_open = loaders.ensure_open or function() end
 
     ---Compiles a chunk into this environment unless an explicit environment is supplied.
     ---@param chunk string|function
@@ -110,6 +115,7 @@ function ModuleEnvironment.new(base, loaders)
     ---@param explicit_environment? table
     ---@return function|nil, string|nil
     local function bound_load(chunk, chunkname, mode, explicit_environment)
+        ensure_open()
         if explicit_environment == nil then explicit_environment = values end
         return load(chunk, chunkname, mode, explicit_environment)
     end
@@ -120,6 +126,7 @@ function ModuleEnvironment.new(base, loaders)
     ---@param explicit_environment? table
     ---@return function|nil, string|nil
     local function bound_loadfile(filename, mode, explicit_environment)
+        ensure_open()
         if explicit_environment == nil then explicit_environment = values end
         return loadfile(filename, mode, explicit_environment)
     end
@@ -128,6 +135,7 @@ function ModuleEnvironment.new(base, loaders)
     ---@param filename string
     ---@return any ...
     local function bound_dofile(filename)
+        ensure_open()
         local chunk, message = bound_loadfile(filename)
         if not chunk then error(message, 2) end
         return chunk()

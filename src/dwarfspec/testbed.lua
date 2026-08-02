@@ -52,13 +52,16 @@
 
 ---Owns one bed-local module and script graph.
 ---@class dwarfspec.TestBed
+---@field guard table
+---@field package_state dwarfspec.testbed.PackageState|nil
+---@field script_loader dwarfspec.testbed.ScriptLoader|nil
 local TestBed = {}
+TestBed.__index = TestBed
 
----Reports that an unimplemented TestBed operation was invoked.
----@param operation string
----@return never
-local function unavailable(operation)
-    error(('dwarfspec.testbed %s is not available yet'):format(operation), 2)
+---Raises the shared closed-TestBed error before accessing private state.
+---@param self dwarfspec.TestBed
+function TestBed:ensure_open()
+    if self.guard.closed then error('TestBed is closed', 2) end
 end
 
 ---Creates a bed-local module environment from a typed configuration.
@@ -67,7 +70,24 @@ end
 ---@param config? dwarfspec.TestBedConfig
 ---@return dwarfspec.TestBed
 function TestBed.new(config)
-    return unavailable('TestBed.new')
+    local normalize = require('dwarfspec.testbed.config').normalize
+    local Paths = require('dwarfspec.testbed.paths').Paths
+    local PackageState = require('dwarfspec.testbed.package_state').PackageState
+    local BaseEnvironment = require('dwarfspec.testbed.base_environment').BaseEnvironment
+    local ScriptLoader = require('dwarfspec.testbed.script_loader').ScriptLoader
+    local guard = {closed=false}
+    local normalized = normalize(config)
+    local paths = Paths.new(normalized)
+    local state = PackageState.new(normalized, paths, guard)
+    local base = BaseEnvironment.new(normalized, {loaders={package=state.package,
+        require=function(name) return state:require(name) end,
+        reqscript=function(name) return state:reqscript(name) end,
+        mkmodule=function(name) return state:mkmodule(name) end,
+        ensure_open=function() return state:ensure_open() end,
+    }}).base
+    state:set_base(base)
+    local scripts = ScriptLoader.new(state)
+    return setmetatable({guard=guard, package_state=state, script_loader=scripts}, TestBed)
 end
 
 ---Loads one Lua module through this TestBed.
@@ -78,7 +98,8 @@ end
 ---@return any value
 ---@return any? loader_data
 function TestBed:require(name)
-    return unavailable('TestBed:require')
+    self:ensure_open()
+    return self.package_state:require(name)
 end
 
 ---Loads one annotated DFHack script module through this TestBed.
@@ -87,14 +108,19 @@ end
 ---@param name string
 ---@return table
 function TestBed:reqscript(name)
-    return unavailable('TestBed:reqscript')
+    self:ensure_open()
+    return self.script_loader:reqscript(name)
 end
 
 ---Closes this TestBed and releases its owned graph.
 ---Borrowed values are not mutated or released, and this operation returns no
 ---graph, inspection, or diagnostic object.
 function TestBed:close()
-    return unavailable('TestBed:close')
+    if self.guard.closed then return end
+    self.guard.closed = true
+    self.script_loader:close()
+    self.package_state:close()
+    self.script_loader, self.package_state = nil, nil
 end
 
 return TestBed

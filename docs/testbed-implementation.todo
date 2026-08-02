@@ -426,29 +426,34 @@ Phase 8: Implement modern bed-local reqscript
     ☒ Test reqscript('') through the ordinary script cache/provider/root order instead of a special validation failure.
 
 Phase 9: Complete lifecycle semantics and the public TestBed facade
-    ☐ Exit with a cohesive TestBed.new/require/reqscript/close API whose ownership and closed-state behavior is uniform across every retained closure.
+    ☒ Exit with a cohesive TestBed.new/require/reqscript/close API whose ownership and closed-state behavior is uniform across every retained closure.
+        - Evidence: `tests/unit/testbed/testbed_spec.lua` covers standalone
+          construction, conventional loading, configured providers, fresh
+          state, retained closures, retained values, and idempotent close; 42
+          focused and 815 full unit examples plus Check-Lua for 306 files
+          passed on 2026-08-02.
 
 9.1 Public orchestration:
-    ☐ Assemble normalized configuration, path state, provider registry, base facade, dfhack facade, private package, module cache, and script cache into one bed.
-    ☐ Ensure no user module or script is loaded during TestBed.new.
-    ☐ Keep construction atomic; discard partially created internal state if validation or setup fails.
-    ☐ Keep implementation internals private and return only the documented TestBed surface.
+    ☒ Assemble normalized configuration, path state, provider registry, base facade, dfhack facade, private package, module cache, and script cache into one bed.
+    ☒ Ensure no user module or script is loaded during TestBed.new.
+    ☒ Keep construction atomic; discard partially created internal state if validation or setup fails.
+    ☒ Keep implementation internals private and return only the documented TestBed surface.
 
 9.2 Shared closed-state sentinel:
-    ☐ Make close idempotent.
-    ☐ Mark the graph closed and clear TestBed-owned cache, environment, provider, configuration, source-record, and result-record references.
-    ☐ Retain only the shared closed-state sentinel and static closed-operation error metadata needed by retained loader closures; retain no inspectable graph state.
-    ☐ Check the same sentinel in TestBed:require, TestBed:reqscript, and every bed-owned require, reqscript, mkmodule, load, loadfile, and dofile closure retained by loaded code.
-    ☐ Return a consistent actionable closed-TestBed error from all guarded entry points.
-    ☐ Leave already-created consumer values callable as ordinary caller-owned references after close.
-    ☐ Do not introduce a process-global registry of active or closed TestBeds.
-    ☐ Prove an unclosed standalone bed installs no process-global hooks or loader mutations, without representing that as cleanup of consumer side effects.
+    ☒ Make close idempotent.
+    ☒ Mark the graph closed and clear TestBed-owned cache, environment, provider, configuration, source-record, and result-record references.
+    ☒ Retain only the shared closed-state sentinel and static closed-operation error metadata needed by retained loader closures; retain no inspectable graph state.
+    ☒ Check the same sentinel in TestBed:require, TestBed:reqscript, and every bed-owned require, reqscript, mkmodule, load, loadfile, and dofile closure retained by loaded code.
+    ☒ Return a consistent actionable closed-TestBed error from all guarded entry points.
+    ☒ Leave already-created consumer values callable as ordinary caller-owned references after close.
+    ☒ Do not introduce a process-global registry of active or closed TestBeds.
+    ☒ Prove an unclosed standalone bed installs no process-global hooks or loader mutations, without representing that as cleanup of consumer side effects.
 
 9.3 Core acceptance tests:
-    ☐ Add a zero-configuration standalone test loading a conventional module and annotated script from a consumer project root.
-    ☐ Add a configured standalone test with module and script dependencies using all non-host strategies.
-    ☐ Test fresh state, nested replacement visibility, close idempotence, retained closure failures, and retained consumer values.
-    ☐ Test that command-execution functions supplied through a live backing are treated as host effects rather than graph members.
+    ☒ Add a zero-configuration standalone test loading a conventional module and annotated script from a consumer project root.
+    ☒ Add a configured standalone test with module and script dependencies using all non-host strategies.
+    ☒ Test fresh state, nested replacement visibility, close idempotence, retained closure failures, and retained consumer values.
+    ☒ Test that command-execution functions supplied through a live backing are treated as host effects rather than graph members.
 
 Phase 10: Add the live adapter and synthesized component imports
     ☐ Exit with live construction parameters supplied explicitly by DwarfSpec and with the foundational host-module set deterministic and overridable.

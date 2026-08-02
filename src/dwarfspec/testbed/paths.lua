@@ -23,8 +23,9 @@ local function current_directory()
         'TestBed could not determine the process current directory')
     local directory = process:read('*l')
     process:close()
-    return assert(directory and directory ~= '',
+    assert(directory and directory ~= '',
         'TestBed could not determine the process current directory')
+    return directory
 end
 
 ---Normalizes separators and lexical dot segments without enforcing containment.
