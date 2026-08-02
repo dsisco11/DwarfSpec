@@ -134,49 +134,59 @@ Phase 1: Establish canonical authoring types and the framework-neutral module bo
     ☒ Express the two-argument ordinary class overload separately from the optional-third-argument descriptor overload.
 
 Phase 2: Validate and freeze TestBed configuration
-    ☐ Exit with a configuration normalizer that accepts the canonical schema, rejects ambiguous input, and produces an immutable normalized construction snapshot ready for TestBed.new in Phase 9.
+    ☒ Exit with a configuration normalizer that accepts the canonical schema, rejects ambiguous input, and produces an immutable normalized construction snapshot ready for TestBed.new in Phase 9.
+        - Evidence: `tests/unit/testbed/config_spec.lua` covers defaults,
+          validation, provider merging, and frozen-versus-borrowed state; 8
+          focused and 778 full unit examples passed on 2026-08-02.
 
 2.1 Top-level validation and defaults:
-    ☐ Accept nil as an empty configuration.
-    ☐ Reject non-table configuration values and unknown top-level fields.
-    ☐ Validate module_roots and script_roots as dense arrays of strings.
-    ☐ Validate globals as a table with string keys and arbitrary values, and component_imports as a boolean when present.
-    ☐ Validate globals.dfhack as a table when present.
-    ☐ Reject configured replacements for _G, require, reqscript, mkmodule, package, load, loadfile, dofile, reload, script_environment, and dfhack_flags.
-    ☐ Apply offline defaults: module_roots ordered as src/scripts_modinstalled, src, and .; script_roots as src/scripts_modinstalled; component_imports=false; imports empty.
-    ☐ Treat explicit root arrays, including empty arrays, as replacements rather than additions to defaults.
-    ☐ Establish one effective consumer root at construction; framework-neutral TestBed.new uses the process current directory and the live adapter supplies the active consumer project root.
-    ☐ Accept construction profile, consumer root, host importer, and synthesized-provider inputs only through a private internal constructor path; do not add a public project_root or adapter field to dwarfspec.TestBedConfig.
-    ☐ Select context-dependent defaults before normalization and freezing: component_imports=false for framework-neutral construction and true for descriptor-mount construction.
-    ☐ Skip missing default directories while retaining their logical order in diagnostics where useful.
+    ☒ Accept nil as an empty configuration.
+    ☒ Reject non-table configuration values and unknown top-level fields.
+    ☒ Validate module_roots and script_roots as dense arrays of strings.
+    ☒ Validate globals as a table with string keys and arbitrary values, and component_imports as a boolean when present.
+    ☒ Validate globals.dfhack as a table when present.
+    ☒ Reject configured replacements for _G, require, reqscript, mkmodule, package, load, loadfile, dofile, reload, script_environment, and dfhack_flags.
+    ☒ Apply offline defaults: module_roots ordered as src/scripts_modinstalled, src, and .; script_roots as src/scripts_modinstalled; component_imports=false; imports empty.
+    ☒ Treat explicit root arrays, including empty arrays, as replacements rather than additions to defaults.
+    ☒ Establish one effective consumer root at construction; framework-neutral TestBed.new uses the process current directory and the live adapter supplies the active consumer project root.
+    ☒ Accept construction profile, consumer root, host importer, and synthesized-provider inputs only through a private internal constructor path; do not add a public project_root or adapter field to dwarfspec.TestBedConfig.
+    ☒ Select context-dependent defaults before normalization and freezing: component_imports=false for framework-neutral construction and true for descriptor-mount construction.
+    ☒ Skip missing default directories while retaining their logical order in diagnostics where useful.
 
 2.2 Provider validation:
-    ☐ Validate imports as a dense ordered array of provider tables.
-    ☐ Reject unknown provider fields and require every provide token to use the canonical kind and a string name; do not add a non-empty restriction absent from the authoring type.
-    ☐ Require exactly one raw-present strategy key among use_value, use_source, use_host, and use_existing.
-    ☐ Recognize use_value=false and reject use_value=nil as an absent/invalid strategy.
-    ☐ Require script use_value payloads to be tables while allowing any non-nil Lua module value.
-    ☐ Require use_host to be exactly true.
-    ☐ Validate use_source as a source path string and leave empty or otherwise unusable strings to ordinary path/load failure semantics.
-    ☐ Validate use_existing as a canonical string-name token in the same namespace as provide.
-    ☐ Reject duplicate user-provided tokens.
-    ☐ Reject every provider whose provide token is {kind='module', name='dfhack'}.
-    ☐ Reject component_imports=true and all use_host providers when no live importer is supplied.
+    ☒ Validate imports as a dense ordered array of provider tables.
+    ☒ Reject unknown provider fields and require every provide token to use the canonical kind and a string name; do not add a non-empty restriction absent from the authoring type.
+    ☒ Require exactly one raw-present strategy key among use_value, use_source, use_host, and use_existing.
+    ☒ Recognize use_value=false and reject use_value=nil as an absent/invalid strategy.
+    ☒ Require script use_value payloads to be tables while allowing any non-nil Lua module value.
+    ☒ Require use_host to be exactly true.
+    ☒ Validate use_source as a source path string and leave empty or otherwise unusable strings to ordinary path/load failure semantics.
+    ☒ Validate use_existing as a canonical string-name token in the same namespace as provide.
+    ☒ Reject duplicate user-provided tokens.
+    ☒ Reject every provider whose provide token is {kind='module', name='dfhack'}.
+    ☒ Reject component_imports=true and all use_host providers when no live importer is supplied.
 
 2.3 Frozen construction state:
-    ☐ Copy the configuration table, provider array, provider tables, tokens, roots, and globals container at construction.
-    ☐ Deliberately borrow use_value payloads and nested values supplied inside globals; document that their later mutation is observable.
-    ☐ Merge synthesized providers and user providers before freezing: user providers replace synthesized tokens, while duplicate user tokens remain errors.
-    ☐ Build the immutable normalized provider registry keyed by exact (kind, name) identity only after that merge.
-    ☐ Prevent later mutation of caller-owned configuration containers from changing the bed.
-    ☐ Keep private runtime package state mutable and separate from the frozen normalized configuration.
+    ☒ Copy the configuration table, provider array, provider tables, tokens, roots, and globals container at construction.
+    ☒ Deliberately borrow use_value payloads and nested values supplied inside globals; document that their later mutation is observable.
+    ☒ Merge synthesized providers and user providers before freezing: user providers replace synthesized tokens, while duplicate user tokens remain errors.
+    ☒ Build the immutable normalized provider registry keyed by exact (kind, name) identity only after that merge.
+    ☒ Prevent later mutation of caller-owned configuration containers from changing the bed.
+    ☒ Keep private runtime package state mutable and separate from the frozen normalized configuration.
 
 2.4 Focused verification:
-    ☐ Add table-driven tests for every valid omission and invalid field/type combination, including non-string globals keys.
-    ☐ Test explicit empty roots, root replacement, provider order, duplicate keys, same text in different namespaces, false values, nil values, and script table constraints.
-    ☐ Test copied containers and borrowed payload identities independently.
-    ☐ Prove empty string token names and use_source paths pass type validation while non-string values fail validation.
-    ☐ Test clear actionable errors that identify the failing configuration path.
+    ☒ Add table-driven tests for every valid omission and invalid field/type combination, including non-string globals keys.
+    ☒ Test explicit empty roots, root replacement, provider order, duplicate keys, same text in different namespaces, false values, nil values, and script table constraints.
+    ☒ Test copied containers and borrowed payload identities independently.
+    ☒ Prove empty string token names and use_source paths pass type validation while non-string values fail validation.
+    ☒ Test clear actionable errors that identify the failing configuration path.
+
+2.5 Configuration edge-case matrix:
+    ☒ Add table-driven coverage for the previously untested root-array, provider-array, token-shape, and reserved-global invalid inputs.
+    ☒ Prove copied globals and provider-array containers do not observe later caller-container replacement while their documented nested borrowed values remain observable.
+    ☒ Re-run focused and full validation, then independently review this expanded matrix before checking this task.
+        - Evidence: 9 focused configuration examples, 779 full unit examples,
+          and Check-Lua passed for 298 files on 2026-08-02.
 
 Phase 3: Build deterministic path and source resolution
     ☐ Exit with isolated module/script search rules that match the proposal without mutating host paths or inventing containment guarantees.
