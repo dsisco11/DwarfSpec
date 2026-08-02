@@ -79,7 +79,7 @@ Phase 5 - Remove and enforce the exception:
     ☑ Run syntax, formatting, declaration, and complete unit validation.
 
 Phase 6 - Final runtime verification:
-    ☐ Run the focused save-game, overlay-registration, diagnostics, scheduler, failure-recovery, and cleanup live sets.
-    ☐ Run the complete live suite and compare its results and cleanup state with Phase 0.
-    ☐ Confirm the service is idle with no queued or quarantined work after validation.
-    ☐ Report implemented ownership changes, verification results, and any baseline-matching known failure without creating a separate evidence document.
+    ☑ Run the focused save-game, overlay-registration, diagnostics, scheduler, failure-recovery, and cleanup live sets.
+    ☑ Run the complete live suite and compare its results and cleanup state with Phase 0.
+    ☑ Confirm the service is idle with no queued or quarantined work after validation.
+    ☑ Report implemented ownership changes, verification results, and any baseline-matching known failure without creating a separate evidence document.
