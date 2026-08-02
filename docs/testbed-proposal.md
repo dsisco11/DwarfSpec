@@ -81,9 +81,12 @@ avoid.
 
 DwarfSpec should therefore expose ordinary TestBed instances to standalone
 callers. Every component-mount overload should accept the same declarative
-configuration type through one optional final parameter. The mount command
-always creates and owns its own TestBed instance; it never accepts an
-instantiated TestBed.
+configuration type through one optional final parameter. Supplying that
+configuration creates a mount-owned TestBed. Omitting it from an ordinary
+class or instance mount preserves the existing mount path and does not create
+a TestBed. A source-backed mount necessarily creates a TestBed because the bed
+must resolve the component source; omitted configuration on that form means
+the fixed defaults. The mount command never accepts an instantiated TestBed.
 
 ## Recommended public contract
 
@@ -230,10 +233,11 @@ needed, the unambiguous call is `ds.mount(Component, nil, testbed)`. The
 declaration file should publish an annotated overload for every supported
 component class, component instance, module source, and script source form,
 with `dwarfspec.TestBedConfig` in the same optional final position. Omitting
-that parameter is exactly equivalent to passing an empty configuration table.
-Every overload creates one fresh mount-owned TestBed, including class and
-instance overloads. Source-backed overloads use that bed to resolve the
-component itself.
+that parameter from a class or instance overload preserves the current
+TestBed-free behavior. Supplying it creates one fresh mount-owned TestBed.
+Module- and script-source overloads always create one fresh mount-owned
+TestBed, using the fixed defaults when configuration is omitted, because that
+bed resolves the component itself.
 
 This is a strong authoring contract for plain Lua tables, not a new wrapper
 builder. Runtime code must apply the same schema: reject unknown fields and
@@ -366,10 +370,11 @@ both downstream paths from the generated artifact:
    checkout path. The fixture must load both an ordinary `require`/`mkmodule`
    graph and an annotated `reqscript` graph.
 2. Use the same generated rock for a live DFHack consumer fixture that calls
-   every supported `ds.mount` form with an omitted and an explicit TestBed
-   configuration, loads production-style module and script dependencies from
-   the consumer root, interacts with the mounted component, and finishes with
-   confirmed cleanup.
+   ordinary class and instance `ds.mount` forms without creating a TestBed,
+   exercises TestBed-backed forms with explicit configuration, exercises
+   source-backed forms with default and explicit configuration, loads
+   production-style module and script dependencies from the consumer root,
+   interacts with the mounted component, and finishes with confirmed cleanup.
 
 A downstream authoring fixture must load the installed declarations and prove
 that valid TestBed fields receive completion and type checking, invalid field
@@ -422,8 +427,8 @@ clean up global or native side effects performed by the consumer module itself.
 ### Live component-test usage
 
 Every `ds.mount` form should accept a `dwarfspec.TestBedConfig` as its optional
-final argument. Omitting it is equivalent to passing `{}`. In either case,
-`ds.mount` creates and owns one fresh TestBed instance:
+final argument. Supplying it makes `ds.mount` create and own one fresh TestBed
+instance:
 
 ```lua
 it('renders the stored value', function()
@@ -452,6 +457,13 @@ DwarfSpec unmounts the component before closing the bed. Callers that need to
 construct, reuse, or inspect a TestBed instance directly do so only through the
 standalone `TestBed.new(config)` API; instantiated beds are not valid mount
 arguments.
+
+An ordinary class or instance mount with no final TestBed configuration uses
+the existing mount implementation and creates no TestBed. A module- or
+script-source mount is inherently TestBed-backed: when its final configuration
+is omitted, DwarfSpec creates the required bed from the fixed defaults. This
+keeps existing calls free of unused TestBed lifecycle work while retaining a
+concise conventional source-backed form.
 
 If configuration validation, bed creation, construction, or mounting fails,
 `ds.mount` must immediately unwind every resource it created before reporting
@@ -682,8 +694,11 @@ The live mount adapter should:
 
 - validate the final `dwarfspec.TestBedConfig` independently from existing
   component and mount options;
-- create one fresh bed from the supplied configuration or from `{}` when the
-  parameter is omitted;
+- create one fresh bed when configuration is supplied;
+- create one fresh bed from the fixed defaults when a module- or script-source
+  form omits configuration;
+- leave ordinary class and instance mounts TestBed-free when configuration is
+  omitted;
 - provide the DFHack base environment and host importer;
 - constrain paths to the active consumer project;
 - resolve a module or script source through the bed when that overload is used;
@@ -786,8 +801,10 @@ The first usable increment should contain:
   overload;
 - typed module- and script-source mount overloads that resolve the component
   through the mount-created bed;
-- mount ownership of one fresh TestBed created from an omitted or supplied
-  configuration;
+- no TestBed allocation or lifecycle change for existing class and instance
+  mounts that omit TestBed configuration;
+- mount ownership of one fresh TestBed when configuration is supplied or a
+  source-backed form requires default TestBed resolution;
 - the fixed project-layout defaults and documented live component-import set;
 - optional `module_roots`, `sources`, `modules`, `globals`, exact `imports`, and
   `component_imports=false` for disabling default host imports on a mount;
@@ -826,8 +843,12 @@ A prototype is successful only if it demonstrates all of the following:
   `dwarfspec.TestBedConfig` field from the installed rock;
 - every `ds.mount` overload exposes the same optional final
   `dwarfspec.TestBedConfig` parameter;
-- each mount overload treats omission as `{}`, creates one fresh bed from the
-  effective configuration, and closes it automatically;
+- existing class and instance mount calls that omit TestBed configuration do
+  not create a bed and retain their existing behavior;
+- each mount overload that receives TestBed configuration creates one fresh
+  bed from it and closes that bed automatically;
+- module- and script-source overloads create one fresh bed from the fixed
+  defaults when configuration is omitted and close it automatically;
 - module- and script-source overloads resolve the component itself through the
   mount-created bed, so replacements affect its defining graph;
 - existing two-argument mount calls remain source- and behavior-compatible;
@@ -906,10 +927,13 @@ standalone Lua.
 The best design is an instance-scoped, strict, deterministic loader shared by
 standalone and live tests. Standalone tests create the instance directly;
 component tests pass the same strongly typed configuration as the optional
-final argument to any `ds.mount` overload. DwarfSpec always creates and owns the
-mount-scoped instance and its cleanup. That design provides controlled
-composition and fresh per-test state while preserving ordinary Lua module and
-DwarfSpec lifecycle boundaries.
+final argument to any `ds.mount` overload when they need TestBed-backed
+composition. Source-backed mounts create a bed even when configuration is
+omitted because source resolution requires it. Existing class and instance
+mounts create no TestBed when the final argument is omitted. Whenever a mount
+creates a TestBed, DwarfSpec owns that instance and its cleanup. That design
+provides controlled composition and fresh per-test state without imposing an
+unused loader lifecycle on ordinary mounts.
 
 ## References
 
