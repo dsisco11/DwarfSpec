@@ -74,6 +74,77 @@ end
 local BaseEnvironment = {}
 BaseEnvironment.__index = BaseEnvironment
 
+---Owns one fresh source-module environment and its bound dynamic loaders.
+---@class dwarfspec.testbed.ModuleEnvironment
+---@field values table
+---@field base table
+local ModuleEnvironment = {}
+ModuleEnvironment.__index = ModuleEnvironment
+
+---Validates the explicit private loader inputs for one module environment.
+---@param loaders table
+---@return void
+local function validate_module_loaders(loaders)
+    assert(type(loaders) == 'table', 'TestBed module environment loaders must be a table')
+    assert(type(loaders.package) == 'table', 'TestBed module environment package must be a table')
+    for _, name in ipairs({'require', 'reqscript', 'mkmodule'}) do
+        assert(type(loaders[name]) == 'function',
+            ('TestBed module environment %s must be a function'):format(name))
+    end
+end
+
+---Constructs a fresh source-module environment from a base facade and loaders.
+---@param base table
+---@param loaders table
+---@return dwarfspec.testbed.ModuleEnvironment
+function ModuleEnvironment.new(base, loaders)
+    assert(type(base) == 'table', 'TestBed module environment base must be a table')
+    validate_module_loaders(loaders)
+    local values = {}
+    local environment = setmetatable({values=values, base=base}, ModuleEnvironment)
+
+    ---Compiles a chunk into this environment unless an explicit environment is supplied.
+    ---@param chunk string|function
+    ---@param chunkname? string
+    ---@param mode? string
+    ---@param explicit_environment? table
+    ---@return function|nil, string|nil
+    local function bound_load(chunk, chunkname, mode, explicit_environment)
+        if explicit_environment == nil then explicit_environment = values end
+        return load(chunk, chunkname, mode, explicit_environment)
+    end
+
+    ---Compiles a file into this environment unless an explicit environment is supplied.
+    ---@param filename string
+    ---@param mode? string
+    ---@param explicit_environment? table
+    ---@return function|nil, string|nil
+    local function bound_loadfile(filename, mode, explicit_environment)
+        if explicit_environment == nil then explicit_environment = values end
+        return loadfile(filename, mode, explicit_environment)
+    end
+
+    ---Loads and executes a file inside this environment with all return values.
+    ---@param filename string
+    ---@return any ...
+    local function bound_dofile(filename)
+        local chunk, message = bound_loadfile(filename)
+        if not chunk then error(message, 2) end
+        return chunk()
+    end
+
+    values._G = values
+    values.package = loaders.package
+    values.require = loaders.require
+    values.reqscript = loaders.reqscript
+    values.mkmodule = loaders.mkmodule
+    values.load = bound_load
+    values.loadfile = bound_loadfile
+    values.dofile = bound_dofile
+    setmetatable(values, {__index=base})
+    return environment
+end
+
 ---Constructs the facade pair from normalized configuration and injected host state.
 ---@param normalized table
 ---@param options? table
@@ -199,6 +270,7 @@ function BaseEnvironment.new(normalized, options)
 end
 
 M.BaseEnvironment = BaseEnvironment
+M.ModuleEnvironment = ModuleEnvironment
 M.RESERVED_POLICY = RESERVED_POLICY
 
 return M

@@ -268,29 +268,32 @@ Phase 4: Construct the TestBed base environment and protected facades
     ☒ Fail the reserved-policy test if any supported-version entry lacks base-facade, dfhack-facade, validation, and live-snapshot behavior.
 
 Phase 5: Create module-environment and dynamic-loader primitives
-    ☐ Exit with an environment factory that can receive bed-owned loader closures and execute source without touching process globals; do not claim complete require behavior in this phase.
+    ☒ Exit with an environment factory that can receive bed-owned loader closures and execute source without touching process globals; do not claim complete require behavior in this phase.
+        - Evidence: `ModuleEnvironment` in `base_environment.lua` and
+          `module_environment_spec.lua`; 29 focused TestBed examples, 799 full
+          unit examples, and Check-Lua passed for 303 files on 2026-08-02.
 
 5.1 Module environments:
-    ☐ Create a fresh environment for each source-loaded module.
-    ☐ Bind environment _G to the module environment itself.
-    ☐ Fall back from the module environment to the bed-owned base facade.
-    ☐ Ensure direct global writes and _G-qualified writes target the same module environment and never process _G.
-    ☐ Accept the owning private package, require, reqscript, mkmodule, load, loadfile, and dofile closures as explicit environment-factory inputs.
-    ☐ Do not publish an ordinary source-module environment into package.loaded merely because the environment was allocated.
-    ☐ Do not inject dfhack_flags into ordinary module environments.
+    ☒ Create a fresh environment for each source-loaded module.
+    ☒ Bind environment _G to the module environment itself.
+    ☒ Fall back from the module environment to the bed-owned base facade.
+    ☒ Ensure direct global writes and _G-qualified writes target the same module environment and never process _G.
+    ☒ Accept the owning private package, require, reqscript, mkmodule, load, loadfile, and dofile closures as explicit environment-factory inputs.
+    ☒ Do not publish an ordinary source-module environment into package.loaded merely because the environment was allocated.
+    ☒ Do not inject dfhack_flags into ordinary module environments.
 
 5.2 Bound dynamic loaders:
-    ☐ Match native load and loadfile signatures and return conventions for the running Lua version.
-    ☐ Default load and loadfile to the environment that owns the closure.
-    ☐ Honor an explicit environment argument exactly.
-    ☐ Make dofile execute in the owning environment and preserve all chunk return values.
-    ☐ Ensure dynamically loaded code receives the same bed-local dependency closures.
-    ☐ Verify nested load, loadfile, and dofile operations do not modify host globals or paths.
+    ☒ Match native load and loadfile signatures and return conventions for the running Lua version.
+    ☒ Default load and loadfile to the environment that owns the closure.
+    ☒ Honor an explicit environment argument exactly.
+    ☒ Make dofile execute in the owning environment and preserve all chunk return values.
+    ☒ Ensure dynamically loaded code receives the same bed-local dependency closures.
+    ☒ Verify nested load, loadfile, and dofile operations do not modify host globals or paths.
 
 5.3 Environment-factory verification:
-    ☐ Test direct and _G-qualified writes, base fallback, injected loader identity, absence of dfhack_flags, and process-global isolation with controlled loader doubles.
-    ☐ Test load, loadfile, and dofile default environments, explicit environments, syntax errors, file errors, and multiple return values.
-    ☐ Defer transitive source-module, cache, provider, and circular-import claims to Phases 6 and 7.
+    ☒ Test direct and _G-qualified writes, base fallback, injected loader identity, absence of dfhack_flags, and process-global isolation with controlled loader doubles.
+    ☒ Test load, loadfile, and dofile default environments, explicit environments, syntax errors, file errors, and multiple return values.
+    ☒ Defer transitive source-module, cache, provider, and circular-import claims to Phases 6 and 7.
 
 Phase 6: Implement the private package, bed-local require, and mkmodule
     ☐ Exit with Lua-compatible non-reserved source-module loading through the Phase 5 environment factory, deterministic loader data, private mutable package state, mkmodule, and bounded dependency failures.
