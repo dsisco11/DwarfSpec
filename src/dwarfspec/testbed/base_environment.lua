@@ -177,7 +177,11 @@ function BaseEnvironment.new(normalized, options)
     for key, value in pairs(normalized.globals) do
         if key ~= 'dfhack' then base_backing[key] = value end
     end
-    local dfhack_backing = snapshot(normalized.globals.dfhack or host_dfhack or {})
+    local configured_dfhack = normalized.globals and normalized.globals.dfhack
+    local has_configured_dfhack = normalized.globals_has_dfhack == true or
+        type(configured_dfhack) == 'table' and next(configured_dfhack) ~= nil
+    local dfhack_backing = snapshot(has_configured_dfhack and
+        configured_dfhack or host_dfhack or {})
     local environment = setmetatable({base_backing=base_backing,
         dfhack_backing=dfhack_backing}, BaseEnvironment)
 

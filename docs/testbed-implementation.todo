@@ -456,32 +456,38 @@ Phase 9: Complete lifecycle semantics and the public TestBed facade
     ☒ Test that command-execution functions supplied through a live backing are treated as host effects rather than graph members.
 
 Phase 10: Add the live adapter and synthesized component imports
-    ☐ Exit with live construction parameters supplied explicitly by DwarfSpec and with the foundational host-module set deterministic and overridable.
+    ☒ Exit with live construction parameters supplied explicitly by DwarfSpec and with the foundational host-module set deterministic and overridable.
+        - Evidence: `tests/unit/driver/mount/testbed_adapter_spec.lua` covers
+          active-run root forwarding, separate host loaders, construction-time
+          facade snapshots, deterministic providers, disablement, overrides,
+          exclusions, standalone loading, and compatibility mapping; 8 focused
+          and 823 full unit examples plus Check-Lua for 309 files passed on
+          2026-08-02.
 
 10.1 Adapter inputs:
-    ☐ Derive and validate the effective consumer project root from the active run context.
-    ☐ Supply the live dfhack backing and a construction-time raw dfhack.BASE_G snapshot source.
-    ☐ Supply exact host require and reqscript functions without exposing them to the offline core as defaults.
-    ☐ Keep all host, scheduler, run-context, and resource-registration dependencies in the driver-side adapter.
-    ☐ Load the TestBed core through DwarfSpec's existing source-or-installed module resolution; add no TestBed-specific checkout-path rule.
-    ☐ Keep configuration validation, path resolution, loader algorithms, caches, environments, dependency errors, and close behavior in the framework-neutral core.
-    ☐ Delegate resolved classes to the existing component-mount implementation; do not introduce a second mount implementation in the adapter.
+    ☒ Derive and validate the effective consumer project root from the active run context.
+    ☒ Supply the live dfhack backing and a construction-time raw dfhack.BASE_G snapshot source.
+    ☒ Supply exact host require and reqscript functions without exposing them to the offline core as defaults.
+    ☒ Keep all host, scheduler, run-context, and resource-registration dependencies in the driver-side adapter.
+    ☒ Load the TestBed core through DwarfSpec's existing source-or-installed module resolution; add no TestBed-specific checkout-path rule.
+    ☒ Keep configuration validation, path resolution, loader algorithms, caches, environments, dependency errors, and close behavior in the framework-neutral core.
+    ☒ Delegate resolved classes to the existing component-mount implementation; do not introduce a second mount implementation in the adapter.
 
 10.2 Synthesized providers:
-    ☐ Define the supported DFHack version for the synthesized component-import compatibility set and keep its version mapping beside the provider list.
-    ☐ When descriptor mounting defaults component_imports to true, synthesize use_host module providers for class, utils, gui, gui.widgets, and gui.dwarfmode only.
-    ☐ Exclude plugins.overlay, plugins.eventful, repeat-util, script-manager, and every undocumented host module.
-    ☐ Let component_imports=false remove the entire synthesized set.
-    ☐ Let an explicit user provider replace a synthesized provider with the same token.
-    ☐ Continue to reject duplicates among user-provided tokens.
-    ☐ Supply the mount construction profile, host importer, and synthesized providers to the internal TestBed constructor before configuration normalization and provider-registry freezing; never mutate a constructed bed's frozen configuration.
-    ☐ Preserve exact host class identity for DFHack defclass and widget construction.
+    ☒ Define the supported DFHack version for the synthesized component-import compatibility set and keep its version mapping beside the provider list.
+    ☒ When descriptor mounting defaults component_imports to true, synthesize use_host module providers for class, utils, gui, gui.widgets, and gui.dwarfmode only.
+    ☒ Exclude plugins.overlay, plugins.eventful, repeat-util, script-manager, and every undocumented host module.
+    ☒ Let component_imports=false remove the entire synthesized set.
+    ☒ Let an explicit user provider replace a synthesized provider with the same token.
+    ☒ Continue to reject duplicates among user-provided tokens.
+    ☒ Supply the mount construction profile, host importer, and synthesized providers to the internal TestBed constructor before configuration normalization and provider-registry freezing; never mutate a constructed bed's frozen configuration.
+    ☒ Preserve exact host class identity for DFHack defclass and widget construction.
 
 10.3 Adapter verification:
-    ☐ Test project-root forwarding, default enablement for mounts, explicit disablement, user override precedence, and excluded host-module failures.
-    ☐ Test borrowed host identities and disclose that invoking host loaders may populate or reuse process caches.
-    ☐ Test that no adapter dependency is loaded by standalone require('dwarfspec.testbed').
-    ☐ Test that the declared component-import compatibility version selects exactly the documented provider set.
+    ☒ Test project-root forwarding, default enablement for mounts, explicit disablement, user override precedence, and excluded host-module failures.
+    ☒ Test borrowed host identities and disclose that invoking host loaders may populate or reuse process caches.
+    ☒ Test that no adapter dependency is loaded by standalone require('dwarfspec.testbed').
+    ☒ Test that the declared component-import compatibility version selects exactly the documented provider set.
 
 Phase 11: Revise ds.mount around tagged descriptors and TestBed ownership
     ☐ Exit with descriptor mounts creating exactly one fresh bed while ordinary class mounts retain their established TestBed-free behavior.

@@ -70,24 +70,7 @@ end
 ---@param config? dwarfspec.TestBedConfig
 ---@return dwarfspec.TestBed
 function TestBed.new(config)
-    local normalize = require('dwarfspec.testbed.config').normalize
-    local Paths = require('dwarfspec.testbed.paths').Paths
-    local PackageState = require('dwarfspec.testbed.package_state').PackageState
-    local BaseEnvironment = require('dwarfspec.testbed.base_environment').BaseEnvironment
-    local ScriptLoader = require('dwarfspec.testbed.script_loader').ScriptLoader
-    local guard = {closed=false}
-    local normalized = normalize(config)
-    local paths = Paths.new(normalized)
-    local state = PackageState.new(normalized, paths, guard)
-    local base = BaseEnvironment.new(normalized, {loaders={package=state.package,
-        require=function(name) return state:require(name) end,
-        reqscript=function(name) return state:reqscript(name) end,
-        mkmodule=function(name) return state:mkmodule(name) end,
-        ensure_open=function() return state:ensure_open() end,
-    }}).base
-    state:set_base(base)
-    local scripts = ScriptLoader.new(state)
-    return setmetatable({guard=guard, package_state=state, script_loader=scripts}, TestBed)
+    return require('dwarfspec.testbed.internal').new(TestBed, config)
 end
 
 ---Loads one Lua module through this TestBed.

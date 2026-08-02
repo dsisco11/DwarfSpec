@@ -426,7 +426,9 @@ function M.normalize(config, options)
         script_roots=script_selection:freeze(),
         attempted_module_roots=attempted_module_selection:freeze(),
         attempted_script_roots=attempted_script_selection:freeze(),
-        globals=Globals.copy(config.globals):freeze(), imports=providers:freeze(),
+        globals=Globals.copy(config.globals):freeze(),
+        globals_has_dfhack=config.globals ~= nil and rawget(config.globals, 'dfhack') ~= nil,
+        imports=providers:freeze(),
         provider_registry=registry:freeze(),
     })
 end
