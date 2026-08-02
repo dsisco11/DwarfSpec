@@ -63,11 +63,12 @@ Phase 1: Establish canonical authoring types and the framework-neutral module bo
 1.1 Canonical runtime annotations:
     ☐ Add dwarfspec.TestBedImportKind with only "module" and "script".
     ☐ Add dwarfspec.TestBedImportToken with kind and logical name.
-    ☐ Add the non-nil value alias required to type use_value=false correctly.
+    ☐ Add dwarfspec.TestBedNonNilValue as boolean|number|string|function|table|thread|userdata so use_value=false remains representable while nil is excluded.
     ☐ Add value, source, host, and existing provider variants and the dwarfspec.TestBedImport union.
     ☐ Add dwarfspec.TestBedGlobals, dwarfspec.TestBedConfig, and dwarfspec.TestBed.
     ☐ Annotate TestBed.new(config?), TestBed:require(name), TestBed:reqscript(name), and TestBed:close().
     ☐ Annotate TestBed:require with a second optional loader-data return instead of pretending every supported Lua version returns it.
+    ☐ Annotate TestBed:reqscript as returning a table and TestBed:close as returning no graph or diagnostic object.
     ☐ Add documentation comments describing ownership, borrowing, mutability, and failure behavior for every public API.
 
 1.2 Entry-point dependency boundary:
@@ -79,7 +80,8 @@ Phase 1: Establish canonical authoring types and the framework-neutral module bo
 
 1.3 Declaration ownership:
     ☐ Make production TestBed annotations authoritative.
-    ☐ Define dwarfspec.ComponentClass, dwarfspec.ModuleComponentSource, dwarfspec.ScriptComponentSource, and dwarfspec.TestBedComponentSource at the appropriate public declaration surface.
+    ☐ Define dwarfspec.ComponentClass as the callable class-table authoring type and define module/script component descriptors with exact kind, name, and optional export fields at the appropriate public declaration surface.
+    ☐ Define dwarfspec.TestBedComponentSource as only the module- and script-descriptor union.
     ☐ Update src/ds.d.lua to reference canonical TestBed types instead of declaring a second provider/config schema.
     ☐ Express the two-argument ordinary class overload separately from the optional-third-argument descriptor overload.
 
@@ -90,12 +92,14 @@ Phase 2: Validate and freeze TestBed configuration
     ☐ Accept nil as an empty configuration.
     ☐ Reject non-table configuration values and unknown top-level fields.
     ☐ Validate module_roots and script_roots as dense arrays of strings.
-    ☐ Validate globals as a table and component_imports as a boolean when present.
+    ☐ Validate globals as a table with string keys and arbitrary values, and component_imports as a boolean when present.
     ☐ Validate globals.dfhack as a table when present.
     ☐ Reject configured replacements for _G, require, reqscript, mkmodule, package, load, loadfile, dofile, reload, script_environment, and dfhack_flags.
     ☐ Apply offline defaults: module_roots ordered as src/scripts_modinstalled, src, and .; script_roots as src/scripts_modinstalled; component_imports=false; imports empty.
     ☐ Treat explicit root arrays, including empty arrays, as replacements rather than additions to defaults.
     ☐ Establish one effective consumer root at construction; framework-neutral TestBed.new uses the process current directory and the live adapter supplies the active consumer project root.
+    ☐ Accept construction profile, consumer root, host importer, and synthesized-provider inputs only through a private internal constructor path; do not add a public project_root or adapter field to dwarfspec.TestBedConfig.
+    ☐ Select context-dependent defaults before normalization and freezing: component_imports=false for framework-neutral construction and true for descriptor-mount construction.
     ☐ Skip missing default directories while retaining their logical order in diagnostics where useful.
 
 2.2 Provider validation:
@@ -114,12 +118,13 @@ Phase 2: Validate and freeze TestBed configuration
 2.3 Frozen construction state:
     ☐ Copy the configuration table, provider array, provider tables, tokens, roots, and globals container at construction.
     ☐ Deliberately borrow use_value payloads and nested values supplied inside globals; document that their later mutation is observable.
-    ☐ Build an immutable normalized provider registry keyed by exact (kind, name) identity.
+    ☐ Merge synthesized providers and user providers before freezing: user providers replace synthesized tokens, while duplicate user tokens remain errors.
+    ☐ Build the immutable normalized provider registry keyed by exact (kind, name) identity only after that merge.
     ☐ Prevent later mutation of caller-owned configuration containers from changing the bed.
     ☐ Keep private runtime package state mutable and separate from the frozen normalized configuration.
 
 2.4 Focused verification:
-    ☐ Add table-driven tests for every valid omission and invalid field/type combination.
+    ☐ Add table-driven tests for every valid omission and invalid field/type combination, including non-string globals keys.
     ☐ Test explicit empty roots, root replacement, provider order, duplicate keys, same text in different namespaces, false values, nil values, and script table constraints.
     ☐ Test copied containers and borrowed payload identities independently.
     ☐ Test clear actionable errors that identify the failing configuration path.
@@ -134,6 +139,7 @@ Phase 3: Build deterministic path and source resolution
     ☐ Construct the initial private package.path without changing process package.path.
     ☐ Provide a compatible private package.searchpath implementation over an explicitly supplied or private path.
     ☐ Preserve normal Lua path-template behavior, including explicit paths, parent traversal, and symlink traversal.
+    ☐ Record the normalized selected source filename so fixed-root precedence is observable through source/result records and Lua 5.4 loader data without adding graph inspection.
 
 3.2 Script roots:
     ☐ Resolve every relative default or explicitly configured script root against the effective consumer root.
@@ -145,6 +151,7 @@ Phase 3: Build deterministic path and source resolution
 
 3.3 Focused verification:
     ☐ Test default-root order, missing default directories, explicit replacement roots, empty roots, ?.lua, and ?/init.lua.
+    ☐ Place duplicate logical modules in multiple roots and prove the selected source follows fixed precedence and is reported by the documented loader data.
     ☐ Test private package.path replacement and mutation affecting only later loads in that bed.
     ☐ Test standalone-current-directory and live-supplied roots for relative module_roots, script_roots, and use_source paths.
     ☐ Test explicit absolute source paths and symlink-capable behavior without a containment rejection.
@@ -166,9 +173,11 @@ Phase 4: Construct the TestBed base environment and protected facades
 
 4.2 Offline and live base construction:
     ☐ Use an empty ordinary-API dfhack backing when offline and globals.dfhack is omitted.
+    ☐ Use the live adapter's permitted host dfhack object as the ordinary-API backing when live and globals.dfhack is omitted.
     ☐ In live construction, shallow-snapshot every non-reserved raw binding from the active dfhack.BASE_G at bed creation.
     ☐ Borrow values from that snapshot without dynamically reading host additions or replacements later.
     ☐ Apply configured globals after the baseline so they replace ordinary non-reserved bindings.
+    ☐ Install TestBed-owned reserved bindings after the standard baseline, live snapshot, and configured globals so no earlier layer can replace them.
     ☐ Treat globals.dfhack as the complete ordinary-API backing; omitted members must not fall through to the live host dfhack object.
 
 4.3 dfhack and BASE_G identity:
@@ -187,6 +196,7 @@ Phase 4: Construct the TestBed base environment and protected facades
     ☐ Test offline and live snapshots separately.
     ☐ Test facade stability, backing completeness, no host fallthrough, bed-wide mutable ordinary fields, and unchanged host tables with controlled loader-closure inputs.
     ☐ Test normal writes, rawget/rawset, next/pairs enumeration, and metatable replacement attempts for every protected category.
+    ☐ Prove bed-local rawget, rawset, next, and pairs retain native behavior for every value other than the recognized base facade.
     ☐ Test that later process-global and host-base additions are invisible.
     ☐ Install host sentinels for reload, dfhack.reload, script_environment, dfhack.script_environment, and every supported-version reserved loader field; prove TestBed returns its documented implementation or rejection without invoking a sentinel.
     ☐ Fail the reserved-policy test if any supported-version entry lacks base-facade, dfhack-facade, validation, and live-snapshot behavior.
@@ -285,6 +295,7 @@ Phase 7: Implement ordinary-module TestBedImport provider resolution
     ☐ Include the provider token and strategy in actionable resolution errors.
     ☐ Preserve ordinary module cache rules when a provider target fails.
     ☐ Prove the provider registry retains distinct module and script tokens with the same name without prematurely resolving the script token.
+    ☐ On Lua 5.4, test the exact use_value, use_source, use_host, and use_existing loader-data strings and prove a provider cache hit returns no second result.
 
 7.3 Native plugin behavior:
     ☐ Permit genuine plugins.* modules through explicit use_host.
@@ -300,7 +311,9 @@ Phase 8: Implement modern bed-local reqscript
     ☐ Recognize only the modern --@ module=true annotation accepted by current DFHack plugins.
     ☐ Reject a missing annotation before executing the script.
     ☐ Reject legacy moduleMode usage with an error naming the supported annotation contract.
-    ☐ Allocate the script environment immediately before execution.
+    ☐ Allocate the script environment immediately before execution through the Phase 5 owning-environment factory.
+    ☐ Give each source script a self-referential _G, base-facade fallback, and the owning private package, require, reqscript, mkmodule, load, loadfile, and dofile closures.
+    ☐ Ensure nested require and reqscript calls and dynamic loads originating from a script remain in the same bed.
     ☐ Install a raw, script-owned dfhack_flags table with module=true before execution.
     ☐ Ensure command-only code guarded by the module flag does not run.
     ☐ Return the preallocated source-script environment regardless of ordinary chunk return values.
@@ -317,10 +330,12 @@ Phase 8: Implement modern bed-local reqscript
     ☐ Resolve script use_existing targets before allocating an alias environment and cache the target's exact identity.
     ☐ Detect alias-only script cycles with a bounded chain.
     ☐ Remove TestBed-preallocated script cache entries and active markers after annotation or execution failure so later calls can retry.
+    ☐ Clear source-script and alias-resolution active markers after success while retaining successful script cache identities.
     ☐ Do not fall back to host reqscript unless an exact use_host provider requests it.
 
 8.3 Focused verification:
     ☐ Prove two beds load the same source script without sharing script globals.
+    ☐ Prove direct and _G-qualified script writes agree, script-nested module/script dependencies remain bed-local, and script-bound load/loadfile/dofile use the script environment.
     ☐ Test module guards, raw flags, missing annotation, legacy moduleMode, execution failure, retry, circular imports, aliases, and provider results.
     ☐ Assert host script_environment, host reqscript, and process script caches remain untouched except for explicit use_host.
     ☐ Add a host-spy test proving only an exact script use_host provider invokes host reqscript.
@@ -355,10 +370,13 @@ Phase 10: Add the live adapter and synthesized component imports
     ☐ Exit with live construction parameters supplied explicitly by DwarfSpec and with the foundational host-module set deterministic and overridable.
 
 10.1 Adapter inputs:
-    ☐ Derive the effective consumer project root from the active run context.
+    ☐ Derive and validate the effective consumer project root from the active run context.
     ☐ Supply the live dfhack backing and a construction-time raw dfhack.BASE_G snapshot source.
     ☐ Supply exact host require and reqscript functions without exposing them to the offline core as defaults.
     ☐ Keep all host, scheduler, run-context, and resource-registration dependencies in the driver-side adapter.
+    ☐ Load the TestBed core through DwarfSpec's existing source-or-installed module resolution; add no TestBed-specific checkout-path rule.
+    ☐ Keep configuration validation, path resolution, loader algorithms, caches, environments, dependency errors, and close behavior in the framework-neutral core.
+    ☐ Delegate resolved classes to the existing component-mount implementation; do not introduce a second mount implementation in the adapter.
 
 10.2 Synthesized providers:
     ☐ Define the supported DFHack version for the synthesized component-import compatibility set and keep its version mapping beside the provider list.
@@ -367,6 +385,7 @@ Phase 10: Add the live adapter and synthesized component imports
     ☐ Let component_imports=false remove the entire synthesized set.
     ☐ Let an explicit user provider replace a synthesized provider with the same token.
     ☐ Continue to reject duplicates among user-provided tokens.
+    ☐ Supply the mount construction profile, host importer, and synthesized providers to the internal TestBed constructor before configuration normalization and provider-registry freezing; never mutate a constructed bed's frozen configuration.
     ☐ Preserve exact host class identity for DFHack defclass and widget construction.
 
 10.3 Adapter verification:
@@ -411,6 +430,7 @@ Phase 11: Revise ds.mount around tagged descriptors and TestBed ownership
     ☐ Update command, mount-context, component classification, resource-ownership, and cleanup-verification specs.
     ☐ Test class success and failure paths with a spy proving zero TestBeds are allocated.
     ☐ Test module and script descriptors with omitted and explicit configuration.
+    ☐ Give component options and TestBed configuration identical field names in one test and prove each table reaches only its intended validator/consumer.
     ☐ Test a fresh bed per descriptor mount and no state sharing across consecutive mounts.
     ☐ Test invalid instances, invalid descriptors, invalid TestBed configurations, third class arguments, instantiated TestBeds, missing exports, invalid exports, loader failures, constructor failures, mount failures, assertion failures, and cleanup failures.
     ☐ Inject TestBed-construction and live-adapter setup failures; prove partially constructed core resources are discarded and no unowned cleanup registration remains.
@@ -437,11 +457,13 @@ Phase 12: Complete unit, declaration, and framework integration coverage
     ☐ Add tests/unit/driver/mount/testbed_adapter_spec.lua and update the existing mount command/context/component/ownership/cleanup specs.
     ☐ Add a host-adapter double that verifies live behavior without importing real DFHack modules into core unit tests.
     ☐ Add regression tests for every proposal discrepancy previously resolved: package mutability, dfhack reservation, BASE_G mutability, native-plugin providers, native Lua cache semantics, and bounded cycles.
+    ☐ Re-run existing ordinary-spec project-path precedence, consumer-module eviction, package.path restoration, and process-global require behavior tests to prove TestBed remains opt-in.
     ☐ Run each new focused suite directly before relying on recursive full-suite discovery.
 
 12.3 Declaration checks:
     ☐ Add valid declaration fixtures for zero-argument construction, partial configuration, all provider variants, optional loader data, and both mount overloads.
-    ☐ Add invalid declaration fixtures for malformed tokens, nil values, cross-namespace aliases, unknown strategies, descriptor/class overload confusion, component instances, and TestBed instances passed to mount.
+    ☐ Add invalid declaration fixtures for malformed tokens, nil values, cross-namespace aliases, unknown strategies, descriptor/class overload confusion, and TestBed instances passed where mount configuration is expected.
+    ☐ Do not claim that the ComponentClass table alias statically distinguishes a class table from an instance table; prove that distinction through the Phase 11 runtime validator instead.
     ☐ Run declaration checks against the source-tree Lua language server configuration in this phase.
     ☐ Verify the runtime validator and declared schema agree on every accepted and rejected shape.
     ☐ Defer installed-rock declaration verification until Phase 13 has created and installed the exact artifact.
@@ -457,6 +479,7 @@ Phase 13: Prove the installed-rock downstream boundary
 
 13.1 Archive construction and audit:
     ☐ Ensure the rockspec packages src/dwarfspec/testbed.lua and every internal module beneath src/dwarfspec/testbed/.
+    ☐ Trace the framework-neutral entry point's complete production require dependency closure and require every dependency in the archive even if a reused helper resides outside src/dwarfspec/testbed/.
     ☐ Ensure the shipped declaration surface includes canonical TestBed types and tagged mount overloads.
     ☐ Ensure no DwarfSpec tests, fixtures, checkout-only helpers, or source-path assumptions enter the rock.
     ☐ Extend or add package verification that lists the archive and fails when any required TestBed runtime or declaration file is absent.
@@ -482,6 +505,7 @@ Phase 14: Prove live descriptor mounting with the same installed rock
 14.1 Representative downstream component:
     ☐ Use at least one production-style consumer widget or component, not only synthetic TestBed fixtures.
     ☐ Give the component a real module dependency and an annotated script dependency.
+    ☐ Configure both a module token and a script token through the same TestBedConfig used to load the production-style component.
     ☐ Provide at least one dependency replacement through TestBed configuration before the defining component source loads.
     ☐ Exercise the synthesized foundational host providers and exact DFHack class identity.
     ☐ Add a second case with component_imports=false or an explicit provider override.
@@ -527,10 +551,11 @@ Phase 15: Document, audit, and hand off
 15.2 Contract audit:
     ☐ Re-read later sections of docs/testbed-proposal.md before reporting any discrepancy or omission.
     ☐ Trace every proposal acceptance criterion to implementation, a focused test, and the appropriate evidence gate.
-    ☐ Search for obsolete TestBedInput, sources, modules, reusable TestBed mount instances, component instance mounts, path-containment claims, legacy moduleMode, native-plugin rejection, immutable BASE_G, and no-active-bed requirements.
+    ☐ Search public schemas and APIs for obsolete TestBedInput, top-level sources/modules configuration fields, reusable TestBed mount instances, component instance mounts, path-containment claims, legacy moduleMode, native-plugin rejection, immutable BASE_G, and no-active-bed requirements.
     ☐ Search for accidental DFHack/live imports reachable from require('dwarfspec.testbed').
     ☐ Search for undocumented public TestBed functions or graph-inspection surfaces.
     ☐ Audit every new or changed callable API for language-standard documentation comments.
+    ☐ Compare at least one representative consumer test with its equivalent package.loaded/_G manipulation and record whether TestBed materially reduces setup and cleanup while preserving explicit ownership boundaries.
 
 15.3 Final verification:
     ☐ Re-run all focused TestBed and mount specs.
