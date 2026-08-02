@@ -104,13 +104,13 @@ Phase 2: Validate and freeze TestBed configuration
 
 2.2 Provider validation:
     ☐ Validate imports as a dense ordered array of provider tables.
-    ☐ Reject unknown provider fields and require every provide token kind/name to use the canonical kind and a non-empty string name.
+    ☐ Reject unknown provider fields and require every provide token to use the canonical kind and a string name; do not add a non-empty restriction absent from the authoring type.
     ☐ Require exactly one raw-present strategy key among use_value, use_source, use_host, and use_existing.
     ☐ Recognize use_value=false and reject use_value=nil as an absent/invalid strategy.
     ☐ Require script use_value payloads to be tables while allowing any non-nil Lua module value.
     ☐ Require use_host to be exactly true.
-    ☐ Validate use_source as a non-empty source path string.
-    ☐ Validate use_existing as a canonical non-empty token in the same namespace as provide.
+    ☐ Validate use_source as a source path string and leave empty or otherwise unusable strings to ordinary path/load failure semantics.
+    ☐ Validate use_existing as a canonical string-name token in the same namespace as provide.
     ☐ Reject duplicate user-provided tokens.
     ☐ Reject every provider whose provide token is {kind='module', name='dfhack'}.
     ☐ Reject component_imports=true and all use_host providers when no live importer is supplied.
@@ -127,6 +127,7 @@ Phase 2: Validate and freeze TestBed configuration
     ☐ Add table-driven tests for every valid omission and invalid field/type combination, including non-string globals keys.
     ☐ Test explicit empty roots, root replacement, provider order, duplicate keys, same text in different namespaces, false values, nil values, and script table constraints.
     ☐ Test copied containers and borrowed payload identities independently.
+    ☐ Prove empty string token names and use_source paths pass type validation while non-string values fail validation.
     ☐ Test clear actionable errors that identify the failing configuration path.
 
 Phase 3: Build deterministic path and source resolution
@@ -240,7 +241,7 @@ Phase 6: Implement the private package, bed-local require, and mkmodule
     ☐ Provide no working package.cpath or package.loadlib route to host native loading.
 
 6.2 Require algorithm:
-    ☐ Validate every TestBed:require name as a non-empty string before cache or searcher access.
+    ☐ Validate every TestBed:require name as a string before cache or searcher access; allow empty strings to follow ordinary require resolution semantics.
     ☐ Resolve module name dfhack to the exact facade installed as the initial global before consulting cache, preload, searchers, providers, or paths.
     ☐ Apply running-Lua cache semantics for all non-reserved names, including false values and loader-written package.loaded values.
     ☐ Invoke mutable searchers in order and aggregate their errors in native-compatible form with the TestBed dependency chain.
@@ -254,7 +255,7 @@ Phase 6: Implement the private package, bed-local require, and mkmodule
     ☐ Use ":testbed:use_value:<kind>:<name>", ":testbed:use_host:<kind>:<name>", and ":testbed:use_existing:<kind>:<name>" for provider loader data; the alias reports its own token rather than its target's loader data.
 
 6.3 mkmodule:
-    ☐ Validate every mkmodule name as a non-empty string.
+    ☐ Validate every mkmodule name as a string without inventing a non-empty restriction.
     ☐ Return a stable module environment for repeated mkmodule(name) calls within one bed.
     ☐ Immediately publish the environment into private package.loaded.
     ☐ Allow ordinary circular imports to observe that published environment.
@@ -272,6 +273,7 @@ Phase 6: Implement the private package, bed-local require, and mkmodule
     ☐ Prove nested dependencies use the same owning environment and bed.
     ☐ Prove package mutations in one bed do not affect another bed or the process package tables.
     ☐ Test missing modules, malformed searchers, loader errors, false cache values, custom preload entries, custom searchers, and source shadowing.
+    ☐ Test require('') through ordinary cache/searcher resolution, including an exact empty-name provider and the normal missing-module chain when none exists.
     ☐ Prove package.loaded.dfhack mutation, package.preload.dfhack installation, replacement searchers, and matching source paths cannot redirect require('dfhack') or invoke host require.
     ☐ Document and test that externally supplied preload functions and replacement searchers retain whatever globals and dependencies their closures already captured.
     ☐ Bound dependency chains and error formatting so diagnostics never dump unbounded tables or source text.
@@ -307,7 +309,7 @@ Phase 8: Implement modern bed-local reqscript
     ☐ Exit with a separate script graph that supports annotated module scripts, exact providers, aliases, circular imports, and retryable failures without host cache leakage.
 
 8.1 Script-source contract:
-    ☐ Validate every TestBed:reqscript name as a non-empty string before cache, provider, or root access.
+    ☐ Validate every TestBed:reqscript name as a string before cache, provider, or root access; allow empty strings to follow the documented script resolution path.
     ☐ Recognize only the modern --@ module=true annotation accepted by current DFHack plugins.
     ☐ Reject a missing annotation before executing the script.
     ☐ Reject legacy moduleMode usage with an error naming the supported annotation contract.
@@ -340,6 +342,7 @@ Phase 8: Implement modern bed-local reqscript
     ☐ Assert host script_environment, host reqscript, and process script caches remain untouched except for explicit use_host.
     ☐ Add a host-spy test proving only an exact script use_host provider invokes host reqscript.
     ☐ Test bounded missing-script and dependency-chain diagnostics that never dump unbounded tables or source text.
+    ☐ Test reqscript('') through the ordinary script cache/provider/root order instead of a special validation failure.
 
 Phase 9: Complete lifecycle semantics and the public TestBed facade
     ☐ Exit with a cohesive TestBed.new/require/reqscript/close API whose ownership and closed-state behavior is uniform across every retained closure.
@@ -402,7 +405,7 @@ Phase 11: Revise ds.mount around tagged descriptors and TestBed ownership
     ☐ Reject already-created component instances before construction or resource registration.
     ☐ Reject a third argument on an ordinary class mount.
     ☐ Accept descriptors shaped only as {kind='module'|'script', name=string, export?=string}.
-    ☐ Reject unknown descriptor fields, malformed tags, empty names, and invalid export values.
+    ☐ Reject unknown descriptor fields, malformed tags, non-string names, and non-string export values; do not reject an empty string that the underlying logical-name or exact-export semantics can resolve.
     ☐ Accept TestBed configuration only as the optional final argument of a tagged descriptor mount.
     ☐ Reject an instantiated TestBed wherever a configuration table is expected.
     ☐ Keep component constructor options and TestBed configuration as separate arguments even when their field names overlap.
@@ -430,6 +433,7 @@ Phase 11: Revise ds.mount around tagged descriptors and TestBed ownership
     ☐ Update command, mount-context, component classification, resource-ownership, and cleanup-verification specs.
     ☐ Test class success and failure paths with a spy proving zero TestBeds are allocated.
     ☐ Test module and script descriptors with omitted and explicit configuration.
+    ☐ Test empty descriptor names and exports through ordinary exact resolution instead of rejecting them solely for emptiness.
     ☐ Give component options and TestBed configuration identical field names in one test and prove each table reaches only its intended validator/consumer.
     ☐ Test a fresh bed per descriptor mount and no state sharing across consecutive mounts.
     ☐ Test invalid instances, invalid descriptors, invalid TestBed configurations, third class arguments, instantiated TestBeds, missing exports, invalid exports, loader failures, constructor failures, mount failures, assertion failures, and cleanup failures.
@@ -456,7 +460,7 @@ Phase 12: Complete unit, declaration, and framework integration coverage
     ☐ Add tests/unit/testbed/testbed_spec.lua for public construction, isolation, lifecycle, and entry-point dependency boundaries.
     ☐ Add tests/unit/driver/mount/testbed_adapter_spec.lua and update the existing mount command/context/component/ownership/cleanup specs.
     ☐ Add a host-adapter double that verifies live behavior without importing real DFHack modules into core unit tests.
-    ☐ Add regression tests for every proposal discrepancy previously resolved: package mutability, dfhack reservation, BASE_G mutability, native-plugin providers, native Lua cache semantics, and bounded cycles.
+    ☐ Add regression tests for every proposal discrepancy previously resolved: package mutability, dfhack reservation, BASE_G mutability, native-plugin providers, native Lua cache semantics, string type validation without invented non-empty restrictions, and bounded cycles.
     ☐ Re-run existing ordinary-spec project-path precedence, consumer-module eviction, package.path restoration, and process-global require behavior tests to prove TestBed remains opt-in.
     ☐ Run each new focused suite directly before relying on recursive full-suite discovery.
 
@@ -551,7 +555,7 @@ Phase 15: Document, audit, and hand off
 15.2 Contract audit:
     ☐ Re-read later sections of docs/testbed-proposal.md before reporting any discrepancy or omission.
     ☐ Trace every proposal acceptance criterion to implementation, a focused test, and the appropriate evidence gate.
-    ☐ Search public schemas and APIs for obsolete TestBedInput, top-level sources/modules configuration fields, reusable TestBed mount instances, component instance mounts, path-containment claims, legacy moduleMode, native-plugin rejection, immutable BASE_G, and no-active-bed requirements.
+    ☐ Search public schemas and APIs for obsolete TestBedInput, top-level sources/modules configuration fields, reusable TestBed mount instances, component instance mounts, unsupported non-empty name/path restrictions, path-containment claims, legacy moduleMode, native-plugin rejection, immutable BASE_G, and no-active-bed requirements.
     ☐ Search for accidental DFHack/live imports reachable from require('dwarfspec.testbed').
     ☐ Search for undocumented public TestBed functions or graph-inspection surfaces.
     ☐ Audit every new or changed callable API for language-standard documentation comments.
