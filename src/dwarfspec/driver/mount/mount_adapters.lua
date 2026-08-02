@@ -1,0 +1,321 @@
+-- DFHack component host adapters for the unified mount command.
+
+local M = {}
+
+---Creates the private screen class used for widget component mounts.
+---@param gui_module table
+---@param define_class function
+---@return table
+local function create_host_class(gui_module, define_class)
+    ---@class dwarfspec.ComponentHostScreen: gui.ZScreen
+    local HostScreen = define_class(nil, gui_module.ZScreen)
+    HostScreen.ATTRS{
+        component=DEFAULT_NIL,
+        focus_path='dwarfspec/component-host',
+        overlay_controller=DEFAULT_NIL,
+        viewport=DEFAULT_NIL,
+    }
+
+    ---Adds the mounted component to its DwarfSpec-owned screen.
+    function HostScreen:init()
+        assert(self.component,
+            'DwarfSpec component host requires a component')
+        self:addviews{self.component}
+    end
+
+---Lays out hosted content against the current mount-owned viewport.
+    ---@param width integer
+    ---@param height integer
+    function HostScreen:onResize(width, height)
+        if self.viewport then
+            width = self.viewport.width
+            height = self.viewport.height
+        end
+        HostScreen.super.onResize(self, width, height)
+        if self.overlay_controller then
+            self.overlay_controller:layout()
+        end
+    end
+
+    ---Renders an overlay through its isolated painter contract.
+    ---@param dc table
+    function HostScreen:renderSubviews(dc)
+        if self.overlay_controller then
+            self.overlay_controller:render()
+            return
+        end
+        HostScreen.super.renderSubviews(self, dc)
+    end
+
+    ---Runs overlay updates from the normal owned-screen idle callback.
+    function HostScreen:onIdle()
+        if HostScreen.super.onIdle then HostScreen.super.onIdle(self) end
+        if self.overlay_controller then
+            self.overlay_controller:update()
+        end
+    end
+
+    ---Routes overlay input first and forwards declined input to the backing screen.
+    ---@param keys table
+    ---@return boolean
+    function HostScreen:onInput(keys)
+        if self.overlay_controller then
+            if self.overlay_controller:input(keys) then return true end
+            self:sendInputToParent(keys)
+            return true
+        end
+        return HostScreen.super.onInput(self, keys)
+    end
+
+    ---Feeds overlay input with its active and visible lifecycle checks.
+    ---@param keys table
+    ---@return boolean
+    function HostScreen:inputToSubviews(keys)
+        if self.overlay_controller then
+            return self.overlay_controller:input(keys)
+        end
+        return HostScreen.super.inputToSubviews(self, keys)
+    end
+
+    return HostScreen
+end
+
+---Returns whether a DFHack screen is currently active.
+---@param screen table
+---@return boolean
+local function is_active(screen)
+    if type(screen) ~= 'table' then return false end
+    if type(screen.isActive) ~= 'function' then return false end
+    local ok, active = pcall(screen.isActive, screen)
+    return ok and not not active
+end
+
+---Registers reversible instrumentation and screen dismissal ownership.
+---@param mount table
+---@param screen table
+---@param instrumentation table
+---@param register_cleanup function
+---@param enrich_failure function
+local function prepare_screen(mount, screen, instrumentation,
+        register_cleanup, enrich_failure)
+    local restore = instrumentation.install(screen, mount.render_tracker,
+        function(failure)
+            return enrich_failure(mount, 'render', failure)
+        end, function()
+            if mount.refresh_views then mount.refresh_views() end
+        end)
+    register_cleanup(('restore component render interception %d')
+        :format(mount.id), restore)
+    register_cleanup(('dismiss component screen %d'):format(mount.id),
+        function()
+            if is_active(screen) then screen:dismiss() end
+        end)
+end
+
+---Installs reversible viewport resize interception on one screen.
+---@param screen table
+---@param viewport table
+---@return function
+local function install_viewport(screen, viewport)
+    local original_instance_method = rawget(screen, 'onResize')
+    local original_effective_method = screen.onResize
+    local installed_method
+    installed_method = function(self)
+        return original_effective_method(
+            self, viewport.width, viewport.height)
+    end
+    rawset(screen, 'onResize', installed_method)
+    local restored = false
+
+    ---Restores the exact instance resize method present at installation.
+    ---@return boolean
+    return function()
+        if restored then return false end
+        assert(rawget(screen, 'onResize') == installed_method,
+            'viewport onResize changed before restoration')
+        rawset(screen, 'onResize', original_instance_method)
+        restored = true
+        return true
+    end
+end
+
+---Applies the current mount-owned viewport to one active host screen.
+---@param mount table
+---@param viewport table
+local function apply_viewport(mount, viewport)
+    assert(mount.host_screen and type(mount.host_screen.onResize) == 'function',
+        'component adapter requires an active host screen for viewport changes')
+    mount.host_screen:onResize(viewport.width, viewport.height)
+end
+
+---Creates category adapters backed by live DFHack screens.
+---@param options table
+---@return function
+function M.new(options)
+    assert(type(options) == 'table',
+        'mount adapters require dependency options')
+    local gui_module = options.gui_module or require('gui')
+    local instrumentation = assert(options.instrumentation,
+        'mount adapters require render instrumentation')
+    local enrich_failure = options.enrich_failure or
+        function(_, _, failure) return tostring(failure) end
+    local define_class = options.define_class or defclass
+    local HostScreen = create_host_class(gui_module, define_class)
+    local interaction_target_factory = assert(
+        options.interaction_target_factory,
+        'mount adapters require an interaction target factory')
+    local subject_source_factory = assert(options.subject_source_factory,
+        'mount adapters require a subject source factory')
+    local overlay_mount_module = options.overlay_mount_module or
+        require('dwarfspec.driver.mount.overlay_mount')
+    local overlay_factory = options.overlay_factory or
+        overlay_mount_module.new({
+            gui_module=gui_module,
+            get_backing_viewscreen=options.get_backing_viewscreen,
+            get_rects=options.get_overlay_rects,
+            get_value=options.get_value,
+            now_ms=options.now_ms,
+            random=options.random,
+        })
+
+    local host_adapter = {}
+
+    ---Builds the independent ownership, interaction, and subject result.
+    ---@param root table
+    ---@param screen table
+    ---@return table
+    local function mounted_result(root, screen)
+        local interaction_target = interaction_target_factory(screen)
+        local subject_source = subject_source_factory(root)
+        assert(type(interaction_target) == 'table',
+            'interaction target factory must return a table')
+        assert(type(subject_source) == 'table' and
+            type(subject_source.adapter) == 'table',
+            'subject source factory must return an adapted source')
+        return {
+            root=root,
+            host_screen=screen,
+            interaction_target=interaction_target,
+            subject_source=subject_source,
+        }
+    end
+
+    ---Shows one widget component in an instrumented DwarfSpec host screen.
+    ---@param mount table
+    ---@param prepared table
+    ---@param register_cleanup function
+    ---@return table
+    function host_adapter:mount(mount, prepared, register_cleanup)
+        local screen = HostScreen{
+            component=prepared.component,
+            initial_pause=prepared.options.initial_pause,
+            viewport=prepared.options.viewport,
+        }
+        prepare_screen(mount, screen, instrumentation, register_cleanup,
+            enrich_failure)
+        screen:show(prepared.options.backing_viewscreen)
+        return mounted_result(prepared.component, screen)
+    end
+
+    ---Dismisses a widget host if scoped cleanup has not already done so.
+    ---@param mount table
+    function host_adapter:unmount(mount)
+        if is_active(mount.host_screen) then mount.host_screen:dismiss() end
+    end
+
+    ---Applies a runtime viewport change to a widget host.
+    ---@param mount table
+    ---@param viewport table
+    function host_adapter:viewport(mount, viewport)
+        return apply_viewport(mount, viewport)
+    end
+
+    ---@class dwarfspec.OverlayAdapter
+    local overlay_adapter = {}
+
+    ---Shows one overlay in the generic instrumented component host.
+    ---@param mount table
+    ---@param prepared table
+    ---@param register_cleanup function
+    ---@return table
+    function overlay_adapter:mount(mount, prepared, register_cleanup)
+        local controller = overlay_factory:create(
+            mount, prepared.component, prepared.options)
+        register_cleanup(('restore overlay component state %d')
+            :format(mount.id), function() controller:restore() end)
+        local screen = HostScreen{
+            component=prepared.component,
+            initial_pause=prepared.options.initial_pause,
+            overlay_controller=controller,
+            viewport=prepared.options.viewport,
+        }
+        prepare_screen(mount, screen, instrumentation, register_cleanup,
+            enrich_failure)
+        register_cleanup(('disable overlay component %d'):format(mount.id),
+            function() controller:disable() end)
+        controller:enable()
+        screen:show(prepared.options.backing_viewscreen)
+        return mounted_result(prepared.component, screen)
+    end
+
+    ---Dismisses an overlay host if scoped cleanup has not already done so.
+    ---@param mount table
+    function overlay_adapter:unmount(mount)
+        if is_active(mount.host_screen) then mount.host_screen:dismiss() end
+    end
+
+    ---Applies a runtime viewport change to an overlay host and painter.
+    ---@param mount table
+    ---@param viewport table
+    function overlay_adapter:viewport(mount, viewport)
+        return apply_viewport(mount, viewport)
+    end
+
+    ---@class dwarfspec.CompleteScreenAdapter
+    local screen_adapter = {}
+
+    ---Shows one complete screen with reversible instance instrumentation.
+    ---@param mount table
+    ---@param prepared table
+    ---@param register_cleanup function
+    ---@return table
+    function screen_adapter:mount(mount, prepared, register_cleanup)
+        local screen = prepared.component
+        local restore_resize = install_viewport(
+            screen, prepared.options.viewport)
+        if restore_resize then
+            register_cleanup(('restore component resize interception %d')
+                :format(mount.id), restore_resize)
+        end
+        prepare_screen(mount, screen, instrumentation, register_cleanup,
+            enrich_failure)
+        screen:show(prepared.options.backing_viewscreen)
+        return mounted_result(screen, screen)
+    end
+
+    ---Dismisses a complete screen if scoped cleanup has not already done so.
+    ---@param mount table
+    function screen_adapter:unmount(mount)
+        if is_active(mount.host_screen) then mount.host_screen:dismiss() end
+    end
+
+    ---Applies a runtime viewport change to a complete screen.
+    ---@param mount table
+    ---@param viewport table
+    function screen_adapter:viewport(mount, viewport)
+        return apply_viewport(mount, viewport)
+    end
+
+    ---Returns the adapter for a supported component category.
+    ---@param category string
+    ---@return table
+    return function(category)
+        if category == 'widget' then return host_adapter end
+        if category == 'overlay' then return overlay_adapter end
+        if category == 'screen' then return screen_adapter end
+        error('unsupported DwarfSpec component category: ' ..
+            tostring(category), 2)
+    end
+end
+
+return M

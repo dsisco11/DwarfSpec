@@ -1,7 +1,7 @@
 -- Deterministic builders for multi-project automation service unit tests.
 
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local RunState = require('dwarfspec.automation.run_states')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 
 local M = {}
 

@@ -1,31 +1,31 @@
 -- Unit contracts for immutable closed-set DwarfSpec identifiers.
 
-local immutable_enum = require('dwarfspec.immutable_enum')
+local immutable_enum = require('dwarfspec.support.immutable_enum')
 local EFieldMode =
-    require('dwarfspec.native_game_ui_path').EFieldMode
+    require('dwarfspec.driver.subjects.native_game_ui_path').EFieldMode
 local EResolutionStage =
-    require('dwarfspec.native_resolution_stages')
+    require('dwarfspec.driver.subjects.native_resolution_stages')
 local EResolutionFailureKind =
-    require('dwarfspec.native_resolution_failure_kinds')
-local ErrorFormat = require('dwarfspec.error_formats')
-local EventType = require('dwarfspec.automation.event_types')
+    require('dwarfspec.driver.subjects.native_resolution_failure_kinds')
+local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 local EBaseScreenFocusComparison =
-    require('dwarfspec.automation.base_screen_focus_comparisons')
-local OwnerKind = require('dwarfspec.automation.owner_kinds')
-local EMouseButton = require('dwarfspec.mouse_buttons')
-local EInputState = require('dwarfspec.input_states')
-local EEvent = require('dwarfspec.state_change_events')
-local EPointerSpace = require('dwarfspec.pointer_spaces')
-local EPointerAnchor = require('dwarfspec.pointer_anchors')
-local EScreenOrigin = require('dwarfspec.screen_origins')
-local ESubjectSource = require('dwarfspec.subject_sources')
-local ResultPolicy = require('dwarfspec.automation.result_policies')
-local ResultState = require('dwarfspec.automation.result_states')
-local RunState = require('dwarfspec.automation.run_states')
+    require('dwarfspec.protocol.diagnostics.base_screen_focus_comparisons')
+local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
+local EMouseButton = require('dwarfspec.driver.input.mouse_buttons')
+local EInputState = require('dwarfspec.driver.input.input_states')
+local EEvent = require('dwarfspec.driver.state_change_events')
+local EPointerSpace = require('dwarfspec.driver.input.pointer_spaces')
+local EPointerAnchor = require('dwarfspec.driver.input.pointer_anchors')
+local EScreenOrigin = require('dwarfspec.driver.screen_origins')
+local ESubjectSource = require('dwarfspec.driver.subjects.subject_sources')
+local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local ResultState = require('dwarfspec.protocol.enums.result_states')
+local RunState = require('dwarfspec.protocol.enums.run_states')
 local SchedulerFailureKind =
-    require('dwarfspec.automation.scheduler_failure_kinds')
-local TestStatus = require('dwarfspec.automation.test_statuses')
-local RunnerFailureKind = require('dwarfspec.runner_failure_kinds')
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
+local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
+local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
 
 ---Asserts that one enum namespace rejects mutation.
 ---@param enum table

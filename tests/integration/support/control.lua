@@ -96,7 +96,7 @@ end
 
 local root = repository_root()
 local host = assert(loadfile(root ..
-    '/src/dwarfspec/automation/host.lua'))()
+    '/src/dwarfspec/host/execution/host.lua'))()
 local registry = assert(dfhack.dwarfspec,
     'DwarfSpec service is not bootstrapped')
 
@@ -114,7 +114,7 @@ elseif operation == 'snapshot' then
     print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
 elseif operation == 'incompatible' then
     local service = assert(loadfile(root ..
-        '/src/dwarfspec/automation/service.lua'))()
+        '/src/dwarfspec/host/service/service.lua'))()
     local before = registry_identity(registry)
     local ok, failure = pcall(service.bootstrap, {
         protocol_version=999,
@@ -130,7 +130,7 @@ elseif operation == 'incompatible' then
     }, {pretty=false}))
 elseif operation == 'compatible-reload' then
     local reloaded = assert(loadfile(root ..
-        '/src/dwarfspec/automation/host.lua'))()
+        '/src/dwarfspec/host/execution/host.lua'))()
     local transport = reloaded.transport(
         assert(run_id, 'run id is required'), cursor)
     transport.harness = {

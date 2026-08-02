@@ -1,26 +1,26 @@
 -- Unit contracts for public mount commands on the run-scoped ds namespace.
 
 local cleanup = assert(loadfile(
-    'src/dwarfspec/automation/cleanup.lua'))()
-local component = assert(loadfile('src/dwarfspec/component.lua'))()
+    'src/dwarfspec/host/execution/cleanup.lua'))()
+local component = assert(loadfile('src/dwarfspec/driver/mount/component.lua'))()
 local render_tracker = assert(loadfile(
-    'src/dwarfspec/render_tracker.lua'))()
+    'src/dwarfspec/driver/render/render_tracker.lua'))()
 local ds_factory = assert(loadfile(
     'src/dwarfspec/ds.lua'))()
 local interaction_target = assert(loadfile(
-    'src/dwarfspec/interaction_target.lua'))()
+    'src/dwarfspec/driver/subjects/interaction_target.lua'))()
 local lua_view_adapter = assert(loadfile(
-    'src/dwarfspec/lua_view_adapter.lua'))()
-local EventType = require('dwarfspec.automation.event_types')
-local EMouseButton = require('dwarfspec.mouse_buttons')
-local EInputState = require('dwarfspec.input_states')
-local EPointerSpace = require('dwarfspec.pointer_spaces')
-local EPointerAnchor = require('dwarfspec.pointer_anchors')
-local EScreenOrigin = require('dwarfspec.screen_origins')
-local EEvent = require('dwarfspec.state_change_events')
+    'src/dwarfspec/driver/subjects/lua_view_adapter.lua'))()
+local EventType = require('dwarfspec.protocol.enums.event_types')
+local EMouseButton = require('dwarfspec.driver.input.mouse_buttons')
+local EInputState = require('dwarfspec.driver.input.input_states')
+local EPointerSpace = require('dwarfspec.driver.input.pointer_spaces')
+local EPointerAnchor = require('dwarfspec.driver.input.pointer_anchors')
+local EScreenOrigin = require('dwarfspec.driver.screen_origins')
+local EEvent = require('dwarfspec.driver.state_change_events')
 local EFieldMode =
-    require('dwarfspec.native_game_ui_path').EFieldMode
-local TestStatus = require('dwarfspec.automation.test_statuses')
+    require('dwarfspec.driver.subjects.native_game_ui_path').EFieldMode
+local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
 ---@param parent table|nil
@@ -560,6 +560,47 @@ describe('DwarfSpec public mount commands', function()
                         end,
                     }
                 end,
+            }, {
+                run_id=run.run_id,
+                project={
+                    resolve_lua_source=function(source_path)
+                        return {
+                            relative_path=source_path,
+                            absolute_path=source_path,
+                        }
+                    end,
+                },
+                cleanup={
+                    mark=function() return cleanup.mark(registry) end,
+                    register=function(name, action)
+                        return cleanup.push(registry, name, action)
+                    end,
+                    rollback=function(marker, reason)
+                        return cleanup.run_from(registry, marker, reason)
+                    end,
+                },
+                overlay={
+                    destination_directory='unused/overlay',
+                    config_path='unused/overlay.json',
+                    isfile=function() return false end,
+                    read_file=function()
+                        error('unexpected overlay file read')
+                    end,
+                    write_file=function()
+                        error('unexpected overlay file write')
+                    end,
+                    remove_file=function()
+                        error('unexpected overlay file removal')
+                    end,
+                    rescan=function()
+                        error('unexpected overlay rescan')
+                    end,
+                    registered_names=function() return {} end,
+                    is_enabled=function() return false end,
+                    disable=function()
+                        error('unexpected overlay disable')
+                    end,
+                },
             })
     end)
 

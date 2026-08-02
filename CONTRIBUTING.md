@@ -26,6 +26,9 @@ whitespace, and a final newline. Production framework modules ultimately live
 under `src/dwarfspec/`; unit and generic live framework coverage live under
 `tests/`.
 
-The extracted legacy layout is temporary. Keep mechanical moves, public API
-renames, and behavior changes in separate commits whenever practical so each
-kind of change remains reviewable.
+Source modules are organized by execution boundary: `controller` for the
+external process, `host` for the DFHack process, `driver` for run-scoped UI
+operations, `protocol` for cross-boundary values, and `support` for neutral
+helpers. `cli`, `layout`, and `ds` remain shallow composition facades at the
+source root. Keep mechanical moves, API changes, and behavior changes separate
+whenever practical so each kind of change remains reviewable.

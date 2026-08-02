@@ -5,11 +5,10 @@ local M = {}
 ---Loads an installed DwarfSpec module or its source-tree equivalent.
 ---@param package_root string
 ---@param module_name string
----@param source_relative string
 ---@return table
-local function load_automation_module(package_root, module_name,
-        source_relative)
-    local source_path = package_root .. source_relative
+local function load_automation_module(package_root, module_name)
+    local source_path = package_root .. '/src/' ..
+        module_name:gsub('%.', '/') .. '.lua'
     local source_file = io.open(source_path, 'rb')
     if source_file then
         source_file:close()
@@ -57,106 +56,106 @@ end
 ---@param cleanup_registry table
 ---@param extensions table
 ---@param mount_dependencies table|nil
+---@param run_capabilities table
 ---@return table
 function M.new(package_root, project, scheduler_module, scheduler,
-        cleanup_module, cleanup_registry, extensions, mount_dependencies)
+        cleanup_module, cleanup_registry, extensions, mount_dependencies,
+        run_capabilities)
+    assert(type(run_capabilities) == 'table',
+        'DwarfSpec ds factory requires injected run capabilities')
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
-local diagnostics = load_automation_module(package_root,
-    'dwarfspec.automation.diagnostics',
-    '/src/dwarfspec/automation/diagnostics.lua')
+local diagnostics_module = load_automation_module(package_root,
+    'dwarfspec.driver.diagnostics.diagnostics')
 local pointer_adapter_module = load_automation_module(package_root,
-    'dwarfspec.automation.pointer_adapter',
-    '/src/dwarfspec/automation/pointer_adapter.lua')
-local overlay_registration = load_automation_module(package_root,
-    'dwarfspec.automation.overlay_registration',
-    '/src/dwarfspec/automation/overlay_registration.lua')
+    'dwarfspec.driver.input.pointer_adapter')
+local overlay_registration_module = load_automation_module(package_root,
+    'dwarfspec.driver.overlay.overlay_registration')
 local component_module = load_automation_module(package_root,
-    'dwarfspec.component', '/src/dwarfspec/component.lua')
+    'dwarfspec.driver.mount.component')
 local mount_context_module = load_automation_module(package_root,
-    'dwarfspec.mount_context', '/src/dwarfspec/mount_context.lua')
+    'dwarfspec.driver.mount.mount_context')
 local mount_adapters_module = load_automation_module(package_root,
-    'dwarfspec.mount_adapters', '/src/dwarfspec/mount_adapters.lua')
+    'dwarfspec.driver.mount.mount_adapters')
 local overlay_mount_module = load_automation_module(package_root,
-    'dwarfspec.overlay_mount', '/src/dwarfspec/overlay_mount.lua')
+    'dwarfspec.driver.mount.overlay_mount')
 local render_instrumentation = load_automation_module(package_root,
-    'dwarfspec.render_instrumentation',
-    '/src/dwarfspec/render_instrumentation.lua')
+    'dwarfspec.driver.render.render_instrumentation')
 local native_render_observer_module = load_automation_module(package_root,
-    'dwarfspec.native_render_observer',
-    '/src/dwarfspec/native_render_observer.lua')
+    'dwarfspec.driver.render.native_render_observer')
 local render_tracker_module = load_automation_module(package_root,
-    'dwarfspec.render_tracker', '/src/dwarfspec/render_tracker.lua')
+    'dwarfspec.driver.render.render_tracker')
 local subject_module = load_automation_module(package_root,
-    'dwarfspec.subject', '/src/dwarfspec/subject.lua')
+    'dwarfspec.driver.subjects.subject')
 local interaction_target_module = load_automation_module(package_root,
-    'dwarfspec.interaction_target',
-    '/src/dwarfspec/interaction_target.lua')
+    'dwarfspec.driver.subjects.interaction_target')
 local lua_view_adapter_module = load_automation_module(package_root,
-    'dwarfspec.lua_view_adapter',
-    '/src/dwarfspec/lua_view_adapter.lua')
+    'dwarfspec.driver.subjects.lua_view_adapter')
 local native_attachment_module = load_automation_module(package_root,
-    'dwarfspec.native_attachment',
-    '/src/dwarfspec/native_attachment.lua')
+    'dwarfspec.driver.mount.native_attachment')
 local native_widget_adapter_module = load_automation_module(package_root,
-    'dwarfspec.native_widget_adapter',
-    '/src/dwarfspec/native_widget_adapter.lua')
+    'dwarfspec.driver.subjects.native_widget_adapter')
 local native_game_ui_path_module = load_automation_module(package_root,
-    'dwarfspec.native_game_ui_path',
-    '/src/dwarfspec/native_game_ui_path.lua')
+    'dwarfspec.driver.subjects.native_game_ui_path')
 local overlay_registry_adapter_module = load_automation_module(package_root,
-    'dwarfspec.overlay_registry_adapter',
-    '/src/dwarfspec/overlay_registry_adapter.lua')
+    'dwarfspec.driver.subjects.overlay_registry_adapter')
 local subject_paths_module = load_automation_module(package_root,
-    'dwarfspec.subject_paths', '/src/dwarfspec/subject_paths.lua')
+    'dwarfspec.driver.subjects.subject_paths')
 local subject_requests_module = load_automation_module(package_root,
-    'dwarfspec.subject_requests', '/src/dwarfspec/subject_requests.lua')
+    'dwarfspec.driver.subjects.subject_requests')
 local identity_labels = load_automation_module(package_root,
-    'dwarfspec.identity_labels', '/src/dwarfspec/identity_labels.lua')
+    'dwarfspec.support.identity_labels')
 local EResolutionStage = load_automation_module(package_root,
-    'dwarfspec.native_resolution_stages',
-    '/src/dwarfspec/native_resolution_stages.lua')
+    'dwarfspec.driver.subjects.native_resolution_stages')
 local EMouseButton = load_automation_module(package_root,
-    'dwarfspec.mouse_buttons', '/src/dwarfspec/mouse_buttons.lua')
+    'dwarfspec.driver.input.mouse_buttons')
 local EInputState = load_automation_module(package_root,
-    'dwarfspec.input_states', '/src/dwarfspec/input_states.lua')
+    'dwarfspec.driver.input.input_states')
 local EPointerSpace = load_automation_module(package_root,
-    'dwarfspec.pointer_spaces', '/src/dwarfspec/pointer_spaces.lua')
+    'dwarfspec.driver.input.pointer_spaces')
 local EPointerAnchor = load_automation_module(package_root,
-    'dwarfspec.pointer_anchors', '/src/dwarfspec/pointer_anchors.lua')
+    'dwarfspec.driver.input.pointer_anchors')
 local EScreenOrigin = load_automation_module(package_root,
-    'dwarfspec.screen_origins', '/src/dwarfspec/screen_origins.lua')
+    'dwarfspec.driver.screen_origins')
 local ESubjectSource = load_automation_module(package_root,
-    'dwarfspec.subject_sources', '/src/dwarfspec/subject_sources.lua')
+    'dwarfspec.driver.subjects.subject_sources')
 local EEvent = load_automation_module(package_root,
-    'dwarfspec.state_change_events',
-    '/src/dwarfspec/state_change_events.lua')
+    'dwarfspec.driver.state_change_events')
 local EventType = load_automation_module(package_root,
-    'dwarfspec.automation.event_types',
-    '/src/dwarfspec/automation/event_types.lua')
+    'dwarfspec.protocol.enums.event_types')
 local TestStatus = load_automation_module(package_root,
-    'dwarfspec.automation.test_statuses',
-    '/src/dwarfspec/automation/test_statuses.lua')
+    'dwarfspec.protocol.enums.test_statuses')
 local save_game_mount_module = load_automation_module(package_root,
-    'dwarfspec.automation.save_game_mount',
-    '/src/dwarfspec/automation/save_game_mount.lua')
+    'dwarfspec.driver.game.save_game_mount')
 local save_game_unload_module = load_automation_module(package_root,
-    'dwarfspec.automation.save_game_unload',
-    '/src/dwarfspec/automation/save_game_unload.lua')
+    'dwarfspec.driver.game.save_game_unload')
 local save_game_load_module = load_automation_module(package_root,
-    'dwarfspec.automation.save_game_load',
-    '/src/dwarfspec/automation/save_game_load.lua')
+    'dwarfspec.driver.game.save_game_load')
 local save_game_unload_command = load_automation_module(package_root,
-    'dwarfspec.commands.save_game_unload',
-    '/src/dwarfspec/commands/save_game_unload.lua')
+    'dwarfspec.driver.commands.save_game_unload')
 local save_game_load_command = load_automation_module(package_root,
-    'dwarfspec.commands.save_game_load',
-    '/src/dwarfspec/commands/save_game_load.lua')
+    'dwarfspec.driver.commands.save_game_load')
 local await_event_command = load_automation_module(package_root,
-    'dwarfspec.commands.await_event',
-    '/src/dwarfspec/commands/await_event.lua')
+    'dwarfspec.driver.commands.await_event')
 local text_search_command = load_automation_module(package_root,
-    'dwarfspec.commands.text_search',
-    '/src/dwarfspec/commands/text_search.lua')
+    'dwarfspec.driver.commands.text_search')
+local wait_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.wait')
+local game_state_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.game_state')
+local view_position_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.view_position')
+local capture_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.capture')
+local mount_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.mount')
+local input_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.input')
+local pointer_command = load_automation_module(package_root,
+    'dwarfspec.driver.commands.pointer')
+local native_subject_source_module = load_automation_module(package_root,
+    'dwarfspec.driver.subjects.native_subject_source')
+local command_observer_module = load_automation_module(package_root,
+    'dwarfspec.driver.render.command_observer')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
     local wait_settings = extensions.settings.wait or {}
@@ -190,7 +189,6 @@ local text_search_command = load_automation_module(package_root,
         scheduler_module=scheduler_module,
         cleanup_module=cleanup_module,
         cleanup_registry=cleanup_registry,
-        diagnostics=diagnostics,
         pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry, {
             get_geometry=get_pointer_geometry,
             screen=pointer_screen,
@@ -242,16 +240,47 @@ local text_search_command = load_automation_module(package_root,
         game_speed_cleanup_entry=nil,
     }
 
+    local diagnostics = diagnostics_module.new({
+        get_window_size=context.get_window_size,
+        read_tile=context.read_tile,
+    })
+    context.diagnostics = diagnostics
+
+    ---Dispatches one native input key through DFHack's GUI module.
+    ---@param screen any
+    ---@param key string
+    ---@return any
+    local function simulate_native_input(screen, key)
+        return require('gui').simulateInput(screen, key)
+    end
+
+    ---Returns the current native main-interface options.
+    ---@return any
+    local function get_native_options()
+        return df.global.game.main_interface.options
+    end
+
+    local native_game = {
+        is_world_loaded=dfhack.isWorldLoaded,
+        read_world_folder=dfhack.world.ReadWorldFolder,
+        get_focus=dfhack.gui.getCurFocus,
+        current_viewscreen=context.current_viewscreen,
+        get_window_size=context.get_window_size,
+        simulate_input=simulate_native_input,
+        get_options=get_native_options,
+        title_screen_type=df.viewscreen_titlest,
+        title_mode_type=df.title_mode_type,
+        load_screen_type=df.viewscreen_loadgamest,
+        main_choice_type=df.main_choice_type,
+        main_menu_option_type=df.main_menu_option_type,
+    }
+
     local save_game_unloader =
         mount_dependencies.save_game_unloader or save_game_unload_command.new({
             workflow=save_game_unload_module,
-            scheduler_module=scheduler_module,
-            scheduler=scheduler,
+            scheduling=run_capabilities.scheduling,
             wait_settings=wait_settings,
-            dfhack=dfhack,
-            df=df,
-            current_viewscreen=context.current_viewscreen,
-            get_window_size=context.get_window_size,
+            native_game=native_game,
             pointer_adapter=pointer_adapter_module,
             pointer=context.pointer,
         })
@@ -289,13 +318,9 @@ local text_search_command = load_automation_module(package_root,
     local save_game_loader =
         mount_dependencies.save_game_loader or save_game_load_command.new({
             workflow=save_game_load_module,
-            scheduler_module=scheduler_module,
-            scheduler=scheduler,
+            scheduling=run_capabilities.scheduling,
             wait_settings=wait_settings,
-            dfhack=dfhack,
-            df=df,
-            current_viewscreen=context.current_viewscreen,
-            get_window_size=context.get_window_size,
+            native_game=native_game,
             pointer_adapter=pointer_adapter_module,
             pointer=context.pointer,
             events=EEvent,
@@ -369,6 +394,8 @@ local text_search_command = load_automation_module(package_root,
             })
         end
     end
+    command_observer = command_observer_module.new(
+        publisher, EventType, TestStatus)
     ---Creates one private render tracker using the run's wait settings.
     ---@return table
     local function new_render_tracker()
@@ -601,14 +628,16 @@ local text_search_command = load_automation_module(package_root,
             context.mount_context.current.render_observer ~= nil
         return state
     end
+    local overlay_registration =
+        overlay_registration_module.new(run_capabilities)
+
     ---Stages one real overlay-registration source through run-owned cleanup.
     ---@param source_path string
     ---@param logical_name string
     ---@return table
     local function stage_overlay_registration_integration(
             source_path, logical_name)
-        return overlay_registration.stage(project, source_path, logical_name,
-            context.run.run_id, cleanup_module, cleanup_registry)
+        return overlay_registration.stage(source_path, logical_name)
     end
     context.run.overlay_registration_integration =
         stage_overlay_registration_integration
@@ -869,6 +898,15 @@ local text_search_command = load_automation_module(package_root,
                 diagnostic_path, bounded_text(viewscreen.failure),
                 bounded_text(game_failure)), 0)
     end
+
+    local native_subject_sources = native_subject_source_module.new({
+        sources=ESubjectSource,
+        mount_context=context.mount_context,
+        is_native_widget_root=is_native_widget_root,
+        native_factory=native_subject_source_factory,
+        overlay_factory=overlay_subject_source_factory,
+        resolve_implicit_path=resolve_implicit_native_path,
+    })
 
     ---Copies caller wait options and applies project-wide defaults.
     ---@param options table|nil
@@ -1311,7 +1349,7 @@ local text_search_command = load_automation_module(package_root,
             return context.mount_context:root()
         end
         local request = subject_requests_module.root(options)
-        local source = select_subject_source(mount, request)
+        local source = native_subject_sources.select(mount, request)
         if source == mount.subject_source then
             return context.mount_context:root()
         end
@@ -1338,7 +1376,7 @@ local text_search_command = load_automation_module(package_root,
         if mount.subject_source.kind == ESubjectSource.NATIVE then
             local request = subject_requests_module.get(
                 control_path, options)
-            source = select_subject_source(mount, request)
+            source = native_subject_sources.select(mount, request)
             path_segments = request.path_segments
             use_implicit_native_roots =
                 request.source == ESubjectSource.NATIVE and
@@ -1359,7 +1397,7 @@ local text_search_command = load_automation_module(package_root,
         local selected_path_segments = path_segments
         local ok, selected = pcall(function()
             if use_implicit_native_roots then
-                return resolve_implicit_native_path(
+                return native_subject_sources.resolve_implicit_path(
                     mount, path_segments, diagnostic_path)
             end
             if path_segments then
@@ -1463,7 +1501,7 @@ local text_search_command = load_automation_module(package_root,
         local source = mount.subject_source
         if mount.subject_source.kind == ESubjectSource.NATIVE then
             local request = subject_requests_module.tree(options)
-            source = select_subject_source(mount, request)
+            source = native_subject_sources.select(mount, request)
         else
             assert(options == nil,
                 'component mounts do not accept subject source options')
@@ -1980,6 +2018,52 @@ local text_search_command = load_automation_module(package_root,
         return stage_overlay_registration_integration(
             source_path, logical_name)
     end
+
+    wait_command.bind(ds, {
+        scheduler_module=scheduler_module,
+        scheduler=scheduler,
+        wait_settings=wait_settings,
+        await_event=await_event,
+    })
+    game_state_command.bind(ds, {
+        context=context,
+        cleanup_module=cleanup_module,
+        cleanup_registry=cleanup_registry,
+    })
+    view_position_command.bind(ds, {
+        context=context,
+        cleanup_module=cleanup_module,
+        cleanup_registry=cleanup_registry,
+        origins=EScreenOrigin,
+    })
+    capture_command.bind(ds, {run=context.run, diagnostics=diagnostics})
+    local mount_commands = mount_command.new({
+        context=context,
+        subject_source=ESubjectSource,
+        requests=subject_requests_module,
+        paths=subject_paths_module,
+        native_attachment=native_attachment,
+        diagnostics=diagnostics,
+        resolve_target=resolve_interaction_target,
+        select_source=native_subject_sources.select,
+        resolve_implicit_path=native_subject_sources.resolve_implicit_path,
+    })
+    for name, command in pairs(mount_commands) do ds[name] = command end
+    local input_commands = input_command.new({
+        context=context,
+        resolve_target=resolve_interaction_target,
+        simulate_input=simulate_input,
+    })
+    ds.input = input_commands.input
+    ds.type = input_commands.type
+    local pointer_commands = pointer_command.new({
+        move_pointer=ds.move_pointer,
+        hover=ds.hover,
+        click=ds.click,
+        mouseInput=ds.mouseInput,
+        mouseWheel=ds.mouseWheel,
+    })
+    for name, command in pairs(pointer_commands) do ds[name] = command end
 
     for name, command in pairs(extensions.commands) do
         local callback = command.callback

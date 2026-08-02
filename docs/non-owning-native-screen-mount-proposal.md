@@ -663,7 +663,7 @@ No native screen or widget dismissal action is registered.
 - Preserve stale-mount and retained-subject diagnostics.
 - Keep native screens and widgets out of ownership evidence.
 
-### `src/dwarfspec/automation/diagnostics.lua`
+### `src/dwarfspec/host/diagnostics/diagnostics.lua`
 
 - Delegate inspection and tree capture to subject adapters.
 - Support bounded capture of DF userdata widget trees.

@@ -2,8 +2,8 @@
 
 local fixtures = assert(loadfile(
     'tests/support/problem_fixtures.lua'))()
-local report = require('dwarfspec.report')
-local EventType = require('dwarfspec.automation.event_types')
+local report = require('dwarfspec.controller.reporting.report')
+local EventType = require('dwarfspec.protocol.enums.event_types')
 
 ---Returns whether a string contains a Windows or Unix-like absolute path.
 ---@param value string

@@ -43,7 +43,7 @@ jobs:
         run: dwarfspec version
 
       - name: Run offline unit tests
-        run: busted --no-recursive tests/unit
+        run: busted tests/unit
 
       - name: Build and validate LuaRock
         shell: pwsh
