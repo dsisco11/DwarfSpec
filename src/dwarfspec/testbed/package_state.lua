@@ -51,6 +51,7 @@ end
 ---@field normalized table
 ---@field paths dwarfspec.testbed.Paths
 ---@field base table|nil
+---@field script_loader dwarfspec.testbed.ScriptLoader|nil
 local PackageState = {}
 PackageState.__index = PackageState
 
@@ -84,6 +85,22 @@ function PackageState:set_base(base)
     assert(type(base) == 'table', 'TestBed package state base must be a table')
     assert(self.base == nil, 'TestBed package state base is already attached')
     self.base = base
+end
+
+---Installs the one bed-local script loader used by source module environments.
+---@param loader dwarfspec.testbed.ScriptLoader
+function PackageState:set_script_loader(loader)
+    assert(type(loader) == 'table', 'TestBed script loader must be a table')
+    assert(self.script_loader == nil, 'TestBed script loader is already attached')
+    self.script_loader = loader
+end
+
+---Loads one annotated script through the installed private script loader.
+---@param name string
+---@return table
+function PackageState:reqscript(name)
+    assert(self.script_loader ~= nil, 'TestBed script loader is not attached')
+    return self.script_loader:reqscript(name)
 end
 
 ---Returns the bed-local dfhack facade without consulting mutable package state.
@@ -170,7 +187,7 @@ function PackageState:source_loader(filename)
         assert(self.base ~= nil, 'TestBed package state base is not attached')
         local environment = ModuleEnvironment.new(self.base, {package=self.package,
             require=function(name) return self:require(name) end,
-            reqscript=function() error('TestBed reqscript is unavailable until its script loader is installed', 2) end,
+            reqscript=function(name) return self:reqscript(name) end,
             mkmodule=function(name) return self:mkmodule(name) end,
         })
         local chunk, message = environment.values.loadfile(filename)
@@ -251,7 +268,7 @@ function PackageState:mkmodule(name)
     assert(self.base ~= nil, 'TestBed package state base is not attached')
     local environment = ModuleEnvironment.new(self.base, {package=self.package,
         require=function(module_name) return self:require(module_name) end,
-        reqscript=function() error('TestBed reqscript is unavailable until its script loader is installed', 2) end,
+        reqscript=function(script_name) return self:reqscript(script_name) end,
         mkmodule=function(module_name) return self:mkmodule(module_name) end,
     })
     self.loaded[name] = environment.values

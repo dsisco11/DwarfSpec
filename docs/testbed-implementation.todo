@@ -382,43 +382,48 @@ Phase 7: Implement ordinary-module TestBedImport provider resolution
     ☒ Add host-spy tests proving only explicit module use_host routes invoke host require.
 
 Phase 8: Implement modern bed-local reqscript
-    ☐ Exit with a separate script graph that supports annotated module scripts, exact providers, aliases, circular imports, and retryable failures without host cache leakage.
+    ☒ Exit with a separate script graph that supports annotated module scripts, exact providers, aliases, circular imports, and retryable failures without host cache leakage.
+        - Evidence: `tests/unit/testbed/package_state_spec.lua` covers script
+          isolation, annotations, flags, dynamic loaders, source and exact
+          providers, aliases, cycles, retry, host boundaries, and bounded
+          diagnostics; 13 focused and 812 full unit examples plus Check-Lua
+          for 306 files passed on 2026-08-02.
 
 8.1 Script-source contract:
-    ☐ Validate every TestBed:reqscript name as a string before cache, provider, or root access; allow empty strings to follow the documented script resolution path.
-    ☐ Recognize only the modern --@ module=true annotation accepted by current DFHack plugins.
-    ☐ Reject a missing annotation before executing the script.
-    ☐ Reject legacy moduleMode usage with an error naming the supported annotation contract.
-    ☐ Allocate the script environment immediately before execution through the Phase 5 owning-environment factory.
-    ☐ Give each source script a self-referential _G, base-facade fallback, and the owning private package, require, reqscript, mkmodule, load, loadfile, and dofile closures.
-    ☐ Ensure nested require and reqscript calls and dynamic loads originating from a script remain in the same bed.
-    ☐ Install a raw, script-owned dfhack_flags table with module=true before execution.
-    ☐ Ensure command-only code guarded by the module flag does not run.
-    ☐ Return the preallocated source-script environment regardless of ordinary chunk return values.
-    ☐ Apply the same annotation and environment rules to root-resolved and use_source scripts.
+    ☒ Validate every TestBed:reqscript name as a string before cache, provider, or root access; allow empty strings to follow the documented script resolution path.
+    ☒ Recognize only the modern --@ module=true annotation accepted by current DFHack plugins.
+    ☒ Reject a missing annotation before executing the script.
+    ☒ Reject legacy moduleMode usage with an error naming the supported annotation contract.
+    ☒ Allocate the script environment immediately before execution through the Phase 5 owning-environment factory.
+    ☒ Give each source script a self-referential _G, base-facade fallback, and the owning private package, require, reqscript, mkmodule, load, loadfile, and dofile closures.
+    ☒ Ensure nested require and reqscript calls and dynamic loads originating from a script remain in the same bed.
+    ☒ Install a raw, script-owned dfhack_flags table with module=true before execution.
+    ☒ Ensure command-only code guarded by the module flag does not run.
+    ☒ Return the preallocated source-script environment regardless of ordinary chunk return values.
+    ☒ Apply the same annotation and environment rules to root-resolved and use_source scripts.
 
 8.2 Script cache and namespace:
-    ☐ Maintain a TestBed-owned script cache distinct from private package.loaded and process-global DFHack script caches.
-    ☐ Resolve scripts in the exact order: bed cache, exact script provider, declared script_roots, then a bounded dependency-chain failure.
-    ☐ Complete use_value, use_source, use_host, and use_existing provider resolution for the script namespace through the Phase 7 registry hooks.
-    ☐ Route script use_host only through the injected live reqscript importer.
-    ☐ Make bed:reqscript(name) and TestBed-local dfhack.reqscript(name) return the same environment identity.
-    ☐ Prepublish a source script environment so supported circular script imports share it.
-    ☐ Do not inject dfhack_flags into use_value, use_host, or use_existing results.
-    ☐ Resolve script use_existing targets before allocating an alias environment and cache the target's exact identity.
-    ☐ Detect alias-only script cycles with a bounded chain.
-    ☐ Remove TestBed-preallocated script cache entries and active markers after annotation or execution failure so later calls can retry.
-    ☐ Clear source-script and alias-resolution active markers after success while retaining successful script cache identities.
-    ☐ Do not fall back to host reqscript unless an exact use_host provider requests it.
+    ☒ Maintain a TestBed-owned script cache distinct from private package.loaded and process-global DFHack script caches.
+    ☒ Resolve scripts in the exact order: bed cache, exact script provider, declared script_roots, then a bounded dependency-chain failure.
+    ☒ Complete use_value, use_source, use_host, and use_existing provider resolution for the script namespace through the Phase 7 registry hooks.
+    ☒ Route script use_host only through the injected live reqscript importer.
+    ☒ Make bed:reqscript(name) and TestBed-local dfhack.reqscript(name) return the same environment identity.
+    ☒ Prepublish a source script environment so supported circular script imports share it.
+    ☒ Do not inject dfhack_flags into use_value, use_host, or use_existing results.
+    ☒ Resolve script use_existing targets before allocating an alias environment and cache the target's exact identity.
+    ☒ Detect alias-only script cycles with a bounded chain.
+    ☒ Remove TestBed-preallocated script cache entries and active markers after annotation or execution failure so later calls can retry.
+    ☒ Clear source-script and alias-resolution active markers after success while retaining successful script cache identities.
+    ☒ Do not fall back to host reqscript unless an exact use_host provider requests it.
 
 8.3 Focused verification:
-    ☐ Prove two beds load the same source script without sharing script globals.
-    ☐ Prove direct and _G-qualified script writes agree, script-nested module/script dependencies remain bed-local, and script-bound load/loadfile/dofile use the script environment.
-    ☐ Test module guards, raw flags, missing annotation, legacy moduleMode, execution failure, retry, circular imports, aliases, and provider results.
-    ☐ Assert host script_environment, host reqscript, and process script caches remain untouched except for explicit use_host.
-    ☐ Add a host-spy test proving only an exact script use_host provider invokes host reqscript.
-    ☐ Test bounded missing-script and dependency-chain diagnostics that never dump unbounded tables or source text.
-    ☐ Test reqscript('') through the ordinary script cache/provider/root order instead of a special validation failure.
+    ☒ Prove two beds load the same source script without sharing script globals.
+    ☒ Prove direct and _G-qualified script writes agree, script-nested module/script dependencies remain bed-local, and script-bound load/loadfile/dofile use the script environment.
+    ☒ Test module guards, raw flags, missing annotation, legacy moduleMode, execution failure, retry, circular imports, aliases, and provider results.
+    ☒ Assert host script_environment, host reqscript, and process script caches remain untouched except for explicit use_host.
+    ☒ Add a host-spy test proving only an exact script use_host provider invokes host reqscript.
+    ☒ Test bounded missing-script and dependency-chain diagnostics that never dump unbounded tables or source text.
+    ☒ Test reqscript('') through the ordinary script cache/provider/root order instead of a special validation failure.
 
 Phase 9: Complete lifecycle semantics and the public TestBed facade
     ☐ Exit with a cohesive TestBed.new/require/reqscript/close API whose ownership and closed-state behavior is uniform across every retained closure.

@@ -4,6 +4,7 @@ local config = require('dwarfspec.testbed.config')
 local Paths = require('dwarfspec.testbed.paths').Paths
 local BaseEnvironment = require('dwarfspec.testbed.base_environment').BaseEnvironment
 local PackageState = require('dwarfspec.testbed.package_state').PackageState
+local ScriptLoader = require('dwarfspec.testbed.script_loader').ScriptLoader
 local lfs = require('lfs')
 
 ---Creates an empty temporary directory.
@@ -65,10 +66,11 @@ local function new_state(root, input, options)
     local state = PackageState.new(normalized, paths)
     local base = BaseEnvironment.new(normalized, {loaders={package=state.package,
         require=function(name) return state:require(name) end,
-        reqscript=function() error('unexpected reqscript') end,
+        reqscript=function(name) return state:reqscript(name) end,
         mkmodule=function(name) return state:mkmodule(name) end,
     }}).base
     state:set_base(base)
+    ScriptLoader.new(state)
     return state
 end
 
@@ -314,6 +316,91 @@ describe('TestBed package state', function()
         assert.is_false(missing_ok)
         assert.has_error(function() first:require(1) end)
         assert.has_error(function() first:mkmodule(1) end)
+        remove_tree(root)
+    end)
+
+    it('loads annotated scripts into isolated, self-referential environments', function()
+        local root = temporary_directory()
+        write_file(root, 'scripts/file.lua', 'return _G')
+        write_file(root, 'scripts/worker.lua', '--@ module=true\nvalue = (value or 0) + 1; _G.same = value; command_only = not dfhack_flags.module; local dep = require("dep"); local nested = reqscript("nested"); loaded = dep.value + nested.value; dynamic = assert(load("return _G"))(); from_file = assert(loadfile("' .. root .. '/scripts/file.lua"))(); from_dofile = dofile("' .. root .. '/scripts/file.lua")')
+        write_file(root, 'scripts/nested.lua', '--@ module=true\nvalue = 2')
+        write_file(root, 'modules/dep.lua', 'return {value=3}')
+        local first = new_state(root, {script_roots={'scripts'}, module_roots={'modules'}})
+        local second = new_state(root, {script_roots={'scripts'}, module_roots={'modules'}})
+        local script = first:reqscript('worker')
+
+        assert.equals(script, first:reqscript('worker'))
+        assert.equals(script, first:dfhack().reqscript('worker'))
+        assert.equals(script, script._G)
+        assert.equals(1, script.value)
+        assert.equals(1, script.same)
+        assert.is_false(script.command_only)
+        assert.equals(5, script.loaded)
+        assert.equals(script, script.dynamic)
+        assert.equals(script, script.from_file)
+        assert.equals(script, script.from_dofile)
+        assert.is_true(script.dfhack_flags.module)
+        assert.equals(1, second:reqscript('worker').value)
+        remove_tree(root)
+    end)
+
+    it('supports source scripts, script providers, aliases, and circular imports', function()
+        local root = temporary_directory()
+        write_file(root, 'source.lua', '--@ module=true\nsource = true')
+        write_file(root, 'scripts/a.lua', '--@ module=true\nb = reqscript("b"); value = b')
+        write_file(root, 'scripts/b.lua', '--@ module=true\na = reqscript("a"); value = a')
+        local host_calls, host_value = 0, {host=true}
+        local state = new_state(root, {script_roots={'scripts'}, imports={
+            {provide={kind='script', name='source'}, use_source='source.lua'},
+            {provide={kind='script', name='value'}, use_value={value=true}},
+            {provide={kind='script', name='alias'}, use_existing={kind='script', name='value'}},
+            {provide={kind='script', name='host'}, use_host=true},
+            {provide={kind='script', name=''}, use_value={empty=true}},
+        }}, {host_importer=function(kind, name)
+            host_calls = host_calls + 1
+            assert.equals('script', kind)
+            assert.equals('host', name)
+            return host_value
+        end})
+        local source, a = state:reqscript('source'), state:reqscript('a')
+
+        assert.is_true(source.source)
+        assert.is_true(source.dfhack_flags.module)
+        assert.equals(a, a.b.value)
+        assert.equals(state:reqscript('value'), state:reqscript('alias'))
+        assert.is_nil(state:reqscript('value').dfhack_flags)
+        assert.is_nil(state:reqscript('alias').dfhack_flags)
+        assert.equals(host_value, state:reqscript('host'))
+        assert.is_nil(state:reqscript('host').dfhack_flags)
+        assert.is_true(state:reqscript('').empty)
+        assert.equals(1, host_calls)
+        remove_tree(root)
+    end)
+
+    it('rejects invalid scripts and clears failed state for a retry', function()
+        local root = temporary_directory()
+        write_file(root, 'scripts/missing.lua', 'executed = true')
+        write_file(root, 'scripts/legacy.lua', '--@ moduleMode=true')
+        write_file(root, 'scripts/retry.lua', '--@ module=true\nif not attempted then attempted = true; error("retry") end')
+        local state = new_state(root, {script_roots={'scripts'}})
+
+        local missing_ok, missing_message = pcall(function() state:reqscript('missing') end)
+        local legacy_ok, legacy_message = pcall(function() state:reqscript('legacy') end)
+        assert.is_false(missing_ok)
+        assert.is_false(legacy_ok)
+        assert.is_truthy(missing_message:find('module=true', 1, true))
+        assert.is_truthy(legacy_message:find('module=true', 1, true))
+        local retry_ok, retry_message = pcall(function() state:reqscript('retry') end)
+        assert.is_false(retry_ok)
+        assert.is_truthy(retry_message:find('retry', 1, true))
+        assert.is_nil(state.script_loader.active.retry)
+        assert.is_nil(state.script_loader.scripts.retry)
+        write_file(root, 'scripts/retry.lua', '--@ module=true\nretried = true')
+        assert.is_true(state:reqscript('retry').retried)
+        assert.has_error(function() state:reqscript(1) end)
+        local absent_ok, absent_message = pcall(function() state:reqscript('') end)
+        assert.is_false(absent_ok)
+        assert.is_truthy(absent_message:find('TestBed script dependency chain', 1, true))
         remove_tree(root)
     end)
 end)
