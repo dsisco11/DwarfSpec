@@ -164,7 +164,9 @@ The provider key is the pair `(kind, name)`. Modules and scripts therefore
 remain separate namespaces even when their names are identical. Each provider
 must specify exactly one strategy:
 
-- `use_value` returns the exact borrowed value. A script value must be a table;
+- `use_value` returns the exact borrowed non-`nil` value. `false` is valid for a
+  module and follows Lua's normal reload semantics; a script value must be a
+  table;
 - `use_source` loads the exact file inside the bed;
 - `use_host` borrows the exact result of host `require` or `reqscript`. It is
   available only from the live adapter and is an explicit escape from graph
@@ -175,9 +177,12 @@ must specify exactly one strategy:
 
 The initial contract intentionally omits factories, classes, dependency lists,
 and multi-providers. Duplicate user-provided tokens, multiple strategies on one
-provider, cross-namespace aliases, and unknown fields are errors. The
-configuration validator copies the provider array, provider tables, tokens,
-roots, and globals container; a `use_value` payload is deliberately borrowed.
+provider, cross-namespace aliases, and unknown fields are errors. Strategy
+selection is based on raw field presence rather than truthiness, so
+`use_value=false` is recognized while `use_value=nil` is rejected as an absent
+strategy. The configuration validator copies the provider array, provider
+tables, tokens, roots, and globals container; a `use_value` payload is
+deliberately borrowed.
 
 The module token `{kind='module', name='dfhack'}` is reserved and cannot appear
 as a provider's `provide` token with any strategy. DFHack is simultaneously a
@@ -215,10 +220,13 @@ The production module should carry the authoritative annotations:
 ---@field kind dwarfspec.TestBedImportKind
 ---@field name string
 
+---Identifies a Lua value that can be present in a provider table.
+---@alias dwarfspec.TestBedNonNilValue boolean|number|string|function|table|thread|userdata
+
 ---Provides one exact borrowed value.
 ---@class dwarfspec.TestBedValueImport
 ---@field provide dwarfspec.TestBedImportToken
----@field use_value any
+---@field use_value dwarfspec.TestBedNonNilValue
 
 ---Provides one exact source file loaded by the TestBed.
 ---@class dwarfspec.TestBedSourceImport
@@ -264,7 +272,9 @@ function TestBed.new(config) end
 
 ---Loads one Lua module through this TestBed.
 ---@param name string
----@return any
+---@return any value
+---@return any? loader_data Present only when the running Lua version returns it
+---and this call invokes a searcher.
 function TestBed:require(name) end
 
 ---Loads one annotated DFHack script module through this TestBed.
@@ -281,6 +291,10 @@ Every public TestBed method must also be annotated on
 than defining a second, drifting copy:
 
 ```lua
+---Identifies a callable DFHack defclass table accepted by `ds.mount`.
+---Runtime validation distinguishes a class from an already-created instance.
+---@alias dwarfspec.ComponentClass table
+
 ---Identifies a component exported by a bed-local Lua module.
 ---@class dwarfspec.ModuleComponentSource
 ---@field kind '"module"'
@@ -305,7 +319,7 @@ ordinary class overload remains TestBed-free:
 ```lua
 ---Mounts one owned component or complete screen.
 ---@overload fun(source: dwarfspec.TestBedComponentSource, options?: dwarfspec.MountOptions, testbed?: dwarfspec.TestBedConfig): dwarfspec.Subject
----@param component any
+---@param component dwarfspec.ComponentClass
 ---@param options? dwarfspec.MountOptions
 ---@return dwarfspec.Subject
 function DS.mount(component, options) end
@@ -350,7 +364,10 @@ remain errors. Since standalone TestBed construction has no live importer,
 explicitly enabling `component_imports` there fails validation instead of
 creating unusable host providers.
 
-Resolution should be deterministic:
+Resolution should be deterministic. The reserved module name `dfhack` is
+resolved to the TestBed-owned facade before the ordinary algorithm below and
+cannot be redirected through `package.loaded`, `package.preload`, a custom
+searcher, or `package.path`. Every other module uses:
 
 1. apply ordinary Lua `package.loaded` cache semantics;
 2. search the bed's mutable `package.searchers` in order, whose initial value
@@ -361,12 +378,14 @@ Resolution should be deterministic:
 
 The provider searcher precedes source search, so explicit and synthesized
 providers reserve exact names against accidental root shadowing. The private
-package is authoritative after creation. Entry mutations in its `loaded` and
-`preload` tables, replacement or mutation of `searchers`, and replacement or
-mutation of `path` affect subsequent bed-local loads. To match native Lua,
-assigning a different table to `package.loaded` or `package.preload` does not
-replace the internal cache or preload table used by bed-local `require`; those
-package fields are references to the authoritative internal tables.
+package is authoritative after creation for every non-reserved module name.
+Entry mutations in its `loaded` and `preload` tables, replacement or mutation of
+`searchers`, and replacement or mutation of `path` affect subsequent bed-local
+loads. To match native Lua, assigning a different table to `package.loaded` or
+`package.preload` does not replace the internal cache or preload table used by
+bed-local `require`; those package fields are references to the authoritative
+internal tables. The reserved `dfhack` identity rule is the sole module-name
+exception to these redirection mechanisms.
 
 The normalized initial configuration and provider registry are immutable from
 construction. This does not make the private runtime `package` immutable; code
@@ -421,11 +440,14 @@ Requiring `dwarfspec.testbed` in a normal Lua process must not:
   or
 - derive any path from the DwarfSpec checkout layout.
 
-The core supports Lua 5.3 and Lua 5.4. TestBed verification is performed only
-under Lua 5.4; Lua 5.3 is supported but explicitly untested. It may be used from
-Busted, but it must remain an ordinary pure-Lua library. Standalone callers may
-release its graph explicitly with `bed:close()`, while the live mount adapter
-owns that lifecycle automatically.
+The core supports Lua 5.3 and Lua 5.4. The standalone core conformance suite is
+performed only under Lua 5.4; Lua 5.3 is supported but has no dedicated
+compatibility suite. A required live integration proof may incidentally execute
+under the DFHack host's Lua version, but that smoke coverage does not constitute
+full Lua 5.3 conformance verification. TestBed may be used from Busted, but
+it must remain an ordinary pure-Lua library. Standalone callers may release its
+graph explicitly with `bed:close()`, while the live mount adapter owns that
+lifecycle automatically.
 
 A downstream offline project should be able to install DwarfSpec into the same
 LuaRocks tree used by its Lua interpreter and Busted runner, then execute:
@@ -482,7 +504,9 @@ The archive audit must require the public TestBed module and its production
 internals plus the public declarations while continuing to reject DwarfSpec's
 own tests. Publication is blocked if the offline installed-rock proof, live
 installed-rock proof, authoring-type proof, Lua 5.4 test suite, or archive audit
-fails. Lua 5.3 support is not a tested publication gate.
+fails. The absence of a dedicated Lua 5.3 compatibility suite is not a
+publication blocker; any required live proof still runs under its actual host
+interpreter.
 
 ### Standalone unit-test usage
 
@@ -517,7 +541,12 @@ end)
 ```
 
 This keeps Busted responsible for hooks and assertions. `close()` should be
-idempotent, clear bed-owned references, and make later operations fail. It
+idempotent, clear bed-owned references, and set one shared closed-state sentinel
+consulted by the public methods and every TestBed-owned `require`, `reqscript`,
+`mkmodule`, `load`, `loadfile`, and `dofile` closure. Those operations fail after
+close even when a caller retained a module environment or loader closure.
+Already-created consumer functions, tables, and borrowed values remain usable;
+TestBed cannot invalidate arbitrary values retained by callers. Explicit close
 should be recommended for deterministic reference release, but an unclosed
 standalone bed must not leave TestBed-owned global hooks or loader mutations
 behind. A test that creates a bed entirely inside one `it` block can therefore
@@ -613,11 +642,13 @@ private, mutable, and authoritative for that bed's `require`. Its initial
 `searchers` contain a private preload searcher, the exact-provider searcher, and
 a Lua source searcher using its private `path`. Code may mutate entries in the
 authoritative `loaded` and `preload` tables and may replace or mutate `searchers`
-and `path`; later bed-local calls must observe those changes. As in native Lua,
-assigning a different table to `package.loaded` or `package.preload` does not
-replace the internal table used by `require`. `config` and `searchpath` must
-match the running Lua version. The bed does not inherit host searchers or host
-`package.path`; its initial path is constructed from `module_roots`.
+and `path`; later bed-local calls for non-reserved module names must observe
+those changes. As in native Lua, assigning a different table to
+`package.loaded` or `package.preload` does not replace the internal table used by
+`require`. The reserved `dfhack` name is resolved before these mechanisms and
+cannot be redirected by them. `config` and `searchpath` must match the running
+Lua version. The bed does not inherit host searchers or host `package.path`; its
+initial path is constructed from `module_roots`.
 
 The environment guarantees in this proposal apply to loaders compiled or
 installed by TestBed. Replacing a private searcher or installing a preload
@@ -631,8 +662,10 @@ genuine DFHack native plugin crosses the boundary only through an explicit
 `use_value` mock or a pure-Lua `use_source` shim; neither strategy attempts to
 load or recreate the native binary.
 
-Bed-local `require` follows the semantics of the running Lua version. A
-non-`nil`, non-`false` `package.loaded[name]` value is returned immediately.
+Except for the bounded unpublished-cycle failure and reserved `dfhack` identity
+rules documented below, bed-local `require` follows the semantics of the running
+Lua version. A non-`nil`, non-`false` `package.loaded[name]` value is returned
+immediately.
 Otherwise the searchers supply and invoke a loader. If the loader returns a
 non-`nil` value, that return value is assigned to `package.loaded[name]`,
 overriding a different assignment made by the loader. If the loader returns
@@ -652,14 +685,18 @@ Initial TestBed searchers use deterministic loader data:
 - `use_existing` uses `":testbed:use_existing:<kind>:<name>"` for the alias
   token rather than forwarding the target token's loader data.
 
-The active-loading map is checked only after the ordinary cache lookup. If a
-module is already loading and has no non-`nil`, non-`false` cache entry,
-TestBed raises a deterministic circular-`require` error with the dependency
-chain instead of recursively loading it again. A module that publishes a
-non-`nil`, non-`false` value in `package.loaded` before re-entry supports the
-cycle through ordinary Lua cache semantics. TestBed does not preallocate a
-generic environment for every ordinary module and does not roll back cache
-assignments if a loader later fails.
+The active-loading map is checked only after the ordinary cache lookup. A module
+that publishes a non-`nil`, non-`false` value in `package.loaded` before re-entry
+therefore supports the cycle through ordinary Lua cache semantics. If a module
+is already loading without such a published value, TestBed replaces native
+Lua's eventual recursion-limit failure with a deterministic circular-`require`
+error containing the bounded dependency chain. This changes how an unpublished,
+already-doomed cycle fails, not which successfully loadable cycles are accepted.
+TestBed does not preallocate a generic environment for every ordinary module and
+does not roll back cache assignments if a loader later fails. It always clears
+the module's active-loading marker while unwinding success or failure, so a
+later call retries whenever ordinary cache semantics do not already provide a
+result.
 
 While `package.loaded[name]` retains a non-`nil`, non-`false` result, repeated
 calls in one bed return that same identity. A cached `false` deliberately does
@@ -704,9 +741,10 @@ module environment
 ```
 
 The module environment should receive bed-local `require`, `reqscript`,
-`mkmodule`, and `package`, and its `_G` must point to that same module
-environment. This preserves normal Lua expectations for `_G.foo` versus a
-direct global `foo` while keeping writes out of the process global table.
+`mkmodule`, and `package`, plus environment-bound `load`, `loadfile`, and
+`dofile` closures. Its `_G` must point to that same module environment. This
+preserves normal Lua expectations for `_G.foo` versus a direct global `foo`
+while keeping writes out of the process global table.
 
 The TestBed base facade is stable and mutable for ordinary keys. Reading through
 it resolves the bed-owned base backing, and assigning an ordinary key through
@@ -729,11 +767,11 @@ from the running interpreter: `_VERSION`, `assert`, `collectgarbage`, `error`,
 `type`, `xpcall`, and the `coroutine`, `debug`, `io`, `math`, `os`, `string`,
 `table`, and `utf8` libraries. Lua 5.4 also contributes `warn`. Library tables
 and other referenced values are borrowed rather than recursively copied.
-TestBed supplies its own `_G`, `require`, `package`, `load`, `loadfile`, and
-`dofile`, plus its `mkmodule`, `reqscript`, and `dfhack` integrations. It wraps
-`rawget`, `rawset`, `next`, and `pairs` only to preserve ordinary behavior for
-the TestBed base facade described above. It does not copy arbitrary process
-`_G` entries.
+TestBed supplies its own `_G`, `require`, `package`, `mkmodule`, `reqscript`, and
+`dfhack` integrations and installs the environment-bound dynamic-loading
+closures described below. It wraps `rawget`, `rawset`, `next`, and `pairs` only
+to preserve ordinary behavior for the TestBed base facade described above. It
+does not copy arbitrary process `_G` entries.
 
 A live mount starts with the same standard set, then shallow-snapshots every raw
 key and value present in the active `dfhack.BASE_G` except the versioned reserved
@@ -763,18 +801,26 @@ state and are not restored by `bed:close()`.
 The `dfhack` global binding initially visible to every module and bed-local
 `require('dfhack')` must return exactly the same TestBed-owned facade. A module
 can still deliberately shadow its own global binding through normal Lua
-assignment. This is a reserved-name exception to otherwise normal Lua
-module-cache mutability: the private package may expose
-`package.loaded.dfhack` for compatibility, but changing that entry must not make
-`require('dfhack')` diverge from the global facade. Resolving the reserved
-`module:dfhack` token must never invoke host `require`. Explicitly borrowed host
-modules may still retain or obtain the real host `dfhack` object within their
-host-owned dependency graph.
+assignment. This is a reserved-name exception to otherwise normal Lua package
+mutability: the private package may expose `package.loaded.dfhack` for
+compatibility, but changing that entry, installing `package.preload.dfhack`,
+replacing searchers, or adding a matching source path must not make
+`require('dfhack')` diverge from the global facade. Resolving the reserved name
+happens before the ordinary package algorithm and never invokes host `require`.
+Explicitly borrowed host modules may still retain or obtain the real host
+`dfhack` object within their host-owned dependency graph.
 
-Bed-local `load`, `loadfile`, and `dofile` behavior must not silently execute a
-chunk in process `_G`. They should preserve the requesting module environment,
-or fail with a clear unsupported-operation error. Explicit file paths follow
-ordinary Lua filesystem behavior; TestBed does not claim physical containment.
+Each module and source-loaded script environment receives closures bound to that
+environment. Bed-local `load(chunk, chunkname?, mode?, env?)` and
+`loadfile(filename, mode?, env?)` preserve the running Lua version's signatures,
+honor an explicitly supplied environment, and otherwise compile into the
+closure's owning module or script environment. Bed-local `dofile(filename)`
+loads and executes the file in that same owning environment and preserves the
+chunk's ordinary return values. The unbound `load`, `loadfile`, and `dofile`
+fields visible directly through the shared `dfhack.BASE_G` facade fail with a
+clear unsupported-operation error; callers use the environment-local global
+bindings instead. Explicit file paths follow ordinary Lua filesystem behavior;
+TestBed does not claim physical containment.
 
 TestBed must publish a versioned reserved-loader policy for the supported
 DFHack version. Known loader entry points visible through the bed base, the
@@ -787,15 +833,17 @@ every future function with loader-like behavior. The initial policy is:
 | Entry point | TestBed behavior |
 |---|---|
 | `_G` | Refer to the current module environment, not process `_G`. |
-| Initial global `dfhack` and `require('dfhack')` | Return the same TestBed-owned facade; never resolve through host `require`. |
+| Initial global `dfhack` and `require('dfhack')` | Return the same TestBed-owned facade; resolve before mutable package mechanisms and never through host `require`. |
 | `dfhack.BASE_G` | Return the stable TestBed base facade. Ordinary writes update bed-wide globals; reserved loader keys reject writes; the real host base is untouched. |
 | `require` | Resolve through the bed-local ordinary-module graph. |
 | `mkmodule` | Return the stable environment owned by this bed and module name. |
 | `reqscript` and `dfhack.reqscript` | Resolve through the bed-local script-module graph. |
-| `load`, `loadfile`, and `dofile` | Preserve the current bed environment, or fail as unsupported. |
+| Module- and script-global `load`, `loadfile`, and `dofile` | Use closures bound to the owning environment, honoring explicit `load` and `loadfile` environment arguments. |
+| `dfhack.BASE_G.load`, `dfhack.BASE_G.loadfile`, and `dfhack.BASE_G.dofile` | Fail as unsupported because the shared base facade has no single owning module environment. |
+| `dfhack_flags` | Be absent from ordinary module environments; source-loaded script environments receive their own table with `module=true`; the shared base facade rejects replacement. |
 | `reload` and `dfhack.reload`, if present | Fail as unsupported; a bed-local reload API is deferred. |
 | `script_environment` and `dfhack.script_environment`, if present | Fail as unsupported; they must not bypass `reqscript` annotation and cache rules. |
-| `package.loaded`, `package.preload`, `package.searchers`, `package.path`, `package.config`, and `package.searchpath` | Use the mutable, authoritative bed-local package. |
+| `package.loaded`, `package.preload`, `package.searchers`, `package.path`, `package.config`, and `package.searchpath` | Use the mutable, authoritative bed-local package for non-reserved names; none can redirect `dfhack`. |
 | `package.cpath` and `package.loadlib` | Do not expose working host native loading; native modules require explicit providers. |
 
 The live adapter must exclude reserved names from the runtime snapshot and
@@ -874,10 +922,14 @@ local script = bed:reqscript('internal/my_plugin/worker')
 
 The `script_roots` field supplies conventional discovery, while exact script
 values, files, host borrows, and aliases use the same `imports` provider array
-with `provide.kind='script'`. A script environment must be allocated before the
-script executes so supported circular script imports can observe the same
-partially initialized environment. TestBed validates `--@ module=true` and runs
-the script with `dfhack_flags.module == true`. It intentionally does not support
+with `provide.kind='script'`. A source-loaded script environment must be
+allocated and cached immediately before its chunk executes so supported
+circular script imports can observe the same partially initialized environment.
+TestBed validates `--@ module=true` and gives that environment its own raw
+`dfhack_flags` table with `module == true`; ordinary module environments do not
+receive that binding. `use_value`, `use_host`, and `use_existing` do not execute
+a TestBed-owned script chunk and therefore do not inject or modify
+`dfhack_flags` in their returned tables. TestBed intentionally does not support
 legacy `moduleMode`; DwarfSpec targets modern plugins and documents this as a
 modern `reqscript` subset rather than complete historical emulation.
 `use_source` does not bypass the annotation or environment rules; it changes
@@ -893,11 +945,20 @@ live DFHack facade.
 
 Bed-local script resolution must be deterministic:
 
-1. return the script environment already cached by this bed;
-2. resolve an exact script provider from `imports`, including same-namespace
-   `use_existing` aliases;
+1. return the script value or environment already cached by this bed;
+2. resolve an exact script provider from `imports`; a same-namespace
+   `use_existing` resolves its target before allocating anything for the alias
+   and caches the target's exact identity under the alias token;
 3. search `script_roots` in declared order; or
 4. fail with the script dependency chain.
+
+An alias-only cycle fails with a bounded dependency chain. An environment is
+preallocated only when TestBed is about to execute an actual source-backed
+script, never merely because an alias token was requested. If annotation
+validation or script execution fails, TestBed removes the preallocated script
+cache entry and clears its active-loading marker while unwinding so a later call
+can retry. Successfully preallocated environments remain cached and continue to
+provide the documented circular-script identity.
 
 TestBed must not silently fall back to the process-global DFHack `reqscript`.
 That would reintroduce shared script caches and make an undeclared dependency
@@ -974,8 +1035,10 @@ The live mount adapter should:
 - coordinate mount-before-bed cleanup order.
 
 It should not contain the loader algorithm or a second component-mount
-implementation. The graph behavior is tested under standalone Lua 5.4. Lua 5.3
-remains a supported but untested runtime.
+implementation. The graph behavior has a dedicated standalone conformance suite
+under Lua 5.4. Lua 5.3 remains supported without a dedicated compatibility
+suite; incidental execution by a live DFHack proof is integration smoke
+coverage rather than full Lua 5.3 conformance verification.
 
 All module names, provider tokens, and source-path values must be type-validated.
 Relative paths use the effective project root, but explicit paths and private
@@ -1009,9 +1072,10 @@ dependencies or replaceable module imports.
 | A module escapes through global `require`, `package`, `loadfile`, or `_G`. | Install bed-local functions and a private authoritative package in every source environment. |
 | A module escapes through DFHack `reload`, `script_environment`, or another known host import function. | Maintain a versioned policy for supported DFHack loader APIs, with a bed-local implementation or explicit rejection for each reserved entry point. |
 | A module replaces a loader through `dfhack.BASE_G`. | Route ordinary base writes to bed-owned shared globals, but reject normal and bed-local `rawset` writes to reserved loader keys. |
-| The initial global `dfhack` binding and `require('dfhack')` expose different APIs. | Reserve the `dfhack` module token, configure mocks only through `globals.dfhack`, and return one facade from both access forms. |
+| The initial global `dfhack` binding and `require('dfhack')` expose different APIs. | Reserve the `dfhack` module token, configure mocks only through `globals.dfhack`, resolve it before the mutable package algorithm, and return one facade from both access forms. |
 | A fake silently masks a misspelled production module. | Validate provider tokens, freeze the provider registry, and identify the failed resolution strategies in the error. |
-| Circular imports return inconsistent state. | Check the cache before the active-loading map, honor explicitly published partial state, and otherwise fail with a bounded circular-import chain. |
+| Circular imports return inconsistent state. | Check the cache before the active-loading map, honor explicitly published partial state, and replace only native Lua's doomed recursive failure with a bounded circular-import chain. |
+| A failed load poisons later resolution. | Clear active-loading markers on every exit, retain only ordinary module cache assignments, and remove TestBed-preallocated script environments after failure. |
 | A borrowed GUI class and a bed-loaded copy have incompatible identities. | Borrow DFHack framework modules exactly and warn against loading them from source roots. |
 | A test passes an already-loaded class or instance and expects replacements to affect captured dependencies. | Reject TestBed configuration on class mounts, reject instance mounts, and require a tagged module or script descriptor for TestBed-backed construction. |
 | A TestBed configuration table is confused with component constructor options. | Keep `dwarfspec.TestBedConfig` in a dedicated final parameter instead of inferring intent from table keys. |
@@ -1079,10 +1143,11 @@ The first usable increment should contain:
   provider array, and `component_imports=false` for disabling synthesized host
   providers on a mount;
 - `use_value`, `use_source`, live-only `use_host`, and same-namespace
-  `use_existing` provider strategies;
+  `use_existing` provider strategies, with raw key-presence validation,
+  non-`nil` `use_value` payloads, and exact script-alias identity;
 - bed-local `require`, Lua-compatible cache and return semantics, module
   environments with module-local `_G`, a mutable authoritative private
-  `package`, and `mkmodule`;
+  `package`, environment-bound `load`, `loadfile`, and `dofile`, and `mkmodule`;
 - bed-local `reqscript` and `dfhack.reqscript`, with annotation validation,
   `dfhack_flags.module`, a separate script cache, supported circular script
   imports, and no legacy `moduleMode`;
@@ -1091,13 +1156,15 @@ The first usable increment should contain:
 - one TestBed-owned `dfhack` facade shared by the initial global binding and
   `require('dfhack')`, backed exclusively by `globals.dfhack`, the permitted live
   object, or an empty offline object, with `dfhack.BASE_G` bound to the stable
-  mutable TestBed base facade;
+  mutable TestBed base facade and the `dfhack` name resolved before mutable
+  package mechanisms;
 - immutable initial configuration from construction while the private runtime
   package remains mutable;
-- idempotent `close`;
+- idempotent `close` with one closed-state sentinel observed by every bed-owned
+  public method and loader closure;
 - bounded module and script dependency-chain errors;
 - standalone unit coverage on Lua 5.4;
-- documented but untested Lua 5.3 support;
+- documented Lua 5.3 support without a dedicated compatibility suite;
 - atomic `ds.mount` TestBed cleanup integration with focused default- and
   explicit-configuration live component proofs;
 - required TestBed files in the generated rock archive;
@@ -1120,11 +1187,13 @@ A prototype is successful only if it demonstrates all of the following:
   without a configuration table when Busted starts at the project root;
 - `TestBed.new(config)` exposes completion and type checking for the canonical
   config, token, provider-union, and provider-strategy types from the installed
-  rock;
+  rock, and `TestBed:require` exposes its Lua-version-dependent optional loader
+  data result;
 - only tagged module- and script-descriptor mount overloads expose the optional
   final `dwarfspec.TestBedConfig` parameter;
-- ordinary class mounts create no TestBed, reject a third TestBed argument, and
-  retain their existing two-argument behavior;
+- ordinary class mounts use the canonical `dwarfspec.ComponentClass` authoring
+  type, create no TestBed, reject a third TestBed argument, and retain their
+  existing two-argument behavior;
 - already-created component instances are rejected;
 - every tagged descriptor mount creates and automatically closes one fresh bed,
   using fixed defaults when its configuration is omitted;
@@ -1137,7 +1206,8 @@ A prototype is successful only if it demonstrates all of the following:
   replace their defaults, and the component provider set can be disabled
   deterministically;
 - `imports` accepts `use_value`, `use_source`, live `use_host`, and
-  same-namespace `use_existing`, while duplicate user tokens, cross-namespace
+  same-namespace `use_existing`; raw field presence recognizes
+  `use_value=false`; and duplicate user tokens, `use_value=nil`, cross-namespace
   aliases, multiple strategies, unknown fields, and non-table script values are
   rejected;
 - an import provider whose `provide` token is `{kind='module', name='dfhack'}`
@@ -1162,9 +1232,10 @@ A prototype is successful only if it demonstrates all of the following:
   fields reject normal and bed-local `rawset` writes; the base facade's
   metatable rejects ordinary replacement; and configured mocks cannot fall
   through to omitted live API members;
-- mutating private `package.loaded.dfhack` cannot redirect
-  `require('dfhack')` away from that facade, while ordinary package cache entries
-  remain mutable and authoritative;
+- mutating private `package.loaded.dfhack`, installing
+  `package.preload.dfhack`, replacing searchers, or adding a matching source path
+  cannot redirect `require('dfhack')` away from that facade, while ordinary
+  package mechanisms remain mutable and authoritative for every other name;
 - `require('dwarfspec.testbed')` succeeds from an installed rock without
   DFHack globals or a DwarfSpec checkout on the Lua path;
 - loading the framework-neutral TestBed module does not load the live host,
@@ -1180,9 +1251,9 @@ A prototype is successful only if it demonstrates all of the following:
 - the bed-local `package` owns mutable `loaded`, `preload`, `searchers`, and
   `path` tables plus compatible `config` and `searchpath`; entry mutations to
   `loaded` and `preload` and replacement or mutation of `searchers` and `path`
-  affect only subsequent loads in that bed, while replacing the exposed
-  `package.loaded` or `package.preload` table reference does not replace the
-  internal table used by `require`;
+  affect only subsequent non-reserved loads in that bed, while replacing the
+  exposed `package.loaded` or `package.preload` table reference does not replace
+  the internal table used by `require`;
 - bed-local `require` honors the running Lua version's cache, loader return,
   `package.loaded` assignment, and `false` semantics; on Lua 5.4, initial
   searchers supply the documented deterministic loader-data values and a cache
@@ -1191,6 +1262,10 @@ A prototype is successful only if it demonstrates all of the following:
 - real host sentinels for `reload`, `dfhack.reload`, `script_environment`, and
   `dfhack.script_environment` are never invoked by TestBed-loaded code and
   instead produce the documented unsupported-operation failures;
+- environment-local `load`, `loadfile`, and `dofile` default to their owning
+  module or script environment, explicit `load` and `loadfile` environment
+  arguments are honored, their ordinary return values are preserved, and the
+  unbound variants on `dfhack.BASE_G` fail clearly;
 - no reserved loader field for the supported DFHack version omitted from the
   bed base or delegated `dfhack` facade can fall through to the real host
   `dfhack.BASE_G` or the process-global loader;
@@ -1201,16 +1276,26 @@ A prototype is successful only if it demonstrates all of the following:
   permits an ordinary circular import to observe that published environment;
 - an ordinary circular import without a non-`nil`, non-`false` value already
   published in `package.loaded` fails with a bounded circular-`require` chain
-  instead of recursively loading the active module again;
+  instead of reaching native Lua's recursion-limit failure, while a published
+  cycle succeeds with native cache behavior;
+- success and failure both clear ordinary module active-loading markers, and a
+  failed module can be retried whenever its ordinary cache state does not
+  already provide a result;
 - `bed:reqscript` and TestBed-local `dfhack.reqscript` return the same
   bed-owned script environment for one script name;
-- annotated scripts observe `dfhack_flags.module == true` and command-only side
-  effects below their module guard do not run;
+- source-loaded annotated scripts receive their own raw `dfhack_flags` table,
+  observe `dfhack_flags.module == true`, and do not run command-only side effects
+  below their module guard; ordinary modules receive no `dfhack_flags`, and
+  value, host, and alias providers do not inject one into returned tables;
 - missing `--@ module=true` declarations fail before script execution;
 - legacy `moduleMode` is not recognized and the resulting error identifies the
   supported modern annotation contract;
 - supported circular script imports share their preallocated environments
   without entering the process-global script cache;
+- script `use_existing` aliases allocate no alias environment and cache the
+  target's exact identity, while alias-only cycles fail with a bounded chain;
+- annotation or execution failure removes the TestBed-preallocated script cache
+  entry and active-loading marker so a later `reqscript` call can retry;
 - two beds load the same script source without sharing script globals;
 - each module's `_G` is its own module environment, direct and `_G`-qualified
   module writes agree, and neither reaches process `_G`;
@@ -1232,7 +1317,10 @@ A prototype is successful only if it demonstrates all of the following:
   and interacts in live DFHack using the same rock;
 - bed creation, construction, mount, and assertion failures still close every
   mount-owned bed exactly once, with component teardown preceding bed teardown
-  whenever construction reached a mounted component; and
+  whenever construction reached a mounted component;
+- after `close`, public methods and retained TestBed-owned loader closures fail
+  through the shared closed-state sentinel, while already-created consumer
+  values remain ordinary caller-owned references; and
 - consecutive live examples see fresh consumer module state without requiring
   a process-global registry of active TestBeds.
 
