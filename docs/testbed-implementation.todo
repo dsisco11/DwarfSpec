@@ -222,47 +222,50 @@ Phase 3: Build deterministic path and source resolution
     ☒ Assert process package.path remains byte-for-byte unchanged.
 
 Phase 4: Construct the TestBed base environment and protected facades
-    ☐ Exit with stable bed-owned base and dfhack facade factories that accept later package/loader closures, expose only documented base bindings, and never fall through dynamically to host state.
+    ☒ Exit with stable bed-owned base and dfhack facade factories that accept later package/loader closures, expose only documented base bindings, and never fall through dynamically to host state.
+        - Evidence: `base_environment.lua` and `base_environment_spec.lua`;
+          23 focused TestBed examples, 793 full unit examples, and Check-Lua
+          passed for 302 files on 2026-08-02.
 
 4.1 Standard-Lua baseline:
-    ☐ Copy only _VERSION, assert, collectgarbage, error, getmetatable, ipairs, next, pairs, pcall, print, rawequal, rawget, rawlen, rawset, select, setmetatable, tonumber, tostring, type, xpcall, coroutine, debug, io, math, os, string, table, and utf8 from the running interpreter.
-    ☐ Include warn only when supplied by Lua 5.4.
-    ☐ Populate a bed-owned base facade rather than copying process _G wholesale.
-    ☐ Borrow documented standard library references while keeping bed-owned global assignments off process _G.
-    ☐ Reserve package, require, reqscript, mkmodule, load, loadfile, and dofile bindings for explicit bed-owned closures supplied during later graph assembly.
-    ☐ Install bed-owned rawget, rawset, next, and pairs wrapper behavior at the base-facade layer.
-    ☐ Retain the running interpreter's ordinary getmetatable and setmetatable functions; protect the base facade with native __metatable behavior instead of custom wrappers.
-    ☐ Protect reserved loader-owned names from replacement through ordinary assignment and bed-local rawset.
+    ☒ Copy only _VERSION, assert, collectgarbage, error, getmetatable, ipairs, next, pairs, pcall, print, rawequal, rawget, rawlen, rawset, select, setmetatable, tonumber, tostring, type, xpcall, coroutine, debug, io, math, os, string, table, and utf8 from the running interpreter.
+    ☒ Include warn only when supplied by Lua 5.4.
+    ☒ Populate a bed-owned base facade rather than copying process _G wholesale.
+    ☒ Borrow documented standard library references while keeping bed-owned global assignments off process _G.
+    ☒ Reserve package, require, reqscript, mkmodule, load, loadfile, and dofile bindings for explicit bed-owned closures supplied during later graph assembly.
+    ☒ Install bed-owned rawget, rawset, next, and pairs wrapper behavior at the base-facade layer.
+    ☒ Retain the running interpreter's ordinary getmetatable and setmetatable functions; protect the base facade with native __metatable behavior instead of custom wrappers.
+    ☒ Protect reserved loader-owned names from replacement through ordinary assignment and bed-local rawset.
 
 4.2 Offline and live base construction:
-    ☐ Use an empty ordinary-API dfhack backing when offline and globals.dfhack is omitted.
-    ☐ Use the live adapter's permitted host dfhack object as the ordinary-API backing when live and globals.dfhack is omitted.
-    ☐ In live construction, shallow-snapshot every non-reserved raw binding from the active dfhack.BASE_G at bed creation.
-    ☐ Borrow values from that snapshot without dynamically reading host additions or replacements later.
-    ☐ Apply configured globals after the baseline so they replace ordinary non-reserved bindings.
-    ☐ Install TestBed-owned reserved bindings after the standard baseline, live snapshot, and configured globals so no earlier layer can replace them.
-    ☐ Treat globals.dfhack as the complete ordinary-API backing; omitted members must not fall through to the live host dfhack object.
+    ☒ Use an empty ordinary-API dfhack backing when offline and globals.dfhack is omitted.
+    ☒ Use the live adapter's permitted host dfhack object as the ordinary-API backing when live and globals.dfhack is omitted.
+    ☒ In live construction, shallow-snapshot every non-reserved raw binding from the active dfhack.BASE_G at bed creation.
+    ☒ Borrow values from that snapshot without dynamically reading host additions or replacements later.
+    ☒ Apply configured globals after the baseline so they replace ordinary non-reserved bindings.
+    ☒ Install TestBed-owned reserved bindings after the standard baseline, live snapshot, and configured globals so no earlier layer can replace them.
+    ☒ Treat globals.dfhack as the complete ordinary-API backing; omitted members must not fall through to the live host dfhack object.
 
 4.3 dfhack and BASE_G identity:
-    ☐ Create one stable TestBed-owned dfhack facade for the initial global binding and expose that exact identity to the reserved require resolver added in Phase 6.
-    ☐ Create one stable mutable bed-owned dfhack.BASE_G facade/backing shared throughout the bed.
-    ☐ Make ordinary writes to non-reserved dfhack.BASE_G fields visible bed-wide without modifying real host base state.
-    ☐ Protect the base facade metatable from ordinary replacement.
-    ☐ Protect reserved dfhack and BASE_G loader fields from ordinary assignment and bed-local rawset.
-    ☐ Make bed-local rawget, rawset, next, and pairs recognize the base facade and operate on its backing for ordinary fields.
-    ☐ Make writes to ordinary dfhack facade fields affect the selected backing table while retaining the reserved-field protections.
-    ☐ Mask host reload, dfhack.reload, script_environment, dfhack.script_environment, and every other versioned reserved loader entry point with documented unsupported-operation errors.
-    ☐ Centralize and publish the supported-DFHack-version reserved-loader policy so live snapshot filtering, base bindings, facade delegation, validation, documentation, and tests cannot drift.
-    ☐ Make unbound dfhack.BASE_G.load, loadfile, and dofile fail clearly instead of using an ambiguous environment.
+    ☒ Create one stable TestBed-owned dfhack facade for the initial global binding and expose that exact identity to the reserved require resolver added in Phase 6.
+    ☒ Create one stable mutable bed-owned dfhack.BASE_G facade/backing shared throughout the bed.
+    ☒ Make ordinary writes to non-reserved dfhack.BASE_G fields visible bed-wide without modifying real host base state.
+    ☒ Protect the base facade metatable from ordinary replacement.
+    ☒ Protect reserved dfhack and BASE_G loader fields from ordinary assignment and bed-local rawset.
+    ☒ Make bed-local rawget, rawset, next, and pairs recognize the base facade and operate on its backing for ordinary fields.
+    ☒ Make writes to ordinary dfhack facade fields affect the selected backing table while retaining the reserved-field protections.
+    ☒ Mask host reload, dfhack.reload, script_environment, dfhack.script_environment, and every other versioned reserved loader entry point with documented unsupported-operation errors.
+    ☒ Centralize and publish the supported-DFHack-version reserved-loader policy so live snapshot filtering, base bindings, facade delegation, validation, documentation, and tests cannot drift.
+    ☒ Make unbound dfhack.BASE_G.load, loadfile, and dofile fail clearly instead of using an ambiguous environment.
 
 4.4 Focused verification:
-    ☐ Test offline and live snapshots separately.
-    ☐ Test facade stability, backing completeness, no host fallthrough, bed-wide mutable ordinary fields, and unchanged host tables with controlled loader-closure inputs.
-    ☐ Test normal writes, rawget/rawset, next/pairs enumeration, and metatable replacement attempts for every protected category.
-    ☐ Prove bed-local rawget, rawset, next, and pairs retain native behavior for every value other than the recognized base facade.
-    ☐ Test that later process-global and host-base additions are invisible.
-    ☐ Install host sentinels for reload, dfhack.reload, script_environment, dfhack.script_environment, and every supported-version reserved loader field; prove TestBed returns its documented implementation or rejection without invoking a sentinel.
-    ☐ Fail the reserved-policy test if any supported-version entry lacks base-facade, dfhack-facade, validation, and live-snapshot behavior.
+    ☒ Test offline and live snapshots separately.
+    ☒ Test facade stability, backing completeness, no host fallthrough, bed-wide mutable ordinary fields, and unchanged host tables with controlled loader-closure inputs.
+    ☒ Test normal writes, rawget/rawset, next/pairs enumeration, and metatable replacement attempts for every protected category.
+    ☒ Prove bed-local rawget, rawset, next, and pairs retain native behavior for every value other than the recognized base facade.
+    ☒ Test that later process-global and host-base additions are invisible.
+    ☒ Install host sentinels for reload, dfhack.reload, script_environment, dfhack.script_environment, and every supported-version reserved loader field; prove TestBed returns its documented implementation or rejection without invoking a sentinel.
+    ☒ Fail the reserved-policy test if any supported-version entry lacks base-facade, dfhack-facade, validation, and live-snapshot behavior.
 
 Phase 5: Create module-environment and dynamic-loader primitives
     ☐ Exit with an environment factory that can receive bed-owned loader closures and execute source without touching process globals; do not claim complete require behavior in this phase.

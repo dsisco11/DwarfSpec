@@ -4,11 +4,7 @@ local M = {}
 
 local DEFAULT_MODULE_ROOTS = {'src/scripts_modinstalled', 'src', '.'}
 local DEFAULT_SCRIPT_ROOTS = {'src/scripts_modinstalled'}
-local RESERVED_GLOBALS = {
-    _G=true, require=true, reqscript=true, mkmodule=true, package=true,
-    load=true, loadfile=true, dofile=true, reload=true,
-    script_environment=true, dfhack_flags=true,
-}
+local RESERVED_GLOBALS = require('dwarfspec.testbed.base_environment').RESERVED_POLICY.base
 local TOP_LEVEL_FIELDS = {
     module_roots=true, script_roots=true, globals=true,
     component_imports=true, imports=true,
@@ -305,7 +301,7 @@ function Globals.copy(source)
     local values = {}
     for key, value in pairs(source) do
         if type(key) ~= 'string' then invalid('globals', 'expected string keys') end
-        if RESERVED_GLOBALS[key] then
+        if RESERVED_GLOBALS[key] and key ~= 'dfhack' then
             invalid('globals.' .. key, 'reserved TestBed loader binding')
         end
         if key == 'dfhack' and type(value) ~= 'table' then
