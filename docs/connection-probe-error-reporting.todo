@@ -98,38 +98,41 @@ Completion criteria:
       exit codes, and selection boundaries.
 
 Phase 2: Make the host probe safe and self-describing
-    ☐ Exit with a dependency-free probe that reports observable context state
+    ☒ Exit with a dependency-free probe that reports observable context state
       instead of crashing while inspecting an incomplete DFHack environment.
+        - Evidence: `src/dwarfspec/host/entrypoints/probe.lua`,
+          `tests/unit/host/entrypoints/probe_spec.lua`, 8 focused successes,
+          776 recursive unit successes, and Lua checks for 295 files.
 
 2.1 Safe capability inspection:
-    ☐ Update `src/dwarfspec/host/entrypoints/probe.lua` to inspect the global
+    ☒ Update `src/dwarfspec/host/entrypoints/probe.lua` to inspect the global
       `dfhack` value without indexing it unless it is a table.
-    ☐ Report `core` using `tostring(dfhack.is_core_context)` when the table is
+    ☒ Report `core` using `tostring(dfhack.is_core_context)` when the table is
       available and a deterministic unavailable value otherwise.
-    ☐ Report `timeout` using `type(dfhack.timeout)` when the table is available
+    ☒ Report `timeout` using `type(dfhack.timeout)` when the table is available
       and a deterministic unavailable type otherwise.
-    ☐ Emit the protocol supported by the probe script.
-    ☐ Emit the approved optional DFHack version field without making it part of
+    ☒ Emit the protocol supported by the probe script.
+    ☒ Emit the approved optional DFHack version field without making it part of
       the healthy-context predicate.
-    ☐ Keep the entrypoint free of `require`, `reqscript`, JSON, project
+    ☒ Keep the entrypoint free of `require`, `reqscript`, JSON, project
       configuration, and host-service dependencies.
-    ☐ Add language-standard documentation comments for any new helper methods.
+    ☒ Add language-standard documentation comments for any new helper methods.
 
 2.2 Entrypoint contract tests:
-    ☐ Extend the host entrypoint unit fixtures to capture the exact probe line.
-    ☐ Verify the healthy core-context response.
-    ☐ Verify that an absent `dfhack` global produces a parseable unhealthy
+    ☒ Extend the host entrypoint unit fixtures to capture the exact probe line.
+    ☒ Verify the healthy core-context response.
+    ☒ Verify that an absent `dfhack` global produces a parseable unhealthy
       response instead of an indexing exception.
-    ☐ Verify missing `is_core_context`, missing `timeout`, and incorrectly typed
+    ☒ Verify missing `is_core_context`, missing `timeout`, and incorrectly typed
       capability values independently.
-    ☐ Verify optional DFHack version presence and absence according to the
+    ☒ Verify optional DFHack version presence and absence according to the
       settled response grammar.
-    ☐ Verify the probe does not load DwarfSpec or third-party modules.
+    ☒ Verify the probe does not load DwarfSpec or third-party modules.
 
 Completion criteria:
-    ☐ The probe emits exactly one parseable marker for every modeled Lua-context
+    ☒ The probe emits exactly one parseable marker for every modeled Lua-context
       shape and does not throw while gathering its required fields.
-    ☐ The healthy response remains compatible with the controller protocol
+    ☒ The healthy response remains compatible with the controller protocol
       settled in Phase 1.
 
 Phase 3: Parse and classify probe results in the controller
