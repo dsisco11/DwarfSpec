@@ -490,47 +490,63 @@ Phase 10: Add the live adapter and synthesized component imports
     ☒ Test that the declared component-import compatibility version selects exactly the documented provider set.
 
 Phase 11: Revise ds.mount around tagged descriptors and TestBed ownership
-    ☐ Exit with descriptor mounts creating exactly one fresh bed while ordinary class mounts retain their established TestBed-free behavior.
+    ☒ Exit with descriptor mounts creating exactly one fresh bed while ordinary class mounts retain their established TestBed-free behavior.
+        - Evidence: focused command and mount-context suites cover class/descriptor
+          discrimination, loader rollback, ownership, and teardown order; 40
+          focused examples, 829 full unit examples, and Check-Lua for 310 files
+          passed on 2026-08-02.
 
 11.1 Public argument discrimination:
-    ☐ Accept an ordinary callable ComponentClass only through ds.mount(component_class, options?).
-    ☐ Reject already-created component instances before construction or resource registration.
-    ☐ Reject a third argument on an ordinary class mount.
-    ☐ Accept descriptors shaped only as {kind='module'|'script', name=string, export?=string}.
-    ☐ Reject unknown descriptor fields, malformed tags, non-string names, and non-string export values; do not reject an empty string that the underlying logical-name or exact-export semantics can resolve.
-    ☐ Accept TestBed configuration only as the optional final argument of a tagged descriptor mount.
-    ☐ Reject an instantiated TestBed wherever a configuration table is expected.
-    ☐ Keep component constructor options and TestBed configuration as separate arguments even when their field names overlap.
+    ☒ Accept an ordinary callable ComponentClass only through ds.mount(component_class, options?).
+    ☒ Reject already-created component instances before construction or resource registration.
+    ☒ Reject a third argument on an ordinary class mount.
+    ☒ Accept descriptors shaped only as {kind='module'|'script', name=string, export?=string}.
+    ☒ Reject unknown descriptor fields, malformed tags, non-string names, and non-string export values; do not reject an empty string that the underlying logical-name or exact-export semantics can resolve.
+    ☒ Accept TestBed configuration only as the optional final argument of a tagged descriptor mount.
+    ☒ Reject an instantiated TestBed wherever a configuration table is expected.
+    ☒ Keep component constructor options and TestBed configuration as separate arguments even when their field names overlap.
 
 11.2 Descriptor resolution:
-    ☐ Create one fresh mount-owned TestBed before resolving the descriptor.
-    ☐ Resolve module descriptors with bed:require(name) and script descriptors with bed:reqscript(name).
-    ☐ Resolve an omitted export according to the documented direct-export rule.
-    ☐ Resolve a named export from the returned module/script table and report a missing or non-component export clearly.
-    ☐ Validate the resolved value as a component class before invoking its constructor.
-    ☐ Ensure provider configuration is active before the component-defining module or script is loaded.
-    ☐ Never require the caller to provide a physical component source path.
-    ☐ Pass component constructor options to the existing component-mount boundary unchanged and return the ordinary mounted root Subject.
+    ☒ Create one fresh mount-owned TestBed before resolving the descriptor.
+    ☒ Resolve module descriptors with bed:require(name) and script descriptors with bed:reqscript(name).
+    ☒ Resolve an omitted export according to the documented direct-export rule.
+    ☒ Resolve a named export from the returned module/script table and report a missing or non-component export clearly.
+    ☒ Validate the resolved value as a component class before invoking its constructor.
+    ☒ Ensure provider configuration is active before the component-defining module or script is loaded.
+    ☒ Never require the caller to provide a physical component source path.
+    ☒ Pass component constructor options to the existing component-mount boundary unchanged and return the ordinary mounted root Subject.
 
 11.3 Ownership and unwind ordering:
-    ☐ Register the bed as mount-owned immediately after successful construction of the TestBed.
-    ☐ Register later component cleanup after bed cleanup so the existing LIFO drain executes component teardown first.
-    ☐ On resolution or component-construction failure, close the bed exactly once.
-    ☐ On mount failure after component construction, run applicable component cleanup before closing the bed.
-    ☐ On normal unmount, unmount and destroy the component before closing the bed.
-    ☐ Preserve existing cleanup markers, cleanup verification, error aggregation, and subject ownership behavior.
-    ☐ Keep ordinary class mounts free of TestBed allocation, adapter calls, and lifecycle changes.
+    ☒ Register the bed as mount-owned immediately after successful construction of the TestBed.
+    ☒ Register later component cleanup after bed cleanup so the existing LIFO drain executes component teardown first.
+    ☒ On resolution or component-construction failure, close the bed exactly once.
+    ☒ On mount failure after component construction, run applicable component cleanup before closing the bed.
+    ☒ On normal unmount, unmount and destroy the component before closing the bed.
+    ☒ Preserve existing cleanup markers, cleanup verification, error aggregation, and subject ownership behavior.
+    ☒ Keep ordinary class mounts free of TestBed allocation, adapter calls, and lifecycle changes.
 
 11.4 Focused mount verification:
-    ☐ Update command, mount-context, component classification, resource-ownership, and cleanup-verification specs.
-    ☐ Test class success and failure paths with a spy proving zero TestBeds are allocated.
-    ☐ Test module and script descriptors with omitted and explicit configuration.
-    ☐ Test empty descriptor names and exports through ordinary exact resolution instead of rejecting them solely for emptiness.
-    ☐ Give component options and TestBed configuration identical field names in one test and prove each table reaches only its intended validator/consumer.
-    ☐ Test a fresh bed per descriptor mount and no state sharing across consecutive mounts.
-    ☐ Test invalid instances, invalid descriptors, invalid TestBed configurations, third class arguments, instantiated TestBeds, missing exports, invalid exports, loader failures, constructor failures, mount failures, assertion failures, and cleanup failures.
-    ☐ Inject TestBed-construction and live-adapter setup failures; prove partially constructed core resources are discarded and no unowned cleanup registration remains.
-    ☐ Assert exact close counts and component-before-bed teardown ordering on every applicable path.
+    ☒ Update command, mount-context, component classification, resource-ownership, and cleanup-verification specs.
+    ☒ Test class success and failure paths with a spy proving zero TestBeds are allocated.
+    ☒ Test module and script descriptors with omitted and explicit configuration.
+    ☒ Test empty descriptor names and exports through ordinary exact resolution instead of rejecting them solely for emptiness.
+    ☒ Give component options and TestBed configuration identical field names in one test and prove each table reaches only its intended validator/consumer.
+    ☒ Test a fresh bed per descriptor mount and no state sharing across consecutive mounts.
+    ☒ Test invalid instances, invalid descriptors, invalid TestBed configurations, third class arguments, instantiated TestBeds, missing exports, invalid exports, loader failures, constructor failures, mount failures, assertion failures, and cleanup failures.
+    ☒ Inject TestBed-construction and live-adapter setup failures; prove partially constructed core resources are discarded and no unowned cleanup registration remains.
+    ☒ Assert exact close counts and component-before-bed teardown ordering on every applicable path.
+    ☒ Add script-descriptor coverage for omitted and explicit TestBed configuration.
+    ☒ Add empty descriptor-name and empty export-name coverage through ordinary exact resolution.
+    ☒ Add a collision case proving identical component-option and TestBed-configuration field names remain isolated.
+    ☒ Add consecutive descriptor-mount coverage proving each mount receives a fresh TestBed with no shared state.
+    ☒ Add direct coverage for instantiated TestBeds, missing and invalid exports, constructor failures, mount failures, assertion failures, and cleanup failures.
+    ☒ Add adapter-construction failure coverage proving partial TestBed resources are discarded without unowned cleanup registration.
+    ☒ Add exact close-count and component-before-bed ordering assertions for every descriptor failure and normal-unmount path.
+    ☒ Add ordinary class-mount success and failure tests with a TestBed-allocation spy proving neither path allocates a TestBed.
+    ☒ Add module- and script-descriptor tests for both omitted and explicit TestBed configuration.
+    ☒ Add descriptor-specific constructor, mount, assertion, and cleanup failure tests that verify descriptor-TestBed closure and cleanup behavior.
+    ☒ Add a real partial-TestBed-construction failure test proving every allocated core resource is discarded and no unowned cleanup registration remains.
+    ☒ Add exact close-count and component-before-TestBed teardown-order assertions for every applicable descriptor success and failure path.
 
 Phase 12: Complete unit, declaration, and framework integration coverage
     ☐ Exit with deterministic coverage for the entire contract under Lua 5.4 and no dependence on live DFHack for core behavior.

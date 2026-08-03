@@ -58,6 +58,14 @@
 local TestBed = {}
 TestBed.__index = TestBed
 
+---Returns whether a value is an instantiated TestBed.
+---@param value any
+---@return boolean
+function TestBed.is_instance(value)
+    return type(value) == 'table' and type(rawget(value, 'guard')) == 'table' and
+        rawget(value, 'package_state') ~= nil
+end
+
 ---Raises the shared closed-TestBed error before accessing private state.
 ---@param self dwarfspec.TestBed
 function TestBed:ensure_open()

@@ -207,7 +207,7 @@ function M.new(scope)
     ---@param component any
     ---@param mount_options table|nil
     ---@return table
-    function service:mount(component, mount_options)
+    function service:mount(component, mount_options, setup)
         assert(not self.current,
             ('DwarfSpec mount rejected because mount %d is still current; ' ..
                 'call ds.unmount() before creating another mount')
@@ -240,6 +240,7 @@ function M.new(scope)
         if not prepare_ok then
             error(self:report_failure(mount_attempt, 'mount', prepared), 2)
         end
+        setup = setup or {}
         local mount = {
             id=mount_attempt.id,
             run=self.run,
@@ -257,9 +258,9 @@ function M.new(scope)
             adapter=adapter,
             alive=false,
             cleaned=false,
-            cleanup_marker=self.cleanup_module.mark(self.cleanup_registry),
+            cleanup_marker=setup.cleanup_marker or self.cleanup_module.mark(self.cleanup_registry),
             cleanup_entry=nil,
-            cleanup_entries={},
+            cleanup_entries=setup.cleanup_entries or {},
             selected_subjects=setmetatable({}, {__mode='k'}),
             owned_views=setmetatable({}, {__mode='k'}),
             command_subject=nil,

@@ -8,6 +8,8 @@ local command_module = require(
     'dwarfspec.driver.mount.mount_command_execution')
 local ownership_module = require(
     'dwarfspec.driver.mount.mount_resource_ownership')
+local descriptor_module = require(
+    'dwarfspec.driver.mount.mount_descriptor')
 
 local M = {}
 
@@ -95,6 +97,8 @@ function M.new(options)
         failure_reporter=options.failure_reporter,
         command_observer=options.command_observer,
         subject_module=options.subject_module,
+        testbed_adapter=options.testbed_adapter,
+        testbed_host=options.testbed_host,
         current=nil,
         next_mount_id=0,
         subject_mounts=setmetatable({}, {__mode='k'}),
@@ -209,6 +213,51 @@ function M.new(options)
     ---@return table
     function context:mount(component, mount_options)
         return ownership:mount(component, mount_options)
+    end
+
+    ---Mounts one tagged descriptor through a fresh mount-owned TestBed.
+    ---@param descriptor table
+    ---@param mount_options table|nil
+    ---@param testbed_config dwarfspec.TestBedConfig|nil
+    ---@return table
+    function context:mount_descriptor(descriptor, mount_options, testbed_config)
+        assert(not self.current, 'DwarfSpec mount rejected because a mount is still current; call ds.unmount() before creating another mount')
+        assert(type(self.testbed_adapter) == 'table' and
+            type(self.testbed_adapter.new) == 'function' and
+            type(self.testbed_host) == 'table',
+            'DwarfSpec descriptor mount requires live TestBed adapter dependencies')
+        descriptor = descriptor_module.validate(descriptor)
+        assert(testbed_config == nil or type(testbed_config) == 'table',
+            'DwarfSpec descriptor TestBed configuration must be a table or nil')
+        local TestBed = require('dwarfspec.testbed')
+        assert(not TestBed.is_instance(testbed_config),
+            'DwarfSpec descriptor mount does not accept a TestBed instance')
+        local marker = self.cleanup_module.mark(self.cleanup_registry)
+        local bed = self.testbed_adapter.new(testbed_config, self.run,
+            self.testbed_host)
+        local entries = {}
+        local registered, bed_entry = xpcall(function()
+            return self.cleanup_module.push(self.cleanup_registry,
+                'close descriptor TestBed', function() bed:close() end)
+        end, debug.traceback)
+        if not registered then
+            bed:close()
+            error('DwarfSpec descriptor mount failed to register TestBed cleanup: ' ..
+                tostring(bed_entry), 2)
+        end
+        table.insert(entries, bed_entry)
+        local ok, result = xpcall(function()
+            local component = descriptor_module.resolve(bed, descriptor)
+            local classification = self.boundary:classify(component)
+            assert(classification.input_form == 'class',
+                'DwarfSpec mount descriptor must resolve to a component class')
+            return ownership:mount(component, mount_options, {
+                cleanup_marker=marker, cleanup_entries=entries})
+        end, debug.traceback)
+        if ok then return result end
+        self.cleanup_module.run_from(self.cleanup_registry, marker,
+            'failed descriptor mount')
+        error(result, 2)
     end
 
     ---Returns the current mount owning one raw view.
