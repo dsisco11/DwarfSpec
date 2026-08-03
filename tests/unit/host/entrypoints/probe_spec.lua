@@ -3,9 +3,12 @@
 local layout = require('dwarfspec.layout')
 
 ---Loads the direct probe entrypoint through the package layout authority.
+---@param environment table|nil
 ---@return function
-local function load_probe()
-    return assert(loadfile(layout.current().host_scripts.probe))
+local function load_probe(environment)
+    local path = layout.current().host_scripts.probe
+    if environment == nil then return assert(loadfile(path)) end
+    return assert(loadfile(path, 't', environment))
 end
 
 ---Returns the number of currently loaded Lua modules.
@@ -61,6 +64,25 @@ describe('DFHack connection probe entrypoint', function()
 
         assert.equals('DWARFSPEC_PROBE protocol=2 core=true ' ..
             'timeout=function dfhack=53.15-r1', line)
+    end)
+
+    it('resolves DFHack through the script environment lookup chain', function()
+        local context = {
+            VERSION='53.15-r2',
+            is_core_context=true,
+            timeout=function() end,
+        }
+        local base_environment = setmetatable({
+            dfhack=context,
+            print=function(line) table.insert(lines, line) end,
+        }, {__index=_G})
+        local environment = setmetatable({}, {__index=base_environment})
+        environment._G = environment
+
+        assert.has_no.errors(load_probe(environment))
+
+        assert.same({'DWARFSPEC_PROBE protocol=2 core=true ' ..
+            'timeout=function dfhack=53.15-r2'}, lines)
     end)
 
     it('reports an absent DFHack global without throwing', function()

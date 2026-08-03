@@ -1,10 +1,10 @@
 -- Production adapter that verifies access to DFHack's core Lua context.
 
----Returns the available DFHack table without indexing an invalid global.
+---Returns the available DFHack table through the active script environment.
 ---@return table|nil
 local function dfhack_context()
-    local context = rawget(_G, 'dfhack')
-    return type(context) == 'table' and context or nil
+    local ok, context = pcall(function() return dfhack end)
+    return ok and type(context) == 'table' and context or nil
 end
 
 ---Returns the normalized core-context capability value.
