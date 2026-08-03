@@ -52,13 +52,22 @@ end
 ---@param config dwarfspec.TestBedConfig|nil
 ---@param run table
 ---@param host table
+---@param loader_options? table
 ---@return dwarfspec.TestBed
-function M.new(config, run, host)
+function M.new(config, run, host, loader_options)
     validate_inputs(run, host)
+    loader_options = loader_options or {}
+    assert(type(loader_options) == 'table', 'TestBed adapter loader options must be a table')
     local TestBed = require('dwarfspec.testbed')
     local internal = require('dwarfspec.testbed.internal')
     return internal.new(TestBed, config, {profile='mount',
         consumer_root=run.project_root,
+        current_directory=loader_options.current_directory,
+        directory_exists=loader_options.directory_exists,
+        file_exists=loader_options.file_exists,
+        read_source=loader_options.read_source,
+        load_chunk=loader_options.load_chunk,
+        loadfile=loader_options.loadfile,
         host_importer=function(kind, name)
             if kind == 'module' then return host.require(name) end
             assert(kind == 'script', 'TestBed adapter received an invalid import kind')

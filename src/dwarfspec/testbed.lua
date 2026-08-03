@@ -5,7 +5,7 @@
 ---| '"script"'
 
 ---Identifies one exact TestBed dependency.
----@class dwarfspec.TestBedImportToken
+---@class (exact) dwarfspec.TestBedImportToken
 ---@field kind dwarfspec.TestBedImportKind
 ---@field name string
 
@@ -13,22 +13,22 @@
 ---@alias dwarfspec.TestBedNonNilValue boolean|number|string|function|table|thread|userdata
 
 ---Provides one exact borrowed value.
----@class dwarfspec.TestBedValueImport
+---@class (exact) dwarfspec.TestBedValueImport
 ---@field provide dwarfspec.TestBedImportToken
 ---@field use_value dwarfspec.TestBedNonNilValue
 
 ---Provides one exact source file loaded by the TestBed.
----@class dwarfspec.TestBedSourceImport
+---@class (exact) dwarfspec.TestBedSourceImport
 ---@field provide dwarfspec.TestBedImportToken
 ---@field use_source string
 
 ---Borrows one exact module or script from the live host.
----@class dwarfspec.TestBedHostImport
+---@class (exact) dwarfspec.TestBedHostImport
 ---@field provide dwarfspec.TestBedImportToken
 ---@field use_host true
 
 ---Aliases one exact token in the same namespace.
----@class dwarfspec.TestBedExistingImport
+---@class (exact) dwarfspec.TestBedExistingImport
 ---@field provide dwarfspec.TestBedImportToken
 ---@field use_existing dwarfspec.TestBedImportToken
 
@@ -39,11 +39,11 @@
 ---| dwarfspec.TestBedExistingImport
 
 ---Provides additional runtime globals and the optional DFHack API backing mock.
----@class dwarfspec.TestBedGlobals: table<string, any>
+---@class (exact) dwarfspec.TestBedGlobals: table<string, any>
 ---@field dfhack? table
 
 ---Configures module and script resolution for one TestBed.
----@class dwarfspec.TestBedConfig
+---@class (exact) dwarfspec.TestBedConfig
 ---@field module_roots? string[]
 ---@field globals? dwarfspec.TestBedGlobals
 ---@field component_imports? boolean
@@ -62,8 +62,8 @@ TestBed.__index = TestBed
 ---@param value any
 ---@return boolean
 function TestBed.is_instance(value)
-    return type(value) == 'table' and type(rawget(value, 'guard')) == 'table' and
-        rawget(value, 'package_state') ~= nil
+    return type(value) == 'table' and getmetatable(value) == TestBed and
+        type(rawget(value, 'guard')) == 'table'
 end
 
 ---Raises the shared closed-TestBed error before accessing private state.

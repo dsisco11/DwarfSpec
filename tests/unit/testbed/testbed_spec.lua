@@ -1,45 +1,38 @@
 -- Framework-neutral public TestBed entry-point contracts.
 
-local lfs = require('lfs')
+local TestBed = require('dwarfspec.testbed')
+local fixtures = dofile('tests/unit/testbed/fixture_integrity.lua')
 
----Creates an empty temporary consumer root.
+local FIXTURE_ROOT = fixtures.FIXTURE_ROOT
+local FixtureIntegrityGuard = fixtures.FixtureIntegrityGuard
+
+---Quotes one trusted repository path for the current platform shell.
+---@param value string
 ---@return string
-local function temporary_directory()
-    local directory = os.tmpname()
-    os.remove(directory)
-    assert(lfs.mkdir(directory))
-    return directory:gsub('\\', '/')
+local function shell_quote(value)
+    if package.config:sub(1, 1) == '\\' then return '"' .. value .. '"' end
+    return "'" .. value:gsub("'", "'\\''") .. "'"
 end
 
----Writes one fixture file, creating its parent directories.
----@param root string
----@param relative string
----@param content string
-local function write_file(root, relative, content)
-    local directory = root
-    local parent = relative:match('^(.*)/[^/]+$')
-    if parent then
-        for part in parent:gmatch('[^/]+') do
-            directory = directory .. '/' .. part
-            if not lfs.attributes(directory) then assert(lfs.mkdir(directory)) end
-        end
+---Runs the zero-configuration consumer in a child process rooted at its fixture.
+---@return string output
+local function run_zero_config_child()
+    local lua = assert(arg and arg[-1],
+        'Run-UnitTests.ps1 must invoke Busted through the Lua executable')
+    local change_directory
+    if package.config:sub(1, 1) == '\\' then
+        change_directory = 'cd /d ' .. shell_quote(FIXTURE_ROOT)
+    else
+        change_directory = 'cd ' .. shell_quote(FIXTURE_ROOT)
     end
-    local file = assert(io.open(root .. '/' .. relative, 'wb'))
-    file:write(content)
-    file:close()
-end
-
----Removes one temporary fixture hierarchy.
----@param root string
-local function remove_tree(root)
-    for entry in lfs.dir(root) do
-        if entry ~= '.' and entry ~= '..' then
-            local path = root .. '/' .. entry
-            if lfs.attributes(path, 'mode') == 'directory' then remove_tree(path)
-            else assert(os.remove(path)) end
-        end
-    end
-    assert(lfs.rmdir(root))
+    local command = change_directory .. ' && ' .. shell_quote(lua) ..
+        ' zero_config.lua 2>&1'
+    local process = assert(io.popen(command, 'r'))
+    local output = process:read('*a')
+    local ok, reason, code = process:close()
+    assert(ok, ('zero-config child failed (%s %s): %s'):format(
+        tostring(reason), tostring(code), output))
+    return output
 end
 
 ---Restores one package-loaded entry after an isolated require attempt.
@@ -50,6 +43,16 @@ local function restore_loaded(name, previous)
 end
 
 describe('dwarfspec.testbed entry point', function()
+    local fixture_guard
+
+    before_each(function()
+        fixture_guard = FixtureIntegrityGuard.new(assert)
+    end)
+
+    after_each(function()
+        fixture_guard:assert_unchanged()
+    end)
+
     it('loads when DFHack globals are unavailable', function()
         local previous_module = package.loaded['dwarfspec.testbed']
         local previous_df = rawget(_G, 'df')
@@ -99,13 +102,21 @@ describe('dwarfspec.testbed entry point', function()
         end
     end)
 
+    it('constructs a provider-only bed through the public constructor', function()
+        local identity = {}
+        local bed = TestBed.new({module_roots={}, script_roots={}, imports={
+            {provide={kind='module', name='identity'}, use_value=identity},
+        }})
+
+        assert.equals(identity, bed:require('identity'))
+        bed:close()
+        assert.has_error(function() bed:require('identity') end)
+    end)
+
     it('owns standalone conventional module and script graphs through close', function()
-        local root = temporary_directory()
-        write_file(root, 'modules/value.lua', 'local script = reqscript("worker"); return {value=script.value, keep=function() return "kept" end, deferred=function() return require("other") end}')
-        write_file(root, 'modules/other.lua', 'return "later"')
-        write_file(root, 'scripts/worker.lua', '--@ module=true\nvalue = (value or 0) + 1')
-        local config = {module_roots={root .. '/modules'}, script_roots={root .. '/scripts'}}
-        local first, second = require('dwarfspec.testbed').new(config), require('dwarfspec.testbed').new(config)
+        local config = {module_roots={FIXTURE_ROOT .. '/modules'},
+            script_roots={FIXTURE_ROOT .. '/scripts'}}
+        local first, second = TestBed.new(config), TestBed.new(config)
         local value = first:require('value')
         local script = first:reqscript('worker')
 
@@ -119,31 +130,18 @@ describe('dwarfspec.testbed entry point', function()
         assert.has_error(function() first:reqscript('worker') end)
         assert.has_error(function() value.deferred() end)
         second:close()
-        remove_tree(root)
     end)
 
-    it('loads conventional modules and scripts with zero configuration', function()
-        local root, previous = temporary_directory(), lfs.currentdir()
-        write_file(root, 'src/value.lua', 'return reqscript("worker").value')
-        write_file(root, 'src/scripts_modinstalled/worker.lua', '--@ module=true\nvalue = 7')
-        assert(lfs.chdir(root))
-        local bed = require('dwarfspec.testbed').new()
-        local value, script = bed:require('value'), bed:reqscript('worker')
-        bed:close()
-        assert(lfs.chdir(previous))
-
-        assert.equals(7, value)
-        assert.equals(7, script.value)
-        remove_tree(root)
+    it('loads conventional modules and scripts with zero configuration in a child', function()
+        assert.is_truthy(run_zero_config_child():find('ZERO_CONFIG_OK', 1, true))
     end)
 
     it('applies configured non-host providers before source loading', function()
-        local root = temporary_directory()
-        write_file(root, 'modules/consumer.lua', 'local value = require("value"); local script = reqscript("script"); return {value=value, script=script}')
         local value, script = {identity=true}, {script=true}
-        local bed = require('dwarfspec.testbed').new({module_roots={root .. '/modules'}, imports={
+        local bed = TestBed.new({module_roots={FIXTURE_ROOT .. '/modules'}, imports={
             {provide={kind='module', name='value'}, use_value=value},
-            {provide={kind='module', name='alias'}, use_existing={kind='module', name='value'}},
+            {provide={kind='module', name='alias'},
+                use_existing={kind='module', name='value'}},
             {provide={kind='script', name='script'}, use_value=script},
         }})
         local consumer = bed:require('consumer')
@@ -152,6 +150,5 @@ describe('dwarfspec.testbed entry point', function()
         assert.equals(script, consumer.script)
         assert.equals(value, bed:require('alias'))
         bed:close()
-        remove_tree(root)
     end)
 end)

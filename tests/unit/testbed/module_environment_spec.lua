@@ -3,16 +3,21 @@
 local TestBedBase = require('dwarfspec.testbed.base_environment')
 local BaseEnvironment = TestBedBase.BaseEnvironment
 local ModuleEnvironment = TestBedBase.ModuleEnvironment
+local VirtualFilesystem = dofile('tests/unit/testbed/virtual_filesystem.lua').VirtualFilesystem
 
 ---Creates a fresh module environment with controlled private loader doubles.
+---@param filesystem? dwarfspec.testbed.spec.VirtualFilesystem
 ---@return dwarfspec.testbed.ModuleEnvironment, table
-local function new_environment()
+local function new_environment(filesystem)
     local base = BaseEnvironment.new({globals={}}).base
     local calls = {}
     local environment = ModuleEnvironment.new(base, {package={private=true},
         require=function(name) calls.require = name; return 'required:' .. name end,
         reqscript=function(name) calls.reqscript = name; return {name=name} end,
         mkmodule=function(name) calls.mkmodule = name; return {name=name} end,
+        loadfile=filesystem and function(filename, mode, environment_values)
+            return filesystem:loadfile(filename, mode, environment_values)
+        end or nil,
     })
     return environment, calls
 end
@@ -77,11 +82,10 @@ describe('TestBed module environment', function()
     end)
 
     it('runs loadfile and dofile in the owning environment with multiple returns', function()
-        local environment = new_environment()
-        local filename = os.tmpname()
-        local file = assert(io.open(filename, 'w'))
-        file:write('from_file = "owned"; return 1, 2, _G')
-        file:close()
+        local filesystem = VirtualFilesystem.new()
+        local filename = filesystem:add('multiple.lua',
+            'from_file = "owned"; return 1, 2, _G')
+        local environment = new_environment(filesystem)
 
         local chunk = assert(environment.values.loadfile(filename))
         local first, second, loaded_environment = chunk()
@@ -90,8 +94,6 @@ describe('TestBed module environment', function()
         explicit()
         environment.values.from_file = nil
         local dofile_first, dofile_second, dofile_environment = environment.values.dofile(filename)
-        os.remove(filename)
-
         assert.equals(1, first)
         assert.equals(2, second)
         assert.equals(environment.values, loaded_environment)
@@ -104,27 +106,20 @@ describe('TestBed module environment', function()
     end)
 
     it('keeps nested dynamic loading in the owner without changing process paths', function()
-        local environment = new_environment()
-        local inner = os.tmpname()
-        local outer = os.tmpname()
-        local inner_file = assert(io.open(inner, 'w'))
-        inner_file:write('inner_value = true; return 3, 4, _G')
-        inner_file:close()
-        local outer_file = assert(io.open(outer, 'w'))
-        outer_file:write(([[
+        local filesystem = VirtualFilesystem.new()
+        local inner = filesystem:add('inner.lua',
+            'inner_value = true; return 3, 4, _G')
+        local outer = filesystem:add('outer.lua', ([[
             local generated = assert(load('generated_value = true; return _G'))
             local from_loadfile = assert(loadfile(%q))
             local _, _, loaded_environment = from_loadfile()
             local _, _, dofile_environment = dofile(%q)
             return generated(), loaded_environment, dofile_environment
         ]]):format(inner, inner))
-        outer_file:close()
+        local environment = new_environment(filesystem)
         local process_path = package.path
         local chunk = assert(environment.values.loadfile(outer))
         local generated_environment, loaded_environment, dofile_environment = chunk()
-        os.remove(inner)
-        os.remove(outer)
-
         assert.equals(environment.values, generated_environment)
         assert.equals(environment.values, loaded_environment)
         assert.equals(environment.values, dofile_environment)

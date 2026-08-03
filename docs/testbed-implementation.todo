@@ -549,42 +549,61 @@ Phase 11: Revise ds.mount around tagged descriptors and TestBed ownership
     ☒ Add exact close-count and component-before-TestBed teardown-order assertions for every applicable descriptor success and failure path.
 
 Phase 12: Complete unit, declaration, and framework integration coverage
-    ☐ Exit with deterministic coverage for the entire contract under Lua 5.4 and no dependence on live DFHack for core behavior.
+    ☒ Exit with deterministic coverage for the entire contract under Lua 5.4 and no dependence on live DFHack for core behavior.
 
 12.1 Test fixture matrix:
-    ☐ Add conventional modules for state isolation, nested dependencies, false returns, nil returns, explicit package.loaded writes, published cycles, unpublished cycles, failures, and retries.
-    ☐ Add annotated scripts for state isolation, guards, nested reqscript, circular imports, aliases, failures, and retries.
-    ☐ Add module and script provider fixtures for every strategy and same-name cross-namespace cases.
-    ☐ Add dynamic loader fixtures for load, loadfile, dofile, explicit environments, and multiple returns.
-    ☐ Keep fixtures consumer-shaped and separate from implementation internals.
+    ☒ Add conventional modules for state isolation, nested dependencies, false returns, nil returns, explicit package.loaded writes, published cycles, unpublished cycles, failures, and retries.
+    ☒ Add an in-memory conventional source module that returns nil and verify the private cache preserves an explicit package.loaded assignment or stores true when no value was published.
+    ☒ Add an in-memory conventional source module that returns false and verify a later require executes the source again under native Lua cache semantics.
+    ☒ Add in-memory conventional source modules that write package.loaded explicitly and verify loader return values override published values while nil returns preserve them.
+    ☒ Add a consumer-shaped published circular module graph that succeeds by exposing non-nil partial state before re-entry.
+    ☒ Add a conventional source module that fails without publishing cache state, then replace its in-memory source and prove a later require retries successfully.
+    ☒ Add annotated scripts for state isolation, guards, nested reqscript, circular imports, aliases, failures, and retries.
+    ☒ Add a script use_existing alias-only cycle and verify it fails with the bounded script dependency chain while allocating no source environment.
+    ☒ Add module and script provider fixtures for every strategy and same-name cross-namespace cases.
+    ☒ Add dynamic loader fixtures for load, loadfile, dofile, explicit environments, and multiple returns.
+    ☒ Keep fixtures consumer-shaped and separate from implementation internals.
+    ☒ Move reusable in-memory module and script sources into a consumer-shaped fixture catalog that does not expose PackageState, ScriptLoader, or internal constructor details.
+    ☒ Add a checked-in consumer fixture tree containing conventional modules and annotated scripts under the supported default and explicit layouts.
+    ☒ Treat the checked-in consumer fixture tree as read-only test data: tests may load it but must never create, modify, copy, or delete its files or directories.
+    ☒ Keep VirtualFilesystem as a pure dependency object for focused loader tests and remove its process-global io.open, io.popen, os.rename, and loadfile replacement behavior.
 
 12.2 Focused suites:
-    ☐ Add tests/unit/testbed/config_spec.lua for configuration normalization and validation.
-    ☐ Add tests/unit/testbed/paths_spec.lua for module and script path behavior.
-    ☐ Add tests/unit/testbed/providers_spec.lua for provider strategy and alias behavior.
-    ☐ Add tests/unit/testbed/base_environment_spec.lua for globals, facades, reserved fields, and dynamic-loader bindings.
-    ☐ Add tests/unit/testbed/package_state_spec.lua for private package, require, loader data, cache, and cycle behavior.
-    ☐ Add tests/unit/testbed/script_loader_spec.lua for reqscript behavior.
-    ☐ Add tests/unit/testbed/testbed_spec.lua for public construction, isolation, lifecycle, and entry-point dependency boundaries.
-    ☐ Add tests/unit/driver/mount/testbed_adapter_spec.lua and update the existing mount command/context/component/ownership/cleanup specs.
-    ☐ Add a host-adapter double that verifies live behavior without importing real DFHack modules into core unit tests.
-    ☐ Add regression tests for every proposal discrepancy previously resolved: package mutability, dfhack reservation, BASE_G mutability, native-plugin providers, native Lua cache semantics, string type validation without invented non-empty restrictions, and bounded cycles.
-    ☐ Re-run existing ordinary-spec project-path precedence, consumer-module eviction, package.path restoration, and process-global require behavior tests to prove TestBed remains opt-in.
-    ☐ Run each new focused suite directly before relying on recursive full-suite discovery.
+    ☒ Add tests/unit/testbed/config_spec.lua for configuration normalization and validation.
+    ☒ Add tests/unit/testbed/paths_spec.lua for module and script path behavior.
+    ☒ Add tests/unit/testbed/providers_spec.lua for provider strategy and alias behavior.
+    ☒ Refactor providers_spec.lua to exercise source providers through the public constructor and checked-in read-only fixtures without replacing bed.package_state, bed.script_loader, or process-global functions.
+    ☒ Add tests/unit/testbed/base_environment_spec.lua for globals, facades, reserved fields, and dynamic-loader bindings.
+    ☒ Add tests/unit/testbed/package_state_spec.lua for private package, require, loader data, cache, and cycle behavior.
+    ☒ Add tests/unit/testbed/script_loader_spec.lua for reqscript behavior.
+    ☒ Add tests/unit/testbed/testbed_spec.lua for public construction, isolation, lifecycle, and entry-point dependency boundaries.
+    ☒ Exercise configured source-backed behavior through the actual public TestBed.new entry point using explicit roots into the checked-in read-only consumer fixture tree.
+    ☒ Exercise true zero-configuration source-backed behavior in a child Lua process whose working directory is the checked-in consumer fixture root, without changing the parent process working directory or globals.
+    ☒ Keep lower-level path, package-state, script-loader, and environment coverage entirely in memory through injected VirtualFilesystem options.
+    ☒ Do not add a public filesystem, source-resolver, hidden constructor-options, or test-only TestBed API solely to support this coverage.
+    ☒ Add a focused audit that fails if the TestBed unit coverage creates filesystem artifacts or leaves io.open, io.popen, os.rename, loadfile, or the parent working directory changed.
+    ☒ Add tests/unit/driver/mount/testbed_adapter_spec.lua and update the existing mount command/context/component/ownership/cleanup specs.
+    ☒ Add a host-adapter double that verifies live behavior without importing real DFHack modules into core unit tests.
+    ☒ Add regression tests for every proposal discrepancy previously resolved: package mutability, dfhack reservation, BASE_G mutability, native-plugin providers, native Lua cache semantics, string type validation without invented non-empty restrictions, and bounded cycles.
+    ☒ Re-run existing ordinary-spec project-path precedence, consumer-module eviction, package.path restoration, and process-global require behavior tests to prove TestBed remains opt-in.
+    ☒ Run each affected focused suite directly before relying on recursive full-suite discovery.
 
 12.3 Declaration checks:
-    ☐ Add valid declaration fixtures for zero-argument construction, partial configuration, all provider variants, optional loader data, and both mount overloads.
-    ☐ Add invalid declaration fixtures for malformed tokens, nil values, cross-namespace aliases, unknown strategies, descriptor/class overload confusion, and TestBed instances passed where mount configuration is expected.
-    ☐ Do not claim that the ComponentClass table alias statically distinguishes a class table from an instance table; prove that distinction through the Phase 11 runtime validator instead.
-    ☐ Run declaration checks against the source-tree Lua language server configuration in this phase.
-    ☐ Verify the runtime validator and declared schema agree on every accepted and rejected shape.
-    ☐ Defer installed-rock declaration verification until Phase 13 has created and installed the exact artifact.
+    ☒ Add valid declaration fixtures for zero-argument construction, partial configuration, all provider variants, optional loader data, and both mount overloads.
+    ☒ Add invalid declaration fixtures for statically representable malformed tokens, nil values, unknown strategies, malformed descriptors, and TestBed instances passed where mount configuration is expected.
+    ☒ Add an invalid declaration fixture with an explicit unknown provider strategy field, distinct from the runtime-only multiple-strategy case.
+    ☒ Do not claim that the ComponentClass table alias statically distinguishes a class table from an instance table; prove that distinction through the Phase 11 runtime validator instead.
+    ☒ Run declaration checks against the source-tree Lua language server configuration in this phase.
+    ☒ Verify the runtime validator and declared schema agree on statically representable shapes; keep correlated-token, exclusive-strategy, and ComponentClass overload discrimination authoritative at runtime where LuaLS structural typing cannot express those constraints.
+    ☒ Add an explicit provider-shape matrix covering every valid and invalid runtime shape, including cross-namespace aliases, multiple strategies, and unknown strategies; require declaration diagnostics only for the statically representable subset.
+    ☒ Defer installed-rock declaration verification until Phase 13 has created and installed the exact artifact.
 
 12.4 Full offline gates:
-    ☐ Run tools/Run-UnitTests.ps1 under the repository's Lua 5.4 toolchain.
-    ☐ Run tools/Check-Lua.ps1.
-    ☐ Record Lua 5.3 as supported without claiming a dedicated conformance result.
-    ☐ Do not infer live behavior from these offline results.
+    ☒ Run tools/Run-UnitTests.ps1 under the repository's Lua 5.4 toolchain after the added coverage is complete.
+    ☒ Run tools/Check-Lua.ps1 after the added coverage is complete.
+    ☒ Perform a second review of the fixture-tree boundary, child-process isolation, and absence of process-global replacement before marking these tasks complete.
+    ☒ Record Lua 5.3 as supported without claiming a dedicated conformance result.
+    ☒ Do not infer live behavior from these offline results.
 
 Phase 13: Prove the installed-rock downstream boundary
     ☐ Exit with a generated rock that contains the complete public/runtime contract and drives an empty-tree consumer without checkout path leakage.

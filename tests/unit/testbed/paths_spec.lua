@@ -1,54 +1,6 @@
 local config = require('dwarfspec.testbed.config')
 local paths = require('dwarfspec.testbed.paths')
-local lfs = require('lfs')
-
----Creates one empty temporary directory and removes the temporary file first.
----@return string
-local function temporary_directory()
-    local directory = os.tmpname()
-    os.remove(directory)
-    assert(lfs.mkdir(directory))
-    return directory:gsub('\\', '/')
-end
-
----Creates a directory hierarchy for one relative path.
----@param root string
----@param relative string
-local function mkdirs(root, relative)
-    local current = root
-    for segment in relative:gmatch('[^/]+') do
-        current = current .. '/' .. segment
-        if not lfs.attributes(current, 'mode') then assert(lfs.mkdir(current)) end
-    end
-end
-
----Writes one fixture file beneath a temporary directory.
----@param root string
----@param relative string
-local function write_file(root, relative)
-    local parent = relative:match('^(.*)/[^/]+$')
-    if parent then mkdirs(root, parent) end
-    local file = assert(io.open(root .. '/' .. relative, 'wb'))
-    file:write('-- fixture\n')
-    file:close()
-end
-
----Removes a fixture directory tree after one test.
----@param root string
-local function remove_tree(root)
-    for entry in lfs.dir(root) do
-        if entry ~= '.' and entry ~= '..' then
-            local path = root .. '/' .. entry
-            local attributes = assert(lfs.attributes(path))
-            if attributes.mode == 'directory' then
-                remove_tree(path)
-            else
-                assert(os.remove(path))
-            end
-        end
-    end
-    assert(lfs.rmdir(root))
-end
+local VirtualFilesystem = dofile('tests/unit/testbed/virtual_filesystem.lua').VirtualFilesystem
 
 ---Builds normalized configuration with every supplied root treated as existing.
 ---@param input table|nil
@@ -61,9 +13,10 @@ end
 
 describe('TestBed paths', function()
     it('builds isolated default module templates in fixed order', function()
-        local root = temporary_directory()
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
         local original_path = package.path
-        local resolver = paths.Paths.new(normalized(nil, root))
+        local resolver = paths.Paths.new(normalized(nil, root), filesystem:options())
 
         assert.same({root .. '/src/scripts_modinstalled', root .. '/src', root},
             resolver.module_roots)
@@ -75,40 +28,43 @@ describe('TestBed paths', function()
             root .. '/?.lua', root .. '/?/init.lua',
         }, package.config:sub(3, 3)), resolver.package_path)
         assert.equals(original_path, package.path)
-        remove_tree(root)
     end)
 
     it('uses fixed module precedence and reports its normalized source', function()
-        local root = temporary_directory()
-        write_file(root, 'first/duplicate.lua')
-        write_file(root, 'second/duplicate.lua')
-        write_file(root, 'second/nested/init.lua')
-        local resolver = paths.Paths.new(normalized({module_roots={'first', 'second'}}, root))
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('first/duplicate.lua', '-- fixture')
+        filesystem:add('second/duplicate.lua', '-- fixture')
+        filesystem:add('second/nested/init.lua', '-- fixture')
+        local resolver = paths.Paths.new(normalized({module_roots={'first', 'second'}}, root),
+            filesystem:options())
 
         assert.equals(root .. '/first/duplicate.lua', resolver:find_module('duplicate'))
         assert.equals(root .. '/second/nested/init.lua', resolver:find_module('nested'))
-        remove_tree(root)
     end)
 
     it('keeps private path replacement local to later resolver lookups', function()
-        local root = temporary_directory()
-        write_file(root, 'first/value.lua')
-        write_file(root, 'second/value.lua')
-        local resolver = paths.Paths.new(normalized({module_roots={'first'}}, root))
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('first/value.lua', '-- fixture')
+        filesystem:add('second/value.lua', '-- fixture')
+        local resolver = paths.Paths.new(normalized({module_roots={'first'}}, root),
+            filesystem:options())
         local replacement = root .. '/second/?.lua'
 
         assert.equals(root .. '/first/value.lua', resolver:find_module('value'))
         resolver.package_path = replacement
         assert.equals(root .. '/second/value.lua', resolver:find_module('value'))
         assert.equals(replacement, resolver.package_path)
-        remove_tree(root)
     end)
 
     it('keeps explicit and empty root replacements exact', function()
-        local root = temporary_directory()
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
         local explicit = paths.Paths.new(normalized({module_roots={'../outside'},
-            script_roots={}}, root))
-        local provider_only = paths.Paths.new(normalized({module_roots={}, script_roots={}}, root))
+            script_roots={}}, root), filesystem:options())
+        local provider_only = paths.Paths.new(normalized({module_roots={}, script_roots={}}, root),
+            filesystem:options())
 
         assert.same({root:match('^(.*)/[^/]+$') .. '/outside'}, explicit.module_roots)
         assert.equals('', provider_only.package_path)
@@ -117,15 +73,15 @@ describe('TestBed paths', function()
         assert.matches('consumer root', message)
         assert.is_not_nil(message:find(root, 1, true))
         assert.matches("no file", message)
-        remove_tree(root)
     end)
 
     it('resolves scripts separately and reports all attempted candidates', function()
-        local root = temporary_directory()
-        write_file(root, 'scripts/internal/worker.lua')
-        write_file(root, 'module/internal/worker.lua')
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('scripts/internal/worker.lua', '-- fixture')
+        filesystem:add('module/internal/worker.lua', '-- fixture')
         local resolver = paths.Paths.new(normalized({module_roots={'module'},
-            script_roots={'scripts'}}, root))
+            script_roots={'scripts'}}, root), filesystem:options())
 
         assert.equals(root .. '/scripts/internal/worker.lua',
             resolver:find_script('internal/worker'))
@@ -134,7 +90,6 @@ describe('TestBed paths', function()
         assert.matches('missing', message)
         assert.matches('scripts', message)
         assert.matches('missing.lua', message)
-        remove_tree(root)
     end)
 
     it('uses the supplied consumer root for relative roots and source paths', function()

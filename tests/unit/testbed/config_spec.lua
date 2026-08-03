@@ -111,6 +111,38 @@ describe('TestBed configuration normalization', function()
             'config.imports[1].use_existing.kind')
     end)
 
+    it('accepts and rejects the complete provider shape matrix', function()
+        local shapes = {
+            {name='provider-use-value-valid', valid=true,
+                config={imports={provider('module', 'value', 'use_value', true)}}},
+            {name='provider-use-source-valid', valid=true,
+                config={imports={provider('script', 'source', 'use_source', 'source.lua')}}},
+            {name='provider-use-host-valid', valid=true,
+                config={imports={provider('module', 'host', 'use_host', true)}},
+                options={profile='mount', host_importer=function() end}},
+            {name='provider-use-existing-valid', valid=true,
+                config={imports={provider('script', 'alias', 'use_existing',
+                    {kind='script', name='source'})}}},
+            {name='provider-missing-token-invalid', valid=false,
+                config={imports={{provide={kind='module'}, use_value=true}}}},
+            {name='provider-nil-strategy-invalid', valid=false,
+                config={imports={{provide={kind='module', name='nil'}, use_value=nil}}}},
+            {name='provider-cross-namespace-invalid', valid=false,
+                config={imports={{provide={kind='module', name='value'},
+                    use_existing={kind='script', name='value'}}}}},
+            {name='provider-multiple-strategies-invalid', valid=false,
+                config={imports={{provide={kind='module', name='value'},
+                    use_value=true, use_host=true}}}},
+            {name='provider-unknown-strategy-invalid', valid=false,
+                config={imports={{provide={kind='module', name='value'},
+                    use_unknown=true}}}},
+        }
+        for _, shape in ipairs(shapes) do
+            local ok = pcall(config.normalize, shape.config, shape.options)
+            assert.equals(shape.valid, ok, shape.name)
+        end
+    end)
+
     it('reports every remaining collection, token, and reserved-global shape',
             function()
         local invalid_cases = {

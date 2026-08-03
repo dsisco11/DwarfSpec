@@ -1,41 +1,7 @@
 -- Driver TestBed adapter contracts.
 
 local adapter = require('dwarfspec.driver.mount.testbed_adapter')
-local lfs = require('lfs')
-
----Creates an empty temporary consumer root.
----@return string
-local function temporary_directory()
-    local directory = os.tmpname()
-    os.remove(directory)
-    assert(lfs.mkdir(directory))
-    return directory:gsub('\\', '/')
-end
-
----Writes one source fixture below a temporary consumer root.
----@param root string
----@param relative string
----@param content string
-local function write_file(root, relative, content)
-    local parent = relative:match('^(.*)/[^/]+$')
-    if parent and not lfs.attributes(root .. '/' .. parent) then
-        assert(lfs.mkdir(root .. '/' .. parent))
-    end
-    local file = assert(io.open(root .. '/' .. relative, 'wb'))
-    file:write(content)
-    file:close()
-end
-
----Removes one temporary fixture root.
----@param root string
-local function remove_tree(root)
-    for entry in lfs.dir(root) do
-        if entry ~= '.' and entry ~= '..' then
-            assert(os.remove(root .. '/' .. entry))
-        end
-    end
-    assert(lfs.rmdir(root))
-end
+local VirtualFilesystem = dofile('tests/unit/testbed/virtual_filesystem.lua').VirtualFilesystem
 
 ---Builds one active run and explicit live-host input double.
 ---@return table, table, table
@@ -94,34 +60,33 @@ describe('TestBed mount adapter', function()
     end)
 
     it('forwards the active consumer root and live facade identities', function()
-        local root = temporary_directory()
-        write_file(root, 'probe.lua', 'return {effect=run_command(), identity=dfhack.identity}')
+        local filesystem = VirtualFilesystem.new()
+        filesystem:add('probe.lua',
+            'return {effect=run_command(), identity=dfhack.identity}')
         local run, host = runtime()
         local identity = {}
-        run.project_root = root
+        run.project_root = filesystem.root
         host.base = {run_command=function() return 'host effect' end}
         host.dfhack = {identity=identity}
-        local bed = adapter.new({module_roots={'.'}}, run, host)
+        local bed = adapter.new({module_roots={'.'}}, run, host, filesystem:options())
         local probe = bed:require('probe')
 
         assert.equals('host effect', probe.effect)
         assert.equals(identity, probe.identity)
         bed:close()
-        remove_tree(root)
     end)
 
     it('takes construction-time snapshots of the supplied live facades', function()
-        local root = temporary_directory()
-        write_file(root, 'probe.lua', 'return {base=late_base, dfhack=dfhack.late_dfhack}')
+        local filesystem = VirtualFilesystem.new()
+        filesystem:add('probe.lua', 'return {base=late_base, dfhack=dfhack.late_dfhack}')
         local run, host = runtime()
-        run.project_root = root
-        local bed = adapter.new({module_roots={'.'}}, run, host)
+        run.project_root = filesystem.root
+        local bed = adapter.new({module_roots={'.'}}, run, host, filesystem:options())
         host.base.late_base = true
         host.dfhack.late_dfhack = true
 
         assert.same({base=nil, dfhack=nil}, bed:require('probe'))
         bed:close()
-        remove_tree(root)
     end)
 
     it('uses exact separate host loaders for module and script providers', function()

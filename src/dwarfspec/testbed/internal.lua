@@ -21,8 +21,8 @@ function M.new(TestBed, config, options)
     local state, scripts
     local ok, result = xpcall(function()
         local normalized = normalize(config, options)
-        local paths = Paths.new(normalized)
-        state = PackageState.new(normalized, paths, guard)
+        local paths = Paths.new(normalized, options)
+        state = PackageState.new(normalized, paths, guard, {loadfile=options.loadfile})
         local base = BaseEnvironment.new(normalized, {host_base=options.host_base,
             host_dfhack=options.host_dfhack, loaders={package=state.package,
             require=function(name) return state:require(name) end,
@@ -31,7 +31,8 @@ function M.new(TestBed, config, options)
             ensure_open=function() return state:ensure_open() end,
         }}).base
         state:set_base(base)
-        scripts = ScriptLoader.new(state)
+        scripts = ScriptLoader.new(state, {read_source=options.read_source,
+            load_chunk=options.load_chunk, loadfile=options.loadfile})
         return setmetatable({guard=guard, package_state=state,
             script_loader=scripts}, TestBed)
     end, debug.traceback)

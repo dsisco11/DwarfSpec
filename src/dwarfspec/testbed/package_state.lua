@@ -52,6 +52,7 @@ end
 ---@field paths dwarfspec.testbed.Paths
 ---@field base table|nil
 ---@field script_loader dwarfspec.testbed.ScriptLoader|nil
+---@field loadfile fun(filename: string, mode?: string, environment?: table): function|nil, string|nil
 ---@field guard table
 local PackageState = {}
 PackageState.__index = PackageState
@@ -60,14 +61,19 @@ PackageState.__index = PackageState
 ---@param normalized table
 ---@param paths dwarfspec.testbed.Paths
 ---@param guard table
+---@param options? table
 ---@return dwarfspec.testbed.PackageState
-function PackageState.new(normalized, paths, guard)
+function PackageState.new(normalized, paths, guard, options)
     assert(type(normalized) == 'table', 'TestBed package state requires normalized configuration')
     assert(type(paths) == 'table', 'TestBed package state requires paths')
+    options = options or {}
+    assert(type(options) == 'table', 'TestBed package state options must be a table')
+    local compile_file = options.loadfile or loadfile
+    assert(type(compile_file) == 'function', 'TestBed package state loadfile must be a function')
     local loaded, preload = {}, {}
     assert(type(guard) == 'table', 'TestBed package state requires a close guard')
     local state = setmetatable({loaded=loaded, preload=preload, active={}, chain={}, guard=guard,
-        normalized=normalized, paths=paths}, PackageState)
+        normalized=normalized, paths=paths, loadfile=compile_file}, PackageState)
     local private_package = {loaded=loaded, preload=preload, path=paths.package_path,
         config=package.config}
     private_package.searchpath = function(name, path, separator, replacement)
@@ -92,7 +98,8 @@ function PackageState:close()
     for key in pairs(self.loaded) do self.loaded[key] = nil end
     for key in pairs(self.preload) do self.preload[key] = nil end
     self.active, self.chain, self.record = {}, {}, nil
-    self.normalized, self.paths, self.base, self.script_loader, self.package = nil, nil, nil, nil, nil
+    self.normalized, self.paths, self.base, self.script_loader, self.package, self.loadfile =
+        nil, nil, nil, nil, nil, nil
 end
 
 ---Attaches the stable base facade used by subsequently compiled module environments.
@@ -213,6 +220,7 @@ function PackageState:source_loader(filename)
             reqscript=function(name) return self:reqscript(name) end,
             mkmodule=function(name) return self:mkmodule(name) end,
             ensure_open=function() return self:ensure_open() end,
+            loadfile=self.loadfile,
         })
         local chunk, message = environment.values.loadfile(filename)
         if not chunk then error(message, 0) end

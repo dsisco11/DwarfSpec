@@ -20,12 +20,10 @@ local function format_chain(chain, name)
     return table.concat(values, ' -> ')
 end
 
----Reads and validates the modern module annotation before a script executes.
+---Validates the modern module annotation before a script executes.
 ---@param filename string
-local function validate_annotation(filename)
-    local file = assert(io.open(filename, 'rb'), 'TestBed could not read script ' .. filename)
-    local text = file:read('*a')
-    file:close()
+---@param text string
+local function validate_annotation(filename, text)
     if text:find('moduleMode', 1, true) then
         error('TestBed scripts support only the modern --@ module=true annotation', 2)
     end
@@ -40,15 +38,34 @@ end
 ---@field scripts table<string, table>
 ---@field active table<string, boolean>
 ---@field chain string[]
+---@field loadfile fun(filename: string, mode?: string, environment?: table): function|nil, string|nil
 local ScriptLoader = {}
 ScriptLoader.__index = ScriptLoader
 
 ---Constructs and installs one bed-local script loader.
 ---@param package_state dwarfspec.testbed.PackageState
+---@param options? table
 ---@return dwarfspec.testbed.ScriptLoader
-function ScriptLoader.new(package_state)
+function ScriptLoader.new(package_state, options)
     assert(type(package_state) == 'table', 'TestBed script loader requires package state')
-    local loader = setmetatable({package_state=package_state, scripts={}, active={}, chain={}}, ScriptLoader)
+    options = options or {}
+    assert(type(options) == 'table', 'TestBed script loader options must be a table')
+    local read_source = options.read_source or function(filename)
+        local file = assert(io.open(filename, 'rb'),
+            'TestBed could not read script ' .. filename)
+        local text = file:read('*a')
+        file:close()
+        return text
+    end
+    local load_chunk = options.load_chunk or function(filename, environment)
+        return environment.loadfile(filename)
+    end
+    local compile_file = options.loadfile or loadfile
+    assert(type(read_source) == 'function', 'TestBed script loader read_source must be a function')
+    assert(type(load_chunk) == 'function', 'TestBed script loader load_chunk must be a function')
+    assert(type(compile_file) == 'function', 'TestBed script loader loadfile must be a function')
+    local loader = setmetatable({package_state=package_state, scripts={}, active={}, chain={},
+        read_source=read_source, load_chunk=load_chunk, loadfile=compile_file}, ScriptLoader)
     package_state:set_script_loader(loader)
     return loader
 end
@@ -100,17 +117,18 @@ end
 ---@return table
 function ScriptLoader:load_source(name, filename)
     self.package_state:ensure_open()
-    validate_annotation(filename)
+    validate_annotation(filename, self.read_source(filename))
     local state = self.package_state
     local environment = ModuleEnvironment.new(state.base, {package=state.package,
         require=function(module_name) return state:require(module_name) end,
         reqscript=function(script_name) return self:reqscript(script_name) end,
         mkmodule=function(module_name) return state:mkmodule(module_name) end,
         ensure_open=function() return state:ensure_open() end,
+        loadfile=self.loadfile,
     })
     rawset(environment.values, 'dfhack_flags', {module=true})
     self.scripts[name] = environment.values
-    local chunk, message = environment.values.loadfile(filename)
+    local chunk, message = self.load_chunk(filename, environment.values)
     if not chunk then error(message, 0) end
     chunk()
     return environment.values
@@ -156,6 +174,7 @@ end
 function ScriptLoader:close()
     for key in pairs(self.scripts) do self.scripts[key] = nil end
     self.active, self.chain, self.package_state = {}, {}, nil
+    self.read_source, self.load_chunk, self.loadfile = nil, nil, nil
 end
 
 M.ScriptLoader = ScriptLoader

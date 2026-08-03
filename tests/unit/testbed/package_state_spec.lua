@@ -5,79 +5,36 @@ local Paths = require('dwarfspec.testbed.paths').Paths
 local BaseEnvironment = require('dwarfspec.testbed.base_environment').BaseEnvironment
 local PackageState = require('dwarfspec.testbed.package_state').PackageState
 local ScriptLoader = require('dwarfspec.testbed.script_loader').ScriptLoader
-local lfs = require('lfs')
-
----Creates an empty temporary directory.
----@return string
-local function temporary_directory()
-    local directory = os.tmpname()
-    os.remove(directory)
-    assert(lfs.mkdir(directory))
-    return directory:gsub('\\', '/')
-end
-
----Creates every parent directory for one relative fixture path.
----@param root string
----@param relative string
-local function mkdirs(root, relative)
-    local current = root
-    for segment in relative:gmatch('[^/]+') do
-        current = current .. '/' .. segment
-        if not lfs.attributes(current) then assert(lfs.mkdir(current)) end
-    end
-end
-
----Writes one Lua fixture below a temporary root.
----@param root string
----@param relative string
----@param content string
-local function write_file(root, relative, content)
-    local parent = relative:match('^(.*)/[^/]+$')
-    if parent then mkdirs(root, parent) end
-    local file = assert(io.open(root .. '/' .. relative, 'wb'))
-    file:write(content)
-    file:close()
-end
-
----Removes one temporary fixture hierarchy.
----@param root string
-local function remove_tree(root)
-    for entry in lfs.dir(root) do
-        if entry ~= '.' and entry ~= '..' then
-            local path = root .. '/' .. entry
-            if lfs.attributes(path, 'mode') == 'directory' then remove_tree(path)
-            else assert(os.remove(path)) end
-        end
-    end
-    assert(lfs.rmdir(root))
-end
+local VirtualFilesystem = dofile('tests/unit/testbed/virtual_filesystem.lua').VirtualFilesystem
+local fixtures = dofile('tests/unit/testbed/consumer_fixtures.lua')
 
 ---Builds one wired private package state with a private base facade.
----@param root string
+---@param filesystem dwarfspec.testbed.spec.VirtualFilesystem
 ---@param input? table
 ---@param options? table
 ---@return dwarfspec.testbed.PackageState
-local function new_state(root, input, options)
-    options = options or {}
-    options.consumer_root = root
-    options.directory_exists = function() return true end
+local function new_state(filesystem, input, options)
+    options = filesystem:options(options)
     local normalized = config.normalize(input, options)
-    local paths = Paths.new(normalized)
-    local state = PackageState.new(normalized, paths, {closed=false})
+    local paths = Paths.new(normalized, options)
+    local state = PackageState.new(normalized, paths, {closed=false},
+        {loadfile=options.loadfile})
     local base = BaseEnvironment.new(normalized, {loaders={package=state.package,
         require=function(name) return state:require(name) end,
         reqscript=function(name) return state:reqscript(name) end,
         mkmodule=function(name) return state:mkmodule(name) end,
     }}).base
     state:set_base(base)
-    ScriptLoader.new(state)
+    ScriptLoader.new(state, {read_source=options.read_source,
+        load_chunk=options.load_chunk, loadfile=options.loadfile})
     return state
 end
 
 describe('TestBed package state', function()
     it('owns mutable package state and preserves the dfhack facade identity', function()
-        local root = temporary_directory()
-        local state = new_state(root, {globals={dfhack={mock=true}}})
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        local state = new_state(filesystem, {globals={dfhack={mock=true}}})
         local process_path = package.path
         state.package.loaded.dfhack = 'redirected'
         state.package.preload.dfhack = function() return 'redirected' end
@@ -86,15 +43,17 @@ describe('TestBed package state', function()
         assert.is_true(state:require('dfhack').mock)
         assert.equals(process_path, package.path)
         assert.is_nil(package.preload.dfhack)
-        remove_tree(root)
+        state:close()
+        assert.is_nil(state.loadfile)
     end)
 
     it('loads nested source modules into one private graph with deterministic data', function()
-        local root = temporary_directory()
-        write_file(root, 'source/outer.lua', "local inner = require('inner'); counter = (counter or 0) + 1; return {inner=inner, counter=counter, env=_G}")
-        write_file(root, 'source/inner.lua', "return {package=package, env=_G}")
-        local first = new_state(root, {module_roots={'source'}})
-        local second = new_state(root, {module_roots={'source'}})
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('source/outer.lua', "local inner = require('inner'); counter = (counter or 0) + 1; return {inner=inner, counter=counter, env=_G}")
+        filesystem:add('source/inner.lua', "return {package=package, env=_G}")
+        local first = new_state(filesystem, {module_roots={'source'}})
+        local second = new_state(filesystem, {module_roots={'source'}})
         local outer, data = first:require('outer')
         local again, cache_data = first:require('outer')
         local other = second:require('outer')
@@ -110,13 +69,80 @@ describe('TestBed package state', function()
         assert.equals(outer.env, outer.env._G)
         assert.not_equals(outer, other)
         assert.not_equals(outer.inner, other.inner)
-        remove_tree(root)
+    end)
+
+    it('caches true when a conventional source module returns nil without publishing', function()
+        local filesystem = VirtualFilesystem.new()
+        filesystem:add_all(fixtures.CONVENTIONAL)
+        local counter = {nil_calls=0}
+        local state = new_state(filesystem, {module_roots={'modules'},
+            globals={counter=counter}})
+        local first, first_data = state:require('nil_result')
+        local second, second_data = state:require('nil_result')
+
+        assert.is_true(first)
+        assert.is_true(second)
+        assert.is_string(first_data)
+        assert.is_nil(second_data)
+        assert.equals(1, counter.nil_calls)
+    end)
+
+    it('reloads a conventional source module whose returned cache value is false', function()
+        local filesystem = VirtualFilesystem.new()
+        filesystem:add_all(fixtures.CONVENTIONAL)
+        local counter = {calls=0}
+        local state = new_state(filesystem, {module_roots={'modules'},
+            globals={counter=counter}})
+        local first, first_data = state:require('false_result')
+        local second, second_data = state:require('false_result')
+
+        assert.is_false(first)
+        assert.is_false(second)
+        assert.is_string(first_data)
+        assert.is_string(second_data)
+        assert.equals(2, counter.calls)
+    end)
+
+    it('preserves published values for nil returns and prioritizes explicit returns', function()
+        local filesystem = VirtualFilesystem.new()
+        filesystem:add_all(fixtures.CONVENTIONAL)
+        local state = new_state(filesystem, {module_roots={'modules'}})
+
+        assert.equals('published', state:require('published_nil').kind)
+        assert.equals('returned', state:require('returned_override').kind)
+        assert.equals('published', state.loaded.published_nil.kind)
+        assert.equals('returned', state.loaded.returned_override.kind)
+    end)
+
+    it('accepts a circular source graph that publishes partial state before re-entry', function()
+        local filesystem = VirtualFilesystem.new()
+        filesystem:add_all(fixtures.CONVENTIONAL)
+        local state = new_state(filesystem, {module_roots={'modules'}})
+        local a = state:require('published.a')
+
+        assert.equals(a, a.b.a)
+        assert.is_true(a.b.saw_started)
+        assert.is_nil(a.b.saw_finished)
+        assert.is_true(a.finished)
+    end)
+
+    it('retries a conventional source module after an uncommitted failure', function()
+        local filesystem = VirtualFilesystem.new()
+        filesystem:add_all(fixtures.CONVENTIONAL)
+        local state = new_state(filesystem, {module_roots={'modules'}})
+
+        assert.has_error(function() state:require('retry') end)
+        assert.is_nil(state.active.retry)
+        assert.is_nil(state.loaded.retry)
+        filesystem:add('modules/retry.lua', "return {retried=true}")
+        assert.is_true(state:require('retry').retried)
     end)
 
     it('honors authoritative cache, preload, searchers, paths, and provider data', function()
-        local root = temporary_directory()
-        write_file(root, 'source/shadow.lua', 'return "source"')
-        local state = new_state(root, {module_roots={'source'}, imports={
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('source/shadow.lua', 'return "source"')
+        local state = new_state(filesystem, {module_roots={'source'}, imports={
             {provide={kind='module', name='value'}, use_value=false},
             {provide={kind='module', name='alias'}, use_existing={kind='module', name='value'}},
             {provide={kind='module', name='shadow'}, use_value='provider'},
@@ -146,14 +172,14 @@ describe('TestBed package state', function()
         assert.equals(root .. '/source/shadow.lua',
             state.package.searchpath('shadow', state.package.path))
         assert.has_error(function() state.package.searchpath('shadow') end)
-        remove_tree(root)
     end)
 
     it('resolves each module provider strategy with exact data and identities', function()
-        local root = temporary_directory()
-        write_file(root, 'shim.lua', 'return {source=true, package=package}')
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('shim.lua', 'return {source=true, package=package}')
         local host_calls, host_value = {}, {host=true}
-        local state = new_state(root, {imports={
+        local state = new_state(filesystem, {imports={
             {provide={kind='module', name='value'}, use_value=false},
             {provide={kind='module', name='source'}, use_source='shim.lua'},
             {provide={kind='module', name='host'}, use_host=true},
@@ -187,13 +213,13 @@ describe('TestBed package state', function()
         assert.same({{kind='module', name='host'}}, host_calls)
         assert.is_nil(state.normalized.provider_registry.module.source.script)
         assert.is_true(state.normalized.provider_registry.script.source.use_value.script)
-        remove_tree(root)
     end)
 
     it('reports provider strategy failures and bounds alias-only cycles', function()
-        local root = temporary_directory()
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
         local host_calls = 0
-        local state = new_state(root, {imports={
+        local state = new_state(filesystem, {imports={
             {provide={kind='module', name='first'}, use_existing={kind='module', name='second'}},
             {provide={kind='module', name='second'}, use_existing={kind='module', name='first'}},
             {provide={kind='module', name='plugins.native'}, use_host=true},
@@ -215,14 +241,14 @@ describe('TestBed package state', function()
         assert.is_nil(state.active.first)
         assert.is_nil(state.active.second)
         assert.is_nil(state.active['plugins.native'])
-        remove_tree(root)
     end)
 
     it('keeps plugin fakes and source shims away from the host importer', function()
-        local root = temporary_directory()
-        write_file(root, 'plugin_shim.lua', 'return {shim=true}')
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('plugin_shim.lua', 'return {shim=true}')
         local host_calls, fake = 0, {fake=true}
-        local state = new_state(root, {imports={
+        local state = new_state(filesystem, {imports={
             {provide={kind='module', name='plugins.fake'}, use_value=fake},
             {provide={kind='module', name='plugins.shim'}, use_source='plugin_shim.lua'},
             {provide={kind='module', name='plugins.native'}, use_host=true},
@@ -237,12 +263,12 @@ describe('TestBed package state', function()
         assert.is_true(state:require('plugins.shim').shim)
         assert.equals('plugins.native', state:require('plugins.native').native)
         assert.equals(1, host_calls)
-        remove_tree(root)
     end)
 
     it('retains loader cache writes while clearing failures and rejects malformed searchers', function()
-        local root = temporary_directory()
-        local state = new_state(root)
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        local state = new_state(filesystem)
         state.package.preload.failure = function()
             state.loaded.failure = 'retained'
             error('expected loader failure')
@@ -255,12 +281,12 @@ describe('TestBed package state', function()
         state.package.searchers = {false}
         assert.has_error(function() state:require('malformed') end)
         assert.is_nil(state.active.malformed)
-        remove_tree(root)
     end)
 
     it('retries a failed loader when no ordinary cache value was published', function()
-        local root = temporary_directory()
-        local state = new_state(root)
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        local state = new_state(filesystem)
         local attempts = 0
         state.package.preload.retry = function()
             attempts = attempts + 1
@@ -273,14 +299,14 @@ describe('TestBed package state', function()
         assert.is_nil(state.loaded.retry)
         assert.equals('retried', state:require('retry'))
         assert.equals(2, attempts)
-        remove_tree(root)
     end)
 
     it('keeps internal cache tables after exposed references are replaced and bounds failures', function()
-        local root = temporary_directory()
-        write_file(root, 'source/a.lua', "return require('b')")
-        write_file(root, 'source/b.lua', "return require('a')")
-        local state = new_state(root, {module_roots={'source'}})
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('source/a.lua', "return require('b')")
+        filesystem:add('source/b.lua', "return require('a')")
+        local state = new_state(filesystem, {module_roots={'source'}})
         local internal_loaded, internal_preload = state.loaded, state.preload
         state.package.loaded, state.package.preload = {}, {}
         internal_preload.replaced = function() return 'private preload' end
@@ -295,13 +321,14 @@ describe('TestBed package state', function()
         assert.is_truthy(missing_message:find('TestBed dependency chain', 1, true))
         assert.is_nil(state.active.a)
         assert.is_nil(state.active.b)
-        remove_tree(root)
     end)
 
     it('publishes stable mkmodule environments immediately and isolates them per bed', function()
-        local root = temporary_directory()
-        local first, second, empty = new_state(root), new_state(root), new_state(root)
-        local provider_state = new_state(root, {imports={
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        local first, second, empty = new_state(filesystem), new_state(filesystem),
+            new_state(filesystem)
+        local provider_state = new_state(filesystem, {imports={
             {provide={kind='module', name=''}, use_value='empty provider'},
         }})
         local module = first:mkmodule('')
@@ -316,17 +343,17 @@ describe('TestBed package state', function()
         assert.is_false(missing_ok)
         assert.has_error(function() first:require(1) end)
         assert.has_error(function() first:mkmodule(1) end)
-        remove_tree(root)
     end)
 
     it('loads annotated scripts into isolated, self-referential environments', function()
-        local root = temporary_directory()
-        write_file(root, 'scripts/file.lua', 'return _G')
-        write_file(root, 'scripts/worker.lua', '--@ module=true\nvalue = (value or 0) + 1; _G.same = value; command_only = not dfhack_flags.module; local dep = require("dep"); local nested = reqscript("nested"); loaded = dep.value + nested.value; dynamic = assert(load("return _G"))(); from_file = assert(loadfile("' .. root .. '/scripts/file.lua"))(); from_dofile = dofile("' .. root .. '/scripts/file.lua")')
-        write_file(root, 'scripts/nested.lua', '--@ module=true\nvalue = 2')
-        write_file(root, 'modules/dep.lua', 'return {value=3}')
-        local first = new_state(root, {script_roots={'scripts'}, module_roots={'modules'}})
-        local second = new_state(root, {script_roots={'scripts'}, module_roots={'modules'}})
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('scripts/file.lua', 'return _G')
+        filesystem:add('scripts/worker.lua', '--@ module=true\nvalue = (value or 0) + 1; _G.same = value; command_only = not dfhack_flags.module; local dep = require("dep"); local nested = reqscript("nested"); loaded = dep.value + nested.value; dynamic = assert(load("return _G"))(); from_file = assert(loadfile("' .. root .. '/scripts/file.lua"))(); from_dofile = dofile("' .. root .. '/scripts/file.lua")')
+        filesystem:add('scripts/nested.lua', '--@ module=true\nvalue = 2')
+        filesystem:add('modules/dep.lua', 'return {value=3}')
+        local first = new_state(filesystem, {script_roots={'scripts'}, module_roots={'modules'}})
+        local second = new_state(filesystem, {script_roots={'scripts'}, module_roots={'modules'}})
         local script = first:reqscript('worker')
 
         assert.equals(script, first:reqscript('worker'))
@@ -341,16 +368,16 @@ describe('TestBed package state', function()
         assert.equals(script, script.from_dofile)
         assert.is_true(script.dfhack_flags.module)
         assert.equals(1, second:reqscript('worker').value)
-        remove_tree(root)
     end)
 
     it('supports source scripts, script providers, aliases, and circular imports', function()
-        local root = temporary_directory()
-        write_file(root, 'source.lua', '--@ module=true\nsource = true')
-        write_file(root, 'scripts/a.lua', '--@ module=true\nb = reqscript("b"); value = b')
-        write_file(root, 'scripts/b.lua', '--@ module=true\na = reqscript("a"); value = a')
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('source.lua', '--@ module=true\nsource = true')
+        filesystem:add('scripts/a.lua', '--@ module=true\nb = reqscript("b"); value = b')
+        filesystem:add('scripts/b.lua', '--@ module=true\na = reqscript("a"); value = a')
         local host_calls, host_value = 0, {host=true}
-        local state = new_state(root, {script_roots={'scripts'}, imports={
+        local state = new_state(filesystem, {script_roots={'scripts'}, imports={
             {provide={kind='script', name='source'}, use_source='source.lua'},
             {provide={kind='script', name='value'}, use_value={value=true}},
             {provide={kind='script', name='alias'}, use_existing={kind='script', name='value'}},
@@ -374,15 +401,15 @@ describe('TestBed package state', function()
         assert.is_nil(state:reqscript('host').dfhack_flags)
         assert.is_true(state:reqscript('').empty)
         assert.equals(1, host_calls)
-        remove_tree(root)
     end)
 
     it('rejects invalid scripts and clears failed state for a retry', function()
-        local root = temporary_directory()
-        write_file(root, 'scripts/missing.lua', 'executed = true')
-        write_file(root, 'scripts/legacy.lua', '--@ moduleMode=true')
-        write_file(root, 'scripts/retry.lua', '--@ module=true\nif not attempted then attempted = true; error("retry") end')
-        local state = new_state(root, {script_roots={'scripts'}})
+        local filesystem = VirtualFilesystem.new()
+        local root = filesystem.root
+        filesystem:add('scripts/missing.lua', 'executed = true')
+        filesystem:add('scripts/legacy.lua', '--@ moduleMode=true')
+        filesystem:add('scripts/retry.lua', '--@ module=true\nif not attempted then attempted = true; error("retry") end')
+        local state = new_state(filesystem, {script_roots={'scripts'}})
 
         local missing_ok, missing_message = pcall(function() state:reqscript('missing') end)
         local legacy_ok, legacy_message = pcall(function() state:reqscript('legacy') end)
@@ -395,12 +422,11 @@ describe('TestBed package state', function()
         assert.is_truthy(retry_message:find('retry', 1, true))
         assert.is_nil(state.script_loader.active.retry)
         assert.is_nil(state.script_loader.scripts.retry)
-        write_file(root, 'scripts/retry.lua', '--@ module=true\nretried = true')
+        filesystem:add('scripts/retry.lua', '--@ module=true\nretried = true')
         assert.is_true(state:reqscript('retry').retried)
         assert.has_error(function() state:reqscript(1) end)
         local absent_ok, absent_message = pcall(function() state:reqscript('') end)
         assert.is_false(absent_ok)
         assert.is_truthy(absent_message:find('TestBed script dependency chain', 1, true))
-        remove_tree(root)
     end)
 end)
