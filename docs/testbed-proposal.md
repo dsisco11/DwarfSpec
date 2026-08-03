@@ -477,9 +477,10 @@ Completion requires two source-backed verification paths:
    ordinary `require`/`mkmodule` graph and an annotated `reqscript` graph from
    the active source tree.
 2. Configure the live DFHack environment to use the active DwarfSpec source
-   repository. Exercise ordinary class and tagged descriptor forms, default and
-   explicit TestBed configuration, production-style module and script
-   dependencies, interaction, failure unwinding, and confirmed cleanup.
+   repository. Run one representative configured descriptor mount with a
+   production-style module dependency, annotated script dependency, replacement,
+   and real host providers; repeat it to prove fresh state and cleanup; then run
+   one post-allocation constructor failure to prove real ownership unwinding.
 
 Source declaration fixtures must prove that valid TestBed fields receive
 completion and type checking, invalid statically representable field types are
@@ -1150,8 +1151,9 @@ The first usable increment should contain:
 - bounded module and script dependency-chain errors;
 - standalone unit coverage on Lua 5.4;
 - documented Lua 5.3 support without a dedicated compatibility suite;
-- atomic `ds.mount` TestBed cleanup integration with focused default- and
-  explicit-configuration live component proofs;
+- atomic `ds.mount` TestBed cleanup integration with one configured live
+  component proof, one consecutive fresh-state proof, and one representative
+  post-allocation failure-unwind proof;
 - source-tree declaration and Lua 5.4 unit proof;
 - an offline consumer-shaped proof against the active source repository; and
 - a live component proof against that same active source repository.
@@ -1299,16 +1301,18 @@ A prototype is successful only if it demonstrates all of the following:
   active source repository and consumer-owned production modules plus annotated
   script modules;
 - a production-style widget from that consumer fixture is loaded through a
-  TestBed configuration with both module and script dependencies, then mounts
-  and interacts in live DFHack using the same active source repository;
-- bed creation, construction, mount, and assertion failures still close every
-  mount-owned bed exactly once, with component teardown preceding bed teardown
-  whenever construction reached a mounted component;
+  TestBed configuration with module and script dependencies, one replacement,
+  and real host providers, then mounts and interacts in live DFHack using the
+  same active source repository;
+- a consecutive mount of that widget observes fresh module and script state,
+  and both successful mounts unmount and close their beds exactly once;
+- one constructor failure after TestBed allocation closes the mount-owned bed
+  exactly once and leaves the host usable without active components, screens,
+  or owned run resources;
 - after `close`, public methods and retained TestBed-owned loader closures fail
   through the shared closed-state sentinel, while already-created consumer
   values remain ordinary caller-owned references; and
-- consecutive live examples see fresh consumer module state without requiring
-  a process-global registry of active TestBeds.
+- live examples require no process-global registry of active TestBeds.
 
 The prototype should be evaluated against at least one real consumer module,
 not only synthetic fixtures. The main success measure is reduced setup and

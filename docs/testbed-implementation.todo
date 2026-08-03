@@ -614,27 +614,20 @@ Phase 13: Prove live descriptor mounting from the active source repository
     ☐ Configure both a module token and a script token through the same TestBedConfig used to load the production-style component.
     ☐ Provide at least one dependency replacement through TestBed configuration before the defining component source loads.
     ☐ Exercise the synthesized foundational host providers and exact DFHack class identity.
-    ☐ Add a second case with component_imports=false or an explicit provider override.
 
 13.2 Live automation cases:
     ☐ Configure the live test environment to load DwarfSpec from the exact active source repository under review.
     ☐ Record the resolved DwarfSpec source path and loaded TestBed module paths, and fail if another DwarfSpec copy shadows the active source.
     ☐ Run one focused forward-slash automation spec/glob per invocation with a bounded timeout.
-    ☐ Prove a default-config module descriptor mount constructs, mounts, interacts, and unmounts.
-    ☐ Prove an explicit-config script or module descriptor observes its replacements.
-    ☐ Prove two consecutive descriptor mounts observe fresh consumer module and script state.
-    ☐ Prove an ordinary class mount still works and allocates no TestBed.
-    ☐ Prove an already-created instance and a third argument on a class mount are rejected.
-    ☐ Prove an excluded host module fails until explicitly supplied with use_host.
-    ☐ Prove a genuine native plugins.* provider can be borrowed, faked, or shimmed as appropriate to the fixture.
+    ☐ Prove one configured descriptor mount constructs, mounts, interacts, and unmounts while observing its module and script replacements and real host providers.
+    ☐ Repeat that configured mount and prove fresh consumer module and script state with complete cleanup after both runs.
 
-13.3 Live failure and cleanup cases:
-    ☐ Exercise descriptor resolution failure, constructor failure, mount failure, assertion failure, and cleanup failure.
-    ☐ Verify each mount-owned bed closes exactly once.
-    ☐ Verify component teardown precedes bed teardown whenever a component was mounted.
+13.3 Representative failure unwind:
+    ☐ Trigger one component-constructor failure after descriptor resolution and TestBed allocation.
+    ☐ Verify the failed mount's bed closes exactly once without attempting component teardown for a component that was never mounted.
     ☐ Verify the host remains usable and no active component, screen, or owned run resource remains.
     ☐ Inspect the terminal run result and structured archive/log evidence; do not treat READY or process exit alone as success.
-    ☐ Record cleanup_confirmed or the repository's equivalent explicit cleanup signal for each run.
+    ☐ Record cleanup_confirmed or the repository's equivalent explicit cleanup signal for the successful and failure runs.
 
 Phase 14: Document, audit, and hand off
     ☐ Exit only when the implemented behavior, documentation, evidence, and repository state satisfy the full implementation contract.
@@ -670,7 +663,7 @@ Phase 14: Document, audit, and hand off
     ☐ Re-run tools/Check-Lua.ps1.
     ☐ Re-run source declaration checks.
     ☐ Re-run the checked-in consumer fixture proof against the active source repository.
-    ☐ Re-run the focused live consumer-component proof against that same active source repository.
+    ☐ Re-run the configured-mount, consecutive-freshness, and constructor-failure live proofs against that same active source repository.
     ☐ Record exact commands, exit statuses, resolved source paths, live terminal results, and cleanup confirmation.
 
 14.4 Repository cleanup and handoff:
@@ -697,7 +690,7 @@ Execution evidence:
     ☐ Source declaration command/results recorded:
     ☐ Active source path and loaded-module identity recorded:
     ☐ Offline consumer-fixture command/results recorded:
-    ☐ Live default-descriptor command/result/cleanup recorded:
     ☐ Live configured-descriptor command/result/cleanup recorded:
-    ☐ Live failure-unwind command/result/cleanup recorded:
+    ☐ Live consecutive-freshness command/result/cleanup recorded:
+    ☐ Live constructor-failure command/result/cleanup recorded:
     ☐ Final git status and cleanup review recorded:
