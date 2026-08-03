@@ -1,0 +1,326 @@
+DwarfSpec Connection Probe Error Reporting
+===========================================
+
+Source proposal:
+    ☐ The error-reporting proposal in the conversation that identified the
+      strict `DWARFSPEC_PROBE` final-line comparison as the source of the
+      misleading "DFHack is not running or did not provide a healthy core Lua
+      context" diagnostic.
+
+Goal:
+    ☐ Preserve the lightweight DFHack connection preflight while reporting the
+      specific subprocess, protocol, context, or capability condition that
+      prevented a run.
+    ☐ Keep canonical live-spec discovery and selection independent from DFHack
+      connection diagnosis.
+    ☐ Preserve `RunnerFailureKind.CONNECTION`, exit code 4, and the existing
+      connection-error result state for all probe failures.
+    ☐ Keep the probe dependency-free so it remains usable when DwarfSpec module
+      loading or the DFHack Lua environment is incomplete.
+    ☐ Treat source, unit, package, and live-runtime evidence as distinct
+      completion requirements.
+
+Non-goals:
+    ☐ Do not change project-root resolution, test discovery, selector glob
+      semantics, runner lookup order, run admission, bootstrap transport, or
+      scheduler behavior.
+    ☐ Do not accept an incompatible protocol, a non-core Lua context, or a
+      missing `dfhack.timeout` capability.
+    ☐ Do not introduce a new public failure kind or change established process
+      exit codes solely to improve diagnostic detail.
+    ☐ Do not make the probe depend on JSON libraries, project modules, the
+      consumer's Lua path, or an already-loaded DwarfSpec host service.
+
+Assumptions and open questions:
+    ☐ Confirm that protocol 2 remains the controller-to-host compatibility
+      contract for this change.
+    ☐ Decide whether the diagnostic probe should report `dfhack.VERSION` as an
+      optional field; it may improve supportability but must not become a
+      health requirement.
+    ☐ Decide the exact bounded-output limits before implementation. The proposed
+      default is at most eight non-empty lines and 2 KiB of rendered text.
+    ☐ Decide whether a package version bump is required for distributing the
+      changed probe and controller together; record the decision and rationale.
+
+Phase 1: Establish the probe response and diagnostic contracts
+    ☐ Exit with one documented probe grammar, one classification table, and
+      explicit compatibility invariants before changing runtime behavior.
+
+1.1 Probe response grammar:
+    ☐ Define `DWARFSPEC_PROBE` as a single line with whitespace-separated
+      `name=value` fields.
+    ☐ Require exactly one probe marker in the complete subprocess output.
+    ☐ Require `protocol`, `core`, and `timeout` fields.
+    ☐ Define the accepted healthy values as `protocol=2`, `core=true`, and
+      `timeout=function`.
+    ☐ Define unknown fields as forward-compatible diagnostics that the current
+      parser ignores after validating the required fields.
+    ☐ Define duplicate required fields, missing values, invalid booleans, and
+      malformed tokens as malformed probe reports.
+    ☐ Define whether `dfhack` or other optional diagnostic field values require
+      escaping or are restricted to safe non-whitespace tokens.
+
+1.2 Failure classification and messages:
+    ☐ Specify distinct messages for every controller-observable condition:
+        ☐ Process invocation throws before returning a result.
+        ☐ The probe process exits nonzero.
+        ☐ The process succeeds but emits no probe marker.
+        ☐ The process emits a malformed probe marker.
+        ☐ The process emits multiple probe markers.
+        ☐ The probe protocol differs from the controller protocol.
+        ☐ The probe reports a non-core Lua context.
+        ☐ The probe reports `dfhack.timeout` with a type other than `function`.
+    ☐ Include the resolved runner path in invocation failures without implying
+      that test selection or the selected spec caused the failure.
+    ☐ Make the protocol-mismatch message identify expected and observed values
+      and recommend checking for mixed installed DwarfSpec package versions.
+    ☐ Make missing-marker and nonzero-exit messages include a bounded excerpt of
+      captured output when output is available.
+    ☐ Define a stable placeholder for empty output so the diagnostic never ends
+      with an unexplained blank suffix.
+    ☐ Preserve `RunnerFailureKind.CONNECTION`, exit code 4, and the connection
+      result state for every classified probe failure.
+
+1.3 Bounded subprocess output contract:
+    ☐ Define deterministic selection of non-empty output lines.
+    ☐ Define per-line and total-length truncation behavior.
+    ☐ Add an explicit truncation marker when content is omitted.
+    ☐ Normalize line endings and control characters that would corrupt a
+      one-line CLI diagnostic while preserving useful DFHack error text.
+    ☐ Do not expose command arguments or environment variables that were not
+      already present in captured subprocess output.
+
+Completion criteria:
+    ☐ Every condition currently collapsed into the generic health message maps
+      to one documented, objectively testable diagnostic.
+    ☐ The contract explicitly preserves existing failure kinds, result states,
+      exit codes, and selection boundaries.
+
+Phase 2: Make the host probe safe and self-describing
+    ☐ Exit with a dependency-free probe that reports observable context state
+      instead of crashing while inspecting an incomplete DFHack environment.
+
+2.1 Safe capability inspection:
+    ☐ Update `src/dwarfspec/host/entrypoints/probe.lua` to inspect the global
+      `dfhack` value without indexing it unless it is a table.
+    ☐ Report `core` using `tostring(dfhack.is_core_context)` when the table is
+      available and a deterministic unavailable value otherwise.
+    ☐ Report `timeout` using `type(dfhack.timeout)` when the table is available
+      and a deterministic unavailable type otherwise.
+    ☐ Emit the protocol supported by the probe script.
+    ☐ Emit the approved optional DFHack version field without making it part of
+      the healthy-context predicate.
+    ☐ Keep the entrypoint free of `require`, `reqscript`, JSON, project
+      configuration, and host-service dependencies.
+    ☐ Add language-standard documentation comments for any new helper methods.
+
+2.2 Entrypoint contract tests:
+    ☐ Extend the host entrypoint unit fixtures to capture the exact probe line.
+    ☐ Verify the healthy core-context response.
+    ☐ Verify that an absent `dfhack` global produces a parseable unhealthy
+      response instead of an indexing exception.
+    ☐ Verify missing `is_core_context`, missing `timeout`, and incorrectly typed
+      capability values independently.
+    ☐ Verify optional DFHack version presence and absence according to the
+      settled response grammar.
+    ☐ Verify the probe does not load DwarfSpec or third-party modules.
+
+Completion criteria:
+    ☐ The probe emits exactly one parseable marker for every modeled Lua-context
+      shape and does not throw while gathering its required fields.
+    ☐ The healthy response remains compatible with the controller protocol
+      settled in Phase 1.
+
+Phase 3: Parse and classify probe results in the controller
+    ☐ Exit with controller-side parsing that accepts unrelated DFHack output but
+      rejects ambiguous or unhealthy probe reports with precise messages.
+
+3.1 Probe parsing:
+    ☐ Add a focused private parser in
+      `src/dwarfspec/controller/execution/transport_client.lua` or a narrowly
+      scoped controller module if the parser and formatting responsibilities
+      would otherwise obscure transport invocation.
+    ☐ Scan every captured line for the exact `DWARFSPEC_PROBE` marker instead of
+      assuming the marker is the final output line.
+    ☐ Reject zero markers and multiple markers as distinct conditions.
+    ☐ Parse required fields by name rather than by positional whole-line
+      equality.
+    ☐ Reject malformed tokens, missing required fields, duplicate required
+      fields, and invalid required values with field-specific context.
+    ☐ Ignore approved unknown fields without weakening required-field checks.
+    ☐ Add language-standard documentation comments for every new parser or
+      formatter method.
+
+3.2 Failure construction:
+    ☐ Handle process invocation exceptions separately from returned subprocess
+      failures.
+    ☐ Check `exit_code` before interpreting a successful probe response.
+    ☐ Format nonzero exits with the numeric exit code and bounded output.
+    ☐ Format missing and malformed reports with bounded output or the offending
+      marker as established in Phase 1.
+    ☐ Compare the parsed protocol to the controller protocol and report both
+      values on mismatch.
+    ☐ Report `core` and `timeout` health failures independently.
+    ☐ Return success only for exactly one well-formed response with every
+      required healthy value.
+    ☐ Remove the generic
+      `DFHack is not running or did not provide a healthy core Lua context`
+      fallback after every observable condition has a precise replacement.
+    ☐ Keep all failures classified as `RunnerFailureKind.CONNECTION` so runner
+      orchestration and result interpretation remain compatible.
+
+3.3 Bounded output formatting:
+    ☐ Implement the settled line and byte limits deterministically.
+    ☐ Preserve useful stderr text already merged into the subprocess result.
+    ☐ Make truncation visible.
+    ☐ Verify output formatting cannot itself throw on absent, empty, sparse, or
+      non-string fixture values.
+
+Completion criteria:
+    ☐ A valid marker can appear before or after unrelated output and still pass.
+    ☐ Every invalid subprocess result produces its specific Phase 1 diagnostic.
+    ☐ No connection-probe branch retains the old generic fallback.
+
+Phase 4: Lock down controller and runner compatibility
+    ☐ Exit with focused unit coverage proving the new detail does not change
+      established orchestration outcomes.
+
+4.1 Transport client tests:
+    ☐ Replace the combined process-exception/unhealthy-probe test with separate
+      cases that assert the exact classification and meaningful message detail.
+    ☐ Verify a healthy marker as the only output line.
+    ☐ Verify a healthy marker with unrelated output before it.
+    ☐ Verify a healthy marker with unrelated output after it.
+    ☐ Verify invocation exceptions include the runner path and original error.
+    ☐ Verify nonzero exits with empty and non-empty output.
+    ☐ Verify empty successful output and successful output without a marker.
+    ☐ Verify malformed, missing-field, duplicate-field, and multiple-marker
+      responses.
+    ☐ Verify protocol mismatch reports expected and observed protocol values.
+    ☐ Verify `core=false` and every non-function `timeout` value independently.
+    ☐ Verify unknown optional fields are ignored.
+    ☐ Verify line, per-line, and total-output truncation boundaries.
+    ☐ Verify every case retains the connection failure kind.
+
+4.2 Runner and result tests:
+    ☐ Verify `runner.run()` returns exit code 4 for each representative probe
+      failure category.
+    ☐ Verify the persisted result remains in the connection-error state where
+      result persistence applies.
+    ☐ Verify run bootstrap is never attempted after probe failure.
+    ☐ Verify selected identities and spec paths do not appear in the connection
+      explanation unless they were independently part of subprocess output.
+    ☐ Verify abort, status, history, show, logs, and executor-recovery commands
+      preserve their existing connection-failure behavior while surfacing the
+      improved detail.
+
+4.3 Regression suite:
+    ☐ Run the focused host-entrypoint, transport-client, runner, and result
+      interpreter unit specifications.
+    ☐ Run the complete recursive unit suite.
+    ☐ Run Lua syntax, formatting, and declaration checks for all changed files.
+    ☐ Run `git diff --check` and inspect the final focused diff.
+
+Completion criteria:
+    ☐ Focused tests cover every classification row and boundary condition.
+    ☐ The complete unit and static-analysis suites pass without changing public
+      failure kinds, result states, or exit codes.
+
+Phase 5: Document and package the improved diagnostics
+    ☐ Exit with user-facing guidance and package artifacts that cannot mix the
+      new controller with an obsolete probe unnoticed.
+
+5.1 Documentation:
+    ☐ Update `docs/command-line.md` to describe connection exit code 4 and the
+      actionable probe diagnostics.
+    ☐ Document that test selection completes before the DFHack connection
+      preflight, so a connection error does not implicate the selected file.
+    ☐ Document protocol-mismatch remediation in terms of controller/probe
+      package alignment without prescribing project-specific paths.
+    ☐ Update other connection-error examples that quote or promise the removed
+      generic message.
+
+5.2 Package integrity:
+    ☐ Apply the settled package-version decision consistently to package
+      metadata, CLI version output, and changelog entries.
+    ☐ Build the LuaRocks artifact using the repository packaging workflow.
+    ☐ Inspect the artifact manifest and archive contents to prove the updated
+      controller parser and probe entrypoint are both present.
+    ☐ Install the artifact into a disposable LuaRocks tree.
+    ☐ Verify the disposable command resolves its controller and probe from the
+      same package version and layout.
+    ☐ Remove the disposable installation and confirm cleanup.
+
+Completion criteria:
+    ☐ Documentation distinguishes runner invocation, subprocess exit, missing
+      report, malformed report, protocol mismatch, and capability failures.
+    ☐ The packaged controller and probe implement the same response protocol
+      and the disposable package smoke checks pass.
+
+Phase 6: Validate installed and live-runtime behavior
+    ☐ Exit with bounded evidence that the packaged CLI reports real DFHack
+      connection failures accurately and still accepts a healthy core context.
+
+6.1 Installed consumer preparation:
+    ☐ Select one consumer project with a canonical nested `.ds.lua` identity.
+    ☐ Record the exact installed DwarfSpec package version, resolved
+      `dwarfspec` command, resolved `dfhack-run`, project root, and selected
+      identity before execution.
+    ☐ Confirm the controller and probe resolve from the same installed artifact.
+    ☐ Preserve the consumer worktree and do not substitute a source-tree module
+      path for installed-package evidence.
+
+6.2 Failure-path evidence:
+    ☐ With no reachable DFHack process, verify the CLI reports the actual
+      nonzero connection-probe exit and bounded runner output.
+    ☐ Using a controlled protocol-mismatch fixture or disposable mismatched
+      package layout, verify expected and observed protocol values are reported.
+    ☐ Using controlled probe fixtures, verify non-core and missing-timeout
+      diagnostics without weakening the real health predicate.
+    ☐ Confirm each failure returns exit code 4, does not attempt bootstrap, and
+      does not attribute the failure to the selected spec path.
+
+6.3 Healthy live evidence:
+    ☐ Start from a known responsive DFHack process and run one exact nested
+      project-relative identity through the installed CLI.
+    ☐ Confirm unrelated DFHack output does not invalidate the single healthy
+      marker.
+    ☐ Confirm the run proceeds beyond preflight into bootstrap and reaches a
+      terminal DwarfSpec result.
+    ☐ Record terminal status, exit code, result artifact status, and
+      `cleanup_confirmed` independently from the connection result.
+    ☐ Confirm the DFHack executor is idle, the queue is empty, quarantine is
+      absent, and no test-owned resources remain after the run.
+
+6.4 Followup review:
+    ☐ Review the implementation against every requirement and non-goal in this
+      plan after source, package, and live validation are complete.
+    ☐ Recheck that no generic fallback still hides captured probe information.
+    ☐ Recheck that healthy validation did not become permissive while making
+      error messages more detailed.
+    ☐ Recheck that package-skew guidance is supported by the final installed
+      layout and does not claim a mismatch when none was observed.
+    ☐ Record any deferred item with its rationale and a concrete follow-up owner
+      or removal condition.
+
+Completion criteria:
+    ☐ Installed failure scenarios produce specific actionable diagnostics.
+    ☐ One installed healthy run reaches a terminal result with cleanup
+      confirmed and final executor state verified.
+    ☐ The followup review finds every requirement satisfied or explicitly
+      deferred with rationale.
+
+Final acceptance:
+    ☐ Every proposal requirement is implemented or explicitly deferred with a
+      recorded rationale.
+    ☐ The probe is dependency-free, safe against incomplete DFHack globals, and
+      emits exactly one parseable response.
+    ☐ The controller parses the response by fields, tolerates unrelated output,
+      and reports every failure condition precisely.
+    ☐ Connection failures retain their existing kind, result state, and exit
+      code while exposing bounded subprocess evidence.
+    ☐ Source, focused unit, complete unit, static-analysis, package, installed,
+      and live-runtime evidence are recorded separately.
+    ☐ Documentation and package metadata describe the shipped behavior.
+    ☐ Temporary fixtures, disposable installations, result artifacts, and live
+      test resources are removed with cleanup confirmed.
