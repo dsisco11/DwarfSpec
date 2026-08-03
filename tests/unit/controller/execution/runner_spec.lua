@@ -857,7 +857,8 @@ describe('DwarfSpec external runner', function()
         assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
             outcome.exit_code)
         assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state)
-        assert.matches('DFHack is not running', outcome.error.message,
+        assert.matches('DFHack connection probe through "bin/dwarfspec" ' ..
+            'exited with code 1. Output: not running', outcome.error.message,
             1, true)
         assert.is_nil(outcome.report)
     end)
@@ -893,7 +894,8 @@ describe('DwarfSpec external runner', function()
         assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
             outcome.exit_code)
         assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state)
-        assert.matches('could not contact DFHack through',
+        assert.matches('Could not invoke DFHack runner "bin/dwarfspec": ' ..
+            'process launch failed',
             outcome.error.message, 1, true)
     end)
 

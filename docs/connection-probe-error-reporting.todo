@@ -136,54 +136,58 @@ Completion criteria:
       settled in Phase 1.
 
 Phase 3: Parse and classify probe results in the controller
-    ☐ Exit with controller-side parsing that accepts unrelated DFHack output but
+    ☒ Exit with controller-side parsing that accepts unrelated DFHack output but
       rejects ambiguous or unhealthy probe reports with precise messages.
+        - Evidence: `src/dwarfspec/controller/execution/transport_client.lua`,
+          `tests/unit/controller/execution/transport_client_spec.lua`, focused
+          12 successes, 782 recursive unit successes, and Lua checks for 295
+          files.
 
 3.1 Probe parsing:
-    ☐ Add a focused private parser in
+    ☒ Add a focused private parser in
       `src/dwarfspec/controller/execution/transport_client.lua` or a narrowly
       scoped controller module if the parser and formatting responsibilities
       would otherwise obscure transport invocation.
-    ☐ Scan every captured line for the exact `DWARFSPEC_PROBE` marker instead of
+    ☒ Scan every captured line for the exact `DWARFSPEC_PROBE` marker instead of
       assuming the marker is the final output line.
-    ☐ Reject zero markers and multiple markers as distinct conditions.
-    ☐ Parse required fields by name rather than by positional whole-line
+    ☒ Reject zero markers and multiple markers as distinct conditions.
+    ☒ Parse required fields by name rather than by positional whole-line
       equality.
-    ☐ Reject malformed tokens, missing required fields, duplicate required
+    ☒ Reject malformed tokens, missing required fields, duplicate required
       fields, and invalid required values with field-specific context.
-    ☐ Ignore approved unknown fields without weakening required-field checks.
-    ☐ Add language-standard documentation comments for every new parser or
+    ☒ Ignore approved unknown fields without weakening required-field checks.
+    ☒ Add language-standard documentation comments for every new parser or
       formatter method.
 
 3.2 Failure construction:
-    ☐ Handle process invocation exceptions separately from returned subprocess
+    ☒ Handle process invocation exceptions separately from returned subprocess
       failures.
-    ☐ Check `exit_code` before interpreting a successful probe response.
-    ☐ Format nonzero exits with the numeric exit code and bounded output.
-    ☐ Format missing and malformed reports with bounded output or the offending
+    ☒ Check `exit_code` before interpreting a successful probe response.
+    ☒ Format nonzero exits with the numeric exit code and bounded output.
+    ☒ Format missing and malformed reports with bounded output or the offending
       marker as established in Phase 1.
-    ☐ Compare the parsed protocol to the controller protocol and report both
+    ☒ Compare the parsed protocol to the controller protocol and report both
       values on mismatch.
-    ☐ Report `core` and `timeout` health failures independently.
-    ☐ Return success only for exactly one well-formed response with every
+    ☒ Report `core` and `timeout` health failures independently.
+    ☒ Return success only for exactly one well-formed response with every
       required healthy value.
-    ☐ Remove the generic
+    ☒ Remove the generic
       `DFHack is not running or did not provide a healthy core Lua context`
       fallback after every observable condition has a precise replacement.
-    ☐ Keep all failures classified as `RunnerFailureKind.CONNECTION` so runner
+    ☒ Keep all failures classified as `RunnerFailureKind.CONNECTION` so runner
       orchestration and result interpretation remain compatible.
 
 3.3 Bounded output formatting:
-    ☐ Implement the settled line and byte limits deterministically.
-    ☐ Preserve useful stderr text already merged into the subprocess result.
-    ☐ Make truncation visible.
-    ☐ Verify output formatting cannot itself throw on absent, empty, sparse, or
+    ☒ Implement the settled line and byte limits deterministically.
+    ☒ Preserve useful stderr text already merged into the subprocess result.
+    ☒ Make truncation visible.
+    ☒ Verify output formatting cannot itself throw on absent, empty, sparse, or
       non-string fixture values.
 
 Completion criteria:
-    ☐ A valid marker can appear before or after unrelated output and still pass.
-    ☐ Every invalid subprocess result produces its specific Phase 1 diagnostic.
-    ☐ No connection-probe branch retains the old generic fallback.
+    ☒ A valid marker can appear before or after unrelated output and still pass.
+    ☒ Every invalid subprocess result produces its specific Phase 1 diagnostic.
+    ☒ No connection-probe branch retains the old generic fallback.
 
 Phase 4: Lock down controller and runner compatibility
     ☐ Exit with focused unit coverage proving the new detail does not change
