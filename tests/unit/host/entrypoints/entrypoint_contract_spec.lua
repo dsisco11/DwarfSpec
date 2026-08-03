@@ -110,6 +110,23 @@ describe('version 2 automation entrypoint contract', function()
         assert.is_nil(dfhack.dwarfspec)
     end)
 
+    it('preserves generic string bootstrap rejections', function()
+        load_host_script('bootstrap')(
+            'entrypoint-generic-rejection', '--unknown=value')
+
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.equals('dwarfspec.error.v1', encoded[1].schema)
+        assert.equals(2, encoded[1].protocol)
+        assert.equals('registration', encoded[1].kind)
+        assert.matches('unknown automation option: --unknown',
+            encoded[1].message, 1, true)
+        assert.is_nil(encoded[1].code)
+        assert.is_nil(encoded[1].running_version)
+        assert.is_nil(encoded[1].requested_version)
+        assert.is_false(encode_options[1].pretty)
+        assert.is_nil(dfhack.dwarfspec)
+    end)
+
     it('starts and aborts through version 2 transport entrypoints',
             function()
         local root = require('lfs').currentdir()
@@ -180,9 +197,15 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals('dwarfspec.error.v1', encoded[4].schema)
         assert.equals(2, encoded[4].protocol)
         assert.equals('registration', encoded[4].kind)
+        assert.equals('package_version_mismatch', encoded[4].code)
+        assert.equals('0.1.3', encoded[4].running_version)
+        assert.equals('0.2.2', encoded[4].requested_version)
+        assert.is_string(encoded[4].message)
+        assert.is_true(encoded[4].message ~= '')
         assert.is_false(encode_options[4].pretty)
-        assert.matches('incompatible automation package version: ' ..
-            'expected 0.1.3, found 0.2.2', encoded[4].message, 1, true)
+        assert.matches('DFHack already has a different DwarfSpec version ' ..
+            'loaded', encoded[4].message, 1, true)
+        assert.is_nil(encoded[4].package_root)
         assert.is_nil(registry.runs['entrypoint-version-rejection'])
 
         registry.package_version = '0.2.2'

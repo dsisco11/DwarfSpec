@@ -289,20 +289,30 @@ describe('multi-project automation service', function()
         local queue_before = registry.queue
         local quarantine_before = registry.quarantine
         local terminals_before = registry.latest_terminal_results
+        local registry_before = events.copy_json(
+            registry, 'registry before incompatible bootstrap')
 
-        assert.has_error(function()
+        local compatible, rejection = pcall(function()
             service.bootstrap(bootstrap_request(nil, '9.9.9'), dependencies)
-        end, 'incompatible automation package version: expected 0.2.1, ' ..
-            'found 9.9.9')
+        end)
+        assert.is_false(compatible)
+        assert.same({
+            code='package_version_mismatch',
+            message='DFHack already has a different DwarfSpec version loaded',
+            running_version='0.2.1',
+            requested_version='9.9.9',
+        }, rejection)
         assert.has_error(function()
             service.bootstrap({
                 protocol_version=1,
                 package_root='D:/Packages/DwarfSpec',
-                package_version='0.2.1',
+                package_version='9.9.9',
             }, dependencies)
         end, 'incompatible automation service protocol: expected 2, found 1')
 
         assert.equals(registry, namespace.dwarfspec)
+        assert.same(registry_before, events.copy_json(
+            registry, 'registry after incompatible bootstrap'))
         assert.equals(projects_before, registry.projects)
         assert.equals(runs_before, registry.runs)
         assert.equals(queue_before, registry.queue)

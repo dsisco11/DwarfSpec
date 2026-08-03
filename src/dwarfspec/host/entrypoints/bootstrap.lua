@@ -159,6 +159,14 @@ local function emit_error(value)
         message=clean_message(value),
     }
     if type(value) == 'table' and
+            value.code == 'package_version_mismatch' then
+        response.code = value.code
+        response.running_version = value.running_version
+        response.requested_version = value.requested_version
+        response.message = type(value.message) == 'string' and
+            value.message ~= '' and value.message or
+            'DFHack already has a different DwarfSpec version loaded'
+    elseif type(value) == 'table' and
             value.kind == SchedulerFailureKind.EXECUTOR_QUARANTINED then
         response.kind = RunnerFailureKind.EXECUTOR_QUARANTINED
         response.blocking_run_id = value.blocking_run_id

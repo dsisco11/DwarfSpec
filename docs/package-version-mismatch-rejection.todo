@@ -115,52 +115,52 @@ Completion criteria:
       exit-code contracts remain explicitly preserved.
 
 Phase 2: Produce structured mismatch rejections in the host
-    ☐ Exit with the service and bootstrap entrypoint carrying version fields
+    ☒ Exit with the service and bootstrap entrypoint carrying version fields
       without mutating retained service state or weakening compatibility.
 
 2.1 Service rejection:
-    ☐ Replace only the incompatible bootstrap package-version assertion in
+    ☒ Replace only the incompatible bootstrap package-version assertion in
       `src/dwarfspec/host/service/service.lua` with a structured error value
       containing the stable code and both version fields.
-    ☐ Preserve request validation before registry access and preserve the
+    ☒ Preserve request validation before registry access and preserve the
       current protocol-version validation order.
-    ☐ Raise the structured value without an incidental Lua source prefix or
+    ☒ Raise the structured value without an incidental Lua source prefix or
       string coercion that would discard its fields.
-    ☐ Keep successful first bootstrap and compatible repeated bootstrap
+    ☒ Keep successful first bootstrap and compatible repeated bootstrap
       behavior unchanged.
-    ☐ Verify an incompatible bootstrap creates no project, run, queue,
+    ☒ Verify an incompatible bootstrap creates no project, run, queue,
       scheduler, ownership, timestamp, or registry mutation.
-    ☐ Add language-standard documentation comments for every new helper or
+    ☒ Add language-standard documentation comments for every new helper or
       public contract surface.
 
 2.2 Bootstrap adapter serialization:
-    ☐ Extend `src/dwarfspec/host/entrypoints/bootstrap.lua` to recognize the
+    ☒ Extend `src/dwarfspec/host/entrypoints/bootstrap.lua` to recognize the
       structured mismatch value and emit its `code`, `running_version`, and
       `requested_version` fields in `dwarfspec.error.v1` JSON.
-    ☐ Retain `kind='registration'`, protocol 2, and a non-empty fallback
+    ☒ Retain `kind='registration'`, protocol 2, and a non-empty fallback
       message for the mismatch response.
-    ☐ Preserve generic string-error serialization for all unrelated
+    ☒ Preserve generic string-error serialization for all unrelated
       bootstrap failures.
-    ☐ Preserve executor-quarantine classification and its structured fields
+    ☒ Preserve executor-quarantine classification and its structured fields
       without routing it through version-mismatch formatting.
-    ☐ Avoid exposing package roots or other machine-specific service data.
+    ☒ Avoid exposing package roots or other machine-specific service data.
 
 2.3 Host-focused tests:
-    ☐ Update `tests/unit/host/service/service_spec.lua` to assert the exact
+    ☒ Update `tests/unit/host/service/service_spec.lua` to assert the exact
       structured mismatch value and unchanged retained registry snapshot.
-    ☐ Update
+    ☒ Update
       `tests/unit/host/entrypoints/entrypoint_contract_spec.lua` to assert the
       exact JSON schema, protocol, registration kind, code, running version,
       requested version, and non-empty message.
-    ☐ Retain independent coverage for generic registration errors and
+    ☒ Retain independent coverage for generic registration errors and
       executor quarantine.
-    ☐ Verify matching versions still bootstrap normally and emit no error
+    ☒ Verify matching versions still bootstrap normally and emit no error
       envelope.
 
 Completion criteria:
-    ☐ A version mismatch crosses the host entrypoint as structured JSON with
+    ☒ A version mismatch crosses the host entrypoint as structured JSON with
       both correctly oriented version values.
-    ☐ Host-focused tests prove rejection atomicity and no regression in
+    ☒ Host-focused tests prove rejection atomicity and no regression in
       compatible bootstrap or quarantine behavior.
 
 Phase 3: Validate and consume the structured rejection in the controller
