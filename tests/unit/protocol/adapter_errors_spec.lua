@@ -4,6 +4,8 @@ local adapter_errors = require('dwarfspec.protocol.adapter_errors')
 local reports = require('dwarfspec.controller.reporting.report')
 local RunnerFailureKind =
     require('dwarfspec.protocol.enums.runner_failure_kinds')
+local SchedulerFailureKind =
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 ---Encodes one value through the controller test JSON implementation.
 ---@param value table
@@ -55,6 +57,46 @@ describe('adapter error protocol', function()
             assert.has_error(function()
                 adapter_errors.domain('package_version_mismatch', 'message', fields)
             end)
+        end
+    end)
+
+    it('validates every admission conflict with only safe blocking context',
+            function()
+        for _, code in ipairs({
+            SchedulerFailureKind.PROJECT_BUSY,
+            SchedulerFailureKind.REQUEST_KEY_CONFLICT,
+            SchedulerFailureKind.RESULT_PATH_BUSY,
+        }) do
+            local rejection = adapter_errors.domain(code, 'admission conflict', {
+                blocking_run_id='blocking-run',
+                blocking_generation=7,
+                state='queued',
+                reason='scheduler classification detail',
+            })
+            local envelope = adapter_errors.envelope(rejection,
+                RunnerFailureKind.REGISTRATION)
+            assert.equals(RunnerFailureKind.REGISTRATION, envelope.kind)
+            assert.equals(code, envelope.code)
+            assert.equals('blocking-run', envelope.blocking_run_id)
+            assert.equals(7, envelope.blocking_generation)
+            assert.equals('queued', envelope.state)
+            assert.is_nil(envelope.project_root)
+            assert.is_nil(envelope.result_path)
+
+            for _, missing in ipairs({
+                'blocking_run_id', 'blocking_generation', 'state', 'reason',
+            }) do
+                local fields = {
+                    blocking_run_id='blocking-run',
+                    blocking_generation=7,
+                    state='queued',
+                    reason='scheduler classification detail',
+                }
+                fields[missing] = nil
+                assert.has_error(function()
+                    adapter_errors.domain(code, 'admission conflict', fields)
+                end)
+            end
         end
     end)
 

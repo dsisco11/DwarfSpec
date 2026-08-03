@@ -9,6 +9,8 @@ local EventType = require('dwarfspec.protocol.enums.event_types')
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 local ResultState = require('dwarfspec.protocol.enums.result_states')
 local RunState = require('dwarfspec.protocol.enums.run_states')
+local SchedulerFailureKind =
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 local RUN_STATE_TERMINAL = {
     [RunState.QUEUED]=false,
@@ -1076,6 +1078,76 @@ describe('DwarfSpec external runner', function()
         assert.is_nil(outcome.error.message:find('expected', 1, true))
         assert.is_nil(outcome.error.message:find('found', 1, true))
         assert.is_nil(outcome.report)
+    end)
+
+    it('renders every admission conflict from its structured subtype without recovery',
+            function()
+        local cases = {
+            {
+                code=SchedulerFailureKind.PROJECT_BUSY,
+                phrase='this project already has an outstanding run',
+                action='Wait for that run to finish and consume its result',
+            },
+            {
+                code=SchedulerFailureKind.REQUEST_KEY_CONFLICT,
+                phrase='this request identity is already bound to a different run',
+                action='submit this work with a new run identity',
+            },
+            {
+                code=SchedulerFailureKind.RESULT_PATH_BUSY,
+                phrase='configured result destination is reserved by another run',
+                action='choose a different result destination',
+            },
+        }
+        for _, case in ipairs(cases) do
+            local bootstrap_calls = 0
+            local recovery_calls = 0
+            local run_options = options('admission-' .. case.code)
+            run_options.invoke = function(_, arguments)
+                if arguments[3]:match('probe%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                elseif arguments[3]:match('bootstrap%.lua$') then
+                    bootstrap_calls = bootstrap_calls + 1
+                    return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                        schema='dwarfspec.error.v1',
+                        protocol=2,
+                        kind=runner.failure_kinds.REGISTRATION,
+                        code=case.code,
+                        message='opaque host wording that must not be parsed',
+                        blocking_run_id='blocking-run',
+                        blocking_generation=9,
+                        state='queued',
+                        reason='scheduler classification detail',
+                    })}}
+                end
+                recovery_calls = recovery_calls + 1
+                return {exit_code=0, lines={}}
+            end
+
+            local outcome = runner.run(run_options)
+
+            assert.equals(1, bootstrap_calls)
+            assert.equals(0, recovery_calls)
+            assert.equals(5, outcome.exit_code)
+            assert.equals(runner.failure_kinds.REGISTRATION,
+                outcome.error.kind)
+            assert.equals(ResultState.REGISTRATION_ERROR,
+                outcome.result.state)
+            assert.equals(outcome.error.message,
+                outcome.result.error.message)
+            assert.matches(case.phrase, outcome.error.message, 1, true)
+            assert.matches(case.action, outcome.error.message, 1, true)
+            assert.matches('Blocking run: blocking-run',
+                outcome.error.message, 1, true)
+            assert.matches('Generation: 9', outcome.error.message, 1, true)
+            assert.matches('State: queued', outcome.error.message, 1, true)
+            assert.is_nil(outcome.error.message:find(
+                'opaque host wording', 1, true))
+            assert.is_nil(outcome.error.message:find(
+                'selected specification', 1, true))
+            assert.is_nil(outcome.report)
+        end
     end)
 
     it('does not infer version guidance from generic registration text or code',

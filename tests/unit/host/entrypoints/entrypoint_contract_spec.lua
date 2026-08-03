@@ -127,6 +127,77 @@ describe('version 2 automation entrypoint contract', function()
         assert.is_nil(dfhack.dwarfspec)
     end)
 
+    it('serializes admission conflicts with exact safe blocking fields',
+            function()
+        local root = require('lfs').currentdir():gsub('\\', '/')
+        local result_path = root .. '/shared-result.json'
+        load_host_script('bootstrap')(
+            'admission-owner', '--project-root=.', '--result-policy=file',
+            '--result-path=' .. result_path)
+        local registry = dfhack.dwarfspec
+        local owner = registry.runs['admission-owner']
+
+        lines = {}
+        load_host_script('bootstrap')(
+            'admission-owner', '--project-root=.', '--result-policy=file',
+            '--result-path=' .. result_path)
+        assert.equals('dwarfspec.transport.v2', encoded[2].schema)
+        assert.matches('DWARFSPEC_OWNER ', lines[2], 1, true)
+        assert.equals(1, registry.generation)
+
+        lines = {}
+        load_host_script('bootstrap')(
+            'admission-owner', '--project-root=.', '--result-policy=file',
+            '--result-path=' .. result_path, '--spec=different.ds.lua')
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.same({
+            schema='dwarfspec.error.v1',
+            protocol=2,
+            kind='registration',
+            code='request_key_conflict',
+            message='This request identity is already bound to a different ' ..
+                'DwarfSpec run.',
+            blocking_run_id=owner.run_id,
+            blocking_generation=owner.generation,
+            state=owner.state,
+            reason='request key is already bound to a different request',
+        }, encoded[3])
+
+        lines = {}
+        load_host_script('bootstrap')(
+            'admission-project-busy', '--project-root=.',
+            '--result-policy=file', '--result-path=' .. result_path)
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.equals('project_busy', encoded[4].code)
+        assert.equals('registration', encoded[4].kind)
+        assert.equals(owner.run_id, encoded[4].blocking_run_id)
+        assert.equals(owner.generation, encoded[4].blocking_generation)
+        assert.equals(owner.state, encoded[4].state)
+        assert.equals('project already owns an outstanding run',
+            encoded[4].reason)
+        assert.is_string(encoded[4].message)
+        assert.is_true(encoded[4].message ~= '')
+
+        lines = {}
+        load_host_script('bootstrap')(
+            'admission-result-busy', '--project-root=tests',
+            '--result-policy=file', '--result-path=' .. result_path)
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.equals('result_path_busy', encoded[5].code)
+        assert.equals('registration', encoded[5].kind)
+        assert.equals(owner.run_id, encoded[5].blocking_run_id)
+        assert.equals(owner.generation, encoded[5].blocking_generation)
+        assert.equals(owner.state, encoded[5].state)
+        assert.equals('result path is owned by another outstanding run',
+            encoded[5].reason)
+        assert.is_nil(encoded[5].project_root)
+        assert.is_nil(encoded[5].result_path)
+        assert.is_nil(encoded[5].owner_capability)
+        assert.equals(1, registry.generation)
+        assert.is_nil(registry.runs['admission-project-busy'])
+        assert.is_nil(registry.runs['admission-result-busy'])
+    end)
+
     it('starts and aborts through version 2 transport entrypoints',
             function()
         local root = require('lfs').currentdir()

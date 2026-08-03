@@ -8,6 +8,8 @@ local result_interpreter_module = require('dwarfspec.controller.execution.result
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
+local SchedulerFailureKind =
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 local M = {}
 
@@ -144,6 +146,29 @@ local function registration_message(rejection)
             'screen or unloading the\nworld will not unload the process-wide ' ..
             'DwarfSpec service.'):format(rejection.running_version,
                 rejection.requested_version, rejection.requested_version)
+    end
+    if rejection.code == SchedulerFailureKind.PROJECT_BUSY then
+        return ('DwarfSpec could not start because this project already has ' ..
+            'an outstanding run.\n\n  Blocking run: %s\n  Generation: %d\n' ..
+            '  State: %s\n\nWait for that run to finish and consume its result, ' ..
+            'then retry this command.'):format(rejection.blocking_run_id,
+                rejection.blocking_generation, rejection.state)
+    end
+    if rejection.code == SchedulerFailureKind.REQUEST_KEY_CONFLICT then
+        return ('DwarfSpec could not start because this request identity is ' ..
+            'already bound to a different run.\n\n  Blocking run: %s\n' ..
+            '  Generation: %d\n  State: %s\n\nRetry the identical request, ' ..
+            'or submit this work with a new run identity.'):format(
+                rejection.blocking_run_id, rejection.blocking_generation,
+                rejection.state)
+    end
+    if rejection.code == SchedulerFailureKind.RESULT_PATH_BUSY then
+        return ('DwarfSpec could not start because the configured result ' ..
+            'destination is reserved by another run.\n\n  Blocking run: %s\n' ..
+            '  Generation: %d\n  State: %s\n\nWait until that result is ' ..
+            'consumed, or choose a different result destination.'):format(
+                rejection.blocking_run_id, rejection.blocking_generation,
+                rejection.state)
     end
     return 'DwarfSpec bootstrap rejected: ' .. rejection.message
 end

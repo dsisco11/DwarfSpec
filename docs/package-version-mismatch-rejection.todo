@@ -51,27 +51,27 @@ Non-goals:
       package on the operator's behalf.
 
 Assumptions and open questions:
-    ☐ Treat `code='package_version_mismatch'`, `running_version`, and
+    ☒ Treat `code='package_version_mismatch'`, `running_version`, and
       `requested_version` as the stable wire names proposed in the
       conversation.
-    ☐ Decide whether `package_version_mismatch` should be centralized in a
+    ☒ Decide whether `package_version_mismatch` should be centralized in a
       shared immutable error-code module with the other accepted domain codes.
-    ☐ Confirm that broadening the accepted error kinds and codes remains an
+    ☒ Confirm that broadening the accepted error kinds and codes remains an
       additive `dwarfspec.error.v1` change. If backward compatibility cannot be
       proved, stop and revise this plan instead of silently introducing a new
       top-level schema.
-    ☐ Define the boundary between expected domain rejections and unexpected
+    ☒ Define the boundary between expected domain rejections and unexpected
       host faults before converting any auxiliary entrypoint; unknown faults
       must remain distinguishable from stable public rejection codes.
-    ☐ Decide whether adapters emit a structured error with subprocess exit
+    ☒ Decide whether adapters emit a structured error with subprocess exit
       code zero, emit structured JSON alongside a nonzero exit, or support both
       during migration. The controller must not discard a valid error envelope
       solely because the bridge returned nonzero.
-    ☐ Decide whether the canonical multi-line remediation text is stored
+    ☒ Decide whether the canonical multi-line remediation text is stored
       verbatim in persisted result errors or whether persistence retains a
       single-line message while the CLI renderer adds layout. Verify existing
       result consumers before settling this boundary.
-    ☐ Decide whether shipping the changed host and controller requires a
+    ☒ Decide whether shipping the changed host and controller requires a
       package version bump, and record the compatibility rationale.
 
 Phase 1: Establish the additive rejection contract
@@ -221,136 +221,136 @@ Completion criteria:
       instructions while all adjacent rejection behavior remains compatible.
 
 Phase 4: Establish one shared adapter-error boundary
-    ☐ Exit with reusable construction, serialization, parsing, and validation
+    ☒ Exit with reusable construction, serialization, parsing, and validation
       rules that later entrypoints can adopt without duplicating bootstrap's
       special-case logic.
-    ☐ Treat the package-version work in Phases 2 and 3 as the first complete
+    ☒ Treat the package-version work in Phases 2 and 3 as the first complete
       vertical slice, then extract its proven contract into shared machinery
       before migrating additional error families.
 
 4.1 Error taxonomy and field policy:
-    ☐ Inventory every error-producing host entrypoint and classify each
+    ☒ Inventory every error-producing host entrypoint and classify each
       failure as an expected domain rejection, structured state already
       represented by another schema, subprocess or connection failure, or
       unexpected internal fault.
-    ☐ Define `kind` as the existing broad runner classification and `code` as
+    ☒ Define `kind` as the existing broad runner classification and `code` as
       the stable domain subtype; document which layer owns each value.
-    ☐ Define common optional fields such as `operation`, `run_id`,
+    ☒ Define common optional fields such as `operation`, `run_id`,
       `generation`, `state`, `blocking_run_id`, and `blocking_generation`.
-    ☐ Define subtype-specific required fields and forbid fields whose values
+    ☒ Define subtype-specific required fields and forbid fields whose values
       would expose owner capabilities, authorization proofs, package roots, or
       unrelated machine-specific paths.
-    ☐ Define compatibility behavior for generic errors without `code`, known
+    ☒ Define compatibility behavior for generic errors without `code`, known
       codes, unknown future codes, malformed known-code payloads, and
       unexpected internal exceptions.
-    ☐ Preserve existing failure kinds, result states, exit codes, primary
+    ☒ Preserve existing failure kinds, result states, exit codes, primary
       versus secondary error precedence, and recovery decisions unless a later
       task explicitly documents an approved mapping.
 
 4.2 Shared host construction and serialization:
-    ☐ Add one narrowly scoped protocol or host-support abstraction for
+    ☒ Add one narrowly scoped protocol or host-support abstraction for
       constructing JSON-safe domain rejection objects with required `code`,
       `message`, and subtype fields.
-    ☐ Add one shared entrypoint serializer for canonical adapter errors so
+    ☒ Add one shared entrypoint serializer for canonical adapter errors so
       bootstrap, mutation, recovery, polling, and event adapters do not each
       implement their own field-copy rules.
-    ☐ Preserve bootstrap's executor-quarantine payload and the structured
+    ☒ Preserve bootstrap's executor-quarantine payload and the structured
       package-version mismatch as compatibility fixtures for the shared path.
-    ☐ Migrate package-version mismatch and executor quarantine onto the
+    ☒ Migrate package-version mismatch and executor quarantine onto the
       shared constructor and serializer, then remove any temporary
       mismatch-only field-copy or dispatch scaffolding after parity is proved.
-    ☐ Ensure error serialization itself cannot throw on a malformed or
+    ☒ Ensure error serialization itself cannot throw on a malformed or
       non-string internal exception; retain a bounded generic host-fault
       fallback without falsely assigning a public code.
-    ☐ Add language-standard documentation comments for every new class,
+    ☒ Add language-standard documentation comments for every new class,
       method, constructor, validator, and public contract surface.
 
 4.3 Shared controller parsing:
-    ☐ Generalize adapter-error validation in
+    ☒ Generalize adapter-error validation in
       `src/dwarfspec/controller/reporting/report.lua` so all approved broad
       kinds and codes are validated by the same contract.
-    ☐ Update transport-client operations to inspect and validate a canonical
+    ☒ Update transport-client operations to inspect and validate a canonical
       error envelope before replacing a response with generic
       `<operation> exited with <code>` text.
-    ☐ Preserve bounded captured output when a subprocess fails without a
+    ☒ Preserve bounded captured output when a subprocess fails without a
       valid structured response.
-    ☐ Return validated error objects to runner and recovery orchestration
+    ☒ Return validated error objects to runner and recovery orchestration
       without flattening them to strings prematurely.
-    ☐ Preserve generic registration fallback, executor quarantine, healthy
+    ☒ Preserve generic registration fallback, executor quarantine, healthy
       transport parsing, read-only response schemas, and connection-probe
       behavior.
 
 4.4 Shared contract tests:
-    ☐ Add round-trip tests from domain rejection construction through JSON
+    ☒ Add round-trip tests from domain rejection construction through JSON
       serialization, controller validation, and retained fields.
-    ☐ Verify known codes require their exact fields and reject missing,
+    ☒ Verify known codes require their exact fields and reject missing,
       empty, incorrectly typed, non-JSON-safe, or forbidden values.
-    ☐ Verify unknown codes and generic uncoded messages follow the settled
+    ☒ Verify unknown codes and generic uncoded messages follow the settled
       compatibility policy without receiving known-code guidance.
-    ☐ Verify nonzero subprocess results with valid structured JSON preserve
+    ☒ Verify nonzero subprocess results with valid structured JSON preserve
       the structured error under the settled migration contract.
-    ☐ Verify nonzero results without valid JSON remain classified as bridge
+    ☒ Verify nonzero results without valid JSON remain classified as bridge
       or host failures with bounded diagnostic output.
 
 Completion criteria:
-    ☐ One documented and tested error-envelope path serves bootstrap and is
+    ☒ One documented and tested error-envelope path serves bootstrap and is
       ready for every approved auxiliary adapter.
-    ☐ Structured domain rejections and unexpected internal faults remain
+    ☒ Structured domain rejections and unexpected internal faults remain
       observably distinct end to end.
 
 Phase 5: Preserve bootstrap admission conflicts
-    ☐ Exit with scheduler admission classifications reaching the CLI as
+    ☒ Exit with scheduler admission classifications reaching the CLI as
       actionable structured registration rejections without changing whether
       a run is accepted, reused, or rejected.
 
 5.1 Admission subtype contracts:
-    ☐ Define structured registration codes for `project_busy`,
+    ☒ Define structured registration codes for `project_busy`,
       `request_key_conflict`, and `result_path_busy` using the existing
       `SchedulerFailureKind` values where compatible.
-    ☐ Define safe blocking context for each subtype, including the blocking
+    ☒ Define safe blocking context for each subtype, including the blocking
       run identity, generation, and state when available.
-    ☐ Decide whether project identity or normalized result-path identity is
+    ☒ Decide whether project identity or normalized result-path identity is
       necessary for remediation; omit raw paths and internal identifiers when
       the blocking run identity is sufficient.
-    ☐ Define actionable messages that name the actual conflict rather than
+    ☒ Define actionable messages that name the actual conflict rather than
       reporting only that another run is queued, active, or terminal.
 
 5.2 Host propagation:
-    ☐ Update `src/dwarfspec/host/execution/host.lua` to preserve
+    ☒ Update `src/dwarfspec/host/execution/host.lua` to preserve
       `outcome.kind`, `outcome.reason`, identity, and snapshot context from
       `service.submit()` when admission is rejected.
-    ☐ Route each expected admission outcome through the shared structured
+    ☒ Route each expected admission outcome through the shared structured
       rejection constructor and bootstrap serializer.
-    ☐ Preserve accepted first submissions and identical request-key retries
+    ☒ Preserve accepted first submissions and identical request-key retries
       as successful, idempotent transport responses.
-    ☐ Preserve rejection atomicity, outstanding-run ownership, queue order,
+    ☒ Preserve rejection atomicity, outstanding-run ownership, queue order,
       generation, leases, and result-path reservations.
-    ☐ Leave invalid scheduler invariants and generator failures as internal
+    ☒ Leave invalid scheduler invariants and generator failures as internal
       faults rather than assigning them admission codes.
 
 5.3 Controller formatting and behavior:
-    ☐ Validate every admission subtype and its required blocking context.
-    ☐ Format project-busy, request-key-conflict, and result-path-busy
+    ☒ Validate every admission subtype and its required blocking context.
+    ☒ Format project-busy, request-key-conflict, and result-path-busy
       guidance from structured fields without parsing `reason` or `message`.
-    ☐ Preserve registration failure classification, registration-error
+    ☒ Preserve registration failure classification, registration-error
       persistence, exit code 5, no bootstrap retry, and no recovery attempt.
-    ☐ Ensure conflict messages do not blame the selected specification or
+    ☒ Ensure conflict messages do not blame the selected specification or
       disclose unrelated consumer configuration.
 
 5.4 Admission tests:
-    ☐ Add focused scheduler and service fixtures for all three rejection
+    ☒ Add focused scheduler and service fixtures for all three rejection
       outcomes and for accepted idempotent reuse.
-    ☐ Add bootstrap-entrypoint tests for exact error schema, code, broad
+    ☒ Add bootstrap-entrypoint tests for exact error schema, code, broad
       kind, safe blocking fields, and non-empty message.
-    ☐ Add controller tests for exact subtype classification, actionable
+    ☒ Add controller tests for exact subtype classification, actionable
       rendering, persisted result state, exit code, and no recovery.
-    ☐ Verify each rejection leaves the complete registry and scheduler state
+    ☒ Verify each rejection leaves the complete registry and scheduler state
       unchanged except for state that legitimately predates the attempted run.
 
 Completion criteria:
-    ☐ Every expected admission conflict retains its scheduler classification
+    ☒ Every expected admission conflict retains its scheduler classification
       and safe blocking context through the CLI.
-    ☐ No admission conflict is reduced to generic run-state prose.
+    ☒ No admission conflict is reduced to generic run-state prose.
 
 Phase 6: Structure mutation and recovery rejections
     ☐ Exit with abort, cancel, recover, acknowledge, discard, and executor

@@ -11,6 +11,7 @@ local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
 local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 local SchedulerFailureKind =
     require('dwarfspec.protocol.enums.scheduler_failure_kinds')
+local adapter_errors = require('dwarfspec.protocol.adapter_errors')
 local service = require('dwarfspec.host.service.service')
 local module_environment_module =
     require('dwarfspec.host.environment.module_environment')
@@ -569,6 +570,29 @@ local function service_selection(specs)
     return identities
 end
 
+local ADMISSION_MESSAGES = {
+    [SchedulerFailureKind.PROJECT_BUSY]=
+        'This project already has an outstanding DwarfSpec run.',
+    [SchedulerFailureKind.REQUEST_KEY_CONFLICT]=
+        'This request identity is already bound to a different DwarfSpec run.',
+    [SchedulerFailureKind.RESULT_PATH_BUSY]=
+        'The configured result destination is reserved by another DwarfSpec run.',
+}
+
+---Constructs a public structured rejection for one expected admission conflict.
+---@param outcome table
+---@return table
+local function admission_rejection(outcome)
+    local message = ADMISSION_MESSAGES[outcome.kind]
+    if not message then return nil end
+    return adapter_errors.domain(outcome.kind, message, {
+        blocking_run_id=outcome.identity.run_id,
+        blocking_generation=outcome.identity.generation,
+        state=outcome.snapshot.state,
+        reason=outcome.reason,
+    })
+end
+
 ---Starts one service-owned nonblocking automation run.
 ---@param package_root string
 ---@param project_root string
@@ -619,12 +643,9 @@ function M.start(package_root, project_root, options)
         selection={identities=service_selection(options.specs)},
     }, dependencies)
     if not outcome.accepted then
-        if outcome.snapshot.terminal then
-            error(('automation run %s has an unobserved %s result')
-                :format(outcome.identity.run_id, outcome.snapshot.state))
-        end
-        error(('automation run %s is already %s')
-            :format(outcome.identity.run_id, outcome.snapshot.state))
+        local rejection = admission_rejection(outcome)
+        if rejection then error(rejection, 0) end
+        error(outcome.reason or 'DwarfSpec scheduler rejected the run', 0)
     end
     local registry = get_registry()
     local run = assert(registry.runs[outcome.identity.run_id],

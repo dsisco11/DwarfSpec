@@ -246,9 +246,35 @@ describe('automation host ownership', function()
     it('rejects overlap and ignores a callback after abort', function()
         local run = host.start('.', '.', options('owner'))
         assert.equals('starting', run.state)
-        assert.has_error(function()
+        local reused = host.start('.', '.', options('owner'))
+        assert.equals(run, reused)
+        assert.equals(1, dfhack.dwarfspec.generation)
+
+        local changed = options('owner')
+        changed.specs = {'different.ds.lua'}
+        local conflict_accepted, conflict = pcall(function()
+            host.start('.', '.', changed)
+        end)
+        assert.is_false(conflict_accepted)
+        assert.equals(SchedulerFailureKind.REQUEST_KEY_CONFLICT, conflict.code)
+        assert.equals('owner', conflict.blocking_run_id)
+        assert.equals(1, conflict.blocking_generation)
+        assert.equals('starting', conflict.state)
+        assert.equals('request key is already bound to a different request',
+            conflict.reason)
+
+        local accepted, rejection = pcall(function()
             host.start('.', '.', options('overlap'))
-        end, 'automation run owner is already starting')
+        end)
+        assert.is_false(accepted)
+        assert.same({
+            code=SchedulerFailureKind.PROJECT_BUSY,
+            message='This project already has an outstanding DwarfSpec run.',
+            blocking_run_id='owner',
+            blocking_generation=1,
+            state='starting',
+            reason='project already owns an outstanding run',
+        }, rejection)
 
         local cleaned = false
         run.cleanup_module.push(run.cleanup_registry, 'abort proof', function()
@@ -302,9 +328,16 @@ describe('automation host ownership', function()
         local retained = host.start('.', '.', options('retained'))
         local aborted = host.abort(retained.run_id,
             retained.owner_capability)
-        assert.has_error(function()
+        local accepted, rejection = pcall(function()
             host.start('.', '.', options('replacement'))
-        end, 'automation run retained has an unobserved aborted result')
+        end)
+        assert.is_false(accepted)
+        assert.equals(SchedulerFailureKind.PROJECT_BUSY, rejection.code)
+        assert.equals('retained', rejection.blocking_run_id)
+        assert.equals(retained.generation, rejection.blocking_generation)
+        assert.equals('aborted', rejection.state)
+        assert.equals('project already owns an outstanding run',
+            rejection.reason)
 
         host.acknowledge(aborted.run_id, aborted.generation,
             aborted.owner_capability)

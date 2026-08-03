@@ -3,6 +3,8 @@
 local events = require('dwarfspec.protocol.events')
 local RunnerFailureKind =
     require('dwarfspec.protocol.enums.runner_failure_kinds')
+local SchedulerFailureKind =
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 local M = {
     protocol=2,
@@ -32,6 +34,33 @@ local KNOWN_CODES = {
         required={
             running_version='string',
             requested_version='string',
+        },
+    },
+    [SchedulerFailureKind.PROJECT_BUSY]={
+        kind=RunnerFailureKind.REGISTRATION,
+        required={
+            blocking_run_id='string',
+            blocking_generation='positive_integer',
+            state='string',
+            reason='string',
+        },
+    },
+    [SchedulerFailureKind.REQUEST_KEY_CONFLICT]={
+        kind=RunnerFailureKind.REGISTRATION,
+        required={
+            blocking_run_id='string',
+            blocking_generation='positive_integer',
+            state='string',
+            reason='string',
+        },
+    },
+    [SchedulerFailureKind.RESULT_PATH_BUSY]={
+        kind=RunnerFailureKind.REGISTRATION,
+        required={
+            blocking_run_id='string',
+            blocking_generation='positive_integer',
+            state='string',
+            reason='string',
         },
     },
 }

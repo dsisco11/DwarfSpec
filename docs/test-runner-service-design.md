@@ -971,10 +971,11 @@ message and safe common fields but receive no code-specific guidance. Known
 codes must contain exactly their required subtype fields. A malformed known
 payload is an invalid host response, while an unexpected exception becomes a
 bounded uncoded `host` error. These cases remain observably distinct.
-Known subtype policy is centralized privately in
-`dwarfspec.protocol.adapter_errors`; a separate public immutable code enum is
-not introduced while package mismatch is the only migrated coded subtype.
-Additional accepted families extend that registry as their contracts land.
+Known subtype policy is centralized in
+`dwarfspec.protocol.adapter_errors`. Package mismatch remains a private
+protocol code; admission conflicts reuse the public immutable
+`SchedulerFailureKind` values `project_busy`, `request_key_conflict`, and
+`result_path_busy` so the scheduler classification is preserved verbatim.
 
 The common optional fields are `operation`, `run_id`, `generation`, `state`,
 `blocking_run_id`, and `blocking_generation`. Identifiers and states are
@@ -984,6 +985,26 @@ package or project roots, result paths, and unrelated machine paths are
 forbidden. The package mismatch code requires `running_version` and
 `requested_version`. The existing uncoded executor-quarantine compatibility
 shape requires `blocking_run_id`, `blocking_generation`, and `reason`.
+
+Each admission-conflict code has broad kind `registration` and requires
+`blocking_run_id`, `blocking_generation`, `state`, and the scheduler's safe
+`reason`. The blocking fields identify
+the exact retained run that owns the conflict and are sufficient for
+remediation, so the envelope deliberately omits project identity, normalized
+result-path identity, and every raw path. `project_busy` tells the caller to
+wait for and consume the outstanding result; `request_key_conflict` tells the
+caller to retry the identical request or choose a new run identity; and
+`result_path_busy` tells the caller to wait for result consumption or select a
+different result destination. Controller guidance is selected by `code` and
+formatted from the blocking fields, never by parsing `message` or `reason`.
+
+Admission rejection does not mutate the registry, outstanding ownership,
+queue order, generation, leases, request-key bindings, or result-path
+reservations. An identical request-key retry remains an accepted idempotent
+transport response. Invalid scheduler invariants and identifier or capability
+generator failures remain internal host faults. All three expected conflicts
+retain the registration failure kind, `registration_error` persisted state,
+exit code 5, a single bootstrap attempt, and no recovery attempt.
 
 Adapters may emit a valid error envelope with either a zero or nonzero process
 exit during migration. The controller inspects and validates the envelope

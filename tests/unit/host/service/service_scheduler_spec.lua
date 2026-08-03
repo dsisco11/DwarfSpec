@@ -488,6 +488,7 @@ describe('multi-project automation service scheduler', function()
         assert.is_nil(first.snapshot.owner_capability)
         assert.is_nil(service.events(first.identity.run_id, 0,
             dependencies).events[1].owner_capability)
+        local after_reuse = service.summary(dependencies)
 
         local mismatched_retry = submission('alpha')
         mismatched_retry.selection.identities = {'tests/live/other.ds.lua'}
@@ -497,12 +498,15 @@ describe('multi-project automation service scheduler', function()
         assert.equals(SchedulerFailureKind.REQUEST_KEY_CONFLICT,
             conflict.kind)
         assert.equals(first.identity.run_id, conflict.identity.run_id)
+        assert.same(after_reuse, service.summary(dependencies))
 
+        local before_busy = service.summary(dependencies)
         local busy = service.submit(projects[1].project_id,
             submission('alpha-other'), dependencies)
         assert.is_false(busy.accepted)
         assert.equals(SchedulerFailureKind.PROJECT_BUSY, busy.kind)
         assert.equals(first.identity.run_id, busy.identity.run_id)
+        assert.same(before_busy, service.summary(dependencies))
 
         local second = service.submit(projects[2].project_id,
             submission('alpha'), dependencies)
