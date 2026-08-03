@@ -43,57 +43,58 @@ Assumptions and open questions:
       changed probe and controller together; record the decision and rationale.
 
 Phase 1: Establish the probe response and diagnostic contracts
-    ☐ Exit with one documented probe grammar, one classification table, and
+    ☒ Exit with one documented probe grammar, one classification table, and
       explicit compatibility invariants before changing runtime behavior.
+        - Evidence: `docs/connection-probe-contract.md`.
 
 1.1 Probe response grammar:
-    ☐ Define `DWARFSPEC_PROBE` as a single line with whitespace-separated
+    ☒ Define `DWARFSPEC_PROBE` as a single line with whitespace-separated
       `name=value` fields.
-    ☐ Require exactly one probe marker in the complete subprocess output.
-    ☐ Require `protocol`, `core`, and `timeout` fields.
-    ☐ Define the accepted healthy values as `protocol=2`, `core=true`, and
+    ☒ Require exactly one probe marker in the complete subprocess output.
+    ☒ Require `protocol`, `core`, and `timeout` fields.
+    ☒ Define the accepted healthy values as `protocol=2`, `core=true`, and
       `timeout=function`.
-    ☐ Define unknown fields as forward-compatible diagnostics that the current
+    ☒ Define unknown fields as forward-compatible diagnostics that the current
       parser ignores after validating the required fields.
-    ☐ Define duplicate required fields, missing values, invalid booleans, and
+    ☒ Define duplicate required fields, missing values, invalid booleans, and
       malformed tokens as malformed probe reports.
-    ☐ Define whether `dfhack` or other optional diagnostic field values require
+    ☒ Define whether `dfhack` or other optional diagnostic field values require
       escaping or are restricted to safe non-whitespace tokens.
 
 1.2 Failure classification and messages:
-    ☐ Specify distinct messages for every controller-observable condition:
-        ☐ Process invocation throws before returning a result.
-        ☐ The probe process exits nonzero.
-        ☐ The process succeeds but emits no probe marker.
-        ☐ The process emits a malformed probe marker.
-        ☐ The process emits multiple probe markers.
-        ☐ The probe protocol differs from the controller protocol.
-        ☐ The probe reports a non-core Lua context.
-        ☐ The probe reports `dfhack.timeout` with a type other than `function`.
-    ☐ Include the resolved runner path in invocation failures without implying
+    ☒ Specify distinct messages for every controller-observable condition:
+        ☒ Process invocation throws before returning a result.
+        ☒ The probe process exits nonzero.
+        ☒ The process succeeds but emits no probe marker.
+        ☒ The process emits a malformed probe marker.
+        ☒ The process emits multiple probe markers.
+        ☒ The probe protocol differs from the controller protocol.
+        ☒ The probe reports a non-core Lua context.
+        ☒ The probe reports `dfhack.timeout` with a type other than `function`.
+    ☒ Include the resolved runner path in invocation failures without implying
       that test selection or the selected spec caused the failure.
-    ☐ Make the protocol-mismatch message identify expected and observed values
+    ☒ Make the protocol-mismatch message identify expected and observed values
       and recommend checking for mixed installed DwarfSpec package versions.
-    ☐ Make missing-marker and nonzero-exit messages include a bounded excerpt of
+    ☒ Make missing-marker and nonzero-exit messages include a bounded excerpt of
       captured output when output is available.
-    ☐ Define a stable placeholder for empty output so the diagnostic never ends
+    ☒ Define a stable placeholder for empty output so the diagnostic never ends
       with an unexplained blank suffix.
-    ☐ Preserve `RunnerFailureKind.CONNECTION`, exit code 4, and the connection
+    ☒ Preserve `RunnerFailureKind.CONNECTION`, exit code 4, and the connection
       result state for every classified probe failure.
 
 1.3 Bounded subprocess output contract:
-    ☐ Define deterministic selection of non-empty output lines.
-    ☐ Define per-line and total-length truncation behavior.
-    ☐ Add an explicit truncation marker when content is omitted.
-    ☐ Normalize line endings and control characters that would corrupt a
+    ☒ Define deterministic selection of non-empty output lines.
+    ☒ Define per-line and total-length truncation behavior.
+    ☒ Add an explicit truncation marker when content is omitted.
+    ☒ Normalize line endings and control characters that would corrupt a
       one-line CLI diagnostic while preserving useful DFHack error text.
-    ☐ Do not expose command arguments or environment variables that were not
+    ☒ Do not expose command arguments or environment variables that were not
       already present in captured subprocess output.
 
 Completion criteria:
-    ☐ Every condition currently collapsed into the generic health message maps
+    ☒ Every condition currently collapsed into the generic health message maps
       to one documented, objectively testable diagnostic.
-    ☐ The contract explicitly preserves existing failure kinds, result states,
+    ☒ The contract explicitly preserves existing failure kinds, result states,
       exit codes, and selection boundaries.
 
 Phase 2: Make the host probe safe and self-describing
