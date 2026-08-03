@@ -1,0 +1,320 @@
+DwarfSpec Structured Package-Version Mismatch Rejection
+========================================================
+
+Source proposal:
+    ☐ The conversation that identified the ambiguous bootstrap diagnostic
+      `incompatible automation package version: expected ..., found ...` and
+      proposed carrying the running and requested package versions as fields in
+      the existing `dwarfspec.error.v1` rejection envelope.
+
+Goal:
+    ☐ Make a bootstrap package-version mismatch identify which version is
+      already loaded by the running DFHack process and which version the
+      current DwarfSpec command requested.
+    ☐ Tell the operator that DwarfSpec is process-wide, that returning to the
+      title screen or unloading a world is insufficient, and that fully exiting
+      and relaunching Dwarf Fortress/DFHack is required before retrying.
+    ☐ Represent the mismatch as a structured registration subtype so the
+      controller does not infer machine-readable meaning from human text.
+    ☐ Preserve the existing `dwarfspec.error.v1` transport,
+      `RunnerFailureKind.REGISTRATION`, registration-error result state, exit
+      code 5, rejection atomicity, and no-recovery behavior.
+    ☐ Keep source, focused unit, complete unit, package, installed, and live
+      DFHack evidence distinct.
+
+Non-goals:
+    ☐ Do not introduce a new top-level error schema, runner failure kind,
+      result state, or process exit code.
+    ☐ Do not change package compatibility rules, protocol compatibility,
+      project registration, scheduler admission, quarantine handling, retained
+      service state, or recovery behavior.
+    ☐ Do not add an in-process service unload or hot-reload path.
+    ☐ Do not generalize every assertion or registration failure into a new
+      structured hierarchy as part of this work.
+    ☐ Do not silently select, install, downgrade, or remove a DwarfSpec
+      package on the operator's behalf.
+
+Assumptions and open questions:
+    ☐ Treat `code='package_version_mismatch'`, `running_version`, and
+      `requested_version` as the stable wire names proposed in the
+      conversation.
+    ☐ Decide whether `package_version_mismatch` should be centralized in a
+      narrowly scoped immutable enum or constant module; do not add a broader
+      rejection framework without demonstrated need.
+    ☐ Decide whether the canonical multi-line remediation text is stored
+      verbatim in persisted result errors or whether persistence retains a
+      single-line message while the CLI renderer adds layout. Verify existing
+      result consumers before settling this boundary.
+    ☐ Decide whether shipping the changed host and controller requires a
+      package version bump, and record the compatibility rationale.
+
+Phase 1: Establish the additive rejection contract
+    ☐ Exit with one documented package-mismatch subtype and exact user-facing
+      semantics before changing service or controller behavior.
+
+1.1 Wire contract:
+    ☐ Extend the existing `dwarfspec.error.v1` registration envelope with the
+      optional `code` field rather than creating another schema or changing the
+      broad `kind='registration'` classification.
+    ☐ Define `code='package_version_mismatch'` as requiring non-empty string
+      fields `running_version` and `requested_version`.
+    ☐ Define `running_version` as the package version retained by the
+      process-wide DFHack service registry.
+    ☐ Define `requested_version` as the package version supplied by the host
+      loaded from the current DwarfSpec command's package.
+    ☐ Keep `message` required and independently meaningful so diagnostics
+      remain useful to consumers that only display the base error text.
+    ☐ Preserve generic registration envelopes without `code` and preserve
+      the existing structured executor-quarantine envelope unchanged.
+    ☐ Define unknown future registration codes to fall back to their
+      supplied message rather than being mistaken for a version mismatch.
+
+1.2 User-facing diagnostic:
+    ☐ Settle and test wording that labels both values without the ambiguous
+      `expected` and `found` terms:
+        ☐ `Running DFHack service: <running_version>`.
+        ☐ `Current DwarfSpec command: <requested_version>`.
+    ☐ Explain that DFHack already has a different DwarfSpec version loaded.
+    ☐ Direct the operator to save, fully exit Dwarf Fortress/DFHack,
+      relaunch it, and retry the command.
+    ☐ State that returning to the title screen or unloading the world does
+      not unload the process-wide DwarfSpec service.
+    ☐ Keep the diagnostic independent of project paths, selected specs,
+      installation-tree paths, and assumptions about how DFHack was launched.
+
+Completion criteria:
+    ☐ The contract distinguishes machine-readable classification from
+      human-readable wording and defines every new field unambiguously.
+    ☐ Existing registration, quarantine, failure-kind, result-state, and
+      exit-code contracts remain explicitly preserved.
+
+Phase 2: Produce structured mismatch rejections in the host
+    ☐ Exit with the service and bootstrap entrypoint carrying version fields
+      without mutating retained service state or weakening compatibility.
+
+2.1 Service rejection:
+    ☐ Replace only the incompatible bootstrap package-version assertion in
+      `src/dwarfspec/host/service/service.lua` with a structured error value
+      containing the stable code and both version fields.
+    ☐ Preserve request validation before registry access and preserve the
+      current protocol-version validation order.
+    ☐ Raise the structured value without an incidental Lua source prefix or
+      string coercion that would discard its fields.
+    ☐ Keep successful first bootstrap and compatible repeated bootstrap
+      behavior unchanged.
+    ☐ Verify an incompatible bootstrap creates no project, run, queue,
+      scheduler, ownership, timestamp, or registry mutation.
+    ☐ Add language-standard documentation comments for every new helper or
+      public contract surface.
+
+2.2 Bootstrap adapter serialization:
+    ☐ Extend `src/dwarfspec/host/entrypoints/bootstrap.lua` to recognize the
+      structured mismatch value and emit its `code`, `running_version`, and
+      `requested_version` fields in `dwarfspec.error.v1` JSON.
+    ☐ Retain `kind='registration'`, protocol 2, and a non-empty fallback
+      message for the mismatch response.
+    ☐ Preserve generic string-error serialization for all unrelated
+      bootstrap failures.
+    ☐ Preserve executor-quarantine classification and its structured fields
+      without routing it through version-mismatch formatting.
+    ☐ Avoid exposing package roots or other machine-specific service data.
+
+2.3 Host-focused tests:
+    ☐ Update `tests/unit/host/service/service_spec.lua` to assert the exact
+      structured mismatch value and unchanged retained registry snapshot.
+    ☐ Update
+      `tests/unit/host/entrypoints/entrypoint_contract_spec.lua` to assert the
+      exact JSON schema, protocol, registration kind, code, running version,
+      requested version, and non-empty message.
+    ☐ Retain independent coverage for generic registration errors and
+      executor quarantine.
+    ☐ Verify matching versions still bootstrap normally and emit no error
+      envelope.
+
+Completion criteria:
+    ☐ A version mismatch crosses the host entrypoint as structured JSON with
+      both correctly oriented version values.
+    ☐ Host-focused tests prove rejection atomicity and no regression in
+      compatible bootstrap or quarantine behavior.
+
+Phase 3: Validate and consume the structured rejection in the controller
+    ☐ Exit with strict field validation and code-based diagnostic formatting
+      that no longer parses human message text.
+
+3.1 Controller response validation:
+    ☐ Extend the adapter-error validator in
+      `src/dwarfspec/controller/reporting/report.lua` to accept optional
+      registration codes while retaining JSON-safety validation.
+    ☐ Require non-empty `running_version` and `requested_version` strings
+      when `code='package_version_mismatch'`.
+    ☐ Reject missing, empty, or incorrectly typed required mismatch fields
+      as malformed adapter responses instead of rendering misleading guidance.
+    ☐ Continue accepting generic registration errors without a code.
+    ☐ Continue validating executor-quarantine fields exactly as before.
+    ☐ Preserve unknown future registration codes as generic message-bearing
+      rejections unless the settled contract requires stricter handling.
+    ☐ Add language-standard documentation comments for every changed or new
+      validation and formatting method.
+
+3.2 Runner formatting:
+    ☐ Change the registration formatter in
+      `src/dwarfspec/controller/execution/runner.lua` to receive the validated
+      rejection object rather than only its message string.
+    ☐ Branch on `code == 'package_version_mismatch'` and format the settled
+      labels and remediation from the structured version fields.
+    ☐ Remove the substring match on
+      `incompatible automation package version` after structured coverage is
+      complete.
+    ☐ Keep generic registration rejections prefixed consistently and do not
+      append restart advice to unrelated errors or unknown codes.
+    ☐ Preserve one bootstrap attempt, no bootstrap retry, no recovery call,
+      registration failure classification, result persistence, and exit code 5
+      for an explicit mismatch rejection.
+
+3.3 Controller-focused tests:
+    ☐ Add report-parser cases for a valid structured mismatch and every
+      missing, empty, or incorrectly typed required field.
+    ☐ Verify generic registration and executor-quarantine envelopes remain
+      accepted and retain their existing fields.
+    ☐ Update `tests/unit/controller/execution/runner_spec.lua` to assert the
+      exact running/current labels, values, full-exit guidance, title-screen or
+      world-unload clarification, classification, result state, and exit code.
+    ☐ Verify the diagnostic contains no ambiguous `expected` or `found`
+      labels.
+    ☐ Verify a generic registration message that happens to contain the old
+      mismatch phrase receives no special restart guidance.
+    ☐ Verify unknown registration codes fall back to the supplied message
+      and do not receive version-mismatch formatting.
+    ☐ Verify malformed structured responses fail through the existing
+      invalid-bootstrap-response path without attempting recovery.
+
+Completion criteria:
+    ☐ No controller behavior depends on parsing the host's human mismatch
+      message.
+    ☐ Valid structured rejections render both versions and precise recovery
+      instructions while all adjacent rejection behavior remains compatible.
+
+Phase 4: Lock down documentation, regression, and package integrity
+    ☐ Exit with user documentation, complete source validation, and one
+      internally consistent package artifact.
+
+4.1 Documentation and release surfaces:
+    ☐ Update `docs/command-line.md` to describe the package-mismatch
+      diagnostic, process-wide lifetime, complete-restart requirement, and
+      preserved exit code 5.
+    ☐ Add a changelog entry describing structured version labels and removal
+      of ambiguous `expected`/`found` wording.
+    ☐ Apply the settled package-version decision consistently to the
+      rockspec, host package version, CLI version, documentation examples, and
+      artifact name when a bump is required.
+    ☐ Search user-facing documentation and tests for the old mismatch
+      wording and retain it only where explicitly testing backward input or
+      historical behavior.
+
+4.2 Source validation:
+    ☐ Run focused service, host-entrypoint, report-parser, and runner unit
+      specifications through build/test subagents.
+    ☐ Run the complete recursive unit suite through a build/test subagent.
+    ☐ Run Lua syntax, formatting, and declaration checks for every changed
+      source and test file through a build/test subagent.
+    ☐ Run `git diff --check` and inspect the focused diff without altering
+      unrelated worktree or index state.
+    ☐ Record focused and complete-suite evidence separately.
+
+4.3 Package integrity:
+    ☐ Build the LuaRocks artifact with the repository publishing workflow
+      through a build/test subagent.
+    ☐ Inspect the archive manifest and contents to prove the matching
+      service, bootstrap adapter, report parser, runner, and version metadata
+      are present.
+    ☐ Install the artifact into a disposable LuaRocks tree and verify the
+      command and bundled host modules resolve from that same artifact.
+    ☐ Remove the disposable tree and confirm cleanup without modifying the
+      operator's normal LuaRocks installation.
+
+Completion criteria:
+    ☐ Focused, recursive, syntax, formatting, declaration, and diff checks
+      pass with evidence recorded independently.
+    ☐ Documentation and package metadata describe the same structured
+      behavior shipped in the inspected artifact.
+
+Phase 5: Prove the installed mismatch and restart workflows
+    ☐ Exit with installed, live DFHack evidence for both the mismatch
+      diagnostic and the healthy post-restart path, followed by an independent
+      implementation review.
+
+5.1 Reproducible installed setup:
+    ☐ Prepare separate disposable installed trees for two known DwarfSpec
+      package versions without replacing the operator's default installation.
+    ☐ Record both package versions, command paths, module roots, the selected
+      consumer project, the exact project-relative spec identity, the resolved
+      `dfhack-run`, and the target DFHack process before execution.
+    ☐ Confirm each command resolves its controller and bootstrap entrypoint
+      from its own single package artifact.
+    ☐ Ensure the selected live test can terminate and clean up normally
+      before intentionally introducing package skew.
+
+5.2 Live mismatch evidence:
+    ☐ Start a clean DFHack process and use the older installed command to
+      bootstrap the process-wide DwarfSpec service.
+    ☐ Confirm the initial run reaches a terminal result with cleanup
+      confirmed and leaves the service idle, the queue empty, and quarantine
+      absent.
+    ☐ Without restarting DFHack, invoke the newer installed command against
+      the same process and exact consumer identity.
+    ☐ Verify the rejection labels the older registry value as the running
+      service and the newer package value as the current command.
+    ☐ Verify the complete-exit/relaunch guidance and the clarification that
+      title-screen return or world unload is insufficient.
+    ☐ Verify registration failure classification, registration-error result
+      state where persisted, exit code 5, one rejected bootstrap attempt, no
+      recovery attempt, no admitted run, and unchanged service state.
+    ☐ Capture bounded command output and service status without claiming the
+      selected spec itself failed.
+
+5.3 Post-restart healthy evidence and cleanup:
+    ☐ Save and fully exit the test Dwarf Fortress/DFHack process, confirm it
+      is no longer running, then relaunch it.
+    ☐ Re-run the same exact consumer identity with the newer installed
+      command and confirm it proceeds beyond bootstrap to a terminal result.
+    ☐ Record exit code, result artifact, test outcome, cleanup confirmation,
+      executor idle state, empty queue, and absent quarantine independently.
+    ☐ Remove disposable installed trees, live result artifacts, and
+      test-owned resources, and confirm cleanup.
+    ☐ Restore the operator's original running-process and command-selection
+      state if the validation workflow changed either one.
+
+5.4 Followup review:
+    ☐ Perform an independent review of the implementation against every
+      requirement, non-goal, assumption, and completion criterion in this plan.
+    ☐ Recheck field orientation from the retained registry through JSON,
+      controller validation, rendered CLI text, and persisted result output.
+    ☐ Recheck that no substring-based version-mismatch classification
+      remains and no unrelated registration rejection receives restart advice.
+    ☐ Recheck that no new unload, downgrade, installation, scheduler,
+      recovery, or compatibility behavior entered the final diff.
+    ☐ Record every deferred item with rationale and a concrete follow-up or
+      removal condition.
+
+Completion criteria:
+    ☐ A real installed mixed-version process produces the exact actionable
+      structured diagnostic with correctly oriented version values.
+    ☐ A complete restart followed by the newer command reaches a terminal
+      live result with cleanup and final service state confirmed.
+    ☐ The followup review finds every requirement satisfied or explicitly
+      deferred with rationale.
+
+Final acceptance:
+    ☐ Every proposal requirement is implemented or explicitly deferred with
+      a recorded rationale.
+    ☐ Package mismatch uses the existing structured error schema with a
+      stable registration subtype and validated running/requested fields.
+    ☐ The controller formats the diagnostic by structured code and fields,
+      never by parsing human text.
+    ☐ The message clearly distinguishes the running DFHack service from the
+      current command and gives complete, accurate restart instructions.
+    ☐ Registration failure kind, result state, exit code, rejection
+      atomicity, no-recovery behavior, and quarantine handling are preserved.
+    ☐ Source, focused unit, complete unit, static-analysis, package,
+      installed mismatch, post-restart live, cleanup, and followup-review
+      evidence are recorded separately.
