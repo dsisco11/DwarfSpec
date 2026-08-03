@@ -250,7 +250,7 @@ describe('DwarfSpec native reports', function()
         }))
     end)
 
-    it('returns a canonical adapter rejection separately from transport',
+    it('returns a generic registration rejection separately from transport',
             function()
         local transport, _, response_error =
             report.parse_transport_response({'DWARFSPEC_JSON ignored'}, {
@@ -270,6 +270,120 @@ describe('DwarfSpec native reports', function()
         assert.equals('registration', response_error.kind)
         assert.equals('incompatible automation package version: ' ..
             'expected 0.1.3, found 0.2.1', response_error.message)
+        assert.is_nil(response_error.code)
+    end)
+
+    it('validates package mismatch and quarantine adapter errors', function()
+        local _, _, mismatch = report.parse_transport_response(
+            {'DWARFSPEC_JSON ignored'}, {}, function()
+                return {
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind='registration',
+                    code='package_version_mismatch',
+                    message='different version loaded',
+                    running_version='0.2.1',
+                    requested_version='0.2.2',
+                }
+            end)
+        assert.equals('package_version_mismatch', mismatch.code)
+        assert.equals('0.2.1', mismatch.running_version)
+        assert.equals('0.2.2', mismatch.requested_version)
+
+        local _, _, quarantine = report.parse_transport_response(
+            {'DWARFSPEC_JSON ignored'}, {}, function()
+                return {
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind='executor_quarantined',
+                    message='cleanup unconfirmed',
+                    blocking_run_id='run-blocking',
+                    blocking_generation=7,
+                    reason='cleanup unconfirmed',
+                }
+            end)
+        assert.equals('run-blocking', quarantine.blocking_run_id)
+        assert.equals(7, quarantine.blocking_generation)
+        assert.equals('cleanup unconfirmed', quarantine.reason)
+    end)
+
+    it('accepts unknown registration codes without mismatch fields', function()
+        local _, _, response_error = report.parse_transport_response(
+            {'DWARFSPEC_JSON ignored'}, {}, function()
+                return {
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind='registration',
+                    code='future_registration_code',
+                    message='future registration rejection',
+                }
+            end)
+
+        assert.equals('future_registration_code', response_error.code)
+        assert.equals('future registration rejection', response_error.message)
+        assert.is_nil(response_error.running_version)
+        assert.is_nil(response_error.requested_version)
+    end)
+
+    it('rejects malformed package mismatch fields', function()
+        local cases = {
+            {'running version missing', nil, '0.2.2', 'running version'},
+            {'running version empty', '', '0.2.2', 'running version'},
+            {'running version typed', 201, '0.2.2', 'running version'},
+            {'requested version missing', '0.2.1', nil, 'requested version'},
+            {'requested version empty', '0.2.1', '', 'requested version'},
+            {'requested version typed', '0.2.1', 202, 'requested version'},
+        }
+        for _, case in ipairs(cases) do
+            local accepted, rejection = pcall(
+                report.parse_transport_response,
+                {'DWARFSPEC_JSON ignored'}, {}, function()
+                    return {
+                        schema='dwarfspec.error.v1',
+                        protocol=2,
+                        kind='registration',
+                        code='package_version_mismatch',
+                        message='different version loaded',
+                        running_version=case[2],
+                        requested_version=case[3],
+                    }
+                end)
+            assert.is_false(accepted, case[1])
+            assert.is_table(rejection, case[1])
+            assert.is_true(rejection.invalid_adapter_error, case[1])
+            assert.matches(case[4], rejection.message, 1, true)
+        end
+
+        local accepted, rejection = pcall(
+            report.parse_transport_response,
+            {'DWARFSPEC_JSON ignored'}, {}, function()
+                return {
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind='registration',
+                    code=42,
+                    message='typed code',
+                }
+            end)
+        assert.is_false(accepted)
+        assert.is_true(rejection.invalid_adapter_error)
+        assert.matches('code must be a non-empty string',
+            rejection.message, 1, true)
+
+        accepted, rejection = pcall(
+            report.parse_transport_response,
+            {'DWARFSPEC_JSON ignored'}, {}, function()
+                return {
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind='registration',
+                    message='unsafe rejection',
+                    unsafe=function() end,
+                }
+            end)
+        assert.is_false(accepted)
+        assert.is_true(rejection.invalid_adapter_error)
+        assert.matches('JSON-safe', rejection.message, 1, true)
     end)
 
     it('accepts one exact version 2 transport identity and cursor', function()

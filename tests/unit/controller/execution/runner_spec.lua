@@ -1045,8 +1045,10 @@ describe('DwarfSpec external runner', function()
                     schema='dwarfspec.error.v1',
                     protocol=2,
                     kind=runner.failure_kinds.REGISTRATION,
-                    message='incompatible automation package version: ' ..
-                        'expected 0.1.3, found 0.2.1',
+                    code='package_version_mismatch',
+                    message='different version loaded',
+                    running_version='0.1.3',
+                    requested_version='0.2.1',
                 })}}
             end
             recovery_calls = recovery_calls + 1
@@ -1061,9 +1063,112 @@ describe('DwarfSpec external runner', function()
             runner.failure_kinds.REGISTRATION], outcome.exit_code)
         assert.equals(runner.failure_kinds.REGISTRATION, outcome.error.kind)
         assert.equals(ResultState.REGISTRATION_ERROR, outcome.result.state)
-        assert.matches('expected 0.1.3, found 0.2.1',
+        assert.equals(
+            'DwarfSpec could not start because DFHack already has a ' ..
+                'different DwarfSpec version loaded.\n\n' ..
+                '  Running DFHack service: 0.1.3\n' ..
+                '  Current DwarfSpec command: 0.2.1\n\n' ..
+                'To use 0.2.1, save and fully exit Dwarf Fortress/DFHack, ' ..
+                'relaunch it,\nand retry this command. Returning to the ' ..
+                'title screen or unloading the\nworld will not unload the ' ..
+                'process-wide DwarfSpec service.', outcome.error.message)
+        assert.equals(outcome.error.message, outcome.result.error.message)
+        assert.is_nil(outcome.error.message:find('expected', 1, true))
+        assert.is_nil(outcome.error.message:find('found', 1, true))
+        assert.is_nil(outcome.report)
+    end)
+
+    it('does not infer version guidance from generic registration text or code',
+            function()
+        local cases = {
+            {
+                name='generic-old-phrase',
+                response={
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind=runner.failure_kinds.REGISTRATION,
+                    message='incompatible automation package version in ' ..
+                        'unrelated registration detail',
+                },
+            },
+            {
+                name='unknown-code',
+                response={
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind=runner.failure_kinds.REGISTRATION,
+                    code='future_registration_code',
+                    message='future registration rejection',
+                },
+            },
+        }
+        for _, case in ipairs(cases) do
+            local recovery_calls = 0
+            local run_options = options(case.name)
+            run_options.invoke = function(_, arguments)
+                if arguments[3]:match('probe%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_PROBE protocol=2 core=true ' ..
+                            'timeout=function'}}
+                elseif arguments[3]:match('bootstrap%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_JSON ' .. json.encode(case.response)}}
+                end
+                recovery_calls = recovery_calls + 1
+                return {exit_code=0, lines={}}
+            end
+
+            local outcome = runner.run(run_options)
+
+            assert.equals(runner.exit_codes[
+                runner.failure_kinds.REGISTRATION], outcome.exit_code)
+            assert.equals(ResultState.REGISTRATION_ERROR,
+                outcome.result.state)
+            assert.matches(case.response.message, outcome.error.message,
+                1, true)
+            assert.is_nil(outcome.error.message:find(
+                'Running DFHack service:', 1, true))
+            assert.is_nil(outcome.error.message:find(
+                'fully exit Dwarf Fortress/DFHack', 1, true))
+            assert.equals(0, recovery_calls)
+        end
+    end)
+
+    it('rejects a malformed mismatch response without recovery', function()
+        local bootstrap_calls = 0
+        local recovery_calls = 0
+        local run_options = options('malformed-version-rejection')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                bootstrap_calls = bootstrap_calls + 1
+                return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind=runner.failure_kinds.REGISTRATION,
+                    code='package_version_mismatch',
+                    message='different version loaded',
+                    running_version='0.1.3',
+                })}}
+            end
+            recovery_calls = recovery_calls + 1
+            return {exit_code=0, lines={}}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(1, bootstrap_calls)
+        assert.equals(0, recovery_calls)
+        assert.equals(runner.exit_codes[
+            runner.failure_kinds.REGISTRATION], outcome.exit_code)
+        assert.equals(runner.failure_kinds.REGISTRATION, outcome.error.kind)
+        assert.equals(ResultState.REGISTRATION_ERROR, outcome.result.state)
+        assert.matches('DwarfSpec bootstrap response was invalid',
             outcome.error.message, 1, true)
-        assert.matches('Restart DFHack', outcome.error.message, 1, true)
+        assert.matches('requires requested version',
+            outcome.error.message, 1, true)
         assert.is_nil(outcome.report)
     end)
 

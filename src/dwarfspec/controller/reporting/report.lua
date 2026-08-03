@@ -28,7 +28,19 @@ local function validate_error(report)
         'unsupported DwarfSpec adapter error kind: ' .. tostring(report.kind))
     assert(type(report.message) == 'string' and report.message ~= '',
         'DwarfSpec adapter error message must be a non-empty string')
-    if report.kind == RunnerFailureKind.EXECUTOR_QUARANTINED then
+    if report.kind == RunnerFailureKind.REGISTRATION then
+        assert(report.code == nil or
+            type(report.code) == 'string' and report.code ~= '',
+            'DwarfSpec registration error code must be a non-empty string')
+        if report.code == 'package_version_mismatch' then
+            assert(type(report.running_version) == 'string' and
+                report.running_version ~= '',
+                'DwarfSpec package version mismatch requires running version')
+            assert(type(report.requested_version) == 'string' and
+                report.requested_version ~= '',
+                'DwarfSpec package version mismatch requires requested version')
+        end
+    elseif report.kind == RunnerFailureKind.EXECUTOR_QUARANTINED then
         assert(type(report.blocking_run_id) == 'string' and
             report.blocking_run_id ~= '',
             'DwarfSpec quarantine error requires blocking run id')
@@ -40,6 +52,16 @@ local function validate_error(report)
             'DwarfSpec quarantine error requires a reason')
     end
     return report
+end
+
+---Wraps one malformed adapter-error diagnostic for bootstrap orchestration.
+---@param value any
+---@return table
+local function invalid_adapter_error(value)
+    return {
+        invalid_adapter_error=true,
+        message=tostring(value),
+    }
 end
 
 ---Returns every machine-readable report payload in output order.
@@ -109,7 +131,9 @@ end
 function M.parse_transport_response(lines, expected, decoder)
     local report, payload = decode_report(lines, decoder)
     if report.schema == 'dwarfspec.error.v1' then
-        return nil, payload, validate_error(report)
+        local valid, response_error = pcall(validate_error, report)
+        if not valid then error(invalid_adapter_error(response_error), 0) end
+        return nil, payload, response_error
     end
     if report.schema ~= 'dwarfspec.transport.v2' then
         error('unsupported DwarfSpec report schema: ' ..

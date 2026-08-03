@@ -164,60 +164,60 @@ Completion criteria:
       compatible bootstrap or quarantine behavior.
 
 Phase 3: Validate and consume the structured rejection in the controller
-    ☐ Exit with strict field validation and code-based diagnostic formatting
+    ☒ Exit with strict field validation and code-based diagnostic formatting
       that no longer parses human message text.
 
 3.1 Controller response validation:
-    ☐ Extend the adapter-error validator in
+    ☒ Extend the adapter-error validator in
       `src/dwarfspec/controller/reporting/report.lua` to accept optional
       registration codes while retaining JSON-safety validation.
-    ☐ Require non-empty `running_version` and `requested_version` strings
+    ☒ Require non-empty `running_version` and `requested_version` strings
       when `code='package_version_mismatch'`.
-    ☐ Reject missing, empty, or incorrectly typed required mismatch fields
+    ☒ Reject missing, empty, or incorrectly typed required mismatch fields
       as malformed adapter responses instead of rendering misleading guidance.
-    ☐ Continue accepting generic registration errors without a code.
-    ☐ Continue validating executor-quarantine fields exactly as before.
-    ☐ Preserve unknown future registration codes as generic message-bearing
+    ☒ Continue accepting generic registration errors without a code.
+    ☒ Continue validating executor-quarantine fields exactly as before.
+    ☒ Preserve unknown future registration codes as generic message-bearing
       rejections unless the settled contract requires stricter handling.
-    ☐ Add language-standard documentation comments for every changed or new
+    ☒ Add language-standard documentation comments for every changed or new
       validation and formatting method.
 
 3.2 Runner formatting:
-    ☐ Change the registration formatter in
+    ☒ Change the registration formatter in
       `src/dwarfspec/controller/execution/runner.lua` to receive the validated
       rejection object rather than only its message string.
-    ☐ Branch on `code == 'package_version_mismatch'` and format the settled
+    ☒ Branch on `code == 'package_version_mismatch'` and format the settled
       labels and remediation from the structured version fields.
-    ☐ Remove the substring match on
+    ☒ Remove the substring match on
       `incompatible automation package version` after structured coverage is
       complete.
-    ☐ Keep generic registration rejections prefixed consistently and do not
+    ☒ Keep generic registration rejections prefixed consistently and do not
       append restart advice to unrelated errors or unknown codes.
-    ☐ Preserve one bootstrap attempt, no bootstrap retry, no recovery call,
+    ☒ Preserve one bootstrap attempt, no bootstrap retry, no recovery call,
       registration failure classification, result persistence, and exit code 5
       for an explicit mismatch rejection.
 
 3.3 Controller-focused tests:
-    ☐ Add report-parser cases for a valid structured mismatch and every
+    ☒ Add report-parser cases for a valid structured mismatch and every
       missing, empty, or incorrectly typed required field.
-    ☐ Verify generic registration and executor-quarantine envelopes remain
+    ☒ Verify generic registration and executor-quarantine envelopes remain
       accepted and retain their existing fields.
-    ☐ Update `tests/unit/controller/execution/runner_spec.lua` to assert the
+    ☒ Update `tests/unit/controller/execution/runner_spec.lua` to assert the
       exact running/current labels, values, full-exit guidance, title-screen or
       world-unload clarification, classification, result state, and exit code.
-    ☐ Verify the diagnostic contains no ambiguous `expected` or `found`
+    ☒ Verify the diagnostic contains no ambiguous `expected` or `found`
       labels.
-    ☐ Verify a generic registration message that happens to contain the old
+    ☒ Verify a generic registration message that happens to contain the old
       mismatch phrase receives no special restart guidance.
-    ☐ Verify unknown registration codes fall back to the supplied message
+    ☒ Verify unknown registration codes fall back to the supplied message
       and do not receive version-mismatch formatting.
-    ☐ Verify malformed structured responses fail through the existing
+    ☒ Verify malformed structured responses fail through the existing
       invalid-bootstrap-response path without attempting recovery.
 
 Completion criteria:
-    ☐ No controller behavior depends on parsing the host's human mismatch
+    ☒ No controller behavior depends on parsing the host's human mismatch
       message.
-    ☐ Valid structured rejections render both versions and precise recovery
+    ☒ Valid structured rejections render both versions and precise recovery
       instructions while all adjacent rejection behavior remains compatible.
 
 Phase 4: Establish one shared adapter-error boundary
