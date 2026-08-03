@@ -30,11 +30,34 @@ describe('scheduler recovery policy', function()
         local dependencies, controls = support.environment()
         controls.registry.quarantine = {active=true,
             run_id='failed-proof', generation=3, reason='unclean'}
-        assert.has_error(function() recovery.recover_executor(controls.registry,
+        local ok, rejection = pcall(function()
+            recovery.recover_executor(controls.registry,
             {service_instance_id=controls.registry.service_instance_id,
                 run_id='failed-proof', generation=3,
-                reason='not clean', proof={clean=false}}, dependencies) end,
-            'clean-state proof rejected')
+                reason='not clean', proof={clean=false}}, dependencies)
+        end)
+        assert.is_false(ok)
+        assert.equals('clean_state_unverified', rejection.code)
+        assert.equals('clean-state proof rejected', rejection.reason)
+        assert.is_true(controls.registry.quarantine.active)
+    end)
+
+    it('normalizes empty verifier detail without clearing quarantine', function()
+        local dependencies, controls = support.environment()
+        controls.registry.quarantine = {active=true,
+            run_id='empty-detail', generation=4, reason='unclean'}
+        dependencies.verify_clean_state = function()
+            return false, ''
+        end
+        local ok, rejection = pcall(recovery.recover_executor,
+            controls.registry, {
+                service_instance_id=controls.registry.service_instance_id,
+                run_id='empty-detail', generation=4,
+                reason='not clean', proof={clean=false},
+            }, dependencies)
+        assert.is_false(ok)
+        assert.equals('clean_state_unverified', rejection.code)
+        assert.equals('clean-state proof was rejected', rejection.reason)
         assert.is_true(controls.registry.quarantine.active)
     end)
 

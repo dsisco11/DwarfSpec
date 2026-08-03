@@ -18,6 +18,8 @@ local COMMON_FIELDS = {
     state='string',
     blocking_run_id='string',
     blocking_generation='positive_integer',
+    current_generation='positive_integer',
+    reason='string',
 }
 
 local FORBIDDEN_FIELDS = {
@@ -63,6 +65,26 @@ local KNOWN_CODES = {
             reason='string',
         },
     },
+    service_not_loaded={kind=RunnerFailureKind.HOST,
+        required={operation='string'}},
+    run_not_found={kind=RunnerFailureKind.HOST,
+        required={operation='string', run_id='string'}},
+    generation_mismatch={kind=RunnerFailureKind.HOST,
+        required={operation='string', run_id='string',
+            generation='positive_integer', current_generation='positive_integer'}},
+    invalid_run_state={kind=RunnerFailureKind.HOST,
+        required={operation='string', run_id='string',
+            generation='positive_integer', state='string'}},
+    owner_capability_rejected={kind=RunnerFailureKind.HOST,
+        required={operation='string', run_id='string',
+            generation='positive_integer', state='string'}},
+    quarantine_mismatch={kind=RunnerFailureKind.HOST,
+        required={operation='string', run_id='string',
+            generation='positive_integer', blocking_run_id='string',
+            blocking_generation='positive_integer'}},
+    clean_state_unverified={kind=RunnerFailureKind.HOST,
+        required={operation='string', run_id='string',
+            generation='positive_integer', reason='string'}},
 }
 
 local APPROVED_KINDS = {

@@ -45,6 +45,12 @@ function M.new(dependencies)
             return nil, 'recovery bridge failed: ' .. clean_message(result)
         end
         if result.exit_code ~= 0 then
+            if client.parse_transport_response then
+                local parsed, transport, rejection = pcall(
+                    client.parse_transport_response, result.lines,
+                    expected or {run_id=run_id}, options.decode_json)
+                if parsed and rejection then return nil, rejection.message end
+            end
             return nil, 'recovery exited with ' .. result.exit_code
         end
         local parse_expected = {}
@@ -52,9 +58,16 @@ function M.new(dependencies)
             parse_expected[name] = value
         end
         parse_expected.after_sequence = after_sequence
-        local ok, transport = pcall(client.parse_transport, result.lines,
-            parse_expected, options.decode_json)
+        local ok, transport, rejection
+        if client.parse_transport_response then
+            ok, transport, rejection = pcall(client.parse_transport_response,
+                result.lines, parse_expected, options.decode_json)
+        else
+            ok, transport = pcall(client.parse_transport, result.lines,
+                parse_expected, options.decode_json)
+        end
         if not ok then return nil, tostring(transport) end
+        if rejection then return nil, rejection.message end
         local report = transport.snapshot
         if not report.terminal then return transport, 'recovery left the run nonterminal' end
         if report.state == RunState.ABORTED and not report.cleanup_confirmed then

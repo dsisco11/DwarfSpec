@@ -147,9 +147,17 @@ local function validate_run_id(run_id)
 end
 
 ---Returns the compatible process-wide service registry.
+---@param operation string|nil
 ---@return table
-local function get_registry()
+local function get_registry(operation)
     local registry = dfhack.dwarfspec
+    if operation and (type(registry) ~= 'table' or
+            registry.protocol_version ~= M.protocol_version or
+            registry.schema ~= service.schema) then
+        error(adapter_errors.domain('service_not_loaded',
+            'The compatible DwarfSpec service is not loaded.',
+            {operation=operation}), 0)
+    end
     assert(type(registry) == 'table' and
         registry.protocol_version == M.protocol_version and
         registry.schema == service.schema,
@@ -660,9 +668,10 @@ end
 
 ---Returns any retained service run by exact identifier.
 ---@param run_id string
+---@param operation string|nil
 ---@return table|nil
-function M.find(run_id)
-    local registry = get_registry()
+function M.find(run_id, operation)
+    local registry = get_registry(operation)
     return registry.runs[run_id]
 end
 
@@ -682,10 +691,16 @@ end
 
 ---Observes one retained run without renewing or transferring ownership.
 ---@param run_id string
+---@param operation string|nil
 ---@return table
-function M.observe(run_id)
-    local run = M.find(run_id)
-    if not run then error('automation run not found: ' .. run_id) end
+function M.observe(run_id, operation)
+    operation = operation or 'observe'
+    local run = M.find(run_id, operation)
+    if not run then
+        error(adapter_errors.domain('run_not_found',
+            'DwarfSpec run was not found.',
+            {operation=operation, run_id=run_id}), 0)
+    end
     return run
 end
 
@@ -732,7 +747,7 @@ end
 ---@param owner_capability string
 ---@return table
 function M.acknowledge(run_id, generation, owner_capability)
-    local run = M.observe(run_id)
+    local run = M.observe(run_id, 'acknowledgement')
     local request = owner_request(run, owner_capability)
     request.generation = generation
     request.persistence = {
@@ -750,9 +765,7 @@ end
 ---@param reason string|nil
 ---@return table
 function M.cancel(run_id, owner_capability, reason)
-    local run = M.observe(run_id)
-    assert(run.state == RunState.QUEUED,
-        'only a queued automation run can be cancelled')
+    local run = M.observe(run_id, 'cancel')
     local request = owner_request(run, owner_capability)
     request.reason = reason or 'by request'
     service.cancel(request, service_dependencies())
@@ -767,7 +780,7 @@ end
 ---@param reason string|nil
 ---@return table
 function M.recover(run_id, owner_capability, reason)
-    local run = M.observe(run_id)
+    local run = M.observe(run_id, 'recover')
     if M.is_terminal(run) then return run end
     if run.state == RunState.QUEUED then
         return M.cancel(run_id, owner_capability,
@@ -785,7 +798,7 @@ end
 ---@param reason string
 ---@return table
 function M.discard(run_id, generation, reason)
-    local run = M.observe(run_id)
+    local run = M.observe(run_id, 'discard')
     service.discard({
         service_instance_id=run.service_instance_id,
         project_id=run.project_id,
@@ -838,7 +851,7 @@ end
 ---@param reason string
 ---@return table
 function M.recover_executor(run_id, generation, reason)
-    local registry = get_registry()
+    local registry = get_registry('recover executor')
     local outcome = service.recover_executor({
         service_instance_id=registry.service_instance_id,
         run_id=run_id,
@@ -855,9 +868,13 @@ end
 ---@param owner_capability string|nil
 ---@return table
 function M.abort(run_id, owner_capability)
-    local registry = get_registry()
+    local registry = get_registry('abort')
     local run = registry.runs[run_id]
-    if not run then error('automation run not found: ' .. run_id) end
+    if not run then
+        error(adapter_errors.domain('run_not_found',
+            'DwarfSpec run was not found.',
+            {operation='abort', run_id=run_id}), 0)
+    end
     if M.is_terminal(run) then return run end
     local reason = 'by request'
     if run.state == RunState.QUEUED then

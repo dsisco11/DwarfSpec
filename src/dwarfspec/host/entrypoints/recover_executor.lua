@@ -50,8 +50,13 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-host.recover_executor(run_id, generation,
-    reason or 'local operator verified executor clean state')
-local transport = host.transport(run_id, after_sequence)
-transport.scheduler = host.scheduler_snapshot()
-print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+local response = require('dwarfspec.host.entrypoints.operation_response')
+response.execute(function()
+    host.recover_executor(run_id, generation,
+        reason or 'local operator verified executor clean state')
+    local transport = host.transport(run_id, after_sequence)
+    transport.scheduler = host.scheduler_snapshot()
+    return transport
+end, function(transport)
+    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+end, require('json').encode)

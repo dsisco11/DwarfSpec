@@ -977,8 +977,9 @@ protocol code; admission conflicts reuse the public immutable
 `SchedulerFailureKind` values `project_busy`, `request_key_conflict`, and
 `result_path_busy` so the scheduler classification is preserved verbatim.
 
-The common optional fields are `operation`, `run_id`, `generation`, `state`,
-`blocking_run_id`, and `blocking_generation`. Identifiers and states are
+The common optional fields are `operation`, `run_id`, `generation`,
+`current_generation`, `state`, `blocking_run_id`, `blocking_generation`, and
+`reason`. Identifiers, states, and reasons are
 non-empty strings; generations are positive integers. Subtype contracts add
 only fields needed for remediation. Owner capabilities, authorization proofs,
 package or project roots, result paths, and unrelated machine paths are
@@ -1005,6 +1006,23 @@ transport response. Invalid scheduler invariants and identifier or capability
 generator failures remain internal host faults. All three expected conflicts
 retain the registration failure kind, `registration_error` persisted state,
 exit code 5, a single bootstrap attempt, and no recovery attempt.
+
+Mutation adapters use the same envelope for expected orchestration rejections.
+`abort`, `cancel`, `recover`, `acknowledge`, `discard`, and executor recovery
+may report `service_not_loaded`, `run_not_found`, `generation_mismatch`,
+`invalid_run_state`, `owner_capability_rejected`, `quarantine_mismatch`, or
+`clean_state_unverified`. These codes retain broad kind `host` and direct
+command exit code 5. Their required fields contain only the operation and the
+minimum applicable run identifier, requested or current generation, state,
+blocking quarantine identity, or clean-state reason.
+
+The controller selects remediation by `code` and renders identifiers,
+generations, and states only from validated subtype fields. A recovery or
+acknowledgement rejection is appended as secondary detail when an earlier run
+failure exists; it never replaces the original timeout, interruption, host, or
+test failure. Rejected service decisions complete before lease, journal,
+ownership, quarantine, result-retention, or native-cleanup mutation. Owner
+capabilities and authorization proofs never cross the error boundary.
 
 Adapters may emit a valid error envelope with either a zero or nonzero process
 exit during migration. The controller inspects and validates the envelope

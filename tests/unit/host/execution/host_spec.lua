@@ -407,10 +407,13 @@ describe('automation host ownership', function()
         assert.equals(1, aborted.mount_cleanup_state.active_screen_count)
         assert.matches('mount lifecycle verification failed',
             aborted.failure_details[1].message, 1, true)
-        assert.has_error(function()
+        local recovered, rejection = pcall(function()
             host.recover_executor(aborted.run_id, aborted.generation,
                 'unsafe fixture recovery')
-        end, 'quarantined mount state is not clean')
+        end)
+        assert.is_false(recovered)
+        assert.equals('clean_state_unverified', rejection.code)
+        assert.equals('quarantined mount state is not clean', rejection.reason)
     end)
 
     it('refuses cleanup confirmation for retained ownership evidence',
@@ -434,10 +437,13 @@ describe('automation host ownership', function()
 
         assert.is_false(aborted.cleanup_confirmed)
         assert.is_false(aborted.mount_cleanup_state.verified)
-        assert.has_error(function()
+        local recovered, rejection = pcall(function()
             host.recover_executor(aborted.run_id, aborted.generation,
                 'unsafe retained ownership recovery')
-        end, 'quarantined mount state is not clean')
+        end)
+        assert.is_false(recovered)
+        assert.equals('clean_state_unverified', rejection.code)
+        assert.equals('quarantined mount state is not clean', rejection.reason)
     end)
 
     it('never confirms cleanup after an earlier cleanup action failed',

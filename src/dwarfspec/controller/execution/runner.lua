@@ -82,6 +82,9 @@ end
 ---@param value any
 ---@return string
 local function clean_message(value)
+    if type(value) == 'table' and type(value.message) == 'string' then
+        return value.message
+    end
     return tostring(value):gsub('^.-:%d+: ', '')
 end
 
@@ -423,11 +426,11 @@ function M.run(options)
             event_cursor)
         if not acknowledge_ok and not runner_error then
             runner_error = failure(RunnerFailureKind.HOST,
-                tostring(acknowledge_error))
+                clean_message(acknowledge_error))
         elseif not acknowledge_ok then
             runner_error.message = runner_error.message ..
                 '; could not acknowledge terminal result: ' ..
-                    tostring(acknowledge_error)
+                    clean_message(acknowledge_error)
         end
     end
 

@@ -48,7 +48,11 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local run = host.cancel(run_id, owner_capability,
-    reason or 'external runner cancellation')
-local transport = host.transport(run.run_id, after_sequence)
-print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+local response = require('dwarfspec.host.entrypoints.operation_response')
+response.execute(function()
+    local run = host.cancel(run_id, owner_capability,
+        reason or 'external runner cancellation')
+    return host.transport(run.run_id, after_sequence)
+end, function(transport)
+    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+end, require('json').encode)

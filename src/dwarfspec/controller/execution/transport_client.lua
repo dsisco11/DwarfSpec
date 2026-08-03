@@ -12,6 +12,48 @@ local MAX_OUTPUT_BYTES = 2048
 local LINE_TRUNCATED = '...<line truncated>'
 local OUTPUT_TRUNCATED = '<output truncated> '
 
+---Renders remediation using only validated structured rejection fields.
+---@param value table
+---@return string
+local function operation_rejection_message(value)
+    local messages = {
+        service_not_loaded=function()
+            return ('%s Bootstrap DwarfSpec with a run before retrying %s.')
+                :format(value.message, value.operation)
+        end,
+        run_not_found=function()
+            return ('%s Run %s is no longer retained; refresh status before retrying %s.')
+                :format(value.message, value.run_id, value.operation)
+        end,
+        generation_mismatch=function()
+            return ('%s Run %s requested generation %d, current generation %d; refresh status and retry.')
+                :format(value.message, value.run_id, value.generation,
+                    value.current_generation)
+        end,
+        invalid_run_state=function()
+            return ('%s Run %s generation %d is %s; refresh status and choose an operation valid for that state.')
+                :format(value.message, value.run_id, value.generation,
+                    value.state)
+        end,
+        owner_capability_rejected=function()
+            return ('%s Run %s generation %d is %s; retry from its owning DwarfSpec process or use an authorized operator command.')
+                :format(value.message, value.run_id, value.generation,
+                    value.state)
+        end,
+        quarantine_mismatch=function()
+            return ('%s Requested run %s generation %d, but executor quarantine belongs to run %s generation %d; refresh status and recover that exact generation.')
+                :format(value.message, value.run_id, value.generation,
+                    value.blocking_run_id, value.blocking_generation)
+        end,
+        clean_state_unverified=function()
+            return ('%s Run %s generation %d: %s Resolve remaining live resources, then retry executor recovery.')
+                :format(value.message, value.run_id, value.generation,
+                    value.reason)
+        end,
+    }
+    return messages[value.code] and messages[value.code]() or value.message
+end
+
 ---Converts an arbitrary captured value without allowing tostring errors to escape.
 ---@param value any
 ---@return string
@@ -208,6 +250,19 @@ function M.new(dependencies)
     local clean_message = assert(dependencies.clean_message, 'transport error cleaner is required')
     local client = {}
 
+    ---Converts a validated wire rejection into a classified controller error.
+    ---@param value table
+    ---@return table
+    local function controller_rejection(value)
+        local detail = failure(value.kind, operation_rejection_message(value))
+        for name, field_value in pairs(value) do
+            if name ~= 'message' and name ~= 'kind' then
+                detail[name] = field_value
+            end
+        end
+        return detail
+    end
+
     ---Resolves the configured dfhack-run executable.
     ---@param options table
     ---@return string|nil, table|nil
@@ -302,10 +357,15 @@ function M.new(dependencies)
         if result.exit_code ~= 0 then
             local adapter_error = adapter_error_from_result(
                 result, expected, options.decode_json)
-            if adapter_error then error(adapter_error, 0) end
+            if adapter_error then
+                error(controller_rejection(adapter_error), 0)
+            end
             error(failure(kinds.HOST, nonzero_message(operation, result)), 0)
         end
-        return reports.parse_transport(result.lines, expected, options.decode_json)
+        local transport, _, adapter_error = reports.parse_transport_response(
+            result.lines, expected, options.decode_json)
+        if adapter_error then error(controller_rejection(adapter_error), 0) end
+        return transport
     end
 
     ---Invokes and parses a bootstrap response that may contain a rejection.
@@ -393,6 +453,20 @@ function M.new(dependencies)
     ---@return table
     function client.parse_transport(lines, expected, decoder)
         return reports.parse_transport(lines, expected, decoder)
+    end
+
+    ---Parses a raw transport-or-rejection response for recovery workflows.
+    ---@param lines string[]
+    ---@param expected table
+    ---@param decoder function|nil
+    ---@return table|nil, table|nil
+    function client.parse_transport_response(lines, expected, decoder)
+        local transport, _, adapter_error = reports.parse_transport_response(
+            lines, expected, decoder)
+        if adapter_error then
+            return nil, controller_rejection(adapter_error)
+        end
+        return transport, nil
     end
 
     ---Returns the report authority's event formatter for polling composition.

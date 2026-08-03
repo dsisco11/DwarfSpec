@@ -290,6 +290,64 @@ describe('controller transport client', function()
         assert.equals('package_version_mismatch', bootstrap_error.code)
     end)
 
+    it('classifies zero-exit mutation rejections with actionable safe context',
+            function()
+        local cases = {
+            {code='service_not_loaded', operation='abort',
+                guidance='Bootstrap DwarfSpec'},
+            {code='run_not_found', operation='cancel', run_id='run-1',
+                guidance='refresh status before retrying cancel'},
+            {code='generation_mismatch', operation='acknowledgement',
+                run_id='run-1', generation=2, current_generation=3,
+                guidance='requested generation 2, current generation 3'},
+            {code='invalid_run_state', operation='discard', run_id='run-1',
+                generation=3, state='running', guidance='is running'},
+            {code='owner_capability_rejected', operation='recover',
+                run_id='run-1', generation=3, state='running',
+                guidance='owning DwarfSpec process'},
+            {code='quarantine_mismatch', operation='recover executor',
+                run_id='run-1', generation=3, blocking_run_id='run-2',
+                blocking_generation=4,
+                guidance='belongs to run run-2 generation 4'},
+            {code='clean_state_unverified', operation='recover executor',
+                run_id='run-1', generation=3, reason='cleanup remains active',
+                guidance='Resolve remaining live resources'},
+        }
+        for _, case in ipairs(cases) do
+            local response = {schema='dwarfspec.error.v1', protocol=2,
+                kind='host', message='opaque host prose'}
+            for name, value in pairs(case) do
+                if name ~= 'guidance' then response[name] = value end
+            end
+            local transport = client()
+            local ok, detail = pcall(transport.transport, {
+                invoke=function()
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_JSON ' .. json.encode(response),
+                    }}
+                end,
+            }, 'runner', {}, {}, case.operation)
+            assert.is_false(ok, case.code)
+            assert.equals(case.code, detail.code)
+            assert.equals('host', detail.kind)
+            assert.equals(9, detail.exit_code)
+            assert.is_truthy(detail.message:find('opaque host prose', 1, true))
+            assert.is_nil(detail.owner_capability)
+            assert.is_nil(detail.authorization_proof)
+            assert.is_truthy(detail.message:find(case.guidance, 1, true),
+                case.code)
+            for name, value in pairs(case) do
+                if name ~= 'guidance' then
+                    assert.equals(value, detail[name], case.code .. '.' .. name)
+                end
+            end
+            if case.run_id then
+                assert.is_truthy(detail.message:find(case.run_id, 1, true),
+                    case.code)
+            end
+        end
+    end)
+
     it('classifies nonzero exits without valid JSON using bounded output', function()
         local transport = client()
         local ok, detail = pcall(transport.transport, {

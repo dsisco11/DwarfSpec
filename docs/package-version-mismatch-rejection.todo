@@ -353,77 +353,77 @@ Completion criteria:
     ☒ No admission conflict is reduced to generic run-state prose.
 
 Phase 6: Structure mutation and recovery rejections
-    ☐ Exit with abort, cancel, recover, acknowledge, discard, and executor
+    ☒ Exit with abort, cancel, recover, acknowledge, discard, and executor
       recovery adapters returning actionable domain rejections instead of only
       subprocess exit codes.
 
 6.1 Operation subtype contracts:
-    ☐ Define stable codes and required safe fields for `service_not_loaded`,
+    ☒ Define stable codes and required safe fields for `service_not_loaded`,
       `run_not_found`, `generation_mismatch`, `invalid_run_state`,
       `owner_capability_rejected`, `quarantine_mismatch`, and
       `clean_state_unverified`, adjusting names only when the contract review
       identifies an existing canonical term.
-    ☐ Map each code only to expected operator- or orchestration-triggerable
+    ☒ Map each code only to expected operator- or orchestration-triggerable
       conditions; keep malformed internal requests and impossible service
       invariants unclassified.
-    ☐ Define broad failure-kind, result-state, and exit-code mappings for
+    ☒ Define broad failure-kind, result-state, and exit-code mappings for
       direct operator commands and secondary recovery or acknowledgement
       failures.
-    ☐ Preserve the original run failure as primary when a structured
+    ☒ Preserve the original run failure as primary when a structured
       recovery or acknowledgement rejection is appended as secondary context.
 
 6.2 Service and host boundaries:
-    ☐ Replace expected assertion-only rejections in the approved operation
+    ☒ Replace expected assertion-only rejections in the approved operation
       paths with structured domain values at the layer that owns the decision.
-    ☐ Preserve exact run, project, service-instance, generation, capability,
+    ☒ Preserve exact run, project, service-instance, generation, capability,
       state, quarantine, and clean-state authorization checks.
-    ☐ Ensure owner capabilities and authorization proofs are never copied
+    ☒ Ensure owner capabilities and authorization proofs are never copied
       into error payloads, logs, persisted results, or CLI output.
-    ☐ Preserve successful operation state transitions, native cleanup,
+    ☒ Preserve successful operation state transitions, native cleanup,
       acknowledgement, discard, quarantine clearing, and subsequent queue
       activation exactly as before.
-    ☐ Prove rejected operations do not renew leases, mutate journals,
+    ☒ Prove rejected operations do not renew leases, mutate journals,
       release ownership, clear quarantine, discard results, or invoke native
       cleanup.
 
 6.3 Entrypoint adoption:
-    ☐ Adopt the shared serializer in `abort.lua`, `cancel.lua`, `recover.lua`,
+    ☒ Adopt the shared serializer in `abort.lua`, `cancel.lua`, `recover.lua`,
       `acknowledge.lua`, `discard.lua`, and `recover_executor.lua`.
-    ☐ Ensure each adapter emits exactly one canonical JSON response for
+    ☒ Ensure each adapter emits exactly one canonical JSON response for
       either success or a modeled domain rejection.
-    ☐ Retain nonzero or fallback behavior for module-load, malformed
+    ☒ Retain nonzero or fallback behavior for module-load, malformed
       argument, serialization, and unexpected internal failures according to
       the settled migration contract.
-    ☐ Keep entrypoints thin and free of duplicated business classification
+    ☒ Keep entrypoints thin and free of duplicated business classification
       or remediation logic.
 
 6.4 Controller and recovery consumption:
-    ☐ Extend transport and recovery clients to return structured operation
+    ☒ Extend transport and recovery clients to return structured operation
       rejections without collapsing them to generic `exited with` messages.
-    ☐ Render run identifiers, generations, current states, and remediation
+    ☒ Render run identifiers, generations, current states, and remediation
       only from validated subtype fields.
-    ☐ Preserve direct abort and executor-recovery command exit behavior.
-    ☐ Preserve recovery error precedence and append structured secondary
+    ☒ Preserve direct abort and executor-recovery command exit behavior.
+    ☒ Preserve recovery error precedence and append structured secondary
       detail without replacing the original timeout, host, interruption, or
       test failure.
-    ☐ Preserve successful transport validation and cleanup confirmation
+    ☒ Preserve successful transport validation and cleanup confirmation
       requirements.
 
 6.5 Mutation and recovery tests:
-    ☐ Add service tests for every modeled rejection and its no-mutation
+    ☒ Add service tests for every modeled rejection and its no-mutation
       guarantee.
-    ☐ Add entrypoint tests for structured success-versus-error exclusivity
+    ☒ Add entrypoint tests for structured success-versus-error exclusivity
       and forbidden sensitive fields.
-    ☐ Add transport-client and recovery tests for each subtype, broad kind,
+    ☒ Add transport-client and recovery tests for each subtype, broad kind,
       exit code, primary-error precedence, and exact useful context.
-    ☐ Retain success coverage for queued cancellation, active abort with
+    ☒ Retain success coverage for queued cancellation, active abort with
       cleanup, terminal acknowledgement, explicit discard, and verified
       executor recovery.
 
 Completion criteria:
-    ☐ Every expected mutation or recovery rejection crosses the adapter
+    ☒ Every expected mutation or recovery rejection crosses the adapter
       boundary as a validated object with safe actionable context.
-    ☐ No successful behavior, authorization rule, state transition, cleanup
+    ☒ No successful behavior, authorization rule, state transition, cleanup
       requirement, or error precedence changes.
 
 Phase 7: Structure polling and event transport rejections

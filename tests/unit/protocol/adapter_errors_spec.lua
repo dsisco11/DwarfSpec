@@ -100,6 +100,41 @@ describe('adapter error protocol', function()
         end
     end)
 
+    it('validates every mutation rejection subtype and safe required fields',
+            function()
+        local cases = {
+            service_not_loaded={operation='abort'},
+            run_not_found={operation='cancel', run_id='run-1'},
+            generation_mismatch={operation='acknowledgement', run_id='run-1',
+                generation=2, current_generation=3},
+            invalid_run_state={operation='discard', run_id='run-1',
+                generation=3, state='running'},
+            owner_capability_rejected={operation='recover', run_id='run-1',
+                generation=3, state='running'},
+            quarantine_mismatch={operation='recover executor', run_id='run-1',
+                generation=3, blocking_run_id='run-2', blocking_generation=4},
+            clean_state_unverified={operation='recover executor', run_id='run-1',
+                generation=3, reason='cleanup remains active'},
+        }
+        for code, fields in pairs(cases) do
+            local rejection = adapter_errors.domain(code, 'rejected', fields)
+            local envelope = adapter_errors.envelope(rejection,
+                RunnerFailureKind.HOST)
+            assert.equals(RunnerFailureKind.HOST, envelope.kind)
+            assert.equals(code, envelope.code)
+            assert.is_nil(envelope.owner_capability)
+            assert.is_nil(envelope.authorization_proof)
+            for name in pairs(fields) do
+                local incomplete = {}
+                for field, value in pairs(fields) do incomplete[field] = value end
+                incomplete[name] = nil
+                assert.has_error(function()
+                    adapter_errors.domain(code, 'rejected', incomplete)
+                end)
+            end
+        end
+    end)
+
     it('rejects non-JSON-safe and forbidden domain fields', function()
         for _, fields in ipairs({
             {operation=function() end},

@@ -110,6 +110,46 @@ describe('version 2 automation entrypoint contract', function()
         assert.is_nil(dfhack.dwarfspec)
     end)
 
+    it('emits one structured rejection from every unloaded mutation adapter',
+            function()
+        local cases = {
+            {name='abort', arguments={'missing-run', ''}},
+            {name='cancel', arguments={'missing-run', 'owner-secret', '0'}},
+            {name='recover', arguments={'missing-run', 'owner-secret', '0'}},
+            {name='acknowledge', arguments={
+                'missing-run', '1', 'owner-secret', '0'}},
+            {name='discard', arguments={'missing-run', '1', '0'}},
+            {name='recover_executor', arguments={'missing-run', '1', '0'}},
+        }
+        for _, case in ipairs(cases) do
+            lines = {}
+            load_host_script(case.name)(table.unpack(case.arguments))
+            assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines, case.name)
+            local rejection = encoded[#encoded]
+            assert.equals('dwarfspec.error.v1', rejection.schema)
+            assert.equals('host', rejection.kind)
+            assert.equals('service_not_loaded', rejection.code)
+            assert.is_nil(rejection.owner_capability)
+            assert.is_nil(rejection.authorization_proof)
+            assert.is_falsy(rejection.message:find('owner-secret', 1, true))
+        end
+        assert.is_nil(dfhack.dwarfspec)
+    end)
+
+    it('keeps unexpected adapter faults on the subprocess failure path',
+            function()
+        local response =
+            require('dwarfspec.host.entrypoints.operation_response')
+        local ok, detail = pcall(response.execute,
+            function() error('unexpected invariant failure', 0) end,
+            function() error('success must not be emitted') end,
+            require('json').encode)
+        assert.is_false(ok)
+        assert.equals('unexpected invariant failure', detail)
+        assert.same({}, lines)
+        assert.same({}, encoded)
+    end)
+
     it('preserves generic string bootstrap rejections', function()
         load_host_script('bootstrap')(
             'entrypoint-generic-rejection', '--unknown=value')
@@ -391,7 +431,19 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals('dwarfspec.transport.v2',
             encoded[#encoded].schema)
 
-        dfhack.dwarfspec.quarantine = {active=false}
+        dfhack.dwarfspec.quarantine = {
+            active=true, run_id=active.run_id,
+            generation=active.generation, reason='fixture quarantine',
+        }
+        lines = {}
+        load_host_script('recover_executor')(
+            active.run_id, tostring(active.generation),
+            tostring(#active.event_journal.events), 'fixture verified clean')
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.equals('dwarfspec.transport.v2', encoded[#encoded].schema)
+        assert.is_false(encoded[#encoded].scheduler.quarantine.active)
+        assert.is_false(dfhack.dwarfspec.quarantine.active)
+
         lines = {}
         load_host_script('scheduler_status')()
         assert.equals('DWARFSPEC_JSON {"encoded":true}', lines[1])

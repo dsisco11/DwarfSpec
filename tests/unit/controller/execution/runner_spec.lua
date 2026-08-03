@@ -1610,4 +1610,85 @@ describe('DwarfSpec external runner', function()
         })
         assert.is_false(outcome.scheduler.quarantine.active)
     end)
+
+    it('returns exit 5 for structured direct mutation rejections', function()
+        local cases = {
+            {
+                name='abort',
+                invoke=function(run_options)
+                    return runner.abort(run_options, 'direct-run')
+                end,
+                response={code='invalid_run_state', operation='abort',
+                    run_id='direct-run', generation=2, state='passed'},
+                expected='is passed',
+            },
+            {
+                name='recover-executor',
+                invoke=function(run_options)
+                    return runner.recover_executor(run_options,
+                        'direct-run', 2, 'verified clean')
+                end,
+                response={code='clean_state_unverified',
+                    operation='recover executor', run_id='direct-run',
+                    generation=2, reason='owned screen remains active'},
+                expected='Resolve remaining live resources',
+            },
+        }
+        for _, case in ipairs(cases) do
+            local run_options = options('direct-' .. case.name)
+            run_options.invoke = function(_, arguments)
+                if arguments[3]:match('probe%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                end
+                local response = {schema='dwarfspec.error.v1', protocol=2,
+                    kind=runner.failure_kinds.HOST,
+                    message='structured direct rejection'}
+                for name, value in pairs(case.response) do
+                    response[name] = value
+                end
+                return {exit_code=0, lines={
+                    'DWARFSPEC_JSON ' .. json.encode(response),
+                }}
+            end
+            local outcome = case.invoke(run_options)
+            assert.equals(5, outcome.exit_code, case.name)
+            assert.equals(runner.failure_kinds.HOST, outcome.error.kind)
+            assert.equals(case.response.code, outcome.error.code)
+            assert.matches(case.expected, outcome.error.message, 1, true)
+        end
+    end)
+
+    it('appends structured acknowledgement detail to the original failure',
+            function()
+        local run_options = options('acknowledgement-secondary')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    run_options.run_id, RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    run_options.run_id, RunState.FAILED, true)}
+            end
+            assert.matches('acknowledge%.lua$', arguments[3])
+            return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                schema='dwarfspec.error.v1', protocol=2,
+                kind=runner.failure_kinds.HOST,
+                code='owner_capability_rejected',
+                message='owner rejected', operation='acknowledgement',
+                run_id=run_options.run_id, generation=1, state='failed',
+            })}}
+        end
+        local outcome = runner.run(run_options)
+        assert.equals(runner.failure_kinds.TEST, outcome.error.kind)
+        assert.equals(6, outcome.exit_code)
+        assert.matches('could not acknowledge terminal result:',
+            outcome.error.message, 1, true)
+        assert.matches('owning DwarfSpec process', outcome.error.message,
+            1, true)
+        assert.is_falsy(outcome.error.message:find('table:', 1, true))
+    end)
 end)
