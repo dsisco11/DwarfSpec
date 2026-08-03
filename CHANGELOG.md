@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `dwarfspec.testbed` provides a private, per-instance Lua module and annotated
+  script graph for standalone tests, while tagged `ds.mount` descriptors provide
+  the same configuration model for fresh live component construction.
 - `ds.search({text=..., occurrence?}, search_area?)` and
   `Subject:search(query)` find literal final rendered text in the active mount
   and return zero-based inclusive screen-cell bounds. Subject and rectangle

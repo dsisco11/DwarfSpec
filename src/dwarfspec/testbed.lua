@@ -52,9 +52,9 @@
 
 ---Owns one bed-local module and script graph.
 ---@class dwarfspec.TestBed
----@field guard table
----@field package_state dwarfspec.testbed.PackageState|nil
----@field script_loader dwarfspec.testbed.ScriptLoader|nil
+---@field private _guard table
+---@field private _package_state dwarfspec.testbed.PackageState|nil
+---@field private _script_loader dwarfspec.testbed.ScriptLoader|nil
 local TestBed = {}
 TestBed.__index = TestBed
 
@@ -63,13 +63,13 @@ TestBed.__index = TestBed
 ---@return boolean
 function TestBed.is_instance(value)
     return type(value) == 'table' and getmetatable(value) == TestBed and
-        type(rawget(value, 'guard')) == 'table'
+        type(rawget(value, '_guard')) == 'table'
 end
 
 ---Raises the shared closed-TestBed error before accessing private state.
 ---@param self dwarfspec.TestBed
-function TestBed:ensure_open()
-    if self.guard.closed then error('TestBed is closed', 2) end
+local function ensure_open(self)
+    if self._guard.closed then error('TestBed is closed', 2) end
 end
 
 ---Creates a bed-local module environment from a typed configuration.
@@ -89,8 +89,8 @@ end
 ---@return any value
 ---@return any? loader_data
 function TestBed:require(name)
-    self:ensure_open()
-    return self.package_state:require(name)
+    ensure_open(self)
+    return self._package_state:require(name)
 end
 
 ---Loads one annotated DFHack script module through this TestBed.
@@ -99,19 +99,19 @@ end
 ---@param name string
 ---@return table
 function TestBed:reqscript(name)
-    self:ensure_open()
-    return self.script_loader:reqscript(name)
+    ensure_open(self)
+    return self._script_loader:reqscript(name)
 end
 
 ---Closes this TestBed and releases its owned graph.
 ---Borrowed values are not mutated or released, and this operation returns no
 ---graph, inspection, or diagnostic object.
 function TestBed:close()
-    if self.guard.closed then return end
-    self.guard.closed = true
-    self.script_loader:close()
-    self.package_state:close()
-    self.script_loader, self.package_state = nil, nil
+    if self._guard.closed then return end
+    self._guard.closed = true
+    self._script_loader:close()
+    self._package_state:close()
+    self._script_loader, self._package_state = nil, nil
 end
 
 return TestBed

@@ -639,67 +639,138 @@ Phase 13: Prove live descriptor mounting from the active source repository
     ☒ Record cleanup_confirmed or the repository's equivalent explicit cleanup signal for the successful and failure runs.
 
 Phase 14: Document, audit, and hand off
-    ☐ Exit only when the implemented behavior, documentation, evidence, and repository state satisfy the full implementation contract.
+    ☒ Exit only when the implemented behavior, documentation, evidence, and repository state satisfy the full implementation contract.
+        - Evidence: the mandatory second review corrected stale instance-mount
+          documentation and moved graph state to underscore-prefixed private
+          TestBed fields.
+          The first independent audit then rejected a module-level weak-key
+          instance registry. The final implementation keeps state directly on
+          each instance under conventional underscore-prefixed private fields;
+          the repeated independent audit supports completion with high
+          confidence and no retained issue, partial item, or evidence gap.
 
 14.1 User documentation:
-    ☐ Document zero-config standalone use and configured module/script replacements.
-    ☐ Document tagged module and script descriptor mounts with the separate constructor-options and TestBed-config arguments.
-    ☐ Document all provider strategies, token namespaces, defaults, override precedence, and borrowed host effects.
-    ☐ Document the DFHack-version mapping for the synthesized component-import set and the versioned reserved-loader policy.
-    ☐ Document private package mutability, native Lua compatibility, the bounded-cycle exception, and Lua 5.3 versus 5.4 return differences.
-    ☐ Document dfhack and BASE_G facade behavior, globals.dfhack completeness, protected loader operations, and explicit host escape hatches.
-    ☐ Document lifecycle ownership and the fact that values returned before close remain ordinary references.
-    ☐ State clearly that TestBed is not a security sandbox and does not undo native or borrowed-state effects.
-    ☐ Publish the proposal's isolation-guarantee table or an equivalent precise boundary matrix in user-facing documentation.
-    ☐ Warn against loading the same consumer source both globally and through a TestBed in one example because class and singleton identities will differ.
-    ☐ Warn against loading foundational DFHack framework modules from source roots; use synthesized or explicit host providers when real class identity is required.
-    ☐ Explain that borrowed host modules retain host-resolved nested dependencies and cannot be retroactively changed by TestBed-local replacements.
-    ☐ Document debug, borrowed native functions, external preload functions, and replacement searchers as explicit escapes from environment rewriting.
-    ☐ State clearly that diagnostic graph inspection and reload APIs are deferred.
+    ☒ Document zero-config standalone use and configured module/script replacements.
+    ☒ Document tagged module and script descriptor mounts with the separate constructor-options and TestBed-config arguments.
+    ☒ Document all provider strategies, token namespaces, defaults, override precedence, and borrowed host effects.
+    ☒ Document the DFHack-version mapping for the synthesized component-import set and the versioned reserved-loader policy.
+    ☒ Document private package mutability, native Lua compatibility, the bounded-cycle exception, and Lua 5.3 versus 5.4 return differences.
+    ☒ Document dfhack and BASE_G facade behavior, globals.dfhack completeness, protected loader operations, and explicit host escape hatches.
+    ☒ Document lifecycle ownership and the fact that values returned before close remain ordinary references.
+    ☒ State clearly that TestBed is not a security sandbox and does not undo native or borrowed-state effects.
+    ☒ Publish the proposal's isolation-guarantee table or an equivalent precise boundary matrix in user-facing documentation.
+    ☒ Warn against loading the same consumer source both globally and through a TestBed in one example because class and singleton identities will differ.
+    ☒ Warn against loading foundational DFHack framework modules from source roots; use synthesized or explicit host providers when real class identity is required.
+    ☒ Explain that borrowed host modules retain host-resolved nested dependencies and cannot be retroactively changed by TestBed-local replacements.
+    ☒ Document debug, borrowed native functions, external preload functions, and replacement searchers as explicit escapes from environment rewriting.
+    ☒ State clearly that diagnostic graph inspection and reload APIs are deferred.
 
 14.2 Contract audit:
-    ☐ Re-read later sections of docs/testbed-proposal.md before reporting any discrepancy or omission.
-    ☐ Trace every proposal acceptance criterion to implementation, a focused test, and the appropriate evidence gate.
-    ☐ Search public schemas and APIs for obsolete TestBedInput, top-level sources/modules configuration fields, reusable TestBed mount instances, component instance mounts, unsupported non-empty name/path restrictions, path-containment claims, legacy moduleMode, native-plugin rejection, immutable BASE_G, and no-active-bed requirements.
-    ☐ Search for accidental DFHack/live imports reachable from require('dwarfspec.testbed').
-    ☐ Search for undocumented public TestBed functions or graph-inspection surfaces.
-    ☐ Audit every new or changed callable API for language-standard documentation comments.
-    ☐ Compare at least one representative consumer test with its equivalent package.loaded/_G manipulation and record whether TestBed materially reduces setup and cleanup while preserving explicit ownership boundaries.
+    ☒ Re-read later sections of docs/testbed-proposal.md before reporting any discrepancy or omission.
+    ☒ Trace every proposal acceptance criterion to implementation, a focused test, and the appropriate evidence gate.
+    ☒ Search public schemas and APIs for obsolete TestBedInput, top-level sources/modules configuration fields, reusable TestBed mount instances, component instance mounts, unsupported non-empty name/path restrictions, path-containment claims, legacy moduleMode, native-plugin rejection, immutable BASE_G, and no-active-bed requirements.
+    ☒ Search for accidental DFHack/live imports reachable from require('dwarfspec.testbed').
+    ☒ Search for undocumented public TestBed functions or graph-inspection surfaces.
+    ☒ Audit every new or changed callable API for language-standard documentation comments.
+    ☒ Compare at least one representative consumer test with its equivalent package.loaded/_G manipulation and record whether TestBed materially reduces setup and cleanup while preserving explicit ownership boundaries.
 
 14.3 Final verification:
-    ☐ Re-run all focused TestBed and mount specs.
-    ☐ Re-run tools/Run-UnitTests.ps1.
-    ☐ Re-run tools/Check-Lua.ps1.
-    ☐ Re-run source declaration checks.
-    ☐ Re-run the checked-in consumer fixture proof against the active source repository.
-    ☐ Re-run the configured-mount, consecutive-freshness, and constructor-failure live proofs against that same active source repository.
-    ☐ Record exact commands, exit statuses, resolved source paths, live terminal results, and cleanup confirmation.
+    ☒ Re-run all focused TestBed and mount specs.
+    ☒ Re-run tools/Run-UnitTests.ps1.
+    ☒ Re-run tools/Check-Lua.ps1.
+    ☒ Re-run source declaration checks.
+    ☒ Re-run the checked-in consumer fixture proof against the active source repository.
+    ☒ Re-run the configured-mount, consecutive-freshness, and constructor-failure live proofs against that same active source repository.
+    ☒ Record exact commands, exit statuses, resolved source paths, live terminal results, and cleanup confirmation.
 
 14.4 Repository cleanup and handoff:
-    ☐ Remove temporary fixtures, logs, and live-test artifacts that are not intentional deliverables.
-    ☐ Preserve required evidence artifacts in the documented repository location.
-    ☐ Review git status and diff; separate intended TestBed changes from pre-existing unrelated work.
-    ☐ Confirm no runtime cache, temporary consumer path, or live-test artifact is accidentally tracked unless explicitly required.
-    ☐ Update this checklist with final evidence and leave no checked item whose gate was not actually observed.
+    ☒ Remove temporary fixtures, logs, and live-test artifacts that are not intentional deliverables.
+    ☒ Preserve required evidence artifacts in the documented repository location.
+    ☒ Review git status and diff; separate intended TestBed changes from pre-existing unrelated work.
+    ☒ Confirm no runtime cache, temporary consumer path, or live-test artifact is accidentally tracked unless explicitly required.
+    ☒ Update this checklist with final evidence and leave no checked item whose gate was not actually observed.
 
 Definition of done:
-    ☐ A standalone consumer can require dwarfspec.testbed from the active source repository and obtain private bed-owned caches and fresh source-loaded module and script state under Lua 5.4.
-    ☐ The canonical TestBed types are usable and correctly checked from the active source declaration surface.
-    ☐ Provider, package, environment, dfhack facade, cycle, dynamic-loader, reqscript, and close semantics match the approved proposal.
-    ☐ Ordinary class mounts remain two-argument and TestBed-free; tagged descriptors create, use, and close one fresh mount-owned TestBed.
-    ☐ Unit, syntax, source declaration, offline consumer-fixture, and live source-runtime gates all pass independently.
-    ☐ Live evidence confirms interaction and cleanup, not merely module loading or process readiness.
-    ☐ No deferred feature or obsolete requirement has been reintroduced.
+    ☒ A standalone consumer can require dwarfspec.testbed from the active source repository and obtain private bed-owned caches and fresh source-loaded module and script state under Lua 5.4.
+    ☒ The canonical TestBed types are usable and correctly checked from the active source declaration surface.
+    ☒ Provider, package, environment, dfhack facade, cycle, dynamic-loader, reqscript, and close semantics match the approved proposal.
+    ☒ Ordinary class mounts remain two-argument and TestBed-free; tagged descriptors create, use, and close one fresh mount-owned TestBed.
+    ☒ Unit, syntax, source declaration, offline consumer-fixture, and live source-runtime gates all pass independently.
+    ☒ Live evidence confirms interaction and cleanup, not merely module loading or process readiness.
+    ☒ No deferred feature or obsolete requirement has been reintroduced.
 
 Execution evidence:
-    ☐ Baseline command/results recorded:
-    ☐ Focused unit command/results recorded:
-    ☐ Full unit command/results recorded:
-    ☐ Syntax/format command/results recorded:
-    ☐ Source declaration command/results recorded:
-    ☐ Active source path and loaded-module identity recorded:
-    ☐ Offline consumer-fixture command/results recorded:
-    ☐ Live configured-descriptor command/result/cleanup recorded:
-    ☐ Live consecutive-freshness command/result/cleanup recorded:
-    ☐ Live constructor-failure command/result/cleanup recorded:
-    ☐ Final git status and cleanup review recorded:
+    ☒ Baseline command/results recorded:
+        - `.\tools\Run-UnitTests.ps1` exited 0 with 853 successes, zero
+          failures/errors/pending, before the implementation edits.
+    ☒ Focused unit command/results recorded:
+        - `$env:LUA_PATH = (& luarocks path --tree .luarocks --lr-path);
+          $env:LUA_CPATH = (& luarocks path --tree .luarocks --lr-cpath);
+          $bustedRockDir = (& luarocks show busted 2.3.0-1 --tree .luarocks
+          --rock-dir).Trim(); $specs = Get-ChildItem
+          tests\unit\testbed\*_spec.lua | Sort-Object Name | Select-Object
+          -ExpandProperty FullName; & lua (Join-Path $bustedRockDir
+          'bin\busted') --defer-print -o plainTerminal @specs; exit
+          $LASTEXITCODE` exited 0 with 60 successes.
+        - The exact same command with the `$specs` assignment changed to
+          `Get-ChildItem tests\unit\driver\mount\*_spec.lua | Sort-Object Name
+          | Select-Object -ExpandProperty FullName` exited 0 with 109
+          successes.
+        - The exact same setup and Busted invocation with the final target
+          `tests/unit/driver/commands/mount_spec.lua` exited 0 with 3
+          successes. All three runs had zero failures/errors/pending.
+    ☒ Full unit command/results recorded:
+        - `.\tools\Run-UnitTests.ps1` exited 0 with 853 successes and zero
+          failures/errors/pending after the final correction.
+    ☒ Syntax/format command/results recorded:
+        - `.\tools\Check-Lua.ps1` exited 0 under Lua 5.4.6 with all 335 files
+          passing syntax and formatting checks.
+    ☒ Source declaration command/results recorded:
+        - `.\tools\Check-SourceDeclarations.ps1 -Mode Valid` and
+          `.\tools\Check-SourceDeclarations.ps1 -Mode Invalid` both exited 0;
+          valid fixtures passed and invalid fixtures produced the expected
+          static diagnostics.
+    ☒ Active source path and loaded-module identity recorded:
+        - Every final live report recorded public
+          `d:/code/dfhack/dwarfspec/src/dwarfspec/testbed.lua` and internal
+          `d:/code/dfhack/dwarfspec/src/dwarfspec/testbed/internal.lua`.
+    ☒ Offline consumer-fixture command/results recorded:
+        - `$env:LUA_PATH = (& luarocks path --tree .luarocks --lr-path);
+          $env:LUA_CPATH = (& luarocks path --tree .luarocks --lr-cpath);
+          $bustedRockDir = (& luarocks show busted 2.3.0-1 --tree .luarocks
+          --rock-dir).Trim(); & lua (Join-Path $bustedRockDir 'bin\busted')
+          --defer-print -o plainTerminal
+          tests/unit/testbed/testbed_spec.lua; exit $LASTEXITCODE` exited 0
+          with 6 successes and zero failures/errors/pending.
+    ☒ Live configured-descriptor command/result/cleanup recorded:
+        - `.\tools\Run-AutomationTests.ps1 --test-glob
+          tests/automation/testbed_descriptor_configured_live_spec.lua
+          --results tests/.test-results/dwarfspec/phase14/configured.json`
+          exited 0; run `dwarfspec-38375390-4ff1c931` was terminal/passed with
+          1 success, zero failures/errors/pending, cleanup_confirmed=true, and
+          mount_cleanup_verified=true.
+    ☒ Live consecutive-freshness command/result/cleanup recorded:
+        - `.\tools\Run-AutomationTests.ps1 --test-glob
+          tests/automation/testbed_descriptor_freshness_live_spec.lua
+          --results tests/.test-results/dwarfspec/phase14/freshness.json`
+          exited 0; run `dwarfspec-38380296-35a44ff1` was terminal/passed with
+          1 success, zero failures/errors/pending, cleanup_confirmed=true, and
+          mount_cleanup_verified=true.
+    ☒ Live constructor-failure command/result/cleanup recorded:
+        - `.\tools\Run-AutomationTests.ps1 --test-glob
+          tests/automation/testbed_descriptor_constructor_failure_live_spec.lua
+          --results
+          tests/.test-results/dwarfspec/phase14/constructor-failure.json`
+          exited 0; run `dwarfspec-38387546-65d81b35` was terminal/passed with
+          1 success, zero failures/errors/pending, cleanup_confirmed=true, and
+          mount_cleanup_verified=true.
+    ☒ Final git status and cleanup review recorded:
+        - Intended tracked modifications are CHANGELOG.md, README.md,
+          docs/architecture.md, docs/testbed-implementation.todo,
+          docs/writing-tests.md, src/dwarfspec/testbed.lua,
+          src/dwarfspec/testbed/internal.lua, and
+          tests/unit/testbed/testbed_spec.lua. Intended new deliverables are
+          docs/testbed.md and docs/testbed-contract-audit.md. Structured live
+          evidence remains in the intentionally ignored
+          tests/.test-results/dwarfspec/phase14 directory; no runtime cache,
+          temporary consumer tree, or generated live artifact is tracked.

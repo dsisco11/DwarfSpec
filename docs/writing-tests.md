@@ -53,17 +53,12 @@ describe('SavePanel', function()
 
         assert.equals('saved', ds.get('status'):text())
     end)
-
-    it('accepts an already-created component instance', function()
-        local panel = SavePanel{value='ready'}
-        local root = ds.mount(panel, {
-            viewport={width=60, height=20},
-        })
-
-        assert.equals(panel, root:raw())
-    end)
 end)
 ```
+
+Pass a class, not an already-created instance. DwarfSpec owns component
+construction so constructor failures and later cleanup remain inside the same
+mount boundary.
 
 The component remains in its own production file,
 `src/my_plugin/save_panel.lua`:
@@ -104,10 +99,6 @@ end
 
 return SavePanel
 ```
-
-Pass an already-created instance when setup outside the mount is itself part
-of the test. Component attributes cannot be supplied again for an instance;
-mount-only options such as the `viewport` shown above remain available.
 
 Every mount uses a deterministic 128 by 64 viewport in DF cells unless the
 test supplies `viewport={width=..., height=...}`. The default approximates a
@@ -755,25 +746,15 @@ Use `ds.wait_frames(count)` only when the number of raw DFHack frames is itself
 part of the contract. Use `ds.wait_ticks(count)` when the test requires the
 unpaused simulation itself to advance.
 
-## Isolated overlay components
+## Owned overlay components
 
-Mount an `overlay.OverlayWidget` class or existing instance through the same
-component entry point as any other GUI component:
+Mount an `overlay.OverlayWidget` class through the same component entry point
+as any other GUI component:
 
 ```lua
 local overlay = require('plugins.overlay')
 
 local root = ds.mount(MyOverlayWidget, {
-    backing_viewscreen=dfhack.gui.getCurViewscreen(true),
-    overlay_position={x=4, y=-2},
-})
-```
-
-An existing overlay instance uses the same operation:
-
-```lua
-local overlay_component = MyOverlayWidget{}
-ds.mount(overlay_component, {
     backing_viewscreen=dfhack.gui.getCurViewscreen(true),
     overlay_position={x=4, y=-2},
 })
@@ -792,7 +773,7 @@ uses the scaled-interface painter, matching DFHack. The host also calls
 and `overlay_ondisable` in their normal lifecycle order. The explicit
 `backing_viewscreen` is supplied to `overlay_onupdate`.
 
-This isolated component path intentionally bypasses GUI script discovery,
+This owned component path intentionally bypasses GUI script discovery,
 persisted enablement and position, viewscreen and focus filtering, hotspot
 registration, overlay database registration, and rescanning. Tests for those
 integration behaviors should use the separate overlay-registration support;
@@ -800,7 +781,7 @@ they do not require another component mount command.
 
 ## Complete screen components
 
-Mount a `gui.ZScreen` class or existing instance with the same entry point:
+Mount a `gui.ZScreen` class with the same entry point:
 
 ```lua
 local root = ds.mount(MyScreen, {
@@ -812,22 +793,13 @@ ds.get('submit'):click()
 assert.equals('saved', ds.get('status'):text())
 ```
 
-An existing complete screen also uses the same operation and lifecycle:
-
-```lua
-local screen = MyScreen{initial_pause=false}
-ds.mount(screen, {
-    backing_viewscreen=dfhack.gui.getCurViewscreen(true),
-})
-```
-
-DwarfSpec shows the supplied screen directly and installs reversible render
-instrumentation on that instance. Native activation, dismissal, pause
-restoration, and parent input forwarding remain the screen's responsibility.
-The mount-owned viewport is applied through reversible instance resize
-interception, and `backing_viewscreen` is passed to the screen's normal
-`show()` method. `ds.viewport(width, height)` updates that same viewport for
-all mounted component categories.
+DwarfSpec constructs and shows the screen directly and installs reversible
+render instrumentation on the resulting instance. Native activation,
+dismissal, pause restoration, and parent input forwarding remain the screen's
+responsibility. The mount-owned viewport is applied through reversible
+instance resize interception, and `backing_viewscreen` is passed to the
+screen's normal `show()` method. `ds.viewport(width, height)` updates that same
+viewport for all mounted component categories.
 
 If the component opens a native modal child screen, input follows that child
 while it remains above the mounted screen. The implicit component root does
@@ -838,7 +810,7 @@ current mount.
 
 ## Real overlay registration integration
 
-Normal overlay behavior belongs in isolated component specs named distinctly,
+Normal overlay behavior belongs in owned component specs named distinctly,
 such as `tooltip_overlay_component_spec.ds.lua`. These specs use
 `ds.mount(component, options)` and never copy scripts into `hack/scripts/gui`.
 

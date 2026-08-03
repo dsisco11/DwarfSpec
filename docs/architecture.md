@@ -62,11 +62,14 @@ library.
 
 ## Mount ownership
 
-`ds.mount(component, options)` is the only component entry point. The
-component boundary classifies a `widgets.Widget`, `overlay.OverlayWidget`, or
-`gui.ZScreen` class or existing instance and normalizes mount-only options. A
-run owns at most one implicit current mount. Calling either public mount entry
-  point while that mount remains current is an error; the test must call
+`ds.mount(component, options)` accepts a `widgets.Widget`,
+`overlay.OverlayWidget`, or `gui.ZScreen` class and normalizes mount-only
+options. A tagged module or script descriptor may instead supply an optional
+third TestBed configuration argument; it resolves and constructs the class
+inside one fresh mount-owned module graph. Existing component instances are
+rejected so construction remains inside the ownership boundary. A run owns at
+most one implicit current mount. Calling either public mount entry point while
+that mount remains current is an error; the test must call
 `ds.unmount()` before selecting another mount.
 
 The mount context assigns identity, owns the component root and host screen,
@@ -201,7 +204,7 @@ remains.
 
 ## Overlay registration boundary
 
-Overlay behavior tests mount `overlay.OverlayWidget` classes or instances into
+Overlay behavior tests mount `overlay.OverlayWidget` classes into
 the DwarfSpec-owned host. They do not install scripts, touch persisted overlay
 configuration, or depend on DFHack registration. A separately named and
 selected DwarfSpec integration spec owns the real registration boundary. Its

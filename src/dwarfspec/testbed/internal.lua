@@ -33,8 +33,8 @@ function M.new(TestBed, config, options)
         state:set_base(base)
         scripts = ScriptLoader.new(state, {read_source=options.read_source,
             load_chunk=options.load_chunk, loadfile=options.loadfile})
-        return setmetatable({guard=guard, package_state=state,
-            script_loader=scripts}, TestBed)
+        return setmetatable({_guard=guard, _package_state=state,
+            _script_loader=scripts}, TestBed)
     end, debug.traceback)
     if ok then return result end
     guard.closed = true
