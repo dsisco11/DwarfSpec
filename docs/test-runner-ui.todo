@@ -639,27 +639,37 @@ Phase 4: Compose the DwarfSpec runner experience
     ☐ Exit with every reusable screen panel, workspace layout, and representative viewer state composed from linked component instances.
 
 4.1 Reusable screen panel: Runner Header:
-    ☐ Create Runner Header from Panel, product title, Run Summary, compact TextButton actions, CycleHotkeyLabel or Dropdown Control configuration controls, optional ConfigureButton and HelpButton actions, and connection Status Badge.
-    ☐ Provide Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop actions.
-    ☐ Define enabled, disabled, focused, running, and stopping action states.
-    ☐ Show current scope, run state, progress, elapsed time, and active test without decorative workflow copy.
-    ☐ Use CycleHotkeyLabel for configurable Mode and Repeat values when each has a small finite option set.
-    ☐ Use Dropdown Control for Mode or Repeat only when exposing the complete option set in a popup is more usable.
-    ☐ Do not include reproduce-command editing or permanent debug configuration.
-    ☐ Create a dedicated component page for Runner Header and its states.
+    ☒ Create Runner Header from Panel, product title, Run Summary, compact TextButton actions, CycleHotkeyLabel or Dropdown Control configuration controls, optional ConfigureButton and HelpButton actions, and connection Status Badge.
+    ☒ Provide Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop actions.
+    ☒ Define enabled, disabled, focused, running, and stopping action states.
+    ☒ Show current scope, run state, progress, elapsed time, and active test without decorative workflow copy.
+    ☒ Use CycleHotkeyLabel for configurable Mode and Repeat values when each has a small finite option set.
+    ☒ Use Dropdown Control for Mode or Repeat only when exposing the complete option set in a popup is more usable.
+    ☒ Do not include reproduce-command editing or permanent debug configuration.
+    ☒ Create a dedicated component page for Runner Header and its states.
+        - Evidence: Penpot "Panel - Runner Header" shows idle, focused,
+          running, and stopping action states with supplied scope, active test,
+          compact run summary, and connection status. Mode and Repeat use
+          finite-cycle presentations; no Dropdown Control, reproduce-command
+          editing, or permanent debug configuration is shown.
 
 4.2 Reusable screen panel: Test Explorer Panel:
-    ☐ Create Test Explorer Panel from Panel, Tree View With Columns, EditField, CycleHotkeyLabel or Dropdown Control, Status Indicator, Divider, and active-scope text.
-    ☐ Show file, suite, and test hierarchy.
-    ☐ Show one supplied, right-aligned aggregate status per visible tree item.
-    ☐ Add search or text filtering.
-    ☐ Add status filtering for failed, errored, flaky, cleanup-failed, and not-run tests.
-    ☐ Evaluate tag and category filters against actual discovery metadata.
-    ☐ Use FilteredList for any flat auxiliary filter-choice list instead of rebuilding its List, EditField, and no-match behavior.
-    ☐ Do not replace the hierarchical Tree View With Columns with FilteredList.
-    ☐ Define empty, loading, no-match, discovery-error, and disconnected states.
-    ☐ Keep discovery, filtering, selection, and status aggregation outside the panel.
-    ☐ Create a dedicated component page for Test Explorer Panel and its states.
+    ☒ Create Test Explorer Panel from Panel, Tree View With Columns, EditField, CycleHotkeyLabel or Dropdown Control, Status Indicator, Divider, and active-scope text.
+    ☒ Show file, suite, and test hierarchy.
+    ☒ Show one supplied, right-aligned aggregate status per visible tree item.
+    ☒ Add search or text filtering.
+    ☒ Add status filtering for failed, errored, flaky, cleanup-failed, and not-run tests.
+    ☒ Evaluate tag and category filters against actual discovery metadata.
+    ☒ Use FilteredList for any flat auxiliary filter-choice list instead of rebuilding its List, EditField, and no-match behavior.
+    ☒ Do not replace the hierarchical Tree View With Columns with FilteredList.
+    ☒ Define empty, loading, no-match, discovery-error, and disconnected states.
+    ☒ Keep discovery, filtering, selection, and status aggregation outside the panel.
+    ☒ Create a dedicated component page for Test Explorer Panel and its states.
+        - Evidence: Penpot "Panel - Test Explorer" has hierarchy, empty,
+          loading, no-match, discovery-error, and disconnected specimens.
+          It keeps the hierarchical Tree View With Columns distinct from the
+          flat auxiliary filter-choice behavior and treats filters, discovery,
+          selection, and aggregate statuses as supplied state.
 
 4.3 Reusable screen panel: Test Results Panel:
     ☐ Create Test Results Panel from Panel, Divider, its pane title, Breadcrumb, selection context, Run Summary, Generic Table View, and Attempt Selector.
