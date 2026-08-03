@@ -9,9 +9,9 @@ Purpose:
 
 Completion contract:
     ☐ Treat this checklist and docs/testbed-proposal.md as the implementation contract; if they disagree, stop and reconcile the documents before coding the disputed behavior.
-    ☐ Complete implementation, focused tests, full tests, declarations, packaging, downstream installed-rock proof, live DFHack proof, documentation, and cleanup.
+    ☐ Complete implementation, focused tests, full tests, source declarations, active-source live DFHack proof, documentation, and cleanup.
     ☐ Do not mark a phase complete merely because its production code exists; satisfy its stated exit gate and record the evidence.
-    ☐ Keep offline unit evidence, declaration evidence, package evidence, and live installed-runtime evidence distinct.
+    ☐ Keep offline unit evidence, source declaration evidence, and live source-runtime evidence distinct.
     ☐ Preserve unrelated worktree and index changes; do not stash, commit, reset, or overwrite them.
     ☐ Add language-standard documentation comments to every new or changed class, public method, internal method, and callable module API.
     ☐ Keep the framework-neutral entry point free of DFHack, DwarfSpec driver, scheduler, ds, and Busted dependencies.
@@ -39,7 +39,7 @@ Phase 0: Freeze the implementation map and baseline
           (3.1-3.3, 4.1-4.3, 5.1-5.2, 6.1-6.3, 8.1-8.4); lifecycle (9.1-9.3);
           live adapter and descriptor mounts (10.1-10.4, 11.1-11.4);
           verification and delivery evidence (12.1-12.4, 13.1-13.3,
-          14.1-14.3, and 15.1-15.2). Scope-boundary exclusions above are the
+          and 14.1-14.4). Scope-boundary exclusions above are the
           explicit out-of-scope rows.
     ☒ Record the required public symbols: dwarfspec.testbed, TestBed.new, TestBed:require, TestBed:reqscript, TestBed:close, and the tagged ds.mount overload.
         - Ownership: 1.1 defines the canonical annotations; 1.2 owns the
@@ -52,7 +52,7 @@ Phase 0: Freeze the implementation map and baseline
         - Evidence ownership: 12.4 runs the dedicated Lua 5.4 gate and records
           the Lua 5.3 support boundary without claiming standalone conformance.
     ☒ Record diagnostic graph inspection as deferred so no public or provisional inspection API enters the implementation accidentally.
-        - Guard: Scope boundaries and 15.1-15.2 prohibit a graph-inspection
+        - Guard: Scope boundaries and 14.1-14.2 prohibit a graph-inspection
           surface until a separately approved contract exists.
 
 0.2 Repository seam audit:
@@ -77,12 +77,12 @@ Phase 0: Freeze the implementation map and baseline
     ☒ Map the canonical declaration surface through production annotations and src/ds.d.lua without duplicating TestBed types.
         - Ownership: production annotations define TestBed vocabulary; src/ds.d.lua
           references it only for descriptor overloads.
-    ☒ Select exact unit, declaration, integration, downstream-consumer, automation, and package-audit fixture locations before adding files.
+    ☒ Select exact unit, declaration, integration, consumer, and automation fixture locations before adding files.
         - Locations: tests/unit/testbed/*.lua; tests/unit/driver/mount/
           testbed_adapter_spec.lua and existing mount specs; tests/declarations/
-          valid and invalid; consumer-owned empty-tree fixtures created by 13.2;
-          forward-slash automation specs created by 14.2; and package audit
-          additions under tools/ and the release checks in 13.1.
+          valid and invalid; the checked-in consumer fixture under
+          tests/fixtures/testbed/consumer; and forward-slash automation specs
+          created by 13.2.
 
 0.3 Baseline evidence:
     ☒ Record git status and distinguish pre-existing changes from work performed by this checklist.
@@ -469,7 +469,7 @@ Phase 10: Add the live adapter and synthesized component imports
     ☒ Supply the live dfhack backing and a construction-time raw dfhack.BASE_G snapshot source.
     ☒ Supply exact host require and reqscript functions without exposing them to the offline core as defaults.
     ☒ Keep all host, scheduler, run-context, and resource-registration dependencies in the driver-side adapter.
-    ☒ Load the TestBed core through DwarfSpec's existing source-or-installed module resolution; add no TestBed-specific checkout-path rule.
+    ☒ Load the TestBed core through DwarfSpec's existing module resolution; add no TestBed-specific checkout-path rule.
     ☒ Keep configuration validation, path resolution, loader algorithms, caches, environments, dependency errors, and close behavior in the framework-neutral core.
     ☒ Delegate resolved classes to the existing component-mount implementation; do not introduce a second mount implementation in the adapter.
 
@@ -596,7 +596,7 @@ Phase 12: Complete unit, declaration, and framework integration coverage
     ☒ Run declaration checks against the source-tree Lua language server configuration in this phase.
     ☒ Verify the runtime validator and declared schema agree on statically representable shapes; keep correlated-token, exclusive-strategy, and ComponentClass overload discrimination authoritative at runtime where LuaLS structural typing cannot express those constraints.
     ☒ Add an explicit provider-shape matrix covering every valid and invalid runtime shape, including cross-namespace aliases, multiple strategies, and unknown strategies; require declaration diagnostics only for the statically representable subset.
-    ☒ Defer installed-rock declaration verification until Phase 13 has created and installed the exact artifact.
+    ☒ Treat the source-tree declaration checks as the TestBed authoring contract; leave packaging declaration qualification to the repository-wide release process.
 
 12.4 Full offline gates:
     ☒ Run tools/Run-UnitTests.ps1 under the repository's Lua 5.4 toolchain after the added coverage is complete.
@@ -605,35 +605,10 @@ Phase 12: Complete unit, declaration, and framework integration coverage
     ☒ Record Lua 5.3 as supported without claiming a dedicated conformance result.
     ☒ Do not infer live behavior from these offline results.
 
-Phase 13: Prove the installed-rock downstream boundary
-    ☐ Exit with a generated rock that contains the complete public/runtime contract and drives an empty-tree consumer without checkout path leakage.
+Phase 13: Prove live descriptor mounting from the active source repository
+    ☐ Exit with bounded DFHack automation demonstrating real component construction, interaction, cleanup, and fresh graph state from the active source repository.
 
-13.1 Archive construction and audit:
-    ☐ Ensure the rockspec packages src/dwarfspec/testbed.lua and every internal module beneath src/dwarfspec/testbed/.
-    ☐ Trace the framework-neutral entry point's complete production require dependency closure and require every dependency in the archive even if a reused helper resides outside src/dwarfspec/testbed/.
-    ☐ Ensure the shipped declaration surface includes canonical TestBed types and tagged mount overloads.
-    ☐ Ensure no DwarfSpec tests, fixtures, checkout-only helpers, or source-path assumptions enter the rock.
-    ☐ Extend or add package verification that lists the archive and fails when any required TestBed runtime or declaration file is absent.
-    ☐ Run tools/Publish.ps1 and retain the exact generated rock as the artifact for all downstream proofs.
-    ☐ Keep publication blocked until the archive, Lua 5.4, installed declarations, empty-tree offline, and same-rock live gates all pass.
-
-13.2 Empty-tree offline consumer:
-    ☐ Create a disposable LuaRocks tree containing only the generated DwarfSpec rock and its declared dependencies.
-    ☐ Keep the DwarfSpec checkout, sibling repositories, and ad hoc package.path entries off the consumer Lua path.
-    ☐ Add consumer-owned conventional modules, a require/mkmodule graph, and annotated scripts under the supported layout.
-    ☐ Run Busted from the consumer project root and require dwarfspec.testbed from the installed rock.
-    ☐ Exercise zero-config loading, a stateful require/mkmodule graph, module and script replacements, aliases, globals.dfhack, dynamic loaders, and close behavior.
-    ☐ Run installed declaration checks from the same empty-tree consumer boundary.
-    ☐ Record paths and loaded-module evidence proving the checkout was not used.
-
-13.3 Artifact identity:
-    ☐ Hash or otherwise uniquely identify the rock used by the offline consumer.
-    ☐ Carry that exact artifact forward to live validation without rebuilding it.
-
-Phase 14: Prove live descriptor mounting with the same installed rock
-    ☐ Exit with bounded DFHack automation demonstrating real component construction, interaction, cleanup, and fresh graph state from the packaged artifact.
-
-14.1 Representative downstream component:
+13.1 Representative consumer component:
     ☐ Use at least one production-style consumer widget or component, not only synthetic TestBed fixtures.
     ☐ Give the component a real module dependency and an annotated script dependency.
     ☐ Configure both a module token and a script token through the same TestBedConfig used to load the production-style component.
@@ -641,8 +616,9 @@ Phase 14: Prove live descriptor mounting with the same installed rock
     ☐ Exercise the synthesized foundational host providers and exact DFHack class identity.
     ☐ Add a second case with component_imports=false or an explicit provider override.
 
-14.2 Live automation cases:
-    ☐ Install the exact rock identified in Phase 13 into the live test environment.
+13.2 Live automation cases:
+    ☐ Configure the live test environment to load DwarfSpec from the exact active source repository under review.
+    ☐ Record the resolved DwarfSpec source path and loaded TestBed module paths, and fail if another DwarfSpec copy shadows the active source.
     ☐ Run one focused forward-slash automation spec/glob per invocation with a bounded timeout.
     ☐ Prove a default-config module descriptor mount constructs, mounts, interacts, and unmounts.
     ☐ Prove an explicit-config script or module descriptor observes its replacements.
@@ -652,7 +628,7 @@ Phase 14: Prove live descriptor mounting with the same installed rock
     ☐ Prove an excluded host module fails until explicitly supplied with use_host.
     ☐ Prove a genuine native plugins.* provider can be borrowed, faked, or shimmed as appropriate to the fixture.
 
-14.3 Live failure and cleanup cases:
+13.3 Live failure and cleanup cases:
     ☐ Exercise descriptor resolution failure, constructor failure, mount failure, assertion failure, and cleanup failure.
     ☐ Verify each mount-owned bed closes exactly once.
     ☐ Verify component teardown precedes bed teardown whenever a component was mounted.
@@ -660,10 +636,10 @@ Phase 14: Prove live descriptor mounting with the same installed rock
     ☐ Inspect the terminal run result and structured archive/log evidence; do not treat READY or process exit alone as success.
     ☐ Record cleanup_confirmed or the repository's equivalent explicit cleanup signal for each run.
 
-Phase 15: Document, audit, and hand off
-    ☐ Exit only when the shipped behavior, documentation, artifacts, evidence, and repository state satisfy the full implementation contract.
+Phase 14: Document, audit, and hand off
+    ☐ Exit only when the implemented behavior, documentation, evidence, and repository state satisfy the full implementation contract.
 
-15.1 User documentation:
+14.1 User documentation:
     ☐ Document zero-config standalone use and configured module/script replacements.
     ☐ Document tagged module and script descriptor mounts with the separate constructor-options and TestBed-config arguments.
     ☐ Document all provider strategies, token namespaces, defaults, override precedence, and borrowed host effects.
@@ -679,7 +655,7 @@ Phase 15: Document, audit, and hand off
     ☐ Document debug, borrowed native functions, external preload functions, and replacement searchers as explicit escapes from environment rewriting.
     ☐ State clearly that diagnostic graph inspection and reload APIs are deferred.
 
-15.2 Contract audit:
+14.2 Contract audit:
     ☐ Re-read later sections of docs/testbed-proposal.md before reporting any discrepancy or omission.
     ☐ Trace every proposal acceptance criterion to implementation, a focused test, and the appropriate evidence gate.
     ☐ Search public schemas and APIs for obsolete TestBedInput, top-level sources/modules configuration fields, reusable TestBed mount instances, component instance mounts, unsupported non-empty name/path restrictions, path-containment claims, legacy moduleMode, native-plugin rejection, immutable BASE_G, and no-active-bed requirements.
@@ -688,29 +664,28 @@ Phase 15: Document, audit, and hand off
     ☐ Audit every new or changed callable API for language-standard documentation comments.
     ☐ Compare at least one representative consumer test with its equivalent package.loaded/_G manipulation and record whether TestBed materially reduces setup and cleanup while preserving explicit ownership boundaries.
 
-15.3 Final verification:
+14.3 Final verification:
     ☐ Re-run all focused TestBed and mount specs.
     ☐ Re-run tools/Run-UnitTests.ps1.
     ☐ Re-run tools/Check-Lua.ps1.
-    ☐ Re-run source and installed declaration checks.
-    ☐ Re-run package creation and required-file archive inspection.
-    ☐ Re-run the empty-tree downstream Busted proof using the final rock.
-    ☐ Re-run the focused live downstream component proof using that same rock.
-    ☐ Record exact commands, exit statuses, artifact identity, live terminal results, and cleanup confirmation.
+    ☐ Re-run source declaration checks.
+    ☐ Re-run the checked-in consumer fixture proof against the active source repository.
+    ☐ Re-run the focused live consumer-component proof against that same active source repository.
+    ☐ Record exact commands, exit statuses, resolved source paths, live terminal results, and cleanup confirmation.
 
-15.4 Repository cleanup and handoff:
-    ☐ Remove temporary package trees, generated fixtures, logs, and installed live-test artifacts that are not intentional deliverables.
+14.4 Repository cleanup and handoff:
+    ☐ Remove temporary fixtures, logs, and live-test artifacts that are not intentional deliverables.
     ☐ Preserve required evidence artifacts in the documented repository location.
     ☐ Review git status and diff; separate intended TestBed changes from pre-existing unrelated work.
-    ☐ Confirm no generated rock, runtime cache, or temporary consumer path is accidentally tracked unless explicitly required.
+    ☐ Confirm no runtime cache, temporary consumer path, or live-test artifact is accidentally tracked unless explicitly required.
     ☐ Update this checklist with final evidence and leave no checked item whose gate was not actually observed.
 
 Definition of done:
-    ☐ A standalone consumer can require dwarfspec.testbed from the installed rock and obtain private bed-owned caches and fresh source-loaded module and script state under Lua 5.4.
-    ☐ The canonical TestBed types are usable and correctly checked from the installed artifact.
+    ☐ A standalone consumer can require dwarfspec.testbed from the active source repository and obtain private bed-owned caches and fresh source-loaded module and script state under Lua 5.4.
+    ☐ The canonical TestBed types are usable and correctly checked from the active source declaration surface.
     ☐ Provider, package, environment, dfhack facade, cycle, dynamic-loader, reqscript, and close semantics match the approved proposal.
     ☐ Ordinary class mounts remain two-argument and TestBed-free; tagged descriptors create, use, and close one fresh mount-owned TestBed.
-    ☐ Unit, syntax, declaration, package, downstream offline, and downstream live gates all pass independently.
+    ☐ Unit, syntax, source declaration, offline consumer-fixture, and live source-runtime gates all pass independently.
     ☐ Live evidence confirms interaction and cleanup, not merely module loading or process readiness.
     ☐ No deferred feature or obsolete requirement has been reintroduced.
 
@@ -720,9 +695,8 @@ Execution evidence:
     ☐ Full unit command/results recorded:
     ☐ Syntax/format command/results recorded:
     ☐ Source declaration command/results recorded:
-    ☐ Package command, archive listing, and artifact identity recorded:
-    ☐ Installed declaration command/results recorded:
-    ☐ Empty-tree downstream command/results recorded:
+    ☐ Active source path and loaded-module identity recorded:
+    ☐ Offline consumer-fixture command/results recorded:
     ☐ Live default-descriptor command/result/cleanup recorded:
     ☐ Live configured-descriptor command/result/cleanup recorded:
     ☐ Live failure-unwind command/result/cleanup recorded:

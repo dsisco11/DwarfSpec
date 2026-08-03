@@ -156,9 +156,9 @@ All configuration fields should be optional:
 ### Authoring-time type contract
 
 The configuration must be one canonical public type named
-`dwarfspec.TestBedConfig`. It must be shipped in the installed rock and visible
-to Lua language servers when a consumer requires `dwarfspec.testbed` or uses
-the shipped `ds.d.lua` declaration.
+`dwarfspec.TestBedConfig`. It must be defined by the active source repository
+and visible to Lua language servers when a consumer loads
+`dwarfspec.testbed` or uses `src/ds.d.lua`.
 
 The provider key is the pair `(kind, name)`. Modules and scripts therefore
 remain separate namespaces even when their names are identical. Each provider
@@ -339,8 +339,9 @@ This is a strong authoring contract for plain Lua tables, not a new wrapper
 builder. Runtime code must apply the same schema: reject unknown fields and
 invalid field types, copy mutable configuration containers, normalize paths,
 and freeze the normalized initial configuration at construction. Static
-annotations and runtime validation must be tested from the installed rock so
-the editor contract cannot silently diverge from executable behavior.
+annotations and runtime validation must be tested from the active source
+repository so the editor contract cannot silently diverge from executable
+behavior.
 
 The default roots are a fixed convention, not an open-ended directory scan.
 Each module root contributes the ordinary `?.lua` and `?/init.lua` templates to
@@ -402,31 +403,25 @@ a fake table before creating the bed. Additional strategies should be added
 only if real consumer tests demonstrate a need that ordinary Lua construction
 cannot meet.
 
-## Installed-rock downstream consumer contract
+## Active-source consumer contract
 
-The supported downstream boundary must be the installed DwarfSpec rock, not a
-DwarfSpec source checkout, sibling repository, copied loader file, or
-consumer-specific package-path workaround.
+TestBed behavior is verified against the active DwarfSpec source repository.
+Packaging qualification belongs to the repository-wide release process and is
+not a TestBed completion gate.
 
-The installed rock must expose the framework-neutral entry point directly:
+The active source tree must expose the framework-neutral entry point directly:
 
 ```lua
 local TestBed = require('dwarfspec.testbed')
 ```
 
 `dwarfspec.testbed` and every internal resolver or environment module it needs
-must be production modules beneath `src/dwarfspec/` and must be present in the
-built rock. The current builtin LuaRocks layout automatically discovers Lua
-modules beneath `src/`, but the release audit must still require the exact
-TestBed files in the archive instead of treating autodiscovery as proof.
-
-The installed artifact must also expose the canonical
-`dwarfspec.TestBedConfig` and `dwarfspec.TestBed` annotations. The TestBed
-production module is the authority for its configuration and instance types;
-the shipped `ds.d.lua` declaration references the configuration type from each
-tagged descriptor `ds.mount` overload. Release checks must fail if either
-declaration surface is absent from the rock or disagrees with the runtime
-validator.
+must be production modules beneath `src/dwarfspec/`. The production module is
+the authority for the canonical `dwarfspec.TestBedConfig` and
+`dwarfspec.TestBed` annotations; `src/ds.d.lua` references that configuration
+type from each tagged descriptor `ds.mount` overload. Source declaration checks
+must fail if either declaration surface is absent or disagrees with the runtime
+validator where LuaLS can express the runtime constraint.
 
 Requiring `dwarfspec.testbed` in a normal Lua process must not:
 
@@ -438,7 +433,7 @@ Requiring `dwarfspec.testbed` in a normal Lua process must not:
   entries in `package.loaded`; normal `package.loaded` entries created by Lua's
   `require` for `dwarfspec.testbed` and its implementation modules are allowed;
   or
-- derive any path from the DwarfSpec checkout layout.
+- derive consumer module or script roots from the DwarfSpec checkout layout.
 
 The core supports Lua 5.3 and Lua 5.4. The standalone core conformance suite is
 performed only under Lua 5.4; Lua 5.3 is supported but has no dedicated
@@ -449,16 +444,11 @@ it must remain an ordinary pure-Lua library. Standalone callers may release its
 graph explicitly with `bed:close()`, while the live mount adapter owns that
 lifecycle automatically.
 
-A downstream offline project should be able to install DwarfSpec into the same
-LuaRocks tree used by its Lua interpreter and Busted runner, then execute:
-
-```powershell
-luarocks install dwarfspec
-busted tests/unit
-```
-
-Custom LuaRocks trees may require their normal `luarocks path` environment
-setup. They must not require a DwarfSpec-specific source path.
+Offline verification must load `dwarfspec.testbed` from the active repository's
+`src` tree and exercise consumer-owned modules and scripts from a separate
+checked-in fixture root. The test harness may add the active `src` tree to its
+Lua module path, but TestBed itself must not add a checkout-specific path or
+derive consumer roots from the DwarfSpec repository layout.
 
 Relative roots and `use_source` paths are resolved from the effective consumer
 root. For framework-neutral `TestBed.new()`, that root is the process's current
@@ -471,41 +461,36 @@ boundary: explicit absolute paths and later mutations to the private
 filesystem and symlink behavior.
 
 For a TestBed-backed live mount, `ds.mount` creates the TestBed through
-DwarfSpec's normal source-or-installed module-loading behavior. Its adapter
+DwarfSpec's normal source-repository module-loading behavior. Its adapter
 supplies and validates the active consumer-project root, adds the DFHack base
 environment and permitted host module importer, and registers cleanup. TestBed
-has no special source-versus-installed loading rule distinct from the rest of
-DwarfSpec.
+has no special checkout-path rule distinct from the rest of DwarfSpec.
 
 Consumer production modules, fakes, fixtures, and specs remain in the consumer
-project. They are resolved from that project's declared roots and are never
-copied into the DwarfSpec rock.
+project. They are resolved from that project's declared roots and are not
+copied into DwarfSpec production source directories.
 
-The installed-rock contract is not complete until release verification proves
-both downstream paths from the generated artifact:
+Completion requires two source-backed verification paths:
 
-1. Install the rock into an empty LuaRocks tree and run a separate consumer
-   fixture's offline Busted suite with no DFHack globals and no DwarfSpec
-   checkout path. The fixture must load both an ordinary `require`/`mkmodule`
-   graph and an annotated `reqscript` graph.
-2. Use the same generated rock for a live DFHack consumer fixture that calls
-   an ordinary class `ds.mount` form without creating a TestBed, verifies that
-   an already-created instance is rejected, exercises descriptor forms with
-   default and explicit TestBed configuration, loads
-   production-style module and script dependencies from the consumer root,
-   interacts with the mounted component, and finishes with confirmed cleanup.
+1. Run the repository's offline Lua 5.4 suite, including the checked-in
+   consumer fixture, with no DFHack globals. The fixture must load both an
+   ordinary `require`/`mkmodule` graph and an annotated `reqscript` graph from
+   the active source tree.
+2. Configure the live DFHack environment to use the active DwarfSpec source
+   repository. Exercise ordinary class and tagged descriptor forms, default and
+   explicit TestBed configuration, production-style module and script
+   dependencies, interaction, failure unwinding, and confirmed cleanup.
 
-A downstream authoring fixture must load the installed declarations and prove
-that valid TestBed fields receive completion and type checking, invalid field
-types are rejected, and only tagged descriptor `ds.mount` overloads accept an
-optional `dwarfspec.TestBedConfig`.
+Source declaration fixtures must prove that valid TestBed fields receive
+completion and type checking, invalid statically representable field types are
+rejected, and only tagged descriptor `ds.mount` overloads declare an optional
+`dwarfspec.TestBedConfig`. Runtime validation remains authoritative for
+structural constraints that LuaLS cannot express.
 
-The archive audit must require the public TestBed module and its production
-internals plus the public declarations while continuing to reject DwarfSpec's
-own tests. Publication is blocked if the offline installed-rock proof, live
-installed-rock proof, authoring-type proof, Lua 5.4 test suite, or archive audit
-fails. The absence of a dedicated Lua 5.3 compatibility suite is not a
-publication blocker; any required live proof still runs under its actual host
+The live proof must record the resolved active source path and loaded-module
+evidence so another DwarfSpec copy cannot be mistaken for the implementation
+under test. The absence of a dedicated Lua 5.3 compatibility suite is not a
+completion blocker; required live proof still runs under its actual host
 interpreter.
 
 ### Standalone unit-test usage
@@ -1128,7 +1113,7 @@ The first usable increment should contain:
 
 - zero-argument framework-neutral `TestBed.new()`;
 - canonical `dwarfspec.TestBedConfig` and `dwarfspec.TestBed` authoring types in
-  the installed rock;
+  the active source repository;
 - `TestBed.new(config)` annotated and runtime-validated against that canonical
   configuration type;
 - the optional final `dwarfspec.TestBedConfig` parameter only on tagged module-
@@ -1167,9 +1152,9 @@ The first usable increment should contain:
 - documented Lua 5.3 support without a dedicated compatibility suite;
 - atomic `ds.mount` TestBed cleanup integration with focused default- and
   explicit-configuration live component proofs;
-- required TestBed files in the generated rock archive;
-- an offline downstream Busted proof from an empty installed-rock tree; and
-- a live downstream component proof using the same generated rock.
+- source-tree declaration and Lua 5.4 unit proof;
+- an offline consumer-shaped proof against the active source repository; and
+- a live component proof against that same active source repository.
 
 Reload APIs, factories, convenience Busted adapters, and diagnostic graph
 inspection should be considered only after representative consumer tests
@@ -1186,9 +1171,9 @@ A prototype is successful only if it demonstrates all of the following:
 - `TestBed.new()` loads a conventional consumer module and annotated script
   without a configuration table when Busted starts at the project root;
 - `TestBed.new(config)` exposes completion and type checking for the canonical
-  config, token, provider-union, and provider-strategy types from the installed
-  rock, and `TestBed:require` exposes its Lua-version-dependent optional loader
-  data result;
+  config, token, provider-union, and provider-strategy types from the active
+  source repository, and `TestBed:require` exposes its Lua-version-dependent
+  optional loader data result;
 - only tagged module- and script-descriptor mount overloads expose the optional
   final `dwarfspec.TestBedConfig` parameter;
 - ordinary class mounts use the canonical `dwarfspec.ComponentClass` authoring
@@ -1236,12 +1221,12 @@ A prototype is successful only if it demonstrates all of the following:
   `package.preload.dfhack`, replacing searchers, or adding a matching source path
   cannot redirect `require('dfhack')` away from that facade, while ordinary
   package mechanisms remain mutable and authoritative for every other name;
-- `require('dwarfspec.testbed')` succeeds from an installed rock without
-  DFHack globals or a DwarfSpec checkout on the Lua path;
+- `require('dwarfspec.testbed')` succeeds from the active source tree without
+  DFHack globals;
 - loading the framework-neutral TestBed module does not load the live host,
   scheduler, mount, `ds`, or Busted integration modules;
-- the generated rock contains every public and internal TestBed production
-  module and no DwarfSpec tests;
+- every public and internal TestBed production module remains under `src/`,
+  while tests and fixtures remain outside production source directories;
 - two beds load the same stateful source without sharing module state;
 - nested dependencies use the same bed and observe exact replacements;
 - TestBed-owned loading leaves process `package.path`, `package.preload`, and
@@ -1310,11 +1295,12 @@ A prototype is successful only if it demonstrates all of the following:
 - relative default roots resolve from the effective project root, while
   explicit source paths, symlinks, and private `package.path` mutations are not
   rejected under a nonexistent physical-containment guarantee;
-- a separate downstream fixture runs offline Busted tests against the installed
-  rock and consumer-owned production modules plus annotated script modules;
-- a production-style widget from that downstream fixture is loaded through a
+- a separate checked-in consumer fixture runs offline Busted tests against the
+  active source repository and consumer-owned production modules plus annotated
+  script modules;
+- a production-style widget from that consumer fixture is loaded through a
   TestBed configuration with both module and script dependencies, then mounts
-  and interacts in live DFHack using the same rock;
+  and interacts in live DFHack using the same active source repository;
 - bed creation, construction, mount, and assertion failures still close every
   mount-owned bed exactly once, with component teardown preceding bed teardown
   whenever construction reached a mounted component;
