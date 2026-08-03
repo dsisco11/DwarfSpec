@@ -1024,6 +1024,32 @@ test failure. Rejected service decisions complete before lease, journal,
 ownership, quarantine, result-retention, or native-cleanup mutation. Owner
 capabilities and authorization proofs never cross the error boundary.
 
+Polling and event adapters also use the shared envelope without changing the
+healthy transport or read-only query schemas. `status`, `event_read`, and the
+run-specific scheduler-status branch report `service_not_loaded`,
+`run_not_found`, `generation_mismatch`, and
+`owner_capability_rejected` where applicable. A cursor beyond the retained
+journal reports `event_cursor_ahead` with the run identifier, generation,
+state, requested `after_sequence`, and retained `last_sequence`.
+
+Expected generation and cursor validation happens before status polling renews
+the owner lease. Therefore a rejected poll cannot advance a lease, event
+cursor, journal, observation, or persisted report. Malformed cursors, corrupt
+event journals, impossible run states, and unexpected host exceptions remain
+uncoded internal failures. Terminal observation remains successful, including
+its existing no-renewal behavior. The service-wide `dwarfspec.status.v1`
+response continues to expose `service_loaded`; history, inspection, and logs
+continue to represent normal absence with `service_loaded` and `found` rather
+than adapter errors.
+
+The controller validates polling envelopes before generic subprocess handling
+and selects remediation from subtype fields. A primary polling rejection still
+uses the existing host-failure and state-aware recovery path. Any structured
+recovery rejection is appended without replacing that primary failure.
+Transports are consumed only after validation, preserving retry, timeout,
+cursor advancement, lease renewal, cleanup confirmation, and acknowledgement
+semantics.
+
 Adapters may emit a valid error envelope with either a zero or nonzero process
 exit during migration. The controller inspects and validates the envelope
 before interpreting the process exit. A valid structured rejection is retained;

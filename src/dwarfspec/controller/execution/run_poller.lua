@@ -83,7 +83,8 @@ function M.new(dependencies)
             local expected = scope.expectation(cursor)
             local transport = client.transport(scope.options, scope.runner,
                 builder.poll(scope.options, scope.run_id,
-                    scope.owner_capability, cursor), expected, 'status')
+                    scope.owner_capability, cursor, expected.generation),
+                expected, 'status')
             scope.execution_started_at = execution_started_at
             local consumed = poller.consume(scope, transport, true)
             report = consumed.report

@@ -8,8 +8,10 @@ local RunState = require('dwarfspec.protocol.enums.run_states')
 ---@return table, table
 local function fixture(transports)
     local record = {polls={}, invocations={}, formatted={}}
-    local builder = {poll=function(_, run_id, owner_capability, cursor)
-        local arguments = {'poll', run_id, owner_capability, tostring(cursor)}
+    local builder = {poll=function(_, run_id, owner_capability, cursor,
+            generation)
+        local arguments = {'poll', run_id, owner_capability, tostring(cursor),
+            tostring(generation)}
         table.insert(record.polls, arguments)
         return arguments
     end}
@@ -43,7 +45,9 @@ local function scope(overrides)
         report={state=RunState.QUEUED, terminal=false}, cursor=4,
         queue_started_at=0, now=function() return 1 end,
         sleep=function() end,
-        expectation=function(cursor) return {after_sequence=cursor} end,
+        expectation=function(cursor)
+            return {after_sequence=cursor, generation=3}
+        end,
         journal={}, activated_at=function() return activated_at end,
         entered_executor=function(report) return report.activated_at_ms ~= nil end,
         activate=function()
@@ -77,11 +81,13 @@ describe('controller run poller', function()
         assert.same(RunState.PASSED, outcome.report.state)
         assert.same(6, outcome.cursor)
         assert.same({
-            {'poll', 'run', 'owner', '4'},
-            {'poll', 'run', 'owner', '5'},
+            {'poll', 'run', 'owner', '4', '3'},
+            {'poll', 'run', 'owner', '5', '3'},
         }, calls.polls)
-        assert.same({after_sequence=4}, calls.invocations[1].expected)
-        assert.same({after_sequence=5}, calls.invocations[2].expected)
+        assert.same({after_sequence=4, generation=3},
+            calls.invocations[1].expected)
+        assert.same({after_sequence=5, generation=3},
+            calls.invocations[2].expected)
         assert.same(1, observed.activated)
         assert.same({'first', 'second'}, observed.emitted)
         assert.same({RunState.RUNNING, RunState.PASSED}, observed.persisted)
@@ -119,6 +125,31 @@ describe('controller run poller', function()
         assert.is_false(ok)
         assert.matches('interrupt', tostring(detail))
         assert.same({}, calls.invocations)
+    end)
+
+    it('does not advance cursor or observations after a rejected poll', function()
+        local detail = {kind='host', code='event_cursor_ahead',
+            message='requested cursor 8, retained cursor 7'}
+        local poller = module.new({
+            builder={poll=function() return {'poll'} end},
+            client={transport=function() error(detail, 0) end},
+            format_events=function() return {} end,
+            fail=function(kind, message)
+                error({kind=kind, message=message}, 0)
+            end,
+            failure_kinds={HOST='host'}, clean_message=tostring,
+        })
+        local value, observed = scope()
+        local original_report = value.report
+        local ok, rejection = pcall(poller.until_terminal, value)
+        assert.is_false(ok)
+        assert.equals('event_cursor_ahead', rejection.code)
+        assert.equals(4, value.cursor)
+        assert.equals(original_report, value.report)
+        assert.same({}, value.journal)
+        assert.same({}, observed.persisted)
+        assert.same({}, observed.observed)
+        assert.same({}, observed.emitted)
     end)
 
     it('classifies formatting failures before persistence', function()

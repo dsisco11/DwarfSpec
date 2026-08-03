@@ -312,6 +312,10 @@ describe('controller transport client', function()
             {code='clean_state_unverified', operation='recover executor',
                 run_id='run-1', generation=3, reason='cleanup remains active',
                 guidance='Resolve remaining live resources'},
+            {code='event_cursor_ahead', operation='status poll',
+                run_id='run-1', generation=3, state='running',
+                after_sequence=8, last_sequence=7,
+                guidance='requested cursor 8, retained cursor 7'},
         }
         for _, case in ipairs(cases) do
             local response = {schema='dwarfspec.error.v1', protocol=2,

@@ -427,57 +427,57 @@ Completion criteria:
       requirement, or error precedence changes.
 
 Phase 7: Structure polling and event transport rejections
-    ☐ Exit with status polling, event reading, and run-specific scheduler
+    ☒ Exit with status polling, event reading, and run-specific scheduler
       transport preserving expected stale-state details while retaining
       existing read-only response schemas.
 
 7.1 Polling and event subtype contracts:
-    ☐ Map expected missing-service, missing-run, stale-generation,
+    ☒ Map expected missing-service, missing-run, stale-generation,
       capability, cursor, and invalid-state conditions to the shared codes or
       define narrowly scoped additional codes when their remediation differs.
-    ☐ Distinguish an operator-addressable stale run from malformed transport,
+    ☒ Distinguish an operator-addressable stale run from malformed transport,
       corrupt registry state, impossible event-journal state, or an unexpected
       host exception.
-    ☐ Define which polling rejections remain primary host failures and which
+    ☒ Define which polling rejections remain primary host failures and which
       trigger the runner's existing state-aware recovery path.
 
 7.2 Entrypoint adoption:
-    ☐ Replace `status.lua`'s modeled-domain `qerror` path with canonical
+    ☒ Replace `status.lua`'s modeled-domain `qerror` path with canonical
       structured serialization while retaining an internal-fault fallback.
-    ☐ Adopt the shared serializer for modeled failures in `event_read.lua`
+    ☒ Adopt the shared serializer for modeled failures in `event_read.lua`
       and the run-specific branch of `scheduler_status.lua`.
-    ☐ Ensure status and event adapters emit exactly one canonical JSON
+    ☒ Ensure status and event adapters emit exactly one canonical JSON
       response and do not emit a partial success envelope before a failure.
-    ☐ Keep the service-wide `dwarfspec.status.v1` response and its
+    ☒ Keep the service-wide `dwarfspec.status.v1` response and its
       `service_loaded` state unchanged.
-    ☐ Keep `history`, `show`, and `logs` using their existing
+    ☒ Keep `history`, `show`, and `logs` using their existing
       `service_loaded` and `found` fields rather than converting normal absence
       into adapter errors.
 
 7.3 Controller behavior:
-    ☐ Parse validated error envelopes from poll, event-read, and run-status
+    ☒ Parse validated error envelopes from poll, event-read, and run-status
       operations before applying generic subprocess failure handling.
-    ☐ Preserve safe structured context in primary and recovery diagnostics.
-    ☐ Preserve retry, timeout, event-cursor advancement, lease renewal,
+    ☒ Preserve safe structured context in primary and recovery diagnostics.
+    ☒ Preserve retry, timeout, event-cursor advancement, lease renewal,
       acknowledgement, and state-aware recovery behavior.
-    ☐ Ensure a rejected or malformed poll never advances the event cursor or
+    ☒ Ensure a rejected or malformed poll never advances the event cursor or
       fabricates a newer transport generation.
 
 7.4 Polling and event tests:
-    ☐ Add host and entrypoint tests for every modeled polling or event
+    ☒ Add host and entrypoint tests for every modeled polling or event
       rejection, exactly-one-response behavior, and no lease or cursor mutation.
-    ☐ Add transport-client and runner tests proving structured details are
+    ☒ Add transport-client and runner tests proving structured details are
       retained for direct polling failures and secondary recovery failures.
-    ☐ Retain healthy polling, unrelated-output, terminal observation,
+    ☒ Retain healthy polling, unrelated-output, terminal observation,
       service-unloaded status, missing read-only run, and malformed transport
       coverage.
-    ☐ Verify unexpected internal failures remain distinguishable and include
+    ☒ Verify unexpected internal failures remain distinguishable and include
       bounded captured output rather than being assigned a domain code.
 
 Completion criteria:
-    ☐ Every approved polling and event rejection retains safe structured
+    ☒ Every approved polling and event rejection retains safe structured
       context across the host/controller boundary.
-    ☐ Existing cursor, lease, retry, timeout, recovery, and read-only query
+    ☒ Existing cursor, lease, retry, timeout, recovery, and read-only query
       semantics remain unchanged.
 
 Phase 8: Lock down documentation, regression, and package integrity

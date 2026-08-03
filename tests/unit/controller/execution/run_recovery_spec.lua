@@ -121,6 +121,7 @@ describe('controller run recovery', function()
             'service_not_loaded', 'run_not_found', 'generation_mismatch',
             'invalid_run_state', 'owner_capability_rejected',
             'quarantine_mismatch', 'clean_state_unverified',
+            'event_cursor_ahead',
         }) do
             local rejection_message = 'structured ' .. code .. ' guidance'
             local service = fixture({rejection={kind='host', code=code,

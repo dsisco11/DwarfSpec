@@ -136,6 +136,54 @@ describe('version 2 automation entrypoint contract', function()
         assert.is_nil(dfhack.dwarfspec)
     end)
 
+    it('serializes polling and event rejections with one safe response',
+            function()
+        for _, case in ipairs({
+            {name='status', arguments={'missing-run', 'owner-secret', '0', '1'}},
+            {name='event_read', arguments={'missing-run', '0', '1'}},
+            {name='scheduler_status', arguments={'missing-run', '0', '1'}},
+        }) do
+            lines = {}
+            load_host_script(case.name)(table.unpack(case.arguments))
+            assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+            assert.equals('service_not_loaded', encoded[#encoded].code)
+            assert.is_falsy(encoded[#encoded].message:find(
+                'owner-secret', 1, true))
+        end
+
+        local root = require('lfs').currentdir():gsub('\\', '/')
+        lines = {}
+        load_host_script('bootstrap')('poll-entrypoint',
+            '--project-root=' .. root, '--defer-frames=1')
+        local run = assert(dfhack.dwarfspec.runs['poll-entrypoint'])
+        local last_sequence = #run.event_journal.events
+        local cases = {
+            {name='status', arguments={run.run_id, run.owner_capability,
+                '0', tostring(run.generation + 1)},
+                code='generation_mismatch'},
+            {name='status', arguments={run.run_id, 'owner-secret', '0',
+                tostring(run.generation)}, code='owner_capability_rejected'},
+            {name='event_read', arguments={run.run_id,
+                tostring(last_sequence + 1), tostring(run.generation)},
+                code='event_cursor_ahead'},
+            {name='event_read', arguments={'missing-run', '0', '1'},
+                code='run_not_found'},
+            {name='scheduler_status', arguments={run.run_id, '0',
+                tostring(run.generation + 1)}, code='generation_mismatch'},
+        }
+        for _, case in ipairs(cases) do
+            lines = {}
+            load_host_script(case.name)(table.unpack(case.arguments))
+            assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines, case.name)
+            local rejection = encoded[#encoded]
+            assert.equals('dwarfspec.error.v1', rejection.schema)
+            assert.equals(case.code, rejection.code)
+            assert.is_nil(rejection.owner_capability)
+            assert.is_nil(rejection.authorization_proof)
+            assert.is_falsy(rejection.message:find('owner-secret', 1, true))
+        end
+    end)
+
     it('keeps unexpected adapter faults on the subprocess failure path',
             function()
         local response =

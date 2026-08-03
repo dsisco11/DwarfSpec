@@ -50,6 +50,11 @@ local function operation_rejection_message(value)
                 :format(value.message, value.run_id, value.generation,
                     value.reason)
         end,
+        event_cursor_ahead=function()
+            return ('%s Run %s generation %d is %s; requested cursor %d, retained cursor %d. Restart observation from the retained cursor without advancing local state.')
+                :format(value.message, value.run_id, value.generation,
+                    value.state, value.after_sequence, value.last_sequence)
+        end,
     }
     return messages[value.code] and messages[value.code]() or value.message
 end

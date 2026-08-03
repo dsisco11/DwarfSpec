@@ -1520,6 +1520,49 @@ describe('DwarfSpec external runner', function()
             outcome.error.message)
     end)
 
+    it('preserves structured poll context when recovery is also rejected',
+            function()
+        local run_options = options('structured-poll-failure')
+        local status_calls, recovery_calls = 0, 0
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    run_options.run_id, RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                status_calls = status_calls + 1
+                return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                    schema='dwarfspec.error.v1', protocol=2,
+                    kind=runner.failure_kinds.HOST,
+                    code='event_cursor_ahead', message='cursor rejected',
+                    operation='status poll', run_id=run_options.run_id,
+                    generation=1, state='starting', after_sequence=4,
+                    last_sequence=3,
+                })}}
+            end
+            assert.matches('recover%.lua$', arguments[3])
+            recovery_calls = recovery_calls + 1
+            return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                schema='dwarfspec.error.v1', protocol=2,
+                kind=runner.failure_kinds.HOST,
+                code='run_not_found', message='run disappeared',
+                operation='recover', run_id=run_options.run_id,
+            })}}
+        end
+        local outcome = runner.run(run_options)
+        assert.equals(5, outcome.exit_code)
+        assert.equals(runner.failure_kinds.HOST, outcome.error.kind)
+        assert.matches('requested cursor 4, retained cursor 3',
+            outcome.error.message, 1, true)
+        assert.matches('recovery failed:', outcome.error.message, 1, true)
+        assert.matches('no longer retained', outcome.error.message, 1, true)
+        assert.equals(1, status_calls)
+        assert.equals(1, recovery_calls)
+        assert.equals(0, outcome.report.last_sequence)
+    end)
+
     it('attributes a selected path only when subprocess output emitted it', function()
         local run_options = options('emitted-selection')
         local identity = 'tests/private-emitted-selection.ds.lua'

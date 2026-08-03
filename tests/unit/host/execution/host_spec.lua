@@ -243,6 +243,56 @@ describe('automation host ownership', function()
             outstanding_run_id)
     end)
 
+    it('rejects stale polling context before lease or cursor mutation',
+            function()
+        local service = require('dwarfspec.host.service.service')
+        local run = host.start('.', '.', options('poll-rejection'))
+
+        ---Captures the complete detached service state.
+        ---@return table
+        local function summary()
+            return service.summary({namespace=dfhack})
+        end
+
+        ---Asserts one polling rejection leaves all service state unchanged.
+        ---@param expected_code string
+        ---@param operation function
+        ---@return table
+        local function rejected(expected_code, operation)
+            local before = summary()
+            local ok, detail = pcall(operation)
+            assert.is_false(ok)
+            assert.equals(expected_code, detail.code)
+            assert.same(before, summary())
+            return detail
+        end
+
+        local stale = rejected('generation_mismatch', function()
+            host.poll_transport(run.run_id, run.owner_capability, 0,
+                run.generation + 1)
+        end)
+        assert.equals(run.generation + 1, stale.generation)
+        assert.equals(run.generation, stale.current_generation)
+
+        local cursor = rejected('event_cursor_ahead', function()
+            host.poll_transport(run.run_id, run.owner_capability,
+                #run.event_journal.events + 1, run.generation)
+        end)
+        assert.equals(#run.event_journal.events + 1, cursor.after_sequence)
+        assert.equals(#run.event_journal.events, cursor.last_sequence)
+
+        local unauthorized = rejected('owner_capability_rejected', function()
+            host.poll_transport(run.run_id, 'wrong-owner-capability', 0,
+                run.generation)
+        end)
+        assert.equals(run.state, unauthorized.state)
+
+        local missing = rejected('run_not_found', function()
+            host.transport('missing-poll-run', 0, 'event read', 1)
+        end)
+        assert.equals('missing-poll-run', missing.run_id)
+    end)
+
     it('rejects overlap and ignores a callback after abort', function()
         local run = host.start('.', '.', options('owner'))
         assert.equals('starting', run.state)

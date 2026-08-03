@@ -20,6 +20,8 @@ local COMMON_FIELDS = {
     blocking_generation='positive_integer',
     current_generation='positive_integer',
     reason='string',
+    after_sequence='nonnegative_integer',
+    last_sequence='nonnegative_integer',
 }
 
 local FORBIDDEN_FIELDS = {
@@ -85,6 +87,11 @@ local KNOWN_CODES = {
     clean_state_unverified={kind=RunnerFailureKind.HOST,
         required={operation='string', run_id='string',
             generation='positive_integer', reason='string'}},
+    event_cursor_ahead={kind=RunnerFailureKind.HOST,
+        required={operation='string', run_id='string',
+            generation='positive_integer', state='string',
+            after_sequence='nonnegative_integer',
+            last_sequence='nonnegative_integer'}},
 }
 
 local APPROVED_KINDS = {
@@ -100,6 +107,13 @@ local function is_positive_integer(value)
     return type(value) == 'number' and value > 0 and value % 1 == 0
 end
 
+---Returns whether a value is a nonnegative integer.
+---@param value any
+---@return boolean
+local function is_nonnegative_integer(value)
+    return type(value) == 'number' and value >= 0 and value % 1 == 0
+end
+
 ---Validates one field against its public adapter-error type.
 ---@param value any
 ---@param field_type string
@@ -109,6 +123,10 @@ local function validate_field(value, field_type, field_name)
         assert(is_positive_integer(value),
             'DwarfSpec adapter error field ' .. field_name ..
                 ' must be a positive integer')
+    elseif field_type == 'nonnegative_integer' then
+        assert(is_nonnegative_integer(value),
+            'DwarfSpec adapter error field ' .. field_name ..
+                ' must be a nonnegative integer')
     else
         assert(type(value) == field_type and value ~= '',
             'DwarfSpec adapter error field ' .. field_name ..
@@ -252,6 +270,11 @@ function M.validate(response)
                 validate_field(response[name], field_type, name)
             end
             allowed[name] = true
+        end
+        if response.code == 'event_cursor_ahead' then
+            assert(response.after_sequence > response.last_sequence,
+                'DwarfSpec event cursor rejection requires requested cursor ' ..
+                    'to be ahead of retained cursor')
         end
     elseif response.kind == RunnerFailureKind.EXECUTOR_QUARANTINED and
             response.code == nil then

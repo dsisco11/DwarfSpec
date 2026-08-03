@@ -1,11 +1,13 @@
 -- Production adapter for scheduler state and retained-run transport.
 
-local run_id, after_sequence_text = ...
+local run_id, after_sequence_text, generation_text = ...
 local after_sequence
 if run_id ~= nil then
     after_sequence = assert(tonumber(after_sequence_text),
         'event cursor argument must be numeric')
 end
+local generation = generation_text and assert(tonumber(generation_text),
+    'generation argument must be numeric') or nil
 
 ---Configures pure-Lua lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
@@ -53,7 +55,13 @@ if run_id == nil then
         scheduler=loaded and host.scheduler_snapshot() or nil,
     }))
 else
-    local transport = host.transport(run_id, after_sequence)
-    transport.scheduler = host.scheduler_snapshot()
-    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+    local response = require('dwarfspec.host.entrypoints.operation_response')
+    response.execute(function()
+        local transport = host.transport(run_id, after_sequence,
+            'run scheduler status', generation)
+        transport.scheduler = host.scheduler_snapshot()
+        return transport
+    end, function(transport)
+        print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+    end, require('json').encode)
 end

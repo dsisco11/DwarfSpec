@@ -115,6 +115,9 @@ describe('adapter error protocol', function()
                 generation=3, blocking_run_id='run-2', blocking_generation=4},
             clean_state_unverified={operation='recover executor', run_id='run-1',
                 generation=3, reason='cleanup remains active'},
+            event_cursor_ahead={operation='status poll', run_id='run-1',
+                generation=3, state='running', after_sequence=8,
+                last_sequence=7},
         }
         for code, fields in pairs(cases) do
             local rejection = adapter_errors.domain(code, 'rejected', fields)
@@ -146,6 +149,19 @@ describe('adapter error protocol', function()
         }) do
             assert.has_error(function()
                 adapter_errors.domain('future_code', 'message', fields)
+            end)
+        end
+    end)
+
+    it('requires an event cursor rejection to describe an ahead cursor',
+            function()
+        for _, after_sequence in ipairs({6, 7}) do
+            assert.has_error(function()
+                adapter_errors.domain('event_cursor_ahead', 'stale cursor', {
+                    operation='status poll', run_id='run-1', generation=3,
+                    state='running', after_sequence=after_sequence,
+                    last_sequence=7,
+                })
             end)
         end
     end)

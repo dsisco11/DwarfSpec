@@ -704,12 +704,47 @@ function M.observe(run_id, operation)
     return run
 end
 
+---Validates expected polling identity and cursor before any lease mutation.
+---@param run table
+---@param operation string
+---@param after_sequence integer|nil
+---@param expected_generation integer|nil
+local function validate_transport_request(run, operation, after_sequence,
+        expected_generation)
+    if expected_generation ~= nil and
+            expected_generation ~= run.generation then
+        error(adapter_errors.domain('generation_mismatch',
+            'The requested run generation is stale.', {
+                operation=operation, run_id=run.run_id,
+                generation=expected_generation,
+                current_generation=run.generation,
+            }), 0)
+    end
+    if after_sequence == nil then return end
+    assert(type(after_sequence) == 'number' and after_sequence >= 0 and
+        after_sequence % 1 == 0,
+        'event cursor must be a nonnegative integer')
+    events.validate_journal(run.event_journal)
+    local last_sequence = #run.event_journal.events
+    if after_sequence > last_sequence then
+        error(adapter_errors.domain('event_cursor_ahead',
+            'The requested event cursor is ahead of the retained journal.', {
+                operation=operation, run_id=run.run_id,
+                generation=run.generation, state=run.state,
+                after_sequence=after_sequence,
+                last_sequence=last_sequence,
+            }), 0)
+    end
+end
+
 ---Renews an owned nonterminal run and returns its current state.
 ---@param run_id string
 ---@param owner_capability string
+---@param expected_generation integer|nil
 ---@return table
-function M.poll(run_id, owner_capability)
-    local run = M.observe(run_id)
+function M.poll(run_id, owner_capability, expected_generation)
+    local run = M.observe(run_id, 'status poll')
+    validate_transport_request(run, 'status poll', nil, expected_generation)
     assert(type(owner_capability) == 'string' and owner_capability ~= '',
         'status poll requires the owner capability')
     if not M.is_terminal(run) then
@@ -726,8 +761,13 @@ end
 ---Returns canonical transport data after one event sequence cursor.
 ---@param run_id string
 ---@param after_sequence integer
+---@param operation string|nil
+---@param expected_generation integer|nil
 ---@return table
-function M.transport(run_id, after_sequence)
+function M.transport(run_id, after_sequence, operation, expected_generation)
+    local label = operation or 'event read'
+    local run = M.observe(run_id, label)
+    validate_transport_request(run, label, after_sequence, expected_generation)
     return service.transport(run_id, after_sequence, service_dependencies())
 end
 
@@ -735,10 +775,15 @@ end
 ---@param run_id string
 ---@param owner_capability string
 ---@param after_sequence integer
+---@param expected_generation integer|nil
 ---@return table
-function M.poll_transport(run_id, owner_capability, after_sequence)
-    M.poll(run_id, owner_capability)
-    return M.transport(run_id, after_sequence)
+function M.poll_transport(run_id, owner_capability, after_sequence,
+        expected_generation)
+    local run = M.observe(run_id, 'status poll')
+    validate_transport_request(run, 'status poll', after_sequence,
+        expected_generation)
+    M.poll(run_id, owner_capability, expected_generation)
+    return service.transport(run_id, after_sequence, service_dependencies())
 end
 
 ---Acknowledges successful persistence for one exact terminal owner.
