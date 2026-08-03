@@ -442,19 +442,15 @@ describe('DwarfSpec mount context', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
-    it('closes descriptor TestBeds for constructor, mount, assertion, and cleanup failures', function()
+    it('closes exactly once without component teardown after descriptor construction fails', function()
         local close_count = 0
         local ConstructorFailure = make_class(Widget, function()
             error('descriptor constructor exploded')
         end)
-        expected_pending = 2
         context.testbed_host = {}
         context.testbed_adapter = {new=function()
             return {
-                require=function(_, name)
-                    if name == 'constructor' then return ConstructorFailure end
-                    return TestWidget
-                end,
+                require=function() return ConstructorFailure end,
                 reqscript=function() error('unexpected script load') end,
                 close=function()
                     close_count = close_count + 1
@@ -466,6 +462,28 @@ describe('DwarfSpec mount context', function()
         assert.has_error(function()
             context:mount_descriptor({kind='module', name='constructor'})
         end)
+
+        assert.equals(1, close_count)
+        assert.equals(1, #events)
+        assert.equals('bed-close', events[1])
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('closes descriptor TestBeds for mount, assertion, and cleanup failures', function()
+        local close_count = 0
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            return {
+                require=function() return TestWidget end,
+                reqscript=function() error('unexpected script load') end,
+                close=function()
+                    close_count = close_count + 1
+                    table.insert(events, 'bed-close')
+                end,
+            }
+        end}
+
         fail_activation = true
         assert.has_error(function()
             context:mount_descriptor({kind='module', name='mount'}, {name='mount'})
@@ -480,7 +498,7 @@ describe('DwarfSpec mount context', function()
         context:mount_descriptor({kind='module', name='cleanup'}, {name='cleanup'})
         assert.has_error(function() context:unmount() end)
 
-        assert.equals(4, close_count)
+        assert.equals(3, close_count)
         assert.equals(0, cleanup.pending_count(registry))
         assert.equals('bed-close', events[#events])
     end)

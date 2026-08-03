@@ -606,28 +606,37 @@ Phase 12: Complete unit, declaration, and framework integration coverage
     ☒ Do not infer live behavior from these offline results.
 
 Phase 13: Prove live descriptor mounting from the active source repository
-    ☐ Exit with bounded DFHack automation demonstrating real component construction, interaction, cleanup, and fresh graph state from the active source repository.
+    ☒ Exit with bounded DFHack automation demonstrating real component construction, interaction, cleanup, and fresh graph state from the active source repository.
+        - Evidence: Check-Lua passed for 335 files and the full unit suite passed
+          with 853 successes on 2026-08-03. Three separate bounded live runs
+          passed with one success each, zero failures/errors/pending, terminal
+          status, cleanup_confirmed=true, and mount_cleanup_verified=true:
+          configured dwarfspec-35361718-6f9e1e25, freshness
+          dwarfspec-35375140-549d1328, and constructor failure
+          dwarfspec-35388625-289a1af1. Their distinct structured reports record
+          the exact active public and internal TestBed source paths.
 
 13.1 Representative consumer component:
-    ☐ Use at least one production-style consumer widget or component, not only synthetic TestBed fixtures.
-    ☐ Give the component a real module dependency and an annotated script dependency.
-    ☐ Configure both a module token and a script token through the same TestBedConfig used to load the production-style component.
-    ☐ Provide at least one dependency replacement through TestBed configuration before the defining component source loads.
-    ☐ Exercise the synthesized foundational host providers and exact DFHack class identity.
+    ☒ Use at least one production-style consumer widget or component, not only synthetic TestBed fixtures.
+    ☒ Give the component a real module dependency and an annotated script dependency.
+    ☒ Configure both a module token and a script token through the same TestBedConfig used to load the production-style component.
+    ☒ Provide at least one dependency replacement through TestBed configuration before the defining component source loads.
+    ☒ Exercise the synthesized foundational host providers and exact DFHack class identity.
 
 13.2 Live automation cases:
-    ☐ Configure the live test environment to load DwarfSpec from the exact active source repository under review.
-    ☐ Record the resolved DwarfSpec source path and loaded TestBed module paths, and fail if another DwarfSpec copy shadows the active source.
-    ☐ Run one focused forward-slash automation spec/glob per invocation with a bounded timeout.
-    ☐ Prove one configured descriptor mount constructs, mounts, interacts, and unmounts while observing its module and script replacements and real host providers.
-    ☐ Repeat that configured mount and prove fresh consumer module and script state with complete cleanup after both runs.
+    ☒ Configure the live test environment to load DwarfSpec from the exact active source repository under review.
+    ☒ Record the resolved DwarfSpec source path and loaded TestBed module paths, and fail if another DwarfSpec copy shadows the active source.
+    ☒ Run one focused forward-slash automation spec/glob per invocation with a bounded timeout.
+    ☒ Prove one configured descriptor mount constructs, mounts, interacts, and unmounts while observing its module and script replacements and real host providers.
+    ☒ Prove Busted assertions, mocks, and spies remain available in the live spec, and that a mocked value passed through a TestBed provider remains observable by the spec after component interaction without installing Busted globals in the TestBed environment.
+    ☒ Repeat that configured mount and prove fresh consumer module and script state with complete cleanup after both runs.
 
 13.3 Representative failure unwind:
-    ☐ Trigger one component-constructor failure after descriptor resolution and TestBed allocation.
-    ☐ Verify the failed mount's bed closes exactly once without attempting component teardown for a component that was never mounted.
-    ☐ Verify the host remains usable and no active component, screen, or owned run resource remains.
-    ☐ Inspect the terminal run result and structured archive/log evidence; do not treat READY or process exit alone as success.
-    ☐ Record cleanup_confirmed or the repository's equivalent explicit cleanup signal for the successful and failure runs.
+    ☒ Trigger one component-constructor failure after descriptor resolution and TestBed allocation.
+    ☒ Verify the failed mount's bed is observably closed before control returns without adding test-only production hooks; retain exact close-count and no-component-teardown proof in the focused ownership unit tests.
+    ☒ Verify the host remains usable and no active component, screen, or owned run resource remains.
+    ☒ Inspect the terminal run result and structured archive/log evidence; do not treat READY or process exit alone as success.
+    ☒ Record cleanup_confirmed or the repository's equivalent explicit cleanup signal for the successful and failure runs.
 
 Phase 14: Document, audit, and hand off
     ☐ Exit only when the implemented behavior, documentation, evidence, and repository state satisfy the full implementation contract.

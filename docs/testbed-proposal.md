@@ -1306,9 +1306,9 @@ A prototype is successful only if it demonstrates all of the following:
   same active source repository;
 - a consecutive mount of that widget observes fresh module and script state,
   and both successful mounts unmount and close their beds exactly once;
-- one constructor failure after TestBed allocation closes the mount-owned bed
-  exactly once and leaves the host usable without active components, screens,
-  or owned run resources;
+- one constructor failure after TestBed allocation leaves the mount-owned bed
+  observably closed before control returns and leaves the host usable without
+  active components, screens, or owned run resources;
 - after `close`, public methods and retained TestBed-owned loader closures fail
   through the shared closed-state sentinel, while already-created consumer
   values remain ordinary caller-owned references; and
