@@ -1,6 +1,7 @@
 -- Process-wide multi-project automation service runtime and public boundary.
 
 local projects = require('dwarfspec.host.service.projects')
+local adapter_errors = require('dwarfspec.protocol.adapter_errors')
 local events = require('dwarfspec.protocol.events')
 local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
 local RunState = require('dwarfspec.protocol.enums.run_states')
@@ -194,6 +195,18 @@ local function service_summary(registry)
     return summary
 end
 
+---Returns a structured rejection for an incompatible bootstrap package.
+---@param running_version string
+---@param requested_version string
+---@return table
+local function package_version_mismatch(running_version, requested_version)
+    return adapter_errors.domain('package_version_mismatch',
+        'DFHack already has a different DwarfSpec version loaded', {
+        running_version=running_version,
+        requested_version=requested_version,
+    })
+end
+
 ---Validates one project client's compatibility with the running service.
 ---@param registry table
 ---@param request table
@@ -223,10 +236,10 @@ function M.bootstrap(request, dependencies)
     local registry = namespace.dwarfspec
     if registry ~= nil then
         validate_registry(registry)
-        assert(request.package_version == registry.package_version,
-            ('incompatible automation package version: expected %s, found %s')
-                :format(registry.package_version,
-                    tostring(request.package_version)))
+        if request.package_version ~= registry.package_version then
+            error(package_version_mismatch(
+                registry.package_version, request.package_version), 0)
+        end
         return service_summary(registry)
     end
 

@@ -673,6 +673,64 @@ The JSON payload uses `dwarfspec.transport.v2` and contains:
 }
 ```
 
+### Adapter rejection envelope
+
+An expected adapter rejection uses the existing `dwarfspec.error.v1`
+envelope. `kind` remains the broad runner classification, `message` remains a
+required non-empty diagnostic that is meaningful without subtype handling,
+and the optional `code` identifies a machine-readable subtype. Adding a code
+does not change the runner failure kind, persisted result state, or process
+exit code associated with `kind`.
+
+A package-version mismatch is a registration rejection with this contract:
+
+```json
+{
+  "schema": "dwarfspec.error.v1",
+  "protocol": 2,
+  "kind": "registration",
+  "code": "package_version_mismatch",
+  "message": "DFHack already has a different DwarfSpec version loaded",
+  "running_version": "0.2.1",
+  "requested_version": "0.2.2"
+}
+```
+
+For `code="package_version_mismatch"`, `running_version` and
+`requested_version` are required non-empty strings. `running_version` is the
+DwarfSpec package version retained by the process-wide DFHack service
+registry. `requested_version` is the version supplied by the host loaded from
+the current DwarfSpec command's package. The response does not include project
+paths, selected specifications, installation-tree paths, package roots, or
+assumptions about how DFHack was launched.
+
+The controller renders a valid package-version mismatch with this canonical
+diagnostic, substituting the two structured values:
+
+```text
+DwarfSpec could not start because DFHack already has a different DwarfSpec version loaded.
+
+  Running DFHack service: 0.2.1
+  Current DwarfSpec command: 0.2.2
+
+To use 0.2.2, save and fully exit Dwarf Fortress/DFHack, relaunch it,
+and retry this command. Returning to the title screen or unloading the
+world will not unload the process-wide DwarfSpec service.
+```
+
+Generic registration envelopes without `code` remain valid. An unknown future
+registration code is displayed using its supplied `message` and must not be
+treated as a package-version mismatch. The existing
+`kind="executor_quarantined"` envelope and its required
+`blocking_run_id`, `blocking_generation`, and `reason` fields are unchanged.
+Generic and package-version registration rejections retain the `registration`
+runner failure kind, `registration_error` persisted result state, and exit
+code 5. The executor-quarantine envelope retains the `executor_quarantined`
+runner failure kind and persisted result state, exit code 5, and its existing
+recovery behavior. A package-version mismatch does not initiate recovery and
+does not modify the service registry, projects, queue, scheduler, ownership,
+timestamps, or retained runs.
+
 `OUTPUT`, `DETAIL`, `HOST_ERROR`, and similar formatted protocol lines are not
 part of the service transport and are neither emitted nor parsed. The
 canonical JSON line contains all command feedback.
@@ -897,6 +955,136 @@ It must also solve authentication, encryption, project synchronization,
 package deployment, and remote path identity. Enabling DFHack's unrestricted
 remote command listener is not considered a DwarfSpec remote execution design.
 
+## Adapter error boundary
+
+`dwarfspec.error.v1` is the sole adapter-error envelope. Its `kind` is the
+existing broad runner classification chosen at the adapter/controller boundary;
+its optional `code` is a stable domain subtype chosen by the service or
+scheduler layer that owns the rejection decision. Adding a code or safe field
+is additive and does not change result state, exit code, retry, recovery, or
+primary-versus-secondary error precedence.
+
+The shared contract accepts `registration`, `executor_quarantined`, and `host`
+as envelope kinds. A domain rejection has a non-empty `code` and `message`.
+Generic compatibility errors omit `code`; unknown future codes retain their
+message and safe common fields but receive no code-specific guidance. Known
+codes must contain exactly their required subtype fields. A malformed known
+payload is an invalid host response, while an unexpected exception becomes a
+bounded uncoded `host` error. These cases remain observably distinct.
+Known subtype policy is centralized in
+`dwarfspec.protocol.adapter_errors`. Package mismatch remains a private
+protocol code; admission conflicts reuse the public immutable
+`SchedulerFailureKind` values `project_busy`, `request_key_conflict`, and
+`result_path_busy` so the scheduler classification is preserved verbatim.
+
+The common optional fields are `operation`, `run_id`, `generation`,
+`current_generation`, `state`, `blocking_run_id`, `blocking_generation`, and
+`reason`. Identifiers, states, and reasons are
+non-empty strings; generations are positive integers. Subtype contracts add
+only fields needed for remediation. Owner capabilities, authorization proofs,
+package or project roots, result paths, and unrelated machine paths are
+forbidden. The package mismatch code requires `running_version` and
+`requested_version`. The existing uncoded executor-quarantine compatibility
+shape requires `blocking_run_id`, `blocking_generation`, and `reason`.
+
+Each admission-conflict code has broad kind `registration` and requires
+`blocking_run_id`, `blocking_generation`, `state`, and the scheduler's safe
+`reason`. The blocking fields identify
+the exact retained run that owns the conflict and are sufficient for
+remediation, so the envelope deliberately omits project identity, normalized
+result-path identity, and every raw path. `project_busy` tells the caller to
+wait for and consume the outstanding result; `request_key_conflict` tells the
+caller to retry the identical request or choose a new run identity; and
+`result_path_busy` tells the caller to wait for result consumption or select a
+different result destination. Controller guidance is selected by `code` and
+formatted from the blocking fields, never by parsing `message` or `reason`.
+
+Admission rejection does not mutate the registry, outstanding ownership,
+queue order, generation, leases, request-key bindings, or result-path
+reservations. An identical request-key retry remains an accepted idempotent
+transport response. Invalid scheduler invariants and identifier or capability
+generator failures remain internal host faults. All three expected conflicts
+retain the registration failure kind, `registration_error` persisted state,
+exit code 5, a single bootstrap attempt, and no recovery attempt.
+
+Mutation adapters use the same envelope for expected orchestration rejections.
+`abort`, `cancel`, `recover`, `acknowledge`, `discard`, and executor recovery
+may report `service_not_loaded`, `run_not_found`, `generation_mismatch`,
+`invalid_run_state`, `owner_capability_rejected`, `quarantine_mismatch`, or
+`clean_state_unverified`. These codes retain broad kind `host` and direct
+command exit code 5. Their required fields contain only the operation and the
+minimum applicable run identifier, requested or current generation, state,
+blocking quarantine identity, or clean-state reason.
+
+The controller selects remediation by `code` and renders identifiers,
+generations, and states only from validated subtype fields. A recovery or
+acknowledgement rejection is appended as secondary detail when an earlier run
+failure exists; it never replaces the original timeout, interruption, host, or
+test failure. Rejected service decisions complete before lease, journal,
+ownership, quarantine, result-retention, or native-cleanup mutation. Owner
+capabilities and authorization proofs never cross the error boundary.
+
+Polling and event adapters also use the shared envelope without changing the
+healthy transport or read-only query schemas. `status`, `event_read`, and the
+run-specific scheduler-status branch report `service_not_loaded`,
+`run_not_found`, `generation_mismatch`, and
+`owner_capability_rejected` where applicable. A cursor beyond the retained
+journal reports `event_cursor_ahead` with the run identifier, generation,
+state, requested `after_sequence`, and retained `last_sequence`.
+
+Expected generation and cursor validation happens before status polling renews
+the owner lease. Therefore a rejected poll cannot advance a lease, event
+cursor, journal, observation, or persisted report. Malformed cursors, corrupt
+event journals, impossible run states, and unexpected host exceptions remain
+uncoded internal failures. Terminal observation remains successful, including
+its existing no-renewal behavior. The service-wide `dwarfspec.status.v1`
+response continues to expose `service_loaded`; history, inspection, and logs
+continue to represent normal absence with `service_loaded` and `found` rather
+than adapter errors.
+
+The controller validates polling envelopes before generic subprocess handling
+and selects remediation from subtype fields. A primary polling rejection still
+uses the existing host-failure and state-aware recovery path. Any structured
+recovery rejection is appended without replacing that primary failure.
+Transports are consumed only after validation, preserving retry, timeout,
+cursor advancement, lease renewal, cleanup confirmation, and acknowledgement
+semantics.
+
+Adapters may emit a valid error envelope with either a zero or nonzero process
+exit during migration. The controller inspects and validates the envelope
+before interpreting the process exit. A valid structured rejection is retained;
+a nonzero result without one remains a bridge or host failure and includes only
+bounded, sanitized captured output. Healthy transports, read-only response
+schemas, and the `DWARFSPEC_PROBE` connection grammar do not use this envelope.
+
+The canonical package-mismatch diagnostic remains the persisted result error
+and CLI text. This additive envelope extraction does not require a package
+version bump: it preserves schema and protocol versions, existing generic and
+quarantine shapes, runner classifications, result states, and exit meanings.
+
+### Entrypoint failure inventory
+
+| Entrypoint | Expected domain rejection | Other structured state | Boundary or internal failures |
+|---|---|---|---|
+| `bootstrap` | package mismatch, scheduler admission, executor quarantine | successful `dwarfspec.transport.v2` | option, module-load, and unexpected host faults |
+| `abort` | run identity, ownership, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `acknowledge` | generation, ownership, cursor, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `cancel` | run identity, ownership, cursor, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `discard` | run identity, generation, cursor, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `recover` | run identity, ownership, cursor, cleanup, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `recover_executor` | quarantine identity, generation, cursor, and clean-state rejection | successful transport | argument, load, and unexpected host faults |
+| `status` | run identity, ownership, and cursor rejection | successful transport | subprocess/bridge, argument, load, and unexpected host faults |
+| `event_read` | run identity and cursor rejection | successful transport | argument, load, and unexpected host faults |
+| `scheduler_status` | none | `dwarfspec.status.v1` or scheduler/transport response | argument, load, and unexpected host faults |
+| `run_query` | invalid query arguments | history, inspection, or log response schemas, including `found=false` | argument, load, and unexpected host faults |
+| `probe` | none | `DWARFSPEC_PROBE` connection state | unavailable or malformed DFHack context |
+
+The domain families listed above are migrated separately. Query `found=false`,
+an unloaded status response, healthy scheduler state, and probe state are data,
+not rejections. Process invocation failures belong to the controller's
+connection or host classification. Assertions for malformed internal requests,
+impossible invariants, module loading, and serialization remain uncoded faults.
+
 ## Compatibility
 
 The existing CLI command names and exit-code meanings remain stable. Terminal
@@ -906,9 +1094,10 @@ queue timeout receive distinct classifications without changing existing code
 meanings.
 
 Native run snapshots use `dwarfspec.run.v2`; adapters use
-`dwarfspec.transport.v2`; event envelopes use `dwarfspec.event.v1`; and
-persisted results use `dwarfspec.result.v2`. Legacy `dwarfspec.run.v1` reports
-and formatted progress lines are unsupported. Schema identifiers version each
+`dwarfspec.transport.v2`; expected adapter rejections use
+`dwarfspec.error.v1`; event envelopes use `dwarfspec.event.v1`; and persisted
+results use `dwarfspec.result.v2`. Legacy `dwarfspec.run.v1` reports and
+formatted progress lines are unsupported. Schema identifiers version each
 document type independently; readers reject unknown versions instead of
 guessing.
 
@@ -937,6 +1126,7 @@ The implementation uses these module boundaries:
 | `dwarfspec.protocol.enums.test_statuses` | Immutable Busted result-status identifiers. |
 | `dwarfspec.protocol.enums.result_policies` | Immutable result-persistence policies. |
 | `dwarfspec.protocol.schemas` | Versioned service, scheduler, run, transport, event, and result validation. |
+| `dwarfspec.protocol.adapter_errors` | Canonical adapter-error construction, field policy, validation, and safe serialization. |
 | `dwarfspec.host.service.snapshots` | Immutable run, history, and scheduler snapshot construction. |
 | `dwarfspec.host.execution.host` | Busted execution, native state transitions, and cleanup. |
 | `dwarfspec.host.execution.output_handler` | Translation from Busted callbacks into service events. |

@@ -43,7 +43,11 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local run = host.discard(run_id, generation,
-    reason or 'local operator discarded retained result')
-local transport = host.transport(run.run_id, after_sequence)
-print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+local response = require('dwarfspec.host.entrypoints.operation_response')
+response.execute(function()
+    local run = host.discard(run_id, generation,
+        reason or 'local operator discarded retained result')
+    return host.transport(run.run_id, after_sequence)
+end, function(transport)
+    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+end, require('json').encode)

@@ -77,8 +77,13 @@ function M.cancel(registry, request, context)
     assert(type(request.reason) == 'string' and request.reason ~= '' and
         #request.reason <= 1024,
         'cancel reason must be a nonempty bounded string')
-    assert(run.state == RunState.QUEUED and not run.terminal,
-        'only a queued run can be cancelled')
+    if run.state ~= RunState.QUEUED or run.terminal then
+        validation.reject('invalid_run_state',
+            'Only a queued run can be cancelled.', {
+                operation='cancel', run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
     return transitions.cancel_queued(registry, run, request.reason,
         run.owner_kind, validation.current_time(context))
 end
@@ -86,8 +91,13 @@ end
 ---Cancels one queued run through operator authority.
 function M.operator_cancel(registry, request, context)
     local run = validation.exact_run(registry, request, 'operator cancel')
-    assert(run.state == RunState.QUEUED and not run.terminal,
-        'only a queued run can be force-cancelled')
+    if run.state ~= RunState.QUEUED or run.terminal then
+        validation.reject('invalid_run_state',
+            'Only a queued run can be force-cancelled.', {
+                operation='operator cancel', run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
     assert(type(request.reason) == 'string' and request.reason ~= '' and
         #request.reason <= 1024,
         'operator cancel reason must be a nonempty bounded string')

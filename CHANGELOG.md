@@ -13,6 +13,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Subject:search(query)` find literal final rendered text in the active mount
   and return zero-based inclusive screen-cell bounds. Subject and rectangle
   areas are spatial filters, not render-ownership claims.
+- Structured `dwarfspec.error.v1` rejection codes now cover package admission,
+  scheduler conflicts, run mutation and recovery, polling, and event cursors
+  while preserving their existing runner classifications and exit codes.
+
+### Changed
+
+- Package-version mismatch diagnostics label the process-wide
+  `running_version` and current command's `requested_version` explicitly and
+  require a complete Dwarf Fortress/DFHack restart, removing the ambiguous
+  `expected` and `found` wording.
+
+## [0.2.2] - 2026-08-03
+
+### Changed
+
+- Report connection preflight failures as distinct invocation, subprocess,
+  missing-response, malformed-response, protocol, core-context, and timeout
+  diagnostics with bounded captured output.
+- Ship the updated controller and DFHack probe together while retaining probe
+  protocol version 2.
+
+### Fixed
+
+- Avoid attributing a failed DFHack connection to a selected specification
+  when test selection succeeded before the connection preflight.
 
 ## [0.2.1] - 2026-07-31
 

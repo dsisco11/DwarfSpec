@@ -110,6 +110,182 @@ describe('version 2 automation entrypoint contract', function()
         assert.is_nil(dfhack.dwarfspec)
     end)
 
+    it('emits one structured rejection from every unloaded mutation adapter',
+            function()
+        local cases = {
+            {name='abort', arguments={'missing-run', ''}},
+            {name='cancel', arguments={'missing-run', 'owner-secret', '0'}},
+            {name='recover', arguments={'missing-run', 'owner-secret', '0'}},
+            {name='acknowledge', arguments={
+                'missing-run', '1', 'owner-secret', '0'}},
+            {name='discard', arguments={'missing-run', '1', '0'}},
+            {name='recover_executor', arguments={'missing-run', '1', '0'}},
+        }
+        for _, case in ipairs(cases) do
+            lines = {}
+            load_host_script(case.name)(table.unpack(case.arguments))
+            assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines, case.name)
+            local rejection = encoded[#encoded]
+            assert.equals('dwarfspec.error.v1', rejection.schema)
+            assert.equals('host', rejection.kind)
+            assert.equals('service_not_loaded', rejection.code)
+            assert.is_nil(rejection.owner_capability)
+            assert.is_nil(rejection.authorization_proof)
+            assert.is_falsy(rejection.message:find('owner-secret', 1, true))
+        end
+        assert.is_nil(dfhack.dwarfspec)
+    end)
+
+    it('serializes polling and event rejections with one safe response',
+            function()
+        for _, case in ipairs({
+            {name='status', arguments={'missing-run', 'owner-secret', '0', '1'}},
+            {name='event_read', arguments={'missing-run', '0', '1'}},
+            {name='scheduler_status', arguments={'missing-run', '0', '1'}},
+        }) do
+            lines = {}
+            load_host_script(case.name)(table.unpack(case.arguments))
+            assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+            assert.equals('service_not_loaded', encoded[#encoded].code)
+            assert.is_falsy(encoded[#encoded].message:find(
+                'owner-secret', 1, true))
+        end
+
+        local root = require('lfs').currentdir():gsub('\\', '/')
+        lines = {}
+        load_host_script('bootstrap')('poll-entrypoint',
+            '--project-root=' .. root, '--defer-frames=1')
+        local run = assert(dfhack.dwarfspec.runs['poll-entrypoint'])
+        local last_sequence = #run.event_journal.events
+        local cases = {
+            {name='status', arguments={run.run_id, run.owner_capability,
+                '0', tostring(run.generation + 1)},
+                code='generation_mismatch'},
+            {name='status', arguments={run.run_id, 'owner-secret', '0',
+                tostring(run.generation)}, code='owner_capability_rejected'},
+            {name='event_read', arguments={run.run_id,
+                tostring(last_sequence + 1), tostring(run.generation)},
+                code='event_cursor_ahead'},
+            {name='event_read', arguments={'missing-run', '0', '1'},
+                code='run_not_found'},
+            {name='scheduler_status', arguments={run.run_id, '0',
+                tostring(run.generation + 1)}, code='generation_mismatch'},
+        }
+        for _, case in ipairs(cases) do
+            lines = {}
+            load_host_script(case.name)(table.unpack(case.arguments))
+            assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines, case.name)
+            local rejection = encoded[#encoded]
+            assert.equals('dwarfspec.error.v1', rejection.schema)
+            assert.equals(case.code, rejection.code)
+            assert.is_nil(rejection.owner_capability)
+            assert.is_nil(rejection.authorization_proof)
+            assert.is_falsy(rejection.message:find('owner-secret', 1, true))
+        end
+    end)
+
+    it('keeps unexpected adapter faults on the subprocess failure path',
+            function()
+        local response =
+            require('dwarfspec.host.entrypoints.operation_response')
+        local ok, detail = pcall(response.execute,
+            function() error('unexpected invariant failure', 0) end,
+            function() error('success must not be emitted') end,
+            require('json').encode)
+        assert.is_false(ok)
+        assert.equals('unexpected invariant failure', detail)
+        assert.same({}, lines)
+        assert.same({}, encoded)
+    end)
+
+    it('preserves generic string bootstrap rejections', function()
+        load_host_script('bootstrap')(
+            'entrypoint-generic-rejection', '--unknown=value')
+
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.equals('dwarfspec.error.v1', encoded[1].schema)
+        assert.equals(2, encoded[1].protocol)
+        assert.equals('registration', encoded[1].kind)
+        assert.matches('unknown automation option: --unknown',
+            encoded[1].message, 1, true)
+        assert.is_nil(encoded[1].code)
+        assert.is_nil(encoded[1].running_version)
+        assert.is_nil(encoded[1].requested_version)
+        assert.is_false(encode_options[1].pretty)
+        assert.is_nil(dfhack.dwarfspec)
+    end)
+
+    it('serializes admission conflicts with exact safe blocking fields',
+            function()
+        local root = require('lfs').currentdir():gsub('\\', '/')
+        local result_path = root .. '/shared-result.json'
+        load_host_script('bootstrap')(
+            'admission-owner', '--project-root=.', '--result-policy=file',
+            '--result-path=' .. result_path)
+        local registry = dfhack.dwarfspec
+        local owner = registry.runs['admission-owner']
+
+        lines = {}
+        load_host_script('bootstrap')(
+            'admission-owner', '--project-root=.', '--result-policy=file',
+            '--result-path=' .. result_path)
+        assert.equals('dwarfspec.transport.v2', encoded[2].schema)
+        assert.matches('DWARFSPEC_OWNER ', lines[2], 1, true)
+        assert.equals(1, registry.generation)
+
+        lines = {}
+        load_host_script('bootstrap')(
+            'admission-owner', '--project-root=.', '--result-policy=file',
+            '--result-path=' .. result_path, '--spec=different.ds.lua')
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.same({
+            schema='dwarfspec.error.v1',
+            protocol=2,
+            kind='registration',
+            code='request_key_conflict',
+            message='This request identity is already bound to a different ' ..
+                'DwarfSpec run.',
+            blocking_run_id=owner.run_id,
+            blocking_generation=owner.generation,
+            state=owner.state,
+            reason='request key is already bound to a different request',
+        }, encoded[3])
+
+        lines = {}
+        load_host_script('bootstrap')(
+            'admission-project-busy', '--project-root=.',
+            '--result-policy=file', '--result-path=' .. result_path)
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.equals('project_busy', encoded[4].code)
+        assert.equals('registration', encoded[4].kind)
+        assert.equals(owner.run_id, encoded[4].blocking_run_id)
+        assert.equals(owner.generation, encoded[4].blocking_generation)
+        assert.equals(owner.state, encoded[4].state)
+        assert.equals('project already owns an outstanding run',
+            encoded[4].reason)
+        assert.is_string(encoded[4].message)
+        assert.is_true(encoded[4].message ~= '')
+
+        lines = {}
+        load_host_script('bootstrap')(
+            'admission-result-busy', '--project-root=tests',
+            '--result-policy=file', '--result-path=' .. result_path)
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.equals('result_path_busy', encoded[5].code)
+        assert.equals('registration', encoded[5].kind)
+        assert.equals(owner.run_id, encoded[5].blocking_run_id)
+        assert.equals(owner.generation, encoded[5].blocking_generation)
+        assert.equals(owner.state, encoded[5].state)
+        assert.equals('result path is owned by another outstanding run',
+            encoded[5].reason)
+        assert.is_nil(encoded[5].project_root)
+        assert.is_nil(encoded[5].result_path)
+        assert.is_nil(encoded[5].owner_capability)
+        assert.equals(1, registry.generation)
+        assert.is_nil(registry.runs['admission-project-busy'])
+        assert.is_nil(registry.runs['admission-result-busy'])
+    end)
+
     it('starts and aborts through version 2 transport entrypoints',
             function()
         local root = require('lfs').currentdir()
@@ -180,12 +356,18 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals('dwarfspec.error.v1', encoded[4].schema)
         assert.equals(2, encoded[4].protocol)
         assert.equals('registration', encoded[4].kind)
+        assert.equals('package_version_mismatch', encoded[4].code)
+        assert.equals('0.1.3', encoded[4].running_version)
+        assert.equals('0.2.2', encoded[4].requested_version)
+        assert.is_string(encoded[4].message)
+        assert.is_true(encoded[4].message ~= '')
         assert.is_false(encode_options[4].pretty)
-        assert.matches('incompatible automation package version: ' ..
-            'expected 0.1.3, found 0.2.1', encoded[4].message, 1, true)
+        assert.matches('DFHack already has a different DwarfSpec version ' ..
+            'loaded', encoded[4].message, 1, true)
+        assert.is_nil(encoded[4].package_root)
         assert.is_nil(registry.runs['entrypoint-version-rejection'])
 
-        registry.package_version = '0.2.1'
+        registry.package_version = '0.2.2'
         registry.quarantine = {
             active=true,
             run_id=run.run_id,
@@ -297,7 +479,19 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals('dwarfspec.transport.v2',
             encoded[#encoded].schema)
 
-        dfhack.dwarfspec.quarantine = {active=false}
+        dfhack.dwarfspec.quarantine = {
+            active=true, run_id=active.run_id,
+            generation=active.generation, reason='fixture quarantine',
+        }
+        lines = {}
+        load_host_script('recover_executor')(
+            active.run_id, tostring(active.generation),
+            tostring(#active.event_journal.events), 'fixture verified clean')
+        assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
+        assert.equals('dwarfspec.transport.v2', encoded[#encoded].schema)
+        assert.is_false(encoded[#encoded].scheduler.quarantine.active)
+        assert.is_false(dfhack.dwarfspec.quarantine.active)
+
         lines = {}
         load_host_script('scheduler_status')()
         assert.equals('DWARFSPEC_JSON {"encoded":true}', lines[1])

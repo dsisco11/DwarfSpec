@@ -9,6 +9,8 @@ local EventType = require('dwarfspec.protocol.enums.event_types')
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 local ResultState = require('dwarfspec.protocol.enums.result_states')
 local RunState = require('dwarfspec.protocol.enums.run_states')
+local SchedulerFailureKind =
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 local RUN_STATE_TERMINAL = {
     [RunState.QUEUED]=false,
@@ -269,6 +271,48 @@ local function options(run_id)
         verbose=false,
         system={monotime=function() return 0 end, sleep=function() end},
     }
+end
+
+---Runs one representative failed probe through the complete run boundary.
+---@param case table
+---@return table, table
+local function run_probe_failure(case)
+    local run_options = options('connection-' .. case.name)
+    run_options.identities = {'tests/private-selected-' .. case.name .. '.ds.lua'}
+    run_options.test_glob = 'tests/private-selection-' .. case.name .. '/*.lua'
+    run_options.result_path = 'D:/results/connection-' .. case.name .. '.json'
+    local persisted
+    run_options.result_store = {
+        write=function(_, result) persisted = result end,
+    }
+    local calls = 0
+    local bootstrap_attempted = false
+    run_options.invoke = function(_, arguments)
+        calls = calls + 1
+        if not arguments[3]:match('probe%.lua$') then
+            bootstrap_attempted = true
+        end
+        if case.exception then error(case.exception) end
+        return case.result
+    end
+
+    local outcome = runner.run(run_options)
+
+    assert.equals(4, outcome.exit_code, case.name)
+    assert.same(runner.failure_kinds.CONNECTION, outcome.error.kind, case.name)
+    assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state, case.name)
+    assert.equals(ResultState.CONNECTION_ERROR, persisted.state, case.name)
+    assert.is_false(bootstrap_attempted, case.name)
+    assert.equals(1, calls, case.name)
+    assert.is_truthy(outcome.error.message:find(case.message, 1, true), case.name)
+    for _, selected_path in ipairs({
+            run_options.project_root, run_options.test_glob,
+            run_options.identities[1],
+        }) do
+        assert.is_falsy(outcome.error.message:find(selected_path, 1, true),
+            case.name .. ': ' .. selected_path)
+    end
+    return outcome, persisted
 end
 
 describe('DwarfSpec external runner', function()
@@ -848,18 +892,35 @@ describe('DwarfSpec external runner', function()
             outcome.error.message, 1, true)
     end)
 
-    it('returns a connection failure before bootstrap', function()
-        local run_options = options('connection-run')
-        run_options.invoke = function()
-            return {exit_code=1, lines={'not running'}}
+    it('preserves orchestration outcomes for every probe failure category', function()
+        local cases = {
+            {name='invocation', exception='process launch failed',
+                message='Could not invoke DFHack runner "bin/dwarfspec":'},
+            {name='nonzero', result={exit_code=1, lines={'not running'}},
+                message='exited with code 1. Output: not running'},
+            {name='missing', result={exit_code=0, lines={'ordinary output'}},
+                message='emitted no DwarfSpec probe report'},
+            {name='multiple', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
+                }}, message='emitted 2 DwarfSpec probe reports'},
+            {name='malformed', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true',
+                }}, message='malformed DwarfSpec probe report'},
+            {name='protocol', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function',
+                }}, message='controller expects 2, probe reported 3'},
+            {name='core', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=false timeout=function',
+                }}, message='reported core=false'},
+            {name='timeout', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=nil',
+                }}, message='reported timeout=nil'},
+        }
+        for _, case in ipairs(cases) do
+            local outcome = run_probe_failure(case)
+            assert.is_nil(outcome.report, case.name)
         end
-        local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
-            outcome.exit_code)
-        assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state)
-        assert.matches('DFHack is not running', outcome.error.message,
-            1, true)
-        assert.is_nil(outcome.report)
     end)
 
     it('classifies a missing configured runner as a dependency failure',
@@ -880,20 +941,6 @@ describe('DwarfSpec external runner', function()
         assert.equals(ResultState.DEPENDENCY_ERROR, persisted.state)
         assert.is_nil(persisted.run_id)
         assert.matches('configured DFHack runner was not found',
-            outcome.error.message, 1, true)
-    end)
-
-    it('classifies a probe launch exception as an actionable connection error',
-            function()
-        local run_options = options('probe-launch')
-        run_options.invoke = function()
-            error('process launch failed')
-        end
-        local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
-            outcome.exit_code)
-        assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state)
-        assert.matches('could not contact DFHack through',
             outcome.error.message, 1, true)
     end)
 
@@ -1000,8 +1047,10 @@ describe('DwarfSpec external runner', function()
                     schema='dwarfspec.error.v1',
                     protocol=2,
                     kind=runner.failure_kinds.REGISTRATION,
-                    message='incompatible automation package version: ' ..
-                        'expected 0.1.3, found 0.2.1',
+                    code='package_version_mismatch',
+                    message='different version loaded',
+                    running_version='0.1.3',
+                    requested_version='0.2.1',
                 })}}
             end
             recovery_calls = recovery_calls + 1
@@ -1016,9 +1065,182 @@ describe('DwarfSpec external runner', function()
             runner.failure_kinds.REGISTRATION], outcome.exit_code)
         assert.equals(runner.failure_kinds.REGISTRATION, outcome.error.kind)
         assert.equals(ResultState.REGISTRATION_ERROR, outcome.result.state)
-        assert.matches('expected 0.1.3, found 0.2.1',
+        assert.equals(
+            'DwarfSpec could not start because DFHack already has a ' ..
+                'different DwarfSpec version loaded.\n\n' ..
+                '  Running DFHack service: 0.1.3\n' ..
+                '  Current DwarfSpec command: 0.2.1\n\n' ..
+                'To use 0.2.1, save and fully exit Dwarf Fortress/DFHack, ' ..
+                'relaunch it,\nand retry this command. Returning to the ' ..
+                'title screen or unloading the\nworld will not unload the ' ..
+                'process-wide DwarfSpec service.', outcome.error.message)
+        assert.equals(outcome.error.message, outcome.result.error.message)
+        assert.is_nil(outcome.error.message:find('expected', 1, true))
+        assert.is_nil(outcome.error.message:find('found', 1, true))
+        assert.is_nil(outcome.report)
+    end)
+
+    it('renders every admission conflict from its structured subtype without recovery',
+            function()
+        local cases = {
+            {
+                code=SchedulerFailureKind.PROJECT_BUSY,
+                phrase='this project already has an outstanding run',
+                action='Wait for that run to finish and consume its result',
+            },
+            {
+                code=SchedulerFailureKind.REQUEST_KEY_CONFLICT,
+                phrase='this request identity is already bound to a different run',
+                action='submit this work with a new run identity',
+            },
+            {
+                code=SchedulerFailureKind.RESULT_PATH_BUSY,
+                phrase='configured result destination is reserved by another run',
+                action='choose a different result destination',
+            },
+        }
+        for _, case in ipairs(cases) do
+            local bootstrap_calls = 0
+            local recovery_calls = 0
+            local run_options = options('admission-' .. case.code)
+            run_options.invoke = function(_, arguments)
+                if arguments[3]:match('probe%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                elseif arguments[3]:match('bootstrap%.lua$') then
+                    bootstrap_calls = bootstrap_calls + 1
+                    return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                        schema='dwarfspec.error.v1',
+                        protocol=2,
+                        kind=runner.failure_kinds.REGISTRATION,
+                        code=case.code,
+                        message='opaque host wording that must not be parsed',
+                        blocking_run_id='blocking-run',
+                        blocking_generation=9,
+                        state='queued',
+                        reason='scheduler classification detail',
+                    })}}
+                end
+                recovery_calls = recovery_calls + 1
+                return {exit_code=0, lines={}}
+            end
+
+            local outcome = runner.run(run_options)
+
+            assert.equals(1, bootstrap_calls)
+            assert.equals(0, recovery_calls)
+            assert.equals(5, outcome.exit_code)
+            assert.equals(runner.failure_kinds.REGISTRATION,
+                outcome.error.kind)
+            assert.equals(ResultState.REGISTRATION_ERROR,
+                outcome.result.state)
+            assert.equals(outcome.error.message,
+                outcome.result.error.message)
+            assert.matches(case.phrase, outcome.error.message, 1, true)
+            assert.matches(case.action, outcome.error.message, 1, true)
+            assert.matches('Blocking run: blocking-run',
+                outcome.error.message, 1, true)
+            assert.matches('Generation: 9', outcome.error.message, 1, true)
+            assert.matches('State: queued', outcome.error.message, 1, true)
+            assert.is_nil(outcome.error.message:find(
+                'opaque host wording', 1, true))
+            assert.is_nil(outcome.error.message:find(
+                'selected specification', 1, true))
+            assert.is_nil(outcome.report)
+        end
+    end)
+
+    it('does not infer version guidance from generic registration text or code',
+            function()
+        local cases = {
+            {
+                name='generic-old-phrase',
+                response={
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind=runner.failure_kinds.REGISTRATION,
+                    message='incompatible automation package version in ' ..
+                        'unrelated registration detail',
+                },
+            },
+            {
+                name='unknown-code',
+                response={
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind=runner.failure_kinds.REGISTRATION,
+                    code='future_registration_code',
+                    message='future registration rejection',
+                },
+            },
+        }
+        for _, case in ipairs(cases) do
+            local recovery_calls = 0
+            local run_options = options(case.name)
+            run_options.invoke = function(_, arguments)
+                if arguments[3]:match('probe%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_PROBE protocol=2 core=true ' ..
+                            'timeout=function'}}
+                elseif arguments[3]:match('bootstrap%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_JSON ' .. json.encode(case.response)}}
+                end
+                recovery_calls = recovery_calls + 1
+                return {exit_code=0, lines={}}
+            end
+
+            local outcome = runner.run(run_options)
+
+            assert.equals(runner.exit_codes[
+                runner.failure_kinds.REGISTRATION], outcome.exit_code)
+            assert.equals(ResultState.REGISTRATION_ERROR,
+                outcome.result.state)
+            assert.matches(case.response.message, outcome.error.message,
+                1, true)
+            assert.is_nil(outcome.error.message:find(
+                'Running DFHack service:', 1, true))
+            assert.is_nil(outcome.error.message:find(
+                'fully exit Dwarf Fortress/DFHack', 1, true))
+            assert.equals(0, recovery_calls)
+        end
+    end)
+
+    it('rejects a malformed mismatch response without recovery', function()
+        local bootstrap_calls = 0
+        local recovery_calls = 0
+        local run_options = options('malformed-version-rejection')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                bootstrap_calls = bootstrap_calls + 1
+                return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                    schema='dwarfspec.error.v1',
+                    protocol=2,
+                    kind=runner.failure_kinds.REGISTRATION,
+                    code='package_version_mismatch',
+                    message='different version loaded',
+                    running_version='0.1.3',
+                })}}
+            end
+            recovery_calls = recovery_calls + 1
+            return {exit_code=0, lines={}}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(1, bootstrap_calls)
+        assert.equals(0, recovery_calls)
+        assert.equals(runner.exit_codes[
+            runner.failure_kinds.REGISTRATION], outcome.exit_code)
+        assert.equals(runner.failure_kinds.REGISTRATION, outcome.error.kind)
+        assert.equals(ResultState.REGISTRATION_ERROR, outcome.result.state)
+        assert.matches('DwarfSpec bootstrap response was invalid',
             outcome.error.message, 1, true)
-        assert.matches('Restart DFHack', outcome.error.message, 1, true)
+        assert.matches('requires requested version',
+            outcome.error.message, 1, true)
         assert.is_nil(outcome.report)
     end)
 
@@ -1298,6 +1520,107 @@ describe('DwarfSpec external runner', function()
             outcome.error.message)
     end)
 
+    it('preserves structured poll context when recovery is also rejected',
+            function()
+        local run_options = options('structured-poll-failure')
+        local status_calls, recovery_calls = 0, 0
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    run_options.run_id, RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                status_calls = status_calls + 1
+                return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                    schema='dwarfspec.error.v1', protocol=2,
+                    kind=runner.failure_kinds.HOST,
+                    code='event_cursor_ahead', message='cursor rejected',
+                    operation='status poll', run_id=run_options.run_id,
+                    generation=1, state='starting', after_sequence=4,
+                    last_sequence=3,
+                })}}
+            end
+            assert.matches('recover%.lua$', arguments[3])
+            recovery_calls = recovery_calls + 1
+            return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                schema='dwarfspec.error.v1', protocol=2,
+                kind=runner.failure_kinds.HOST,
+                code='run_not_found', message='run disappeared',
+                operation='recover', run_id=run_options.run_id,
+            })}}
+        end
+        local outcome = runner.run(run_options)
+        assert.equals(5, outcome.exit_code)
+        assert.equals(runner.failure_kinds.HOST, outcome.error.kind)
+        assert.matches('requested cursor 4, retained cursor 3',
+            outcome.error.message, 1, true)
+        assert.matches('recovery failed:', outcome.error.message, 1, true)
+        assert.matches('no longer retained', outcome.error.message, 1, true)
+        assert.equals(1, status_calls)
+        assert.equals(1, recovery_calls)
+        assert.equals(0, outcome.report.last_sequence)
+    end)
+
+    it('attributes a selected path only when subprocess output emitted it', function()
+        local run_options = options('emitted-selection')
+        local identity = 'tests/private-emitted-selection.ds.lua'
+        run_options.identities = {identity}
+        run_options.invoke = function()
+            return {exit_code=1, lines={'runner echoed ' .. identity}}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(4, outcome.exit_code)
+        assert.same(runner.failure_kinds.CONNECTION, outcome.error.kind)
+        assert.is_truthy(outcome.error.message:find(identity, 1, true))
+    end)
+
+    it('preserves connection preflight for every auxiliary command', function()
+        local cases = {
+            {name='abort', invoke=function(run_options)
+                return runner.abort(run_options, 'retained-run')
+            end},
+            {name='status', invoke=function(run_options)
+                return runner.status(run_options)
+            end},
+            {name='history', invoke=function(run_options)
+                return runner.history(run_options)
+            end},
+            {name='show', invoke=function(run_options)
+                return runner.inspect(run_options, 'retained-run')
+            end},
+            {name='logs', invoke=function(run_options)
+                return runner.logs(run_options, 'retained-run')
+            end},
+            {name='executor-recovery', invoke=function(run_options)
+                return runner.recover_executor(run_options, 'retained-run', 3,
+                    'operator verified clean state')
+            end},
+        }
+        for _, case in ipairs(cases) do
+            local run_options = options('command-' .. case.name)
+            local calls = 0
+            run_options.invoke = function()
+                calls = calls + 1
+                return {exit_code=7, lines={case.name .. ' probe unavailable'}}
+            end
+
+            local outcome = case.invoke(run_options)
+
+            assert.equals(4, outcome.exit_code, case.name)
+            assert.same(runner.failure_kinds.CONNECTION, outcome.error.kind,
+                case.name)
+            assert.is_truthy(outcome.error.message:find(
+                'DFHack connection probe through "bin/dwarfspec" exited with ' ..
+                    'code 7. Output: ' .. case.name .. ' probe unavailable',
+                1, true), case.name)
+            assert.equals(1, calls, case.name)
+        end
+    end)
+
     it('recovers one exact quarantined generation through host verification',
             function()
         local run_options = options('unused-recovery-id')
@@ -1329,5 +1652,86 @@ describe('DwarfSpec external runner', function()
             recovery_arguments[6], recovery_arguments[7],
         })
         assert.is_false(outcome.scheduler.quarantine.active)
+    end)
+
+    it('returns exit 5 for structured direct mutation rejections', function()
+        local cases = {
+            {
+                name='abort',
+                invoke=function(run_options)
+                    return runner.abort(run_options, 'direct-run')
+                end,
+                response={code='invalid_run_state', operation='abort',
+                    run_id='direct-run', generation=2, state='passed'},
+                expected='is passed',
+            },
+            {
+                name='recover-executor',
+                invoke=function(run_options)
+                    return runner.recover_executor(run_options,
+                        'direct-run', 2, 'verified clean')
+                end,
+                response={code='clean_state_unverified',
+                    operation='recover executor', run_id='direct-run',
+                    generation=2, reason='owned screen remains active'},
+                expected='Resolve remaining live resources',
+            },
+        }
+        for _, case in ipairs(cases) do
+            local run_options = options('direct-' .. case.name)
+            run_options.invoke = function(_, arguments)
+                if arguments[3]:match('probe%.lua$') then
+                    return {exit_code=0, lines={
+                        'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                end
+                local response = {schema='dwarfspec.error.v1', protocol=2,
+                    kind=runner.failure_kinds.HOST,
+                    message='structured direct rejection'}
+                for name, value in pairs(case.response) do
+                    response[name] = value
+                end
+                return {exit_code=0, lines={
+                    'DWARFSPEC_JSON ' .. json.encode(response),
+                }}
+            end
+            local outcome = case.invoke(run_options)
+            assert.equals(5, outcome.exit_code, case.name)
+            assert.equals(runner.failure_kinds.HOST, outcome.error.kind)
+            assert.equals(case.response.code, outcome.error.code)
+            assert.matches(case.expected, outcome.error.message, 1, true)
+        end
+    end)
+
+    it('appends structured acknowledgement detail to the original failure',
+            function()
+        local run_options = options('acknowledgement-secondary')
+        run_options.invoke = function(_, arguments)
+            if arguments[3]:match('probe%.lua$') then
+                return {exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+            elseif arguments[3]:match('bootstrap%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    run_options.run_id, RunState.STARTING, false)}
+            elseif arguments[3]:match('status%.lua$') then
+                return {exit_code=0, lines=transport_lines(arguments,
+                    run_options.run_id, RunState.FAILED, true)}
+            end
+            assert.matches('acknowledge%.lua$', arguments[3])
+            return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
+                schema='dwarfspec.error.v1', protocol=2,
+                kind=runner.failure_kinds.HOST,
+                code='owner_capability_rejected',
+                message='owner rejected', operation='acknowledgement',
+                run_id=run_options.run_id, generation=1, state='failed',
+            })}}
+        end
+        local outcome = runner.run(run_options)
+        assert.equals(runner.failure_kinds.TEST, outcome.error.kind)
+        assert.equals(6, outcome.exit_code)
+        assert.matches('could not acknowledge terminal result:',
+            outcome.error.message, 1, true)
+        assert.matches('owning DwarfSpec process', outcome.error.message,
+            1, true)
+        assert.is_falsy(outcome.error.message:find('table:', 1, true))
     end)
 end)

@@ -243,12 +243,88 @@ describe('automation host ownership', function()
             outstanding_run_id)
     end)
 
+    it('rejects stale polling context before lease or cursor mutation',
+            function()
+        local service = require('dwarfspec.host.service.service')
+        local run = host.start('.', '.', options('poll-rejection'))
+
+        ---Captures the complete detached service state.
+        ---@return table
+        local function summary()
+            return service.summary({namespace=dfhack})
+        end
+
+        ---Asserts one polling rejection leaves all service state unchanged.
+        ---@param expected_code string
+        ---@param operation function
+        ---@return table
+        local function rejected(expected_code, operation)
+            local before = summary()
+            local ok, detail = pcall(operation)
+            assert.is_false(ok)
+            assert.equals(expected_code, detail.code)
+            assert.same(before, summary())
+            return detail
+        end
+
+        local stale = rejected('generation_mismatch', function()
+            host.poll_transport(run.run_id, run.owner_capability, 0,
+                run.generation + 1)
+        end)
+        assert.equals(run.generation + 1, stale.generation)
+        assert.equals(run.generation, stale.current_generation)
+
+        local cursor = rejected('event_cursor_ahead', function()
+            host.poll_transport(run.run_id, run.owner_capability,
+                #run.event_journal.events + 1, run.generation)
+        end)
+        assert.equals(#run.event_journal.events + 1, cursor.after_sequence)
+        assert.equals(#run.event_journal.events, cursor.last_sequence)
+
+        local unauthorized = rejected('owner_capability_rejected', function()
+            host.poll_transport(run.run_id, 'wrong-owner-capability', 0,
+                run.generation)
+        end)
+        assert.equals(run.state, unauthorized.state)
+
+        local missing = rejected('run_not_found', function()
+            host.transport('missing-poll-run', 0, 'event read', 1)
+        end)
+        assert.equals('missing-poll-run', missing.run_id)
+    end)
+
     it('rejects overlap and ignores a callback after abort', function()
         local run = host.start('.', '.', options('owner'))
         assert.equals('starting', run.state)
-        assert.has_error(function()
+        local reused = host.start('.', '.', options('owner'))
+        assert.equals(run, reused)
+        assert.equals(1, dfhack.dwarfspec.generation)
+
+        local changed = options('owner')
+        changed.specs = {'different.ds.lua'}
+        local conflict_accepted, conflict = pcall(function()
+            host.start('.', '.', changed)
+        end)
+        assert.is_false(conflict_accepted)
+        assert.equals(SchedulerFailureKind.REQUEST_KEY_CONFLICT, conflict.code)
+        assert.equals('owner', conflict.blocking_run_id)
+        assert.equals(1, conflict.blocking_generation)
+        assert.equals('starting', conflict.state)
+        assert.equals('request key is already bound to a different request',
+            conflict.reason)
+
+        local accepted, rejection = pcall(function()
             host.start('.', '.', options('overlap'))
-        end, 'automation run owner is already starting')
+        end)
+        assert.is_false(accepted)
+        assert.same({
+            code=SchedulerFailureKind.PROJECT_BUSY,
+            message='This project already has an outstanding DwarfSpec run.',
+            blocking_run_id='owner',
+            blocking_generation=1,
+            state='starting',
+            reason='project already owns an outstanding run',
+        }, rejection)
 
         local cleaned = false
         run.cleanup_module.push(run.cleanup_registry, 'abort proof', function()
@@ -302,9 +378,16 @@ describe('automation host ownership', function()
         local retained = host.start('.', '.', options('retained'))
         local aborted = host.abort(retained.run_id,
             retained.owner_capability)
-        assert.has_error(function()
+        local accepted, rejection = pcall(function()
             host.start('.', '.', options('replacement'))
-        end, 'automation run retained has an unobserved aborted result')
+        end)
+        assert.is_false(accepted)
+        assert.equals(SchedulerFailureKind.PROJECT_BUSY, rejection.code)
+        assert.equals('retained', rejection.blocking_run_id)
+        assert.equals(retained.generation, rejection.blocking_generation)
+        assert.equals('aborted', rejection.state)
+        assert.equals('project already owns an outstanding run',
+            rejection.reason)
 
         host.acknowledge(aborted.run_id, aborted.generation,
             aborted.owner_capability)
@@ -374,10 +457,13 @@ describe('automation host ownership', function()
         assert.equals(1, aborted.mount_cleanup_state.active_screen_count)
         assert.matches('mount lifecycle verification failed',
             aborted.failure_details[1].message, 1, true)
-        assert.has_error(function()
+        local recovered, rejection = pcall(function()
             host.recover_executor(aborted.run_id, aborted.generation,
                 'unsafe fixture recovery')
-        end, 'quarantined mount state is not clean')
+        end)
+        assert.is_false(recovered)
+        assert.equals('clean_state_unverified', rejection.code)
+        assert.equals('quarantined mount state is not clean', rejection.reason)
     end)
 
     it('refuses cleanup confirmation for retained ownership evidence',
@@ -401,10 +487,13 @@ describe('automation host ownership', function()
 
         assert.is_false(aborted.cleanup_confirmed)
         assert.is_false(aborted.mount_cleanup_state.verified)
-        assert.has_error(function()
+        local recovered, rejection = pcall(function()
             host.recover_executor(aborted.run_id, aborted.generation,
                 'unsafe retained ownership recovery')
-        end, 'quarantined mount state is not clean')
+        end)
+        assert.is_false(recovered)
+        assert.equals('clean_state_unverified', rejection.code)
+        assert.equals('quarantined mount state is not clean', rejection.reason)
     end)
 
     it('never confirms cleanup after an earlier cleanup action failed',

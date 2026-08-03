@@ -18,23 +18,40 @@ function M.authorize_abort(registry, request)
     assert(type(request.reason) == 'string' and request.reason ~= '' and
         #request.reason <= 1024,
         'abort reason must be a nonempty bounded string')
-    assert(registry.active_run_id == run.run_id and ACTIVE[run.state] and
-        not run.terminal, 'only the active run can be aborted')
+    if registry.active_run_id ~= run.run_id or not ACTIVE[run.state] or
+            run.terminal then
+        validation.reject('invalid_run_state',
+            'Only the active run can be aborted.', {
+                operation='abort', run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
     return run
 end
 
 ---Clears executor quarantine after authoritative clean-state verification.
 function M.recover_executor(registry, request, context)
-    assert(registry.quarantine.active,
-        'automation executor is not quarantined')
     assert(type(request) == 'table',
         'executor recovery request must be a table')
     assert(request.service_instance_id == registry.service_instance_id,
         'executor recovery service identity does not match')
-    assert(request.run_id == registry.quarantine.run_id,
-        'executor recovery run identity does not match quarantine')
-    assert(request.generation == registry.quarantine.generation,
-        'executor recovery generation does not match quarantine')
+    if not registry.quarantine.active then
+        validation.reject('invalid_run_state',
+            'The DwarfSpec executor is not quarantined.', {
+                operation='recover executor', run_id=request.run_id,
+                generation=request.generation, state='not_quarantined',
+            })
+    end
+    if request.run_id ~= registry.quarantine.run_id or
+            request.generation ~= registry.quarantine.generation then
+        validation.reject('quarantine_mismatch',
+            'The requested generation does not own executor quarantine.', {
+                operation='recover executor', run_id=request.run_id,
+                generation=request.generation,
+                blocking_run_id=registry.quarantine.run_id,
+                blocking_generation=registry.quarantine.generation,
+            })
+    end
     assert(type(request.reason) == 'string' and request.reason ~= '' and
         #request.reason <= 1024,
         'executor recovery reason must be a nonempty bounded string')
@@ -44,8 +61,15 @@ function M.recover_executor(registry, request, context)
     assert(type(context.verify_clean_state) == 'function',
         'executor recovery requires an authoritative verifier')
     local verified, detail = context.verify_clean_state(request.proof)
-    assert(verified == true, detail or
-        'executor clean-state proof was rejected')
+    if verified ~= true then
+        validation.reject('clean_state_unverified',
+            'Executor clean state could not be verified.', {
+                operation='recover executor', run_id=request.run_id,
+                generation=request.generation,
+                reason=validation.safe_reason(detail,
+                    'clean-state proof was rejected'),
+            })
+    end
     transitions.clear_quarantine(registry)
     return {recovered=true}
 end
@@ -53,10 +77,20 @@ end
 ---Acknowledges one exact owner-retained terminal result after persistence.
 function M.acknowledge(registry, request, context)
     local run = validation.authorize_owner(registry, request, 'acknowledgement')
-    assert(run.terminal and TERMINAL[run.state],
-        'only a terminal run can be acknowledged')
-    assert(run.acknowledged ~= true and run.discarded ~= true,
-        'terminal run has already been released')
+    if not run.terminal or not TERMINAL[run.state] then
+        validation.reject('invalid_run_state',
+            'Only a terminal run can be acknowledged.', {
+                operation='acknowledgement', run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
+    if run.acknowledged == true or run.discarded == true then
+        validation.reject('invalid_run_state',
+            'The terminal run has already been released.', {
+                operation='acknowledgement', run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
     local persistence = request.persistence
     assert(type(persistence) == 'table' and persistence.succeeded == true,
         'acknowledgement requires successful persistence')
@@ -73,10 +107,20 @@ end
 ---Releases one exact retained terminal result through operator authority.
 function M.discard(registry, request, context)
     local run = validation.exact_run(registry, request, 'discard')
-    assert(run.terminal and TERMINAL[run.state],
-        'only a terminal run can be discarded')
-    assert(run.acknowledged ~= true and run.discarded ~= true,
-        'terminal run has already been released')
+    if not run.terminal or not TERMINAL[run.state] then
+        validation.reject('invalid_run_state',
+            'Only a terminal run can be discarded.', {
+                operation='discard', run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
+    if run.acknowledged == true or run.discarded == true then
+        validation.reject('invalid_run_state',
+            'The terminal run has already been released.', {
+                operation='discard', run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
     assert(type(request.reason) == 'string' and request.reason ~= '' and
         #request.reason <= 1024,
         'discard reason must be a nonempty bounded string')
@@ -93,8 +137,14 @@ end
 ---Authorizes an operator recovery abort without owner impersonation.
 function M.authorize_operator_abort(registry, request, context)
     local run = validation.exact_run(registry, request, 'operator abort')
-    assert(registry.active_run_id == run.run_id and ACTIVE[run.state] and
-        not run.terminal, 'only the active run can be force-aborted')
+    if registry.active_run_id ~= run.run_id or not ACTIVE[run.state] or
+            run.terminal then
+        validation.reject('invalid_run_state',
+            'Only the active run can be force-aborted.', {
+                operation='operator abort', run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
     assert(type(request.reason) == 'string' and request.reason ~= '' and
         #request.reason <= 1024,
         'operator abort reason must be a nonempty bounded string')

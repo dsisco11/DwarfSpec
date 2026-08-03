@@ -2,6 +2,7 @@
 
 local M = {}
 local events = require('dwarfspec.protocol.events')
+local adapter_errors = require('dwarfspec.protocol.adapter_errors')
 local EventType = require('dwarfspec.protocol.enums.event_types')
 local diagnostic_formatter = require('dwarfspec.controller.reporting.diagnostic_formatter')
 local focus =
@@ -11,7 +12,6 @@ local focus_warning =
 local schemas = require('dwarfspec.protocol.schemas')
 local SchedulerFailureKind =
     require('dwarfspec.protocol.enums.scheduler_failure_kinds')
-local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
 
 local PREFIX = 'DWARFSPEC_JSON '
 local OWNER_PREFIX = 'DWARFSPEC_OWNER '
@@ -20,26 +20,17 @@ local OWNER_PREFIX = 'DWARFSPEC_OWNER '
 ---@param report table
 ---@return table
 local function validate_error(report)
-    events.copy_json(report, 'adapter error response')
-    assert(report.protocol == 2,
-        'unsupported DwarfSpec protocol: ' .. tostring(report.protocol))
-    assert(report.kind == RunnerFailureKind.REGISTRATION or
-        report.kind == RunnerFailureKind.EXECUTOR_QUARANTINED,
-        'unsupported DwarfSpec adapter error kind: ' .. tostring(report.kind))
-    assert(type(report.message) == 'string' and report.message ~= '',
-        'DwarfSpec adapter error message must be a non-empty string')
-    if report.kind == RunnerFailureKind.EXECUTOR_QUARANTINED then
-        assert(type(report.blocking_run_id) == 'string' and
-            report.blocking_run_id ~= '',
-            'DwarfSpec quarantine error requires blocking run id')
-        assert(type(report.blocking_generation) == 'number' and
-            report.blocking_generation > 0 and
-            report.blocking_generation % 1 == 0,
-            'DwarfSpec quarantine error requires blocking generation')
-        assert(type(report.reason) == 'string' and report.reason ~= '',
-            'DwarfSpec quarantine error requires a reason')
-    end
-    return report
+    return adapter_errors.validate(report)
+end
+
+---Wraps one malformed adapter-error diagnostic for bootstrap orchestration.
+---@param value any
+---@return table
+local function invalid_adapter_error(value)
+    return {
+        invalid_adapter_error=true,
+        message=tostring(value),
+    }
 end
 
 ---Returns every machine-readable report payload in output order.
@@ -109,7 +100,9 @@ end
 function M.parse_transport_response(lines, expected, decoder)
     local report, payload = decode_report(lines, decoder)
     if report.schema == 'dwarfspec.error.v1' then
-        return nil, payload, validate_error(report)
+        local valid, response_error = pcall(validate_error, report)
+        if not valid then error(invalid_adapter_error(response_error), 0) end
+        return nil, payload, response_error
     end
     if report.schema ~= 'dwarfspec.transport.v2' then
         error('unsupported DwarfSpec report schema: ' ..

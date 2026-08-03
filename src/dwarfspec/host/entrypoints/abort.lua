@@ -47,9 +47,13 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local run = host.abort(run_id, owner_capability)
-local transport = host.transport(run.run_id, after_sequence)
-print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
-    :format(transport.protocol, transport.run_id,
-        transport.snapshot.state, transport.generation))
-print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+local response = require('dwarfspec.host.entrypoints.operation_response')
+response.execute(function()
+    local run = host.abort(run_id, owner_capability)
+    return host.transport(run.run_id, after_sequence)
+end, function(transport)
+    print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
+        :format(transport.protocol, transport.run_id,
+            transport.snapshot.state, transport.generation))
+    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+end, require('json').encode)

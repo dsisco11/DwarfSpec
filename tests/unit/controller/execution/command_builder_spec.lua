@@ -36,6 +36,8 @@ describe('controller command builder', function()
         }, builder.bootstrap(value, 'run'))
         assert.same({'lua', '-f', value.host_scripts.status, 'run', 'owner', '7'},
             builder.poll(value, 'run', 'owner', 7))
+        assert.same({'lua', '-f', value.host_scripts.status, 'run', 'owner',
+            '7', '3'}, builder.poll(value, 'run', 'owner', 7, 3))
         assert.same({'lua', '-f', value.host_scripts.run_query, 'show', 'run'},
             builder.query(value, 'show', 'run'))
         assert.same({'lua', '-f', value.host_scripts.scheduler_status},

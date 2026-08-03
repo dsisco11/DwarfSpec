@@ -160,6 +160,35 @@ complete terminal result without writing a file. A terminal service generation
 is acknowledged only after its file replacement succeeds, or after successful
 no-results validation.
 
+### Connection preflight diagnostics
+
+`dwarfspec run` completes discovery and selection before it starts the DFHack
+connection preflight. A connection failure therefore does not implicate the
+selected specification path. The path is included in a diagnostic only when
+DFHack's subprocess output itself includes it.
+
+Every connection preflight failure exits with code 4, but its message identifies
+the failed boundary and the action needed to investigate it:
+
+- an invocation failure reports the resolved runner path and the original
+  process-launch error;
+- a nonzero probe exit reports the numeric exit code and bounded probe output;
+- a missing response marker reports that no probe response was found and
+  includes bounded probe output;
+- multiple response markers report the observed count and bounded probe output;
+- a malformed response reports the first grammar error and the bounded
+  offending response line;
+- a protocol mismatch reports the expected and observed protocol versions;
+- a core-context failure reports that DFHack did not provide a healthy core Lua
+  context; and
+- a timeout-capability failure reports that the required timeout support is
+  unavailable.
+
+Captured subprocess output is length-bounded and sanitized before display. For
+a protocol mismatch, reinstall or upgrade DwarfSpec from one package artifact
+so that the external controller and bundled DFHack probe come from the same
+DwarfSpec release. The probe protocol remains version 2 for this release.
+
 Focus diagnostics are nonfatal. They do not change test counts, terminal state,
 cleanup confirmation, or the process result. A run whose tests pass and whose
 cleanup is confirmed therefore exits with code 0 even when it retains focus
@@ -178,6 +207,47 @@ Exit codes are stable:
 | 7 | Execution timeout or the distinct queue-timeout classification |
 | 8 | Active abort or the distinct pre-activation cancellation classification |
 
+When bootstrap rejects a command because the running DFHack process retained a
+different DwarfSpec package version, the diagnostic identifies the running
+service version and the current command version separately. Save and fully
+exit Dwarf Fortress/DFHack, relaunch it, and retry the command. Returning to
+the title screen or unloading the world does not unload the process-wide
+DwarfSpec service. This remains a registration rejection with
+`registration_error` result state and exit code 5.
+
+### Structured host rejections
+
+Expected service decisions use a validated `dwarfspec.error.v1` response. The
+command selects guidance from its stable code and safe context fields; it does
+not parse the human-readable message. These decisions preserve the existing
+runner classification, persisted result state, and exit code 5.
+
+| Code | When it is reported | Operator action |
+|---|---|---|
+| `package_version_mismatch` | DFHack retained a different process-wide DwarfSpec package version | Fully exit and relaunch Dwarf Fortress/DFHack, then retry with the current command package |
+| `project_busy` | Another retained run owns the project | Wait for and consume the blocking run's result |
+| `request_key_conflict` | A request identity was reused for different work | Retry the identical request or choose a new run identity |
+| `result_path_busy` | Another retained run owns the result destination | Wait for result consumption or choose another result destination |
+| `service_not_loaded` | The requested mutating, recovery, polling, or event operation has no loaded service | Start a run to load the service; for an in-flight command, treat the service as unavailable and retry only after checking its result |
+| `run_not_found` | The named retained run does not exist | Verify the run identity; do not fabricate local run state |
+| `generation_mismatch` | The run exists at a newer generation | Refresh authoritative run state and retry with its current generation |
+| `invalid_run_state` | The operation is not legal in the run's current state | Inspect the reported state and choose the matching status, recovery, acknowledgement, or discard workflow |
+| `owner_capability_rejected` | The caller no longer owns the requested run operation | Stop retrying with the rejected ownership context and recover or inspect through the command that created the run |
+| `quarantine_mismatch` | Executor recovery targeted a different quarantined run generation | Refresh scheduler state and recover the reported blocking run |
+| `clean_state_unverified` | Executor recovery could not prove native cleanup | Keep the executor quarantined and resolve the reported cleanup condition before retrying recovery |
+| `event_cursor_ahead` | Polling requested events beyond the retained journal | Restart observation from the reported retained cursor without advancing the local cursor |
+
+Normal read-only absence is not a rejection. Service-wide status reports
+`service_loaded`, and history, inspection, and log queries report `found` when
+the service or run is unavailable. A structured domain rejection means the
+host understood a valid operation and declined it without performing the
+forbidden state change. A bridge failure means the external `dfhack-run`
+process failed, timed out, or returned no valid response; its diagnostic may
+include only bounded, sanitized subprocess output. Malformed responses,
+corrupt service state, impossible invariants, and unexpected host exceptions
+remain internal faults instead of being mislabeled as operator-correctable
+rejection codes.
+
 On timeout, interruption, or malformed transport after bootstrap, the command
 asks the service to recover from authoritative current state. A queued run is
 cancelled without native cleanup; an active run is aborted with cleanup. If
@@ -185,8 +255,9 @@ recovery also fails, the original runner failure remains primary.
 
 ## Protocol compatibility
 
-All bundled commands and adapters use `dwarfspec.transport.v2`, structured
-`dwarfspec.event.v1` events, `dwarfspec.run.v2` snapshots, and
-`dwarfspec.result.v2` results. Legacy `dwarfspec.run.v1` reports and formatted
-progress lines are not accepted. Readers reject unknown schemas and protocols
-instead of guessing.
+All bundled commands and adapters use `dwarfspec.transport.v2`; expected
+adapter rejections use `dwarfspec.error.v1`; structured events use
+`dwarfspec.event.v1`; snapshots use `dwarfspec.run.v2`; and results use
+`dwarfspec.result.v2`. Legacy `dwarfspec.run.v1` reports and formatted progress
+lines are not accepted. Readers reject unknown schemas and protocols instead
+of guessing.

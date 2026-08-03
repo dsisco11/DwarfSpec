@@ -5,11 +5,11 @@ local glob = require('dwarfspec.support.glob')
 local result_store = require('dwarfspec.controller.result_store')
 
 local command_line = {
-    version='0.2.1',
+    version='0.2.2',
 }
 
 local HELP = [[
-DwarfSpec 0.2.1 - live DFHack automation with in-process Busted
+DwarfSpec 0.2.2 - live DFHack automation with in-process Busted
 
 Usage:
   dwarfspec

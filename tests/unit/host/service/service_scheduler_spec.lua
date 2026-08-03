@@ -255,6 +255,73 @@ describe('multi-project automation service scheduler', function()
             renewed.execution_lease.expires_at_ms)
     end)
 
+    it('returns structured mutation rejections without changing service state',
+            function()
+        local dependencies = environment()
+        local project = register_project(dependencies, 1)
+        local admitted = service.submit(project.project_id,
+            submission('structured-mutation'), dependencies)
+
+        ---Captures and verifies one rejected operation atomically.
+        ---@param expected_code string
+        ---@param operation function
+        ---@return table
+        local function rejected(expected_code, operation)
+            local scheduler_before = service.scheduler_snapshot(dependencies)
+            local run_before = service.snapshot(admitted.identity.run_id,
+                dependencies)
+            local ok, detail = pcall(operation)
+            assert.is_false(ok)
+            assert.equals(expected_code, detail.code)
+            assert.same(scheduler_before,
+                service.scheduler_snapshot(dependencies))
+            assert.same(run_before, service.snapshot(
+                admitted.identity.run_id, dependencies))
+            assert.is_nil(detail.owner_capability)
+            assert.is_nil(detail.authorization_proof)
+            return detail
+        end
+
+        local missing = owner_request(admitted, {run_id='missing-run'})
+        missing.reason = 'cancel'
+        rejected('run_not_found', function()
+            service.cancel(missing, dependencies)
+        end)
+        local stale = owner_request(admitted, {
+            generation=admitted.identity.generation + 1, reason='cancel',
+        })
+        rejected('generation_mismatch', function()
+            service.cancel(stale, dependencies)
+        end)
+        local unauthorized = owner_request(admitted, {
+            owner_capability='wrong-owner-capability-00000000001',
+            reason='cancel',
+        })
+        rejected('owner_capability_rejected', function()
+            service.cancel(unauthorized, dependencies)
+        end)
+
+        service.activate_next(dependencies)
+        local active_request = owner_request(admitted, {reason='cancel'})
+        local invalid = rejected('invalid_run_state', function()
+            service.cancel(active_request, dependencies)
+        end)
+        assert.equals(RunState.STARTING, invalid.state)
+
+        local cleanup_called = false
+        dependencies.abort_active = function()
+            cleanup_called = true
+        end
+        local rejected_abort = owner_request(admitted, {
+            owner_capability='wrong-owner-capability-00000000001',
+            reason='abort',
+        })
+        rejected('owner_capability_rejected', function()
+            service.abort(rejected_abort, dependencies)
+        end)
+        assert.is_false(cleanup_called)
+    end)
+
     it('expires queued owners without cleanup and blocks only their project',
             function()
         local dependencies, clock = environment()
@@ -488,6 +555,7 @@ describe('multi-project automation service scheduler', function()
         assert.is_nil(first.snapshot.owner_capability)
         assert.is_nil(service.events(first.identity.run_id, 0,
             dependencies).events[1].owner_capability)
+        local after_reuse = service.summary(dependencies)
 
         local mismatched_retry = submission('alpha')
         mismatched_retry.selection.identities = {'tests/live/other.ds.lua'}
@@ -497,12 +565,15 @@ describe('multi-project automation service scheduler', function()
         assert.equals(SchedulerFailureKind.REQUEST_KEY_CONFLICT,
             conflict.kind)
         assert.equals(first.identity.run_id, conflict.identity.run_id)
+        assert.same(after_reuse, service.summary(dependencies))
 
+        local before_busy = service.summary(dependencies)
         local busy = service.submit(projects[1].project_id,
             submission('alpha-other'), dependencies)
         assert.is_false(busy.accepted)
         assert.equals(SchedulerFailureKind.PROJECT_BUSY, busy.kind)
         assert.equals(first.identity.run_id, busy.identity.run_id)
+        assert.same(before_busy, service.summary(dependencies))
 
         local second = service.submit(projects[2].project_id,
             submission('alpha'), dependencies)
@@ -702,7 +773,8 @@ describe('multi-project automation service scheduler', function()
         assert.equals(1, service.snapshot(third.identity.run_id,
             dependencies).queue_position)
 
-        assert.has_error(function()
+        local before_recovery = service.scheduler_snapshot(dependencies)
+        local recovered, rejection = pcall(function()
             service.recover_executor({
                 service_instance_id=scheduler.service_instance_id,
                 run_id=scheduler.quarantine.run_id,
@@ -710,8 +782,11 @@ describe('multi-project automation service scheduler', function()
                 reason='stale recovery',
                 proof={clean=true},
             }, dependencies)
-        end, 'executor recovery generation does not match quarantine')
-        assert.has_error(function()
+        end)
+        assert.is_false(recovered)
+        assert.equals('quarantine_mismatch', rejection.code)
+        assert.same(before_recovery, service.scheduler_snapshot(dependencies))
+        recovered, rejection = pcall(function()
             service.recover_executor({
                 service_instance_id=scheduler.service_instance_id,
                 run_id=scheduler.quarantine.run_id,
@@ -719,7 +794,11 @@ describe('multi-project automation service scheduler', function()
                 reason='unverified recovery',
                 proof={clean=true},
             }, dependencies)
-        end, 'fixture clean-state proof was rejected')
+        end)
+        assert.is_false(recovered)
+        assert.equals('clean_state_unverified', rejection.code)
+        assert.equals('fixture clean-state proof was rejected', rejection.reason)
+        assert.same(before_recovery, service.scheduler_snapshot(dependencies))
         assert.is_true(service.scheduler_snapshot(
             dependencies).quarantine.active)
 

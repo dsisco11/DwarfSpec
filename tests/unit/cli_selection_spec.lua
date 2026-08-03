@@ -288,7 +288,7 @@ describe('DwarfSpec CLI selection', function()
         assert.matches('Usage: dwarfspec run', output.text, 1, true)
         output.text = ''
         assert.equals(0, cli.main({'version'}, context))
-        assert.equals('DwarfSpec 0.2.1\n', output.text)
+        assert.equals('DwarfSpec 0.2.2\n', output.text)
         assert.is_nil(invoked)
     end)
 

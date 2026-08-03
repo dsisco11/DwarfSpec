@@ -123,10 +123,16 @@ function M.new(dependencies)
     ---@param run_id string
     ---@param owner_capability string
     ---@param after_sequence integer
+    ---@param generation integer|nil
     ---@return string[]
-    function builder.poll(options, run_id, owner_capability, after_sequence)
-        return {'lua', '-f', builder.host_script(options, 'status'), run_id,
-            owner_capability, tostring(after_sequence)}
+    function builder.poll(options, run_id, owner_capability, after_sequence,
+            generation)
+        local arguments = {'lua', '-f', builder.host_script(options, 'status'),
+            run_id, owner_capability, tostring(after_sequence)}
+        if generation ~= nil then
+            table.insert(arguments, tostring(generation))
+        end
+        return arguments
     end
 
     ---Builds a scheduler-status command vector.

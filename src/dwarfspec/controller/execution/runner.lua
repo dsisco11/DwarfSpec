@@ -8,6 +8,8 @@ local result_interpreter_module = require('dwarfspec.controller.execution.result
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
 local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
 local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
+local SchedulerFailureKind =
+    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 local M = {}
 
@@ -80,6 +82,9 @@ end
 ---@param value any
 ---@return string
 local function clean_message(value)
+    if type(value) == 'table' and type(value.message) == 'string' then
+        return value.message
+    end
     return tostring(value):gsub('^.-:%d+: ', '')
 end
 
@@ -130,16 +135,45 @@ local recovery = run_recovery_module.new({
     clean_message=clean_message,
 })
 
----Adds actionable guidance to one host registration rejection.
----@param message string
+---Formats one validated host registration rejection.
+---@param rejection table
 ---@return string
-local function registration_message(message)
-    local result = 'DwarfSpec bootstrap rejected: ' .. message
-    if message:match('incompatible automation package version') then
-        result = result .. '. Restart DFHack to unload the running ' ..
-            'DwarfSpec service before using a different package version'
+local function registration_message(rejection)
+    if rejection.code == 'package_version_mismatch' then
+        return ('DwarfSpec could not start because DFHack already has a ' ..
+            'different DwarfSpec version loaded.\n\n' ..
+            '  Running DFHack service: %s\n' ..
+            '  Current DwarfSpec command: %s\n\n' ..
+            'To use %s, save and fully exit Dwarf Fortress/DFHack, ' ..
+            'relaunch it,\nand retry this command. Returning to the title ' ..
+            'screen or unloading the\nworld will not unload the process-wide ' ..
+            'DwarfSpec service.'):format(rejection.running_version,
+                rejection.requested_version, rejection.requested_version)
     end
-    return result
+    if rejection.code == SchedulerFailureKind.PROJECT_BUSY then
+        return ('DwarfSpec could not start because this project already has ' ..
+            'an outstanding run.\n\n  Blocking run: %s\n  Generation: %d\n' ..
+            '  State: %s\n\nWait for that run to finish and consume its result, ' ..
+            'then retry this command.'):format(rejection.blocking_run_id,
+                rejection.blocking_generation, rejection.state)
+    end
+    if rejection.code == SchedulerFailureKind.REQUEST_KEY_CONFLICT then
+        return ('DwarfSpec could not start because this request identity is ' ..
+            'already bound to a different run.\n\n  Blocking run: %s\n' ..
+            '  Generation: %d\n  State: %s\n\nRetry the identical request, ' ..
+            'or submit this work with a new run identity.'):format(
+                rejection.blocking_run_id, rejection.blocking_generation,
+                rejection.state)
+    end
+    if rejection.code == SchedulerFailureKind.RESULT_PATH_BUSY then
+        return ('DwarfSpec could not start because the configured result ' ..
+            'destination is reserved by another run.\n\n  Blocking run: %s\n' ..
+            '  Generation: %d\n  State: %s\n\nWait until that result is ' ..
+            'consumed, or choose a different result destination.'):format(
+                rejection.blocking_run_id, rejection.blocking_generation,
+                rejection.state)
+    end
+    return 'DwarfSpec bootstrap rejected: ' .. rejection.message
 end
 
 
@@ -253,13 +287,20 @@ function M.run(options)
                     bootstrap_rejected = true
                     local message = response_error.kind ==
                         RunnerFailureKind.REGISTRATION and
-                        registration_message(response_error.message) or
+                        registration_message(response_error) or
                         response_error.message
                     fail(response_error.kind, message)
                 end
                 owner_capability = capability
                 return transport
             else
+                if type(transport) == 'table' and
+                        transport.invalid_adapter_error then
+                    bootstrap_rejected = true
+                    fail(RunnerFailureKind.REGISTRATION,
+                        'DwarfSpec bootstrap response was invalid: ' ..
+                            clean_message(transport.message))
+                end
                 if type(transport) == 'table' and transport.exit_code and
                         not transport.retryable then
                     error(transport, 0)
@@ -385,11 +426,11 @@ function M.run(options)
             event_cursor)
         if not acknowledge_ok and not runner_error then
             runner_error = failure(RunnerFailureKind.HOST,
-                tostring(acknowledge_error))
+                clean_message(acknowledge_error))
         elseif not acknowledge_ok then
             runner_error.message = runner_error.message ..
                 '; could not acknowledge terminal result: ' ..
-                    tostring(acknowledge_error)
+                    clean_message(acknowledge_error)
         end
     end
 

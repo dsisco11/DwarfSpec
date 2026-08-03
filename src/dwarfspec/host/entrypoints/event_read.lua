@@ -1,9 +1,11 @@
 -- Production adapter that reads events without renewing a run lease.
 
-local run_id, after_sequence_text = ...
+local run_id, after_sequence_text, generation_text = ...
 assert(run_id, 'run id argument is required')
 local after_sequence = assert(tonumber(after_sequence_text),
     'event cursor argument must be numeric')
+local generation = generation_text and assert(tonumber(generation_text),
+    'generation argument must be numeric') or nil
 
 ---Configures pure-Lua lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
@@ -41,5 +43,9 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local transport = host.transport(run_id, after_sequence)
-print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+local response = require('dwarfspec.host.entrypoints.operation_response')
+response.execute(function()
+    return host.transport(run_id, after_sequence, 'event read', generation)
+end, function(transport)
+    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+end, require('json').encode)

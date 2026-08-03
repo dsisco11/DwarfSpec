@@ -1,10 +1,12 @@
 -- Production adapter that polls a run through cursor-based transport.
 
-local run_id, owner_capability, after_sequence_text = ...
+local run_id, owner_capability, after_sequence_text, generation_text = ...
 assert(run_id, 'run id argument is required')
 assert(owner_capability, 'owner capability argument is required')
 local after_sequence = assert(tonumber(after_sequence_text),
     'event cursor argument must be numeric')
+local generation = generation_text and assert(tonumber(generation_text),
+    'generation argument must be numeric') or nil
 
 ---Configures pure-Lua module lookup and derives the DwarfSpec runtime root.
 ---@return string, string|nil
@@ -48,10 +50,13 @@ end
 
 local root, lua_root = package_root()
 local host = load_host(root, lua_root)
-local poll_ok, transport = pcall(host.poll_transport, run_id,
-    owner_capability, after_sequence)
-if not poll_ok then qerror(transport) end
-print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
-    :format(transport.protocol, transport.run_id,
-        transport.snapshot.state, transport.generation))
-print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+local response = require('dwarfspec.host.entrypoints.operation_response')
+response.execute(function()
+    return host.poll_transport(run_id, owner_capability, after_sequence,
+        generation)
+end, function(transport)
+    print(('DWARFSPEC protocol=%d run_id=%s state=%s generation=%d')
+        :format(transport.protocol, transport.run_id,
+            transport.snapshot.state, transport.generation))
+    print('DWARFSPEC_JSON ' .. host.encode_transport(transport))
+end, require('json').encode)

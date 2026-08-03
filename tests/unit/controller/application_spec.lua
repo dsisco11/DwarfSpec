@@ -70,7 +70,7 @@ describe('DwarfSpec application', function()
 
         output.text = ''
         assert.equals(0, application.main({'version'}, context))
-        assert.equals('DwarfSpec 0.2.1\n', output.text)
+        assert.equals('DwarfSpec 0.2.2\n', output.text)
 
         output.text = ''
         assert.equals(0, application.main({'list'}, context))

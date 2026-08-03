@@ -4,10 +4,28 @@ local events = require('dwarfspec.protocol.events')
 local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
 local projects = require('dwarfspec.host.service.projects')
 local ResultPolicy = require('dwarfspec.protocol.enums.result_policies')
+local adapter_errors = require('dwarfspec.protocol.adapter_errors')
 
 local M = {}
 local SUBMISSION_FIELDS = {selection=true, request_key=true, owner_kind=true,
     queue_lease_ms=true, execution_lease_ms=true, lease_check_frames=true}
+
+---Raises one expected scheduler mutation rejection as a structured value.
+---@param code string
+---@param message string
+---@param fields table
+function M.reject(code, message, fields)
+    error(adapter_errors.domain(code, message, fields), 0)
+end
+
+---Returns one non-empty bounded reason safe for an adapter rejection.
+---@param value any
+---@param fallback string
+---@return string
+function M.safe_reason(value, fallback)
+    if type(value) ~= 'string' or value == '' then value = fallback end
+    return adapter_errors.safe_message(value)
+end
 
 ---Returns one validated monotonic timestamp.
 function M.current_time(context)
@@ -88,17 +106,30 @@ function M.authorize_owner(registry, request, operation)
         operation .. ' project id must be a nonempty string')
     assert(type(request.run_id) == 'string' and request.run_id ~= '',
         operation .. ' run id must be a nonempty string')
-    local run = assert(registry.runs[request.run_id],
-        'automation run was not found: ' .. tostring(request.run_id))
+    local run = registry.runs[request.run_id]
+    if not run then
+        M.reject('run_not_found', 'DwarfSpec run was not found.',
+            {operation=operation, run_id=request.run_id})
+    end
     assert(run.project_id == request.project_id,
         operation .. ' project identity does not match run')
-    assert(run.generation == request.generation,
-        operation .. ' generation does not match run')
-    assert(type(request.owner_capability) == 'string' and
-        request.owner_capability ~= '',
-        operation .. ' owner capability must be a nonempty string')
-    assert(run.owner_capability == request.owner_capability,
-        operation .. ' owner capability does not match run')
+    if run.generation ~= request.generation then
+        M.reject('generation_mismatch',
+            'The requested run generation is stale.', {
+                operation=operation, run_id=run.run_id,
+                generation=request.generation,
+                current_generation=run.generation,
+            })
+    end
+    if type(request.owner_capability) ~= 'string' or
+            request.owner_capability == '' or
+            run.owner_capability ~= request.owner_capability then
+        M.reject('owner_capability_rejected',
+            'The run owner capability was rejected.', {
+                operation=operation, run_id=run.run_id,
+                generation=run.generation, state=run.state,
+            })
+    end
     M.run_identity(registry, run)
     return run
 end
@@ -108,12 +139,21 @@ function M.exact_run(registry, request, operation)
     assert(type(request) == 'table', operation .. ' request must be a table')
     assert(request.service_instance_id == registry.service_instance_id,
         operation .. ' service identity does not match')
-    local run = assert(registry.runs[request.run_id],
-        'automation run was not found: ' .. tostring(request.run_id))
+    local run = registry.runs[request.run_id]
+    if not run then
+        M.reject('run_not_found', 'DwarfSpec run was not found.',
+            {operation=operation, run_id=request.run_id})
+    end
     assert(run.project_id == request.project_id,
         operation .. ' project identity does not match run')
-    assert(run.generation == request.generation,
-        operation .. ' generation does not match run')
+    if run.generation ~= request.generation then
+        M.reject('generation_mismatch',
+            'The requested run generation is stale.', {
+                operation=operation, run_id=run.run_id,
+                generation=request.generation,
+                current_generation=run.generation,
+            })
+    end
     M.run_identity(registry, run)
     return run
 end

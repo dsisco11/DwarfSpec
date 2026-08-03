@@ -39,6 +39,12 @@ local function fixture(behavior)
             if behavior.parse_error then error(behavior.parse_error) end
             return behavior.recovery_transport
         end,
+        parse_transport_response=function(_, expected)
+            record.parse_expected=expected
+            if behavior.parse_error then error(behavior.parse_error) end
+            if behavior.rejection then return nil, behavior.rejection end
+            return behavior.recovery_transport, nil
+        end,
         transport=function(_, _, arguments, expected, operation)
             record.transport={arguments=arguments, expected=expected,
                 operation=operation}
@@ -107,6 +113,29 @@ describe('controller run recovery', function()
         assert.same('timeout', original.kind)
         assert.same('original timeout; recovery failed: recovery exited with 1',
             original.message)
+    end)
+
+    it('appends a structured recovery rejection without replacing the primary',
+            function()
+        for _, code in ipairs({
+            'service_not_loaded', 'run_not_found', 'generation_mismatch',
+            'invalid_run_state', 'owner_capability_rejected',
+            'quarantine_mismatch', 'clean_state_unverified',
+            'event_cursor_ahead',
+        }) do
+            local rejection_message = 'structured ' .. code .. ' guidance'
+            local service = fixture({rejection={kind='host', code=code,
+                message=rejection_message}})
+            local _, detail = service.after_failure({}, 'runner', 'run-1',
+                'secret-owner', {run_id='run-1', generation=2}, 4)
+            local original = {kind='timeout', exit_code=7,
+                message='original timeout'}
+            service.preserve_error(original, detail)
+            assert.equals('timeout', original.kind)
+            assert.equals(7, original.exit_code)
+            assert.equals('original timeout; recovery failed: ' ..
+                rejection_message, original.message)
+        end
     end)
 
     it('classifies queued and active explicit abort cleanup outcomes', function()
