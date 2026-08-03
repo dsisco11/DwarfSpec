@@ -138,48 +138,15 @@ end
 
 local root, lua_root = package_root()
 local json = require('json')
+local adapter_errors = require('dwarfspec.protocol.adapter_errors')
 local RunnerFailureKind = require('dwarfspec.protocol.enums.runner_failure_kinds')
-local SchedulerFailureKind =
-    require('dwarfspec.protocol.enums.scheduler_failure_kinds')
-
----Removes an incidental Lua source location from an adapter error.
----@param value any
----@return string
-local function clean_message(value)
-    return tostring(value):gsub('^.-:%d+: ', '')
-end
 
 ---Emits one canonical bootstrap rejection.
 ---@param value any
 local function emit_error(value)
-    local response = {
-        schema='dwarfspec.error.v1',
-        protocol=2,
-        kind=RunnerFailureKind.REGISTRATION,
-        message=clean_message(value),
-    }
-    if type(value) == 'table' and
-            value.code == 'package_version_mismatch' then
-        response.code = value.code
-        response.running_version = value.running_version
-        response.requested_version = value.requested_version
-        response.message = type(value.message) == 'string' and
-            value.message ~= '' and value.message or
-            'DFHack already has a different DwarfSpec version loaded'
-    elseif type(value) == 'table' and
-            value.kind == SchedulerFailureKind.EXECUTOR_QUARANTINED then
-        response.kind = RunnerFailureKind.EXECUTOR_QUARANTINED
-        response.blocking_run_id = value.blocking_run_id
-        response.blocking_generation = value.blocking_generation
-        response.reason = value.reason
-        response.message = ('DwarfSpec executor is quarantined by run %s ' ..
-            'generation %d: %s. Recover it with: dwarfspec ' ..
-            'recover-executor %s --generation %d'):format(
-                value.blocking_run_id, value.blocking_generation,
-                value.reason, value.blocking_run_id,
-                value.blocking_generation)
-    end
-    print('DWARFSPEC_JSON ' .. json.encode(response, {pretty=false}))
+    local encoded = adapter_errors.serialize(
+        value, RunnerFailureKind.REGISTRATION, json.encode)
+    print('DWARFSPEC_JSON ' .. encoded)
 end
 
 ---Registers one run without emitting a partial success response.

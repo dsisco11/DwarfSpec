@@ -267,13 +267,53 @@ describe('controller transport client', function()
         assert.same(lines[8], truncated_output:sub(-#lines[8]))
     end)
 
-    it('classifies nonzero exits before canonical parsing', function()
+    it('preserves structured errors from nonzero subprocess results', function()
+        local lines = {'DWARFSPEC_JSON ' .. json.encode({
+            schema='dwarfspec.error.v1', protocol=2,
+            kind='registration', code='package_version_mismatch',
+            message='different version loaded',
+            running_version='0.2.1', requested_version='0.2.2',
+        })}
         local transport = client()
         local ok, detail = pcall(transport.transport, {
-            invoke=function() return {exit_code=4, lines={}} end}, 'runner', {}, {}, 'poll')
+            invoke=function() return {exit_code=4, lines=lines} end,
+        }, 'runner', {}, {}, 'poll')
+        assert.is_false(ok)
+        assert.equals('package_version_mismatch', detail.code)
+        assert.equals('0.2.1', detail.running_version)
+
+        local response, owner, bootstrap_error = transport.bootstrap_response({
+            invoke=function() return {exit_code=4, lines=lines} end,
+        }, 'runner', {}, {})
+        assert.is_nil(response)
+        assert.is_nil(owner)
+        assert.equals('package_version_mismatch', bootstrap_error.code)
+    end)
+
+    it('classifies nonzero exits without valid JSON using bounded output', function()
+        local transport = client()
+        local ok, detail = pcall(transport.transport, {
+            invoke=function()
+                return {exit_code=4, lines={string.rep('x', 3000)}}
+            end}, 'runner', {}, {}, 'poll')
         assert.is_false(ok)
         assert.same('host', detail.kind)
         assert.matches('poll exited with 4', detail.message)
+        assert.matches('Output:', detail.message, 1, true)
+        assert.is_true(#detail.message < 2200)
+
+        local malformed = {'DWARFSPEC_JSON ' .. json.encode({
+            schema='dwarfspec.error.v1', protocol=2,
+            kind='registration', code='package_version_mismatch',
+            message='different version loaded', running_version='0.2.1',
+        })}
+        ok, detail = pcall(transport.transport, {
+            invoke=function() return {exit_code=4, lines=malformed} end,
+        }, 'runner', {}, {}, 'poll')
+        assert.is_false(ok)
+        assert.equals('host', detail.kind)
+        assert.is_nil(detail.code)
+        assert.matches('DWARFSPEC_JSON', detail.message, 1, true)
     end)
 
     it('rejects missing and malformed canonical envelopes', function()

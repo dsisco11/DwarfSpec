@@ -1,6 +1,7 @@
 -- Process-wide multi-project automation service runtime and public boundary.
 
 local projects = require('dwarfspec.host.service.projects')
+local adapter_errors = require('dwarfspec.protocol.adapter_errors')
 local events = require('dwarfspec.protocol.events')
 local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
 local RunState = require('dwarfspec.protocol.enums.run_states')
@@ -199,12 +200,11 @@ end
 ---@param requested_version string
 ---@return table
 local function package_version_mismatch(running_version, requested_version)
-    return {
-        code='package_version_mismatch',
-        message='DFHack already has a different DwarfSpec version loaded',
+    return adapter_errors.domain('package_version_mismatch',
+        'DFHack already has a different DwarfSpec version loaded', {
         running_version=running_version,
         requested_version=requested_version,
-    }
+    })
 end
 
 ---Validates one project client's compatibility with the running service.

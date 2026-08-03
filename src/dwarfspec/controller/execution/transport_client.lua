@@ -116,6 +116,27 @@ local function format_output(lines)
     return output
 end
 
+---Returns a validated canonical adapter error from subprocess output, if any.
+---@param result table
+---@param expected table|nil
+---@param decoder function|nil
+---@return table|nil
+local function adapter_error_from_result(result, expected, decoder)
+    local parsed, _, _, adapter_error = pcall(
+        reports.parse_transport_response, result.lines, expected or {}, decoder)
+    if parsed then return adapter_error end
+    return nil
+end
+
+---Builds one bounded fallback for a nonzero subprocess result.
+---@param operation string
+---@param result table
+---@return string
+local function nonzero_message(operation, result)
+    return ('DwarfSpec %s exited with %s. Output: %s'):format(
+        operation, safe_tostring(result.exit_code), format_output(result.lines))
+end
+
 ---Finds exact probe marker lines without treating embedded marker text as a report.
 ---@param lines any
 ---@return string[]
@@ -279,8 +300,10 @@ function M.new(dependencies)
                     operation, clean_message(result))), 0)
         end
         if result.exit_code ~= 0 then
-            error(failure(kinds.HOST,
-                ('DwarfSpec %s exited with %d'):format(operation, result.exit_code)), 0)
+            local adapter_error = adapter_error_from_result(
+                result, expected, options.decode_json)
+            if adapter_error then error(adapter_error, 0) end
+            error(failure(kinds.HOST, nonzero_message(operation, result)), 0)
         end
         return reports.parse_transport(result.lines, expected, options.decode_json)
     end
@@ -300,8 +323,11 @@ function M.new(dependencies)
             error(detail, 0)
         end
         if result.exit_code ~= 0 then
+            local adapter_error = adapter_error_from_result(
+                result, expected, options.decode_json)
+            if adapter_error then return nil, nil, adapter_error end
             error(failure(kinds.REGISTRATION,
-                'DwarfSpec bootstrap exited with ' .. result.exit_code), 0)
+                nonzero_message('bootstrap', result)), 0)
         end
         local transport, _, adapter_error = reports.parse_transport_response(
             result.lines, expected, options.decode_json)
@@ -321,8 +347,10 @@ function M.new(dependencies)
                 'DwarfSpec status bridge failed: ' .. clean_message(result)), 0)
         end
         if result.exit_code ~= 0 then
-            error(failure(kinds.HOST,
-                'DwarfSpec status exited with ' .. result.exit_code), 0)
+            local adapter_error = adapter_error_from_result(
+                result, nil, options.decode_json)
+            if adapter_error then error(adapter_error, 0) end
+            error(failure(kinds.HOST, nonzero_message('status', result)), 0)
         end
         return reports.parse_status(result.lines, options.decode_json)
     end
@@ -342,9 +370,11 @@ function M.new(dependencies)
                     operation, clean_message(result))), 0)
         end
         if result.exit_code ~= 0 then
+            local adapter_error = adapter_error_from_result(
+                result, nil, options.decode_json)
+            if adapter_error then error(adapter_error, 0) end
             error(failure(kinds.HOST,
-                ('DwarfSpec %s query exited with %d'):format(
-                    operation, result.exit_code)), 0)
+                nonzero_message(operation .. ' query', result)), 0)
         end
         local parsers = {
             history=reports.parse_run_history,

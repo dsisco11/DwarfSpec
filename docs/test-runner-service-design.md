@@ -955,6 +955,71 @@ It must also solve authentication, encryption, project synchronization,
 package deployment, and remote path identity. Enabling DFHack's unrestricted
 remote command listener is not considered a DwarfSpec remote execution design.
 
+## Adapter error boundary
+
+`dwarfspec.error.v1` is the sole adapter-error envelope. Its `kind` is the
+existing broad runner classification chosen at the adapter/controller boundary;
+its optional `code` is a stable domain subtype chosen by the service or
+scheduler layer that owns the rejection decision. Adding a code or safe field
+is additive and does not change result state, exit code, retry, recovery, or
+primary-versus-secondary error precedence.
+
+The shared contract accepts `registration`, `executor_quarantined`, and `host`
+as envelope kinds. A domain rejection has a non-empty `code` and `message`.
+Generic compatibility errors omit `code`; unknown future codes retain their
+message and safe common fields but receive no code-specific guidance. Known
+codes must contain exactly their required subtype fields. A malformed known
+payload is an invalid host response, while an unexpected exception becomes a
+bounded uncoded `host` error. These cases remain observably distinct.
+Known subtype policy is centralized privately in
+`dwarfspec.protocol.adapter_errors`; a separate public immutable code enum is
+not introduced while package mismatch is the only migrated coded subtype.
+Additional accepted families extend that registry as their contracts land.
+
+The common optional fields are `operation`, `run_id`, `generation`, `state`,
+`blocking_run_id`, and `blocking_generation`. Identifiers and states are
+non-empty strings; generations are positive integers. Subtype contracts add
+only fields needed for remediation. Owner capabilities, authorization proofs,
+package or project roots, result paths, and unrelated machine paths are
+forbidden. The package mismatch code requires `running_version` and
+`requested_version`. The existing uncoded executor-quarantine compatibility
+shape requires `blocking_run_id`, `blocking_generation`, and `reason`.
+
+Adapters may emit a valid error envelope with either a zero or nonzero process
+exit during migration. The controller inspects and validates the envelope
+before interpreting the process exit. A valid structured rejection is retained;
+a nonzero result without one remains a bridge or host failure and includes only
+bounded, sanitized captured output. Healthy transports, read-only response
+schemas, and the `DWARFSPEC_PROBE` connection grammar do not use this envelope.
+
+The canonical package-mismatch diagnostic remains the persisted result error
+and CLI text. This additive envelope extraction does not require a package
+version bump: it preserves schema and protocol versions, existing generic and
+quarantine shapes, runner classifications, result states, and exit meanings.
+
+### Entrypoint failure inventory
+
+| Entrypoint | Expected domain rejection | Other structured state | Boundary or internal failures |
+|---|---|---|---|
+| `bootstrap` | package mismatch, scheduler admission, executor quarantine | successful `dwarfspec.transport.v2` | option, module-load, and unexpected host faults |
+| `abort` | run identity, ownership, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `acknowledge` | generation, ownership, cursor, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `cancel` | run identity, ownership, cursor, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `discard` | run identity, generation, cursor, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `recover` | run identity, ownership, cursor, cleanup, and state rejection | successful transport | argument, load, and unexpected host faults |
+| `recover_executor` | quarantine identity, generation, cursor, and clean-state rejection | successful transport | argument, load, and unexpected host faults |
+| `status` | run identity, ownership, and cursor rejection | successful transport | subprocess/bridge, argument, load, and unexpected host faults |
+| `event_read` | run identity and cursor rejection | successful transport | argument, load, and unexpected host faults |
+| `scheduler_status` | none | `dwarfspec.status.v1` or scheduler/transport response | argument, load, and unexpected host faults |
+| `run_query` | invalid query arguments | history, inspection, or log response schemas, including `found=false` | argument, load, and unexpected host faults |
+| `probe` | none | `DWARFSPEC_PROBE` connection state | unavailable or malformed DFHack context |
+
+The domain families listed above are migrated separately. Query `found=false`,
+an unloaded status response, healthy scheduler state, and probe state are data,
+not rejections. Process invocation failures belong to the controller's
+connection or host classification. Assertions for malformed internal requests,
+impossible invariants, module loading, and serialization remain uncoded faults.
+
 ## Compatibility
 
 The existing CLI command names and exit-code meanings remain stable. Terminal
@@ -996,6 +1061,7 @@ The implementation uses these module boundaries:
 | `dwarfspec.protocol.enums.test_statuses` | Immutable Busted result-status identifiers. |
 | `dwarfspec.protocol.enums.result_policies` | Immutable result-persistence policies. |
 | `dwarfspec.protocol.schemas` | Versioned service, scheduler, run, transport, event, and result validation. |
+| `dwarfspec.protocol.adapter_errors` | Canonical adapter-error construction, field policy, validation, and safe serialization. |
 | `dwarfspec.host.service.snapshots` | Immutable run, history, and scheduler snapshot construction. |
 | `dwarfspec.host.execution.host` | Busted execution, native state transitions, and cleanup. |
 | `dwarfspec.host.execution.output_handler` | Translation from Busted callbacks into service events. |
