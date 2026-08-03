@@ -75,43 +75,43 @@ Assumptions and open questions:
       package version bump, and record the compatibility rationale.
 
 Phase 1: Establish the additive rejection contract
-    ☐ Exit with one documented package-mismatch subtype and exact user-facing
+    ☒ Exit with one documented package-mismatch subtype and exact user-facing
       semantics before changing service or controller behavior.
 
 1.1 Wire contract:
-    ☐ Extend the existing `dwarfspec.error.v1` registration envelope with the
+    ☒ Extend the existing `dwarfspec.error.v1` registration envelope with the
       optional `code` field rather than creating another schema or changing the
       broad `kind='registration'` classification.
-    ☐ Define `code='package_version_mismatch'` as requiring non-empty string
+    ☒ Define `code='package_version_mismatch'` as requiring non-empty string
       fields `running_version` and `requested_version`.
-    ☐ Define `running_version` as the package version retained by the
+    ☒ Define `running_version` as the package version retained by the
       process-wide DFHack service registry.
-    ☐ Define `requested_version` as the package version supplied by the host
+    ☒ Define `requested_version` as the package version supplied by the host
       loaded from the current DwarfSpec command's package.
-    ☐ Keep `message` required and independently meaningful so diagnostics
+    ☒ Keep `message` required and independently meaningful so diagnostics
       remain useful to consumers that only display the base error text.
-    ☐ Preserve generic registration envelopes without `code` and preserve
+    ☒ Preserve generic registration envelopes without `code` and preserve
       the existing structured executor-quarantine envelope unchanged.
-    ☐ Define unknown future registration codes to fall back to their
+    ☒ Define unknown future registration codes to fall back to their
       supplied message rather than being mistaken for a version mismatch.
 
 1.2 User-facing diagnostic:
-    ☐ Settle and test wording that labels both values without the ambiguous
+    ☒ Settle and test wording that labels both values without the ambiguous
       `expected` and `found` terms:
-        ☐ `Running DFHack service: <running_version>`.
-        ☐ `Current DwarfSpec command: <requested_version>`.
-    ☐ Explain that DFHack already has a different DwarfSpec version loaded.
-    ☐ Direct the operator to save, fully exit Dwarf Fortress/DFHack,
+        ☒ `Running DFHack service: <running_version>`.
+        ☒ `Current DwarfSpec command: <requested_version>`.
+    ☒ Explain that DFHack already has a different DwarfSpec version loaded.
+    ☒ Direct the operator to save, fully exit Dwarf Fortress/DFHack,
       relaunch it, and retry the command.
-    ☐ State that returning to the title screen or unloading the world does
+    ☒ State that returning to the title screen or unloading the world does
       not unload the process-wide DwarfSpec service.
-    ☐ Keep the diagnostic independent of project paths, selected specs,
+    ☒ Keep the diagnostic independent of project paths, selected specs,
       installation-tree paths, and assumptions about how DFHack was launched.
 
 Completion criteria:
-    ☐ The contract distinguishes machine-readable classification from
+    ☒ The contract distinguishes machine-readable classification from
       human-readable wording and defines every new field unambiguously.
-    ☐ Existing registration, quarantine, failure-kind, result-state, and
+    ☒ Existing registration, quarantine, failure-kind, result-state, and
       exit-code contracts remain explicitly preserved.
 
 Phase 2: Produce structured mismatch rejections in the host

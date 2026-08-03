@@ -673,6 +673,64 @@ The JSON payload uses `dwarfspec.transport.v2` and contains:
 }
 ```
 
+### Adapter rejection envelope
+
+An expected adapter rejection uses the existing `dwarfspec.error.v1`
+envelope. `kind` remains the broad runner classification, `message` remains a
+required non-empty diagnostic that is meaningful without subtype handling,
+and the optional `code` identifies a machine-readable subtype. Adding a code
+does not change the runner failure kind, persisted result state, or process
+exit code associated with `kind`.
+
+A package-version mismatch is a registration rejection with this contract:
+
+```json
+{
+  "schema": "dwarfspec.error.v1",
+  "protocol": 2,
+  "kind": "registration",
+  "code": "package_version_mismatch",
+  "message": "DFHack already has a different DwarfSpec version loaded",
+  "running_version": "0.2.1",
+  "requested_version": "0.2.2"
+}
+```
+
+For `code="package_version_mismatch"`, `running_version` and
+`requested_version` are required non-empty strings. `running_version` is the
+DwarfSpec package version retained by the process-wide DFHack service
+registry. `requested_version` is the version supplied by the host loaded from
+the current DwarfSpec command's package. The response does not include project
+paths, selected specifications, installation-tree paths, package roots, or
+assumptions about how DFHack was launched.
+
+The controller renders a valid package-version mismatch with this canonical
+diagnostic, substituting the two structured values:
+
+```text
+DwarfSpec could not start because DFHack already has a different DwarfSpec version loaded.
+
+  Running DFHack service: 0.2.1
+  Current DwarfSpec command: 0.2.2
+
+To use 0.2.2, save and fully exit Dwarf Fortress/DFHack, relaunch it,
+and retry this command. Returning to the title screen or unloading the
+world will not unload the process-wide DwarfSpec service.
+```
+
+Generic registration envelopes without `code` remain valid. An unknown future
+registration code is displayed using its supplied `message` and must not be
+treated as a package-version mismatch. The existing
+`kind="executor_quarantined"` envelope and its required
+`blocking_run_id`, `blocking_generation`, and `reason` fields are unchanged.
+Generic and package-version registration rejections retain the `registration`
+runner failure kind, `registration_error` persisted result state, and exit
+code 5. The executor-quarantine envelope retains the `executor_quarantined`
+runner failure kind and persisted result state, exit code 5, and its existing
+recovery behavior. A package-version mismatch does not initiate recovery and
+does not modify the service registry, projects, queue, scheduler, ownership,
+timestamps, or retained runs.
+
 `OUTPUT`, `DETAIL`, `HOST_ERROR`, and similar formatted protocol lines are not
 part of the service transport and are neither emitted nor parsed. The
 canonical JSON line contains all command feedback.
@@ -906,9 +964,10 @@ queue timeout receive distinct classifications without changing existing code
 meanings.
 
 Native run snapshots use `dwarfspec.run.v2`; adapters use
-`dwarfspec.transport.v2`; event envelopes use `dwarfspec.event.v1`; and
-persisted results use `dwarfspec.result.v2`. Legacy `dwarfspec.run.v1` reports
-and formatted progress lines are unsupported. Schema identifiers version each
+`dwarfspec.transport.v2`; expected adapter rejections use
+`dwarfspec.error.v1`; event envelopes use `dwarfspec.event.v1`; and persisted
+results use `dwarfspec.result.v2`. Legacy `dwarfspec.run.v1` reports and
+formatted progress lines are unsupported. Schema identifiers version each
 document type independently; readers reject unknown versions instead of
 guessing.
 

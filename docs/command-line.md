@@ -207,6 +207,14 @@ Exit codes are stable:
 | 7 | Execution timeout or the distinct queue-timeout classification |
 | 8 | Active abort or the distinct pre-activation cancellation classification |
 
+When bootstrap rejects a command because the running DFHack process retained a
+different DwarfSpec package version, the diagnostic identifies the running
+service version and the current command version separately. Save and fully
+exit Dwarf Fortress/DFHack, relaunch it, and retry the command. Returning to
+the title screen or unloading the world does not unload the process-wide
+DwarfSpec service. This remains a registration rejection with
+`registration_error` result state and exit code 5.
+
 On timeout, interruption, or malformed transport after bootstrap, the command
 asks the service to recover from authoritative current state. A queued run is
 cancelled without native cleanup; an active run is aborted with cleanup. If
@@ -214,8 +222,9 @@ recovery also fails, the original runner failure remains primary.
 
 ## Protocol compatibility
 
-All bundled commands and adapters use `dwarfspec.transport.v2`, structured
-`dwarfspec.event.v1` events, `dwarfspec.run.v2` snapshots, and
-`dwarfspec.result.v2` results. Legacy `dwarfspec.run.v1` reports and formatted
-progress lines are not accepted. Readers reject unknown schemas and protocols
-instead of guessing.
+All bundled commands and adapters use `dwarfspec.transport.v2`; expected
+adapter rejections use `dwarfspec.error.v1`; structured events use
+`dwarfspec.event.v1`; snapshots use `dwarfspec.run.v2`; and results use
+`dwarfspec.result.v2`. Legacy `dwarfspec.run.v1` reports and formatted progress
+lines are not accepted. Readers reject unknown schemas and protocols instead
+of guessing.
