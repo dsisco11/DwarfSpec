@@ -271,6 +271,48 @@ local function options(run_id)
     }
 end
 
+---Runs one representative failed probe through the complete run boundary.
+---@param case table
+---@return table, table
+local function run_probe_failure(case)
+    local run_options = options('connection-' .. case.name)
+    run_options.identities = {'tests/private-selected-' .. case.name .. '.ds.lua'}
+    run_options.test_glob = 'tests/private-selection-' .. case.name .. '/*.lua'
+    run_options.result_path = 'D:/results/connection-' .. case.name .. '.json'
+    local persisted
+    run_options.result_store = {
+        write=function(_, result) persisted = result end,
+    }
+    local calls = 0
+    local bootstrap_attempted = false
+    run_options.invoke = function(_, arguments)
+        calls = calls + 1
+        if not arguments[3]:match('probe%.lua$') then
+            bootstrap_attempted = true
+        end
+        if case.exception then error(case.exception) end
+        return case.result
+    end
+
+    local outcome = runner.run(run_options)
+
+    assert.equals(4, outcome.exit_code, case.name)
+    assert.same(runner.failure_kinds.CONNECTION, outcome.error.kind, case.name)
+    assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state, case.name)
+    assert.equals(ResultState.CONNECTION_ERROR, persisted.state, case.name)
+    assert.is_false(bootstrap_attempted, case.name)
+    assert.equals(1, calls, case.name)
+    assert.is_truthy(outcome.error.message:find(case.message, 1, true), case.name)
+    for _, selected_path in ipairs({
+            run_options.project_root, run_options.test_glob,
+            run_options.identities[1],
+        }) do
+        assert.is_falsy(outcome.error.message:find(selected_path, 1, true),
+            case.name .. ': ' .. selected_path)
+    end
+    return outcome, persisted
+end
+
 describe('DwarfSpec external runner', function()
     it('streams progress and returns zero only after passing cleanup', function()
         local calls = 0
@@ -848,19 +890,35 @@ describe('DwarfSpec external runner', function()
             outcome.error.message, 1, true)
     end)
 
-    it('returns a connection failure before bootstrap', function()
-        local run_options = options('connection-run')
-        run_options.invoke = function()
-            return {exit_code=1, lines={'not running'}}
+    it('preserves orchestration outcomes for every probe failure category', function()
+        local cases = {
+            {name='invocation', exception='process launch failed',
+                message='Could not invoke DFHack runner "bin/dwarfspec":'},
+            {name='nonzero', result={exit_code=1, lines={'not running'}},
+                message='exited with code 1. Output: not running'},
+            {name='missing', result={exit_code=0, lines={'ordinary output'}},
+                message='emitted no DwarfSpec probe report'},
+            {name='multiple', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
+                }}, message='emitted 2 DwarfSpec probe reports'},
+            {name='malformed', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true',
+                }}, message='malformed DwarfSpec probe report'},
+            {name='protocol', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function',
+                }}, message='controller expects 2, probe reported 3'},
+            {name='core', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=false timeout=function',
+                }}, message='reported core=false'},
+            {name='timeout', result={exit_code=0, lines={
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=nil',
+                }}, message='reported timeout=nil'},
+        }
+        for _, case in ipairs(cases) do
+            local outcome = run_probe_failure(case)
+            assert.is_nil(outcome.report, case.name)
         end
-        local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
-            outcome.exit_code)
-        assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state)
-        assert.matches('DFHack connection probe through "bin/dwarfspec" ' ..
-            'exited with code 1. Output: not running', outcome.error.message,
-            1, true)
-        assert.is_nil(outcome.report)
     end)
 
     it('classifies a missing configured runner as a dependency failure',
@@ -881,21 +939,6 @@ describe('DwarfSpec external runner', function()
         assert.equals(ResultState.DEPENDENCY_ERROR, persisted.state)
         assert.is_nil(persisted.run_id)
         assert.matches('configured DFHack runner was not found',
-            outcome.error.message, 1, true)
-    end)
-
-    it('classifies a probe launch exception as an actionable connection error',
-            function()
-        local run_options = options('probe-launch')
-        run_options.invoke = function()
-            error('process launch failed')
-        end
-        local outcome = runner.run(run_options)
-        assert.equals(runner.exit_codes[runner.failure_kinds.CONNECTION],
-            outcome.exit_code)
-        assert.equals(ResultState.CONNECTION_ERROR, outcome.result.state)
-        assert.matches('Could not invoke DFHack runner "bin/dwarfspec": ' ..
-            'process launch failed',
             outcome.error.message, 1, true)
     end)
 
@@ -1298,6 +1341,64 @@ describe('DwarfSpec external runner', function()
             outcome.exit_code)
         assert.equals('DwarfSpec run was not found: missing-run',
             outcome.error.message)
+    end)
+
+    it('attributes a selected path only when subprocess output emitted it', function()
+        local run_options = options('emitted-selection')
+        local identity = 'tests/private-emitted-selection.ds.lua'
+        run_options.identities = {identity}
+        run_options.invoke = function()
+            return {exit_code=1, lines={'runner echoed ' .. identity}}
+        end
+
+        local outcome = runner.run(run_options)
+
+        assert.equals(4, outcome.exit_code)
+        assert.same(runner.failure_kinds.CONNECTION, outcome.error.kind)
+        assert.is_truthy(outcome.error.message:find(identity, 1, true))
+    end)
+
+    it('preserves connection preflight for every auxiliary command', function()
+        local cases = {
+            {name='abort', invoke=function(run_options)
+                return runner.abort(run_options, 'retained-run')
+            end},
+            {name='status', invoke=function(run_options)
+                return runner.status(run_options)
+            end},
+            {name='history', invoke=function(run_options)
+                return runner.history(run_options)
+            end},
+            {name='show', invoke=function(run_options)
+                return runner.inspect(run_options, 'retained-run')
+            end},
+            {name='logs', invoke=function(run_options)
+                return runner.logs(run_options, 'retained-run')
+            end},
+            {name='executor-recovery', invoke=function(run_options)
+                return runner.recover_executor(run_options, 'retained-run', 3,
+                    'operator verified clean state')
+            end},
+        }
+        for _, case in ipairs(cases) do
+            local run_options = options('command-' .. case.name)
+            local calls = 0
+            run_options.invoke = function()
+                calls = calls + 1
+                return {exit_code=7, lines={case.name .. ' probe unavailable'}}
+            end
+
+            local outcome = case.invoke(run_options)
+
+            assert.equals(4, outcome.exit_code, case.name)
+            assert.same(runner.failure_kinds.CONNECTION, outcome.error.kind,
+                case.name)
+            assert.is_truthy(outcome.error.message:find(
+                'DFHack connection probe through "bin/dwarfspec" exited with ' ..
+                    'code 7. Output: ' .. case.name .. ' probe unavailable',
+                1, true), case.name)
+            assert.equals(1, calls, case.name)
+        end
     end)
 
     it('recovers one exact quarantined generation through host verification',

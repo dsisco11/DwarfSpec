@@ -190,48 +190,52 @@ Completion criteria:
     ☒ No connection-probe branch retains the old generic fallback.
 
 Phase 4: Lock down controller and runner compatibility
-    ☐ Exit with focused unit coverage proving the new detail does not change
+    ☒ Exit with focused unit coverage proving the new detail does not change
       established orchestration outcomes.
+        - Evidence: focused probe 8 successes, transport 18 successes, runner
+          32 successes, and result-interpreter 4 successes; 789 recursive unit
+          successes; Lua checks for 295 files; LuaLS valid declarations with no
+          diagnostics and invalid declarations with six expected warnings.
 
 4.1 Transport client tests:
-    ☐ Replace the combined process-exception/unhealthy-probe test with separate
+    ☒ Replace the combined process-exception/unhealthy-probe test with separate
       cases that assert the exact classification and meaningful message detail.
-    ☐ Verify a healthy marker as the only output line.
-    ☐ Verify a healthy marker with unrelated output before it.
-    ☐ Verify a healthy marker with unrelated output after it.
-    ☐ Verify invocation exceptions include the runner path and original error.
-    ☐ Verify nonzero exits with empty and non-empty output.
-    ☐ Verify empty successful output and successful output without a marker.
-    ☐ Verify malformed, missing-field, duplicate-field, and multiple-marker
+    ☒ Verify a healthy marker as the only output line.
+    ☒ Verify a healthy marker with unrelated output before it.
+    ☒ Verify a healthy marker with unrelated output after it.
+    ☒ Verify invocation exceptions include the runner path and original error.
+    ☒ Verify nonzero exits with empty and non-empty output.
+    ☒ Verify empty successful output and successful output without a marker.
+    ☒ Verify malformed, missing-field, duplicate-field, and multiple-marker
       responses.
-    ☐ Verify protocol mismatch reports expected and observed protocol values.
-    ☐ Verify `core=false` and every non-function `timeout` value independently.
-    ☐ Verify unknown optional fields are ignored.
-    ☐ Verify line, per-line, and total-output truncation boundaries.
-    ☐ Verify every case retains the connection failure kind.
+    ☒ Verify protocol mismatch reports expected and observed protocol values.
+    ☒ Verify `core=false` and every non-function `timeout` value independently.
+    ☒ Verify unknown optional fields are ignored.
+    ☒ Verify line, per-line, and total-output truncation boundaries.
+    ☒ Verify every case retains the connection failure kind.
 
 4.2 Runner and result tests:
-    ☐ Verify `runner.run()` returns exit code 4 for each representative probe
+    ☒ Verify `runner.run()` returns exit code 4 for each representative probe
       failure category.
-    ☐ Verify the persisted result remains in the connection-error state where
+    ☒ Verify the persisted result remains in the connection-error state where
       result persistence applies.
-    ☐ Verify run bootstrap is never attempted after probe failure.
-    ☐ Verify selected identities and spec paths do not appear in the connection
+    ☒ Verify run bootstrap is never attempted after probe failure.
+    ☒ Verify selected identities and spec paths do not appear in the connection
       explanation unless they were independently part of subprocess output.
-    ☐ Verify abort, status, history, show, logs, and executor-recovery commands
+    ☒ Verify abort, status, history, show, logs, and executor-recovery commands
       preserve their existing connection-failure behavior while surfacing the
       improved detail.
 
 4.3 Regression suite:
-    ☐ Run the focused host-entrypoint, transport-client, runner, and result
+    ☒ Run the focused host-entrypoint, transport-client, runner, and result
       interpreter unit specifications.
-    ☐ Run the complete recursive unit suite.
-    ☐ Run Lua syntax, formatting, and declaration checks for all changed files.
-    ☐ Run `git diff --check` and inspect the final focused diff.
+    ☒ Run the complete recursive unit suite.
+    ☒ Run Lua syntax, formatting, and declaration checks for all changed files.
+    ☒ Run `git diff --check` and inspect the final focused diff.
 
 Completion criteria:
-    ☐ Focused tests cover every classification row and boundary condition.
-    ☐ The complete unit and static-analysis suites pass without changing public
+    ☒ Focused tests cover every classification row and boundary condition.
+    ☒ The complete unit and static-analysis suites pass without changing public
       failure kinds, result states, or exit codes.
 
 Phase 5: Document and package the improved diagnostics

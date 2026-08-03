@@ -3,6 +3,8 @@
 local module = require('dwarfspec.controller.execution.transport_client')
 local json = require('dkjson')
 local RunState = require('dwarfspec.protocol.enums.run_states')
+local HEALTHY_PROBE =
+    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'
 
 ---Creates a transport client with a minimal command builder.
 ---@return table
@@ -34,6 +36,25 @@ local function connection_failure(lines, exit_code)
     assert.is_false(ok)
     assert.same('connection', detail.kind)
     return detail
+end
+
+---Verifies that one simulated subprocess result passes connection preflight.
+---@param lines any
+local function assert_connection_success(lines)
+    local transport = client()
+    local options = {invoke=function()
+        return {exit_code=0, lines=lines}
+    end}
+    assert.has_no.errors(function()
+        transport.verify_connection(options, 'runner')
+    end)
+end
+
+---Returns the bounded output excerpt from one missing-marker diagnostic.
+---@param lines any
+---@return string
+local function output_excerpt(lines)
+    return assert(connection_failure(lines).message:match('Output: (.*)$'))
 end
 
 ---Builds one valid terminal transport at the requested cursor.
@@ -71,24 +92,36 @@ describe('controller transport client', function()
         assert.is_truthy(detail.message:find('bridge unavailable', 1, true))
     end)
 
-    it('accepts one healthy probe among unrelated output', function()
-        local transport = client()
-        local options = {invoke=function() return {exit_code=0, lines={
-                'before',
-                'prefix DWARFSPEC_PROBE protocol=999 core=false timeout=nil',
-                'DWARFSPEC_PROBE timeout=function future=value protocol=2 core=true',
-                'after'}} end}
-        assert.has_no.errors(function() transport.verify_connection(options, 'runner') end)
+    it('accepts a healthy probe as the only output line', function()
+        assert_connection_success({HEALTHY_PROBE})
     end)
 
-    it('reports nonzero probe exits before parsing marker output', function()
-        local detail = connection_failure({
-            'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
+    it('accepts unrelated output before a healthy probe', function()
+        assert_connection_success({'before', HEALTHY_PROBE})
+    end)
+
+    it('accepts unrelated output after a healthy probe', function()
+        assert_connection_success({HEALTHY_PROBE, 'after'})
+    end)
+
+    it('ignores embedded markers and well-formed unknown fields', function()
+        assert_connection_success({
+            'prefix DWARFSPEC_PROBE protocol=999 core=false timeout=nil',
+            'DWARFSPEC_PROBE timeout=function future=value protocol=2 core=true',
+        })
+    end)
+
+    it('reports nonzero probe exits with empty and non-empty output', function()
+        local detail = connection_failure({}, 17)
+        assert.same('DFHack connection probe through "runner" exited with code 17. ' ..
+            'Output: <no output>', detail.message)
+
+        detail = connection_failure({
+            HEALTHY_PROBE,
             'subprocess failed',
         }, 17)
         assert.same('DFHack connection probe through "runner" exited with code 17. ' ..
-            'Output: DWARFSPEC_PROBE protocol=2 core=true timeout=function | ' ..
-            'subprocess failed', detail.message)
+            'Output: ' .. HEALTHY_PROBE .. ' | subprocess failed', detail.message)
     end)
 
     it('distinguishes missing and multiple probe reports', function()
@@ -140,26 +173,34 @@ describe('controller transport client', function()
         end
     end)
 
-    it('classifies protocol, core, and timeout health independently', function()
-        local cases = {
-            {
-                'DWARFSPEC_PROBE protocol=3 core=false timeout=nil',
-                'DwarfSpec protocol mismatch: controller expects 2, probe reported 3. ' ..
-                    'Check for mixed installed DwarfSpec package versions.',
-            },
-            {
-                'DWARFSPEC_PROBE protocol=2 core=unavailable timeout=nil',
-                'DFHack probe did not run in a healthy core Lua context: expected ' ..
-                    'core=true, reported core=unavailable.',
-            },
-            {
-                'DWARFSPEC_PROBE protocol=2 core=true timeout=nil',
-                'DFHack core Lua context is missing the required dfhack.timeout ' ..
-                    'function: reported timeout=nil.',
-            },
-        }
-        for _, case in ipairs(cases) do
-            assert.same(case[2], connection_failure({case[1]}).message)
+    it('reports expected and observed protocol values before health failures', function()
+        local detail = connection_failure({
+            'DWARFSPEC_PROBE protocol=3 core=false timeout=nil',
+        })
+        assert.same('DwarfSpec protocol mismatch: controller expects 2, probe ' ..
+            'reported 3. Check for mixed installed DwarfSpec package versions.',
+            detail.message)
+    end)
+
+    it('reports core=false independently from timeout health', function()
+        local detail = connection_failure({
+            'DWARFSPEC_PROBE protocol=2 core=false timeout=function',
+        })
+        assert.same('DFHack probe did not run in a healthy core Lua context: ' ..
+            'expected core=true, reported core=false.', detail.message)
+    end)
+
+    it('reports every non-function timeout type independently', function()
+        for _, timeout_type in ipairs({
+                'nil', 'boolean', 'number', 'string', 'userdata', 'thread',
+                'table', 'unavailable',
+            }) do
+            local detail = connection_failure({
+                'DWARFSPEC_PROBE protocol=2 core=true timeout=' .. timeout_type,
+            })
+            assert.same('DFHack core Lua context is missing the required ' ..
+                'dfhack.timeout function: reported timeout=' .. timeout_type .. '.',
+                detail.message)
         end
     end)
 
@@ -194,6 +235,36 @@ describe('controller transport client', function()
         assert.is_truthy(output:find('<output truncated> ', 1, true))
         assert.is_falsy(output:find('line-01-', 1, true))
         assert.is_truthy(output:find('line-10-', 1, true))
+    end)
+
+    it('enforces exact line-count and byte truncation boundaries', function()
+        local lines = {}
+        for index = 1, 8 do lines[index] = 'line-' .. index end
+        assert.same(table.concat(lines, ' | '), output_excerpt(lines))
+
+        table.insert(lines, 'line-9')
+        assert.same('<1 earlier lines omitted> | ' ..
+            table.concat({table.unpack(lines, 2, 9)}, ' | '),
+            output_excerpt(lines))
+
+        local exact_line = string.rep('x', 512)
+        assert.same(exact_line, output_excerpt({exact_line}))
+        local truncated_line = output_excerpt({string.rep('x', 513)})
+        assert.same(512, #truncated_line)
+        assert.is_truthy(truncated_line:find('...<line truncated>', 1, true))
+
+        lines = {}
+        for index = 1, 7 do lines[index] = string.rep('x', 253) end
+        lines[8] = string.rep('x', 256)
+        local exact_output = output_excerpt(lines)
+        assert.same(2048, #exact_output)
+        assert.is_falsy(exact_output:find('<output truncated> ', 1, true))
+
+        lines[8] = string.rep('x', 257)
+        local truncated_output = output_excerpt(lines)
+        assert.same(2048, #truncated_output)
+        assert.same('<output truncated> ', truncated_output:sub(1, 19))
+        assert.same(lines[8], truncated_output:sub(-#lines[8]))
     end)
 
     it('classifies nonzero exits before canonical parsing', function()
