@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and return zero-based inclusive screen-cell bounds. Subject and rectangle
   areas are spatial filters, not render-ownership claims.
 
+## [0.2.2] - 2026-08-03
+
+### Changed
+
+- Report connection preflight failures as distinct invocation, subprocess,
+  missing-response, malformed-response, protocol, core-context, and timeout
+  diagnostics with bounded captured output.
+- Ship the updated controller and DFHack probe together while retaining probe
+  protocol version 2.
+
+### Fixed
+
+- Avoid attributing a failed DFHack connection to a selected specification
+  when test selection succeeded before the connection preflight.
+
 ## [0.2.1] - 2026-07-31
 
 ### Added

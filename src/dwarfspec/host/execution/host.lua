@@ -27,7 +27,7 @@ local run_lifecycle_module = require('dwarfspec.host.execution.run_lifecycle')
 
 local M = {
     protocol_version=2,
-    package_version='0.2.1',
+    package_version='0.2.2',
 }
 
 local RUN_STATE_TERMINAL = {

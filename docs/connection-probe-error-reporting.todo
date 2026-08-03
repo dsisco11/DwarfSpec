@@ -239,34 +239,47 @@ Completion criteria:
       failure kinds, result states, or exit codes.
 
 Phase 5: Document and package the improved diagnostics
-    ☐ Exit with user-facing guidance and package artifacts that cannot mix the
+    ☒ Exit with user-facing guidance and package artifacts that cannot mix the
       new controller with an obsolete probe unnoticed.
+        - Evidence: release documentation and version surfaces, successful
+          package build and archive inspection, disposable LuaRocks install,
+          installed command/layout/hash verification, and confirmed cleanup.
 
 5.1 Documentation:
-    ☐ Update `docs/command-line.md` to describe connection exit code 4 and the
+    ☒ Update `docs/command-line.md` to describe connection exit code 4 and the
       actionable probe diagnostics.
-    ☐ Document that test selection completes before the DFHack connection
+    ☒ Document that test selection completes before the DFHack connection
       preflight, so a connection error does not implicate the selected file.
-    ☐ Document protocol-mismatch remediation in terms of controller/probe
+    ☒ Document protocol-mismatch remediation in terms of controller/probe
       package alignment without prescribing project-specific paths.
-    ☐ Update other connection-error examples that quote or promise the removed
+    ☒ Update other connection-error examples that quote or promise the removed
       generic message.
+        - Evidence: `docs/command-line.md`; repository search found no other
+          user-facing example retaining the removed generic diagnostic.
 
 5.2 Package integrity:
-    ☐ Apply the settled package-version decision consistently to package
+    ☒ Apply the settled package-version decision consistently to package
       metadata, CLI version output, and changelog entries.
-    ☐ Build the LuaRocks artifact using the repository packaging workflow.
-    ☐ Inspect the artifact manifest and archive contents to prove the updated
+    ☒ Build the LuaRocks artifact using the repository packaging workflow.
+    ☒ Inspect the artifact manifest and archive contents to prove the updated
       controller parser and probe entrypoint are both present.
-    ☐ Install the artifact into a disposable LuaRocks tree.
-    ☐ Verify the disposable command resolves its controller and probe from the
+        - Evidence: `dwarfspec-0.2.2-1.rockspec`, CLI and host package version
+          `0.2.2`, `CHANGELOG.md`, successful `tools/Publish.ps1`, and
+          `dist/dwarfspec-0.2.2-1.all.rock` with controller and probe protocol
+          `2` entries listed in `rock_manifest`.
+    ☒ Install the artifact into a disposable LuaRocks tree.
+    ☒ Verify the disposable command resolves its controller and probe from the
       same package version and layout.
-    ☐ Remove the disposable installation and confirm cleanup.
+    ☒ Remove the disposable installation and confirm cleanup.
+        - Evidence: the read-only mounted `0.2.2-1` artifact installed into a
+          container-local LuaRocks tree; its command reported `0.2.2`, the
+          controller, probe, and host resolved from the same tree and matched
+          archive hashes, and the `--rm` container was confirmed absent.
 
 Completion criteria:
-    ☐ Documentation distinguishes runner invocation, subprocess exit, missing
+    ☒ Documentation distinguishes runner invocation, subprocess exit, missing
       report, malformed report, protocol mismatch, and capability failures.
-    ☐ The packaged controller and probe implement the same response protocol
+    ☒ The packaged controller and probe implement the same response protocol
       and the disposable package smoke checks pass.
 
 Phase 6: Validate installed and live-runtime behavior

@@ -160,6 +160,35 @@ complete terminal result without writing a file. A terminal service generation
 is acknowledged only after its file replacement succeeds, or after successful
 no-results validation.
 
+### Connection preflight diagnostics
+
+`dwarfspec run` completes discovery and selection before it starts the DFHack
+connection preflight. A connection failure therefore does not implicate the
+selected specification path. The path is included in a diagnostic only when
+DFHack's subprocess output itself includes it.
+
+Every connection preflight failure exits with code 4, but its message identifies
+the failed boundary and the action needed to investigate it:
+
+- an invocation failure reports the resolved runner path and the original
+  process-launch error;
+- a nonzero probe exit reports the numeric exit code and bounded probe output;
+- a missing response marker reports that no probe response was found and
+  includes bounded probe output;
+- multiple response markers report the observed count and bounded probe output;
+- a malformed response reports the first grammar error and the bounded
+  offending response line;
+- a protocol mismatch reports the expected and observed protocol versions;
+- a core-context failure reports that DFHack did not provide a healthy core Lua
+  context; and
+- a timeout-capability failure reports that the required timeout support is
+  unavailable.
+
+Captured subprocess output is length-bounded and sanitized before display. For
+a protocol mismatch, reinstall or upgrade DwarfSpec from one package artifact
+so that the external controller and bundled DFHack probe come from the same
+DwarfSpec release. The probe protocol remains version 2 for this release.
+
 Focus diagnostics are nonfatal. They do not change test counts, terminal state,
 cleanup confirmation, or the process result. A run whose tests pass and whose
 cleanup is confirmed therefore exits with code 0 even when it retains focus

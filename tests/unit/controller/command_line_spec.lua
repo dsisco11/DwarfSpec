@@ -4,7 +4,7 @@ local command_line = require('dwarfspec.controller.command_line')
 
 describe('DwarfSpec command line', function()
     it('constructs general and command-specific help documents', function()
-        assert.matches('DwarfSpec 0%.2%.1', command_line.help())
+        assert.matches('DwarfSpec 0%.2%.2', command_line.help())
         for _, topic in ipairs({
                 'list', 'run', 'status', 'history', 'show', 'logs', 'abort',
                 'recover-executor'}) do
