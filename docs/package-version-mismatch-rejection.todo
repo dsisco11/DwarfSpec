@@ -481,53 +481,53 @@ Completion criteria:
       semantics remain unchanged.
 
 Phase 8: Lock down documentation, regression, and package integrity
-    ☐ Exit with user documentation, complete source validation, and one
+    ☒ Exit with user documentation, complete source validation, and one
       internally consistent package artifact.
 
 8.1 Documentation and release surfaces:
-    ☐ Update `docs/command-line.md` to describe the package-mismatch
+    ☒ Update `docs/command-line.md` to describe the package-mismatch
       diagnostic, process-wide lifetime, complete-restart requirement, and
       preserved exit code 5.
-    ☐ Add a changelog entry describing structured version labels and removal
+    ☒ Add a changelog entry describing structured version labels and removal
       of ambiguous `expected`/`found` wording.
-    ☐ Apply the settled package-version decision consistently to the
+    ☒ Apply the settled package-version decision consistently to the
       rockspec, host package version, CLI version, documentation examples, and
       artifact name when a bump is required.
-    ☐ Search user-facing documentation and tests for the old mismatch
+    ☒ Search user-facing documentation and tests for the old mismatch
       wording and retain it only where explicitly testing backward input or
       historical behavior.
-    ☐ Document admission, mutation, recovery, polling, and event rejection
+    ☒ Document admission, mutation, recovery, polling, and event rejection
       codes that have an operator-facing remediation path.
-    ☐ Document the distinction between a structured domain rejection, an
+    ☒ Document the distinction between a structured domain rejection, an
       unavailable service or run represented by read-only state, a bridge
       failure, and an unexpected internal host fault.
 
 8.2 Source validation:
-    ☐ Run focused service, scheduler, host-entrypoint, report-parser,
+    ☒ Run focused service, scheduler, host-entrypoint, report-parser,
       transport-client, recovery, and runner unit specifications through
       build/test subagents.
-    ☐ Run the complete recursive unit suite through a build/test subagent.
-    ☐ Run Lua syntax, formatting, and declaration checks for every changed
+    ☒ Run the complete recursive unit suite through a build/test subagent.
+    ☒ Run Lua syntax, formatting, and declaration checks for every changed
       source and test file through a build/test subagent.
-    ☐ Run `git diff --check` and inspect the focused diff without altering
+    ☒ Run `git diff --check` and inspect the focused diff without altering
       unrelated worktree or index state.
-    ☐ Record focused and complete-suite evidence separately.
+    ☒ Record focused and complete-suite evidence separately.
 
 8.3 Package integrity:
-    ☐ Build the LuaRocks artifact with the repository publishing workflow
+    ☒ Build the LuaRocks artifact with the repository publishing workflow
       through a build/test subagent.
-    ☐ Inspect the archive manifest and contents to prove the matching
+    ☒ Inspect the archive manifest and contents to prove the matching
       service, shared error contract, all migrated entrypoints, report parser,
       transport and recovery clients, runner, and version metadata are present.
-    ☐ Install the artifact into a disposable LuaRocks tree and verify the
+    ☒ Install the artifact into a disposable LuaRocks tree and verify the
       command and bundled host modules resolve from that same artifact.
-    ☐ Remove the disposable tree and confirm cleanup without modifying the
+    ☒ Remove the disposable tree and confirm cleanup without modifying the
       operator's normal LuaRocks installation.
 
 Completion criteria:
-    ☐ Focused, recursive, syntax, formatting, declaration, and diff checks
+    ☒ Focused, recursive, syntax, formatting, declaration, and diff checks
       pass with evidence recorded independently.
-    ☐ Documentation and package metadata describe the same structured
+    ☒ Documentation and package metadata describe the same structured
       behavior shipped in the inspected artifact.
 
 Phase 9: Prove installed rejection and restart workflows
