@@ -16,6 +16,7 @@ describe('driver unit speed controller', function()
             available={},
             update_callback=nil,
             retained=nil,
+            action_calls={},
         }
         local recurring = {}
         ---Returns whether recurring work is active.
@@ -27,7 +28,9 @@ describe('driver unit speed controller', function()
         function recurring:start(callback, retained)
             state.starts = state.starts + 1
             state.active = true
-            state.update_callback = callback
+            state.update_callback = function()
+                if state.active then callback() end
+            end
             state.retained = retained
         end
         ---Stops recurring work.
@@ -64,6 +67,11 @@ describe('driver unit speed controller', function()
         local controller = module.new({
             recurring=recurring,
             targets=targets,
+            actions={
+                accelerate=function(_, unit)
+                    state.action_calls[#state.action_calls + 1] = unit.id
+                end,
+            },
             register_cleanup=function(name, callback)
                 state.cleanups[#state.cleanups + 1] = {
                     name=name,
@@ -187,6 +195,60 @@ describe('driver unit speed controller', function()
         assert.equals(3, #visited)
         assert.equals(2, visited[3].unit.generation)
         assert.is_true(visited[3].teleport)
+    end)
+
+    it('accelerates each available captured target once in stable order',
+            function()
+        local state, controller = fixture()
+        state.available[2] = {id=2}
+        state.available[7] = {id=7}
+        controller:activate({fast_actions=true})
+
+        state.update_callback()
+        state.update_callback()
+
+        assert.same({2, 7, 2, 7}, state.action_calls)
+    end)
+
+    it('skips later unavailable targets without disturbing stable order',
+            function()
+        local state, controller = fixture()
+        state.available[8] = {id=8}
+        state.available[3] = {id=3}
+        controller:activate({fast_actions=true, unit_ids={8, 3}})
+        state.update_callback()
+        state.available[8] = nil
+        state.available[3] = {id=3}
+        state.update_callback()
+
+        assert.same({8, 3, 3}, state.action_calls)
+    end)
+
+    it('leaves actions untouched when only teleportation is enabled', function()
+        local state, controller = fixture()
+        state.available[2] = {id=2}
+        local teleport_visits = 0
+        controller:activate({teleport_jobs=true}, function()
+            teleport_visits = teleport_visits + 1
+        end)
+
+        state.update_callback()
+
+        assert.equals(1, teleport_visits)
+        assert.same({}, state.action_calls)
+    end)
+
+    it('stops all later action calls without restoring prior timers', function()
+        local state, controller = fixture()
+        state.available[2] = {id=2}
+        controller:activate({fast_actions=true})
+        state.update_callback()
+        controller:stop()
+
+        state.update_callback()
+
+        assert.same({2}, state.action_calls)
+        assert.equals(1, state.stops)
     end)
 
     it('rejects a second activation until cleanup releases ownership', function()

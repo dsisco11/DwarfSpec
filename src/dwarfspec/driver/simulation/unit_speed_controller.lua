@@ -118,6 +118,10 @@ function M.new(dependencies)
         'unit-speed controller requires recurring operation')
     local targets = assert(dependencies.targets,
         'unit-speed controller requires target adapter')
+    local actions = assert(dependencies.actions,
+        'unit-speed controller requires action adapter')
+    assert(type(actions.accelerate) == 'function',
+        'unit-speed action adapter requires accelerate')
     local register_cleanup = assert(dependencies.register_cleanup,
         'unit-speed controller requires cleanup registration')
     assert(type(register_cleanup) == 'function',
@@ -175,6 +179,9 @@ function M.new(dependencies)
                 if not targets:for_each_available(captured,
                         function(unit, id)
                             update(unit, configuration, id)
+                            if configuration.fast_actions then
+                                actions:accelerate(unit)
+                            end
                         end) then
                     self:stop()
                 end

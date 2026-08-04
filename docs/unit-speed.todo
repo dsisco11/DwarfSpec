@@ -336,31 +336,31 @@ Completion criteria:
       the controller, and invalid input cannot create partial runtime state.
 
 Phase 4: Implement fast action timers
-    ☐ Exit with targeted fastdwarf mode-1-equivalent action acceleration driven by
+    ☒ Exit with targeted fastdwarf mode-1-equivalent action acceleration driven by
       the run-owned controller.
 
 4.1 Update behavior:
-    ☐ On each scheduled simulation tick, re-resolve captured targets in stable id
+    ☒ On each scheduled simulation tick, re-resolve captured targets in stable id
       order.
-    ☐ When `fast_actions=true`, call the characterized DFHack group-action-timer API
+    ☒ When `fast_actions=true`, call the characterized DFHack group-action-timer API
       with amount `1` and group `All` for each eligible target.
-    ☐ Do not mutate action timers when `fast_actions=false`.
-    ☐ Do not modify unit attributes, skills, jobs, needs, labor assignments, game
+    ☒ Do not mutate action timers when `fast_actions=false`.
+    ☒ Do not modify unit attributes, skills, jobs, needs, labor assignments, game
       TPS, or native global turbo speed directly.
-    ☐ Preserve callback fault containment when an adapter or native invariant fails.
+    ☒ Preserve callback fault containment when an adapter or native invariant fails.
 
 4.2 Focused verification:
-    ☐ Prove exactly one action-timer call per eligible captured target per scheduled
+    ☒ Prove exactly one action-timer call per eligible captured target per scheduled
       update.
-    ☐ Prove stable target ordering and skips for targets that follow the accepted
+    ☒ Prove stable target ordering and skips for targets that follow the accepted
       later-lifecycle policy.
-    ☐ Prove the disabled flag produces no action mutation while teleportation can
+    ☒ Prove the disabled flag produces no action mutation while teleportation can
       remain active independently.
-    ☐ Prove cleanup stops all later action-timer calls without claiming to restore
+    ☒ Prove cleanup stops all later action-timer calls without claiming to restore
       timers already changed.
 
 Completion criteria:
-    ☐ Captured eligible units receive supported one-tick actions only while their
+    ☒ Captured eligible units receive supported one-tick actions only while their
       example owns an active fast-action controller.
 
 Phase 5: Implement reusable unit positioning and job-destination teleportation
