@@ -371,181 +371,305 @@ Phase 2: Build the generic component system
           Dropdown Menu Item instances (options 1/2/4 normal, option 3 selected).
 
 2.6 Official DFHack widgets: Tab, TabBar, and Pages application:
-    ☐ Reuse TabBar for raw-output and diagnostic navigation.
-    ☐ Reuse component-linked Tab instances inside TabBar.
-    ☐ Reuse Pages for the content views selected by TabBar.
-    ☐ Keep tab content and selected-page state supplied by the parent view-model.
-    ☐ Do not use TabBar for chronological trace-step selection.
-    ☐ Do not create a parallel custom Tab or Tab Bar component.
+    ☒ Reuse TabBar for raw-output and diagnostic navigation.
+    ☒ Reuse component-linked Tab instances inside TabBar.
+    ☒ Reuse Pages for the content views selected by TabBar.
+    ☒ Keep tab content and selected-page state supplied by the parent view-model.
+    ☒ Do not use TabBar for chronological trace-step selection.
+    ☒ Do not create a parallel custom Tab or Tab Bar component.
+        - Evidence: Penpot "Widget - TabBar" page, "Application / Raw output
+          navigation / TabBar + Pages" board. A linked widgets.TabBar instance
+          contains linked widgets.Tab instances for OUTPUT and REPORT; a linked
+          widgets.Pages instance shows exactly the
+          view-model-selected output child. The composition explicitly reserves
+          chronological trace-step selection for Command Trace rather than tabs.
 
 2.7 Official DFHack widgets: binary-choice application:
-    ☐ Reuse ToggleHotkeyLabel for a labeled textual On or Off setting.
-    ☐ Reevaluate RadioButton only after the locally installed DFHack version
+    ☒ Reuse ToggleHotkeyLabel for a labeled textual On or Off setting.
+    ☒ Reevaluate RadioButton only after the locally installed DFHack version
       supplies a source-verifiable implementation.
-    ☐ Reuse ButtonGroup for synchronized graphical option selection only when its full behavior is required.
-    ☐ Use existing CP437 assets and established palette presets in every choice widget.
-    ☐ Reuse ToggleHotkeyLabel for Follow Output, Wrap, and supported debug options.
-    ☐ Do not create a parallel custom Toggle component.
+    ☒ Reuse ButtonGroup for synchronized graphical option selection only when its full behavior is required.
+    ☒ Use existing CP437 assets and established palette presets in every choice widget.
+    ☒ Reuse ToggleHotkeyLabel for Follow Output, Wrap, and supported debug options.
+    ☒ Do not create a parallel custom Toggle component.
+        - Evidence: Penpot "Widget - ToggleHotkeyLabel" page, "Application /
+          Output drawer binary choices" board. Linked official
+          widgets.ToggleHotkeyLabel instances represent Follow Output and Wrap;
+          both inherit the existing On palette. The textual controls introduce
+          no new visual symbol, while the application board uses linked BLACK
+          and BROWN palette entries. No supported debug toggle is asserted.
+          ButtonGroup is not instantiated because these are independent
+          booleans, not synchronized graphical choices. The source-blocked
+          "Widget - RadioButton" page remains the upgrade reevaluation gate.
 
 2.8 Generic component: Source Reference:
-    ☐ Create a Source Reference component for file, line, and optional column.
-    ☐ Define compact-inline and full-path presentations only if both are used.
-    ☐ Compose an existing TextButton or equivalent existing action treatment for Open Source.
-    ☐ Keep source display separate from editor-launch behavior.
-    ☐ Reuse Source Reference in result details, trace steps, code frames, and stack entries.
-    ☐ Create a dedicated component page for Source Reference and its variants.
+    ☒ Create a Source Reference component for file, line, and optional column.
+    ☒ Define compact-inline and full-path presentations only if both are used.
+    ☒ Compose an existing TextButton or equivalent existing action treatment for Open Source.
+    ☒ Keep source display separate from editor-launch behavior.
+    ☒ Reuse Source Reference in result details, trace steps, code frames, and stack entries.
+    ☒ Create a dedicated component page for Source Reference and its variants.
+        - Evidence: Penpot "Component - Source Reference" page. The
+          Source Reference variant component exposes compact-inline and
+          full-path presentations, each with a linked TextButton "Open Source"
+          action treatment. The component displays only supplied location data;
+          the parent supplies the action callback and owns any editor launch.
+          Four linked reuse instances cover Result details, Trace step, Code
+          frame, and Stack entry.
 
 2.9 Generic components: Property Row and Property List:
-    ☐ Create Property Row for one label and value pair.
-    ☐ Define value states for normal, warning, failure, unavailable, and actionable only where required.
-    ☐ Create Property List as a Panel or ResizingPanel containing repeated Property Row instances with consistent label alignment.
-    ☐ Reuse Property List for host metadata, selected-step details, and evidence metadata.
-    ☐ Keep Property List free of host-specific field names.
-    ☐ Create dedicated component pages for Property Row and Property List.
+    ☒ Create Property Row for one label and value pair.
+    ☒ Define value states for normal, warning, failure, unavailable, and actionable only where required.
+    ☒ Create Property List as a Panel or ResizingPanel containing repeated Property Row instances with consistent label alignment.
+    ☒ Reuse Property List for host metadata, selected-step details, and evidence metadata.
+    ☒ Keep Property List free of host-specific field names.
+    ☒ Create dedicated component pages for Property Row and Property List.
+        - Evidence: Penpot "Component - Property Row and List" page. The
+          Property Row variant component has Value state values normal, warning,
+          failure, unavailable, and actionable. Property List composes linked
+          Property Row instances and demonstrates generic host metadata,
+          selected-step details, and evidence metadata reuse without field names.
 
 2.10 Generic component: Log Row:
-    ☐ Create Log Row with timestamp, source, severity or status, and Label or WrappedLabel message slots.
-    ☐ Define normal, selected, correlated, warning, failure, and wrapped presentations.
-    ☐ Compose Status Indicator where severity needs a visual indicator.
-    ☐ Keep raw-log filtering, buffering, and truncation outside Log Row.
-    ☐ Reuse Log Row for DFHack output and supported host-event streams.
-    ☐ Create a dedicated component page for Log Row and its variants.
+    ☒ Create Log Row with timestamp, source, severity or status, and Label or WrappedLabel message slots.
+    ☒ Define normal, selected, correlated, warning, failure, and wrapped presentations.
+    ☒ Compose Status Indicator where severity needs a visual indicator.
+    ☒ Keep raw-log filtering, buffering, and truncation outside Log Row.
+    ☒ Reuse Log Row for DFHack output and supported host-event streams.
+    ☒ Create a dedicated component page for Log Row and its variants.
+        - Evidence: Penpot "Component - Log Row" page. The Log Row variant
+          component has normal, selected, correlated, warning, failure, and
+          wrapped presentations; each composes a linked Status Indicator plus
+          supplied timestamp, source, and message slots. Linked reuse examples
+          cover DFHack output and supported host-event streams. Filtering,
+          buffering, and truncation remain outside the component.
 
 Phase 3: Build the DwarfSpec domain component system
-    ☐ Exit with linked DwarfSpec domain components that compose official and generic components without absorbing runner orchestration or runtime behavior.
+    ☒ Exit with linked DwarfSpec domain components that compose official and generic components without absorbing runner orchestration or runtime behavior.
+        - Evidence: Penpot audit confirms all 12 dedicated domain-component
+          pages for Attempt Indicator, Attempt Selector, trace rows, Command
+          Trace, evidence values, Failure Comparison, Host Evidence, Failure
+          Inspector, Run Summary, Reproduce Command, and Debug Options.
 
 3.1 DwarfSpec component: Attempt Indicator:
-    ☐ Create Attempt Indicator from an attempt number or label plus Status Indicator.
-    ☐ Define normal, selected, focused, and disabled states without duplicating every possible status as parent-level artwork.
-    ☐ Keep flake calculation outside Attempt Indicator.
-    ☐ Create a dedicated component page for Attempt Indicator and its variants.
+    ☒ Create Attempt Indicator from an attempt number or label plus Status Indicator.
+    ☒ Define normal, selected, focused, and disabled states without duplicating every possible status as parent-level artwork.
+    ☒ Keep flake calculation outside Attempt Indicator.
+    ☒ Create a dedicated component page for Attempt Indicator and its variants.
+        - Evidence: Penpot "Component - Attempt Indicator" page. The linked
+          Attempt Indicator component has one Interaction state axis with normal,
+          selected, focused, and disabled variants. Each variant contains exactly
+          one linked Status Indicator plus one supplied attempt-label slot; status
+          selection and flake calculation remain outside the component. The page
+          shows linked instances for every state in both specimen and reuse areas.
 
 3.2 DwarfSpec component: Attempt Selector:
-    ☐ Create Attempt Selector as a collection of Attempt Indicator instances plus current-attempt and total-attempt context.
-    ☐ Evaluate ButtonGroup as the selection container before retaining the custom Attempt Selector layout.
-    ☐ Retain the custom Attempt Selector only if ButtonGroup cannot represent per-attempt status and overflow requirements.
-    ☐ Show a compact status for every supplied attempt.
-    ☐ Define the no-repeat and single-attempt presentation without reserving dead space.
-    ☐ Define overflow behavior for many attempts.
-    ☐ Keep attempt selection outside the component's presentation contract.
-    ☐ Keep FLAKY defined by supplied inconsistent attempt outcomes unless historical data is explicitly available.
-    ☐ Create a dedicated component page for Attempt Selector and its states.
+    ☒ Create Attempt Selector as a collection of Attempt Indicator instances plus current-attempt and total-attempt context.
+    ☒ Evaluate ButtonGroup as the selection container before retaining the custom Attempt Selector layout.
+    ☒ Retain the custom Attempt Selector only if ButtonGroup cannot represent per-attempt status and overflow requirements.
+    ☒ Show a compact status for every supplied attempt.
+    ☒ Define the no-repeat and single-attempt presentation without reserving dead space.
+    ☒ Define overflow behavior for many attempts.
+    ☒ Keep attempt selection outside the component's presentation contract.
+        - Evidence: Penpot "Component - Attempt Selector" page. Attempt Selector
+          has no-repeat, single-attempt, and many-attempts presentations. It
+          composes linked Attempt Indicator instances with supplied current/total
+          context. ButtonGroup was rejected because the only available master is
+          incomplete and cannot express per-attempt status or horizontal overflow.
+          The many-attempts strip clips horizontally while retaining nine linked
+          supplied attempts, each with a linked Status Indicator; selection remains
+          supplied from outside the component.
+    ☒ Keep FLAKY defined by supplied inconsistent attempt outcomes unless historical data is explicitly available.
+    ☒ Create a dedicated component page for Attempt Selector and its states.
 
 3.3 DwarfSpec components: Trace Step Row and Trace Group Row:
-    ☐ Define the ordered step taxonomy for setup, test commands, inputs, waits, assertions, cleanup, host events, and runner events.
-    ☐ Create Trace Step Row from Status Indicator, optional Source Reference, and supplied step content.
-    ☐ Show sequence, category, command or event, important target or argument, duration, and optional retry or wait information.
-    ☐ Define queued, running, passed, failed, errored, skipped, cancelled, and not-run step states.
-    ☐ Define selected, focused, expanded, and collapsed structural states without duplicating status artwork.
-    ☐ Show retry, poll, or wait information only when supplied by the runner.
-    ☐ Show a source reference only when one exists.
-    ☐ Create Trace Group Row for setup, behavior, and cleanup grouping.
-    ☐ Compose Status Indicator and existing CP437 expander assets in Trace Group Row.
-    ☐ Show aggregate group status, duration, and child count.
-    ☐ Keep group expansion from changing chronological ordering.
-    ☐ Keep status aggregation outside Trace Group Row.
-    ☐ Create dedicated component pages for Trace Step Row and Trace Group Row.
+    ☒ Define the ordered step taxonomy for setup, test commands, inputs, waits, assertions, cleanup, host events, and runner events.
+    ☒ Create Trace Step Row from Status Indicator, optional Source Reference, and supplied step content.
+    ☒ Show sequence, category, command or event, important target or argument, duration, and optional retry or wait information.
+    ☒ Define queued, running, passed, failed, errored, skipped, cancelled, and not-run step states.
+    ☒ Define selected, focused, expanded, and collapsed structural states without duplicating status artwork.
+    ☒ Show retry, poll, or wait information only when supplied by the runner.
+    ☒ Show a source reference only when one exists.
+    ☒ Create Trace Group Row for setup, behavior, and cleanup grouping.
+    ☒ Compose Status Indicator and existing CP437 expander assets in Trace Group Row.
+    ☒ Show aggregate group status, duration, and child count.
+    ☒ Keep group expansion from changing chronological ordering.
+    ☒ Keep status aggregation outside Trace Group Row.
+    ☒ Create dedicated component pages for Trace Step Row and Trace Group Row.
+        - Evidence: Penpot "Component - Trace Step Row" and "Component - Trace
+          Group Row" pages. Trace Step Row has normal, selected, focused,
+          expanded, and collapsed structural variants, each with one linked Status
+          Indicator; its status-input specimens cover queued, running, passed,
+          failed, errored, skipped, cancelled, and not-run. Only the expanded
+          presentation shows supplied poll/wait text and a linked Source Reference.
+          Trace Group Row has setup, behavior, and cleanup variants, each composing
+          linked Status Indicator and cp437.016 expander instances with supplied
+          child-count and duration slots. Both pages state supplied-only aggregation
+          and preserve setup-to-behavior-to-cleanup chronology.
 
 3.4 DwarfSpec component: Command Trace:
-    ☐ Create Command Trace from widgets.List, Trace Group Row, Trace Step Row, and the normal Scrollbar.
-    ☐ Keep the chronological trace as the primary selected-attempt debugging view.
-    ☐ Define empty, loading, streaming, complete, failed, filtered-empty, and unavailable states.
-    ☐ Define long-command, long-argument, nested-command, and large-trace scrolling behavior.
-    ☐ Keep the selected failing step visible when changing attempts or related log views.
-    ☐ Define behavior when a step has no host evidence or raw-log anchor.
-    ☐ Keep failure formatting, host capture, and raw-output rendering outside Command Trace.
-    ☐ Create a dedicated component page for Command Trace and its states.
+    ☒ Create Command Trace from widgets.List, Trace Group Row, Trace Step Row, and the normal Scrollbar.
+    ☒ Keep the chronological trace as the primary selected-attempt debugging view.
+    ☒ Define empty, loading, streaming, complete, failed, filtered-empty, and unavailable states.
+    ☒ Define long-command, long-argument, nested-command, and large-trace scrolling behavior.
+    ☒ Keep the selected failing step visible when changing attempts or related log views.
+    ☒ Define behavior when a step has no host evidence or raw-log anchor.
+    ☒ Keep failure formatting, host capture, and raw-output rendering outside Command Trace.
+    ☒ Create a dedicated component page for Command Trace and its states.
+        - Evidence: Penpot "Component - Command Trace" page. Command Trace has
+          empty, loading, streaming, complete, failed, filtered-empty, and
+          unavailable states. Streaming, complete, and failed compose linked List
+          Box Variants (the widgets.List foundation), normal scrollbar, Trace Group
+          Row, and Trace Step Row instances in chronological order. The failed
+          state keeps a linked selected failed step as its supplied anchor. The
+          clipped viewport documents long/nested content and large-trace scrolling;
+          unavailable explicitly covers a missing host-evidence or raw-log anchor.
+          Filtering, capture, raw rendering, and failure formatting remain outside.
 
 3.5 DwarfSpec components: Evidence Value Block and Failure Comparison:
-    ☐ Create Evidence Value Block from a label and WrappedLabel for one labeled, multiline evidence value.
-    ☐ Define normal, expected, actual, warning, failure, and unavailable presentations only where required.
-    ☐ Create Failure Comparison from two Evidence Value Block instances.
-    ☐ Support expected versus actual, requested versus observed, and previous versus current labels without new component copies.
-    ☐ Keep comparison calculation and diff generation outside Failure Comparison.
-    ☐ Define empty-side, long-value, and multiline overflow behavior.
-    ☐ Create dedicated component pages for Evidence Value Block and Failure Comparison.
+    ☒ Create Evidence Value Block from a label and WrappedLabel for one labeled, multiline evidence value.
+    ☒ Define normal, expected, actual, warning, failure, and unavailable presentations only where required.
+    ☒ Create Failure Comparison from two Evidence Value Block instances.
+    ☒ Support expected versus actual, requested versus observed, and previous versus current labels without new component copies.
+    ☒ Keep comparison calculation and diff generation outside Failure Comparison.
+    ☒ Define empty-side, long-value, and multiline overflow behavior.
+    ☒ Create dedicated component pages for Evidence Value Block and Failure Comparison.
+        - Evidence: Penpot "Component - Evidence Value Block" and "Component -
+          Failure Comparison" pages. Evidence Value Block has normal, expected,
+          actual, warning, failure, and unavailable presentations; every variant
+          composes one supplied label and one linked widgets.WrappedLabel value.
+          Failure Comparison composes exactly two linked Evidence Value Blocks.
+          Its linked specimens supply EXPECTED/ACTUAL, REQUESTED/OBSERVED, and
+          PREVIOUS/CURRENT labels without copies, and demonstrate an empty-side
+          placeholder plus long and multiline values. Diff calculation and
+          comparison interpretation remain outside the component.
 
 3.6 DwarfSpec component: Host Evidence:
-    ☐ Determine whether the runner can supply live rendering, captured frames, component-tree snapshots, or only textual state.
-    ☐ Document supported evidence modes and their availability conditions.
-    ☐ Create Host Evidence from Panel, an evidence viewport, Property List, Status Badge, TooltipLabel where contextual help is required, and supported overlay treatments.
-    ☐ Show the evidence supplied for the selected trace step.
-    ☐ When supplied, show focus path, active viewscreen, pointer position, input target, mounted-screen ownership, and selected widget bounds.
-    ☐ Define unavailable, pending, stale, capture-failed, and host-disconnected states.
-    ☐ Never label inferred state as captured or visually verified evidence.
-    ☐ Do not make Host Evidence capture, infer, or retain runtime state.
-    ☐ Do not imply full time travel unless the runner retains the required per-step state.
-    ☐ Create a dedicated component page for Host Evidence and its states.
+    ☒ Determine whether the runner can supply live rendering, captured frames, component-tree snapshots, or only textual state.
+    ☒ Document supported evidence modes and their availability conditions.
+    ☒ Create Host Evidence from Panel, an evidence viewport, Property List, Status Badge, TooltipLabel where contextual help is required, and supported overlay treatments.
+    ☒ Show the evidence supplied for the selected trace step.
+    ☒ When supplied, show focus path, active viewscreen, pointer position, input target, mounted-screen ownership, and selected widget bounds.
+    ☒ Define unavailable, pending, stale, capture-failed, and host-disconnected states.
+    ☒ Never label inferred state as captured or visually verified evidence.
+    ☒ Do not make Host Evidence capture, infer, or retain runtime state.
+    ☒ Do not imply full time travel unless the runner retains the required per-step state.
+    ☒ Create a dedicated component page for Host Evidence and its states.
+        - Capability decision: the runner can supply a bounded screen-cell capture
+          when capture is invoked, a bounded component-tree snapshot, and textual
+          focus/viewscreen context. It does not supply a retained live-render stream
+          or per-step visual history; missing instrumentation remains unavailable.
+        - Evidence: Penpot "Component - Host Evidence" page. Host Evidence has
+          captured-current, unavailable, pending, stale, capture-failed, and
+          host-disconnected states. Captured-current composes linked widgets.Panel,
+          Status Badge, Property List, and widgets.TooltipLabel with a supplied
+          screen-cell viewport, selected-widget-bounds overlay, and supplied focus,
+          screen, pointer, target, mount, bounds, and tree metadata. All other
+          states explicitly avoid inferred or retained visual evidence.
 
 3.7 DwarfSpec component: Failure Inspector:
-    ☐ Create Failure Inspector from Panel, issue, Status Badge, Source Reference, Failure Comparison, WrappedLabel, code-frame, stack, and action components.
-    ☐ Show failure category, concise message, source location, expected value, and actual value when available.
-    ☐ Add a short code-frame treatment when source context is supplied.
-    ☐ Keep the stack collapsed by default when concise failure context is sufficient.
-    ☐ Provide Copy Failure, Copy Reproduce Command, and Open Source actions.
-    ☐ Keep Open Source as the primary transition to VS Code.
-    ☐ Keep behavior failure, infrastructure error, cleanup failure, and host-health evidence visually distinct.
-    ☐ Show cleanup status only when cleanup failed, was interrupted, or could not be confirmed.
-    ☐ Show quarantine or dirty-host state as a separate critical condition.
-    ☐ Define assertion, Lua error, timeout, discovery error, cleanup failure, host loss, and cancellation states.
-    ☐ Keep failure classification and editor integration outside Failure Inspector.
-    ☐ Create a dedicated component page for Failure Inspector and its states.
+    ☒ Create Failure Inspector from Panel, issue, Status Badge, Source Reference, Failure Comparison, WrappedLabel, code-frame, stack, and action components.
+    ☒ Show failure category, concise message, source location, expected value, and actual value when available.
+    ☒ Add a short code-frame treatment when source context is supplied.
+    ☒ Keep the stack collapsed by default when concise failure context is sufficient.
+    ☒ Provide Copy Failure, Copy Reproduce Command, and Open Source actions.
+    ☒ Keep Open Source as the primary transition to VS Code.
+    ☒ Keep behavior failure, infrastructure error, cleanup failure, and host-health evidence visually distinct.
+    ☒ Show cleanup status only when cleanup failed, was interrupted, or could not be confirmed.
+    ☒ Show quarantine or dirty-host state as a separate critical condition.
+    ☒ Define assertion, Lua error, timeout, discovery error, cleanup failure, host loss, and cancellation states.
+    ☒ Keep failure classification and editor integration outside Failure Inspector.
+    ☒ Create a dedicated component page for Failure Inspector and its states.
+        - Evidence: Penpot "Component - Failure Inspector" has ASCII-safe
+          assertion, Lua error, timeout, discovery error, cleanup failure,
+          host loss, and cancellation specimens. It includes supplied source,
+          expected/actual, short code-frame, collapsed-stack, Copy Failure,
+          Copy Reproduce Command, and unavailable Open Source treatments;
+          cleanup and host health remain separate critical conditions.
 
 3.8 DwarfSpec component: Run Summary:
-    ☐ Create Run Summary from supplied run state, progress, result counts, and elapsed time.
-    ☐ Define compact and full presentations for title-bar and footer use.
-    ☐ Compose Status Indicator or Status Badge instead of duplicating status artwork.
-    ☐ Define idle, discovering, running, stopping, complete, cancelled, failed, and disconnected states.
-    ☐ Keep result aggregation and progress calculation outside Run Summary.
-    ☐ Create a dedicated component page for Run Summary and its states.
+    ☒ Create Run Summary from supplied run state, progress, result counts, and elapsed time.
+    ☒ Define compact and full presentations for title-bar and footer use.
+    ☒ Compose Status Indicator or Status Badge instead of duplicating status artwork.
+    ☒ Define idle, discovering, running, stopping, complete, cancelled, failed, and disconnected states.
+    ☒ Keep result aggregation and progress calculation outside Run Summary.
+    ☒ Create a dedicated component page for Run Summary and its states.
+        - Evidence: Penpot "Component - Run Summary" has compact and full
+          supplied-value presentations for idle, discovering, running,
+          stopping, complete, cancelled, failed, and disconnected. The
+          current run-state source maps queued/starting to the idle and
+          discovering presentations, cleaning to stopping, passed to
+          complete, and transport availability to disconnected. It keeps
+          aggregation and progress calculation outside the presentation.
 
 3.9 DwarfSpec component: Reproduce Command:
-    ☐ Create Reproduce Command from EditField or an appropriate read-only field presentation plus existing action components.
-    ☐ Show one contextual command for the selected result or failure.
-    ☐ Provide a Copy action.
-    ☐ Add Open in Terminal only if the product supports it.
-    ☐ Keep command generation, clipboard behavior, and terminal launching outside the component.
-    ☐ Do not present Reproduce Command as a replacement shell or source editor.
-    ☐ Create a dedicated component page for Reproduce Command and its states.
+    ☒ Create Reproduce Command from EditField or an appropriate read-only field presentation plus existing action components.
+    ☒ Show one contextual command for the selected result or failure.
+    ☒ Provide a Copy action.
+    ☒ Add Open in Terminal only if the product supports it.
+    ☒ Keep command generation, clipboard behavior, and terminal launching outside the component.
+    ☒ Do not present Reproduce Command as a replacement shell or source editor.
+    ☒ Create a dedicated component page for Reproduce Command and its states.
+        - Evidence: Penpot "Component - Reproduce Command" shows selected
+          result, selected failure, no-selection, and terminal-unavailable
+          presentations. Each available command is contextual and read-only;
+          Copy is present, while Open in Terminal is absent because the
+          current product contract has no terminal-launch capability.
 
 3.10 DwarfSpec component: Debug Options:
-    ☐ Create Debug Options from Panel, ConfigureButton, CycleHotkeyLabel, ToggleHotkeyLabel, Command Menu, Status Indicator, and targeting_prompt where applicable.
-    ☐ Use Dropdown Control only when a debug choice set is too large or unclear to cycle.
-    ☐ Include Break on Assertion only if supported by the runner.
-    ☐ Include Break on Lua Error only if supported by the runner.
-    ☐ Include Break on Cleanup Failure only if supported by the runner.
-    ☐ Include Pause Before Input only if supported by the runner.
-    ☐ Clearly indicate armed debug behavior without occupying the normal evidence pane.
-    ☐ Use HelpButton for command help only if the debug-options composition exposes a supported help target.
-    ☐ Keep variables, watches, general breakpoint management, and embedded source editing out of Debug Options.
-    ☐ Keep debug execution and breakpoint behavior outside the component.
-    ☐ Create a dedicated component page for Debug Options and its states.
+    ☒ Create Debug Options from Panel, ConfigureButton, CycleHotkeyLabel, ToggleHotkeyLabel, Command Menu, Status Indicator, and targeting_prompt where applicable.
+    ☒ Use Dropdown Control only when a debug choice set is too large or unclear to cycle.
+    ☒ Include Break on Assertion only if supported by the runner.
+    ☒ Include Break on Lua Error only if supported by the runner.
+    ☒ Include Break on Cleanup Failure only if supported by the runner.
+    ☒ Include Pause Before Input only if supported by the runner.
+    ☒ Clearly indicate armed debug behavior without occupying the normal evidence pane.
+    ☒ Use HelpButton for command help only if the debug-options composition exposes a supported help target.
+    ☒ Keep variables, watches, general breakpoint management, and embedded source editing out of Debug Options.
+    ☒ Keep debug execution and breakpoint behavior outside the component.
+    ☒ Create a dedicated component page for Debug Options and its states.
+        - Evidence: Penpot "Component - Debug Options" records unavailable,
+          armed-status-boundary, and help-boundary states. The current runner
+          has no debug-break or execution-pause contract, so break, pause,
+          choice, and help controls are absent rather than presented as
+          working controls. An armed state is reserved for a future supported
+          contract and remains outside the normal evidence pane.
 
 Phase 4: Compose the DwarfSpec runner experience
     ☐ Exit with every reusable screen panel, workspace layout, and representative viewer state composed from linked component instances.
 
 4.1 Reusable screen panel: Runner Header:
-    ☐ Create Runner Header from Panel, product title, Run Summary, compact TextButton actions, CycleHotkeyLabel or Dropdown Control configuration controls, optional ConfigureButton and HelpButton actions, and connection Status Badge.
-    ☐ Provide Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop actions.
-    ☐ Define enabled, disabled, focused, running, and stopping action states.
-    ☐ Show current scope, run state, progress, elapsed time, and active test without decorative workflow copy.
-    ☐ Use CycleHotkeyLabel for configurable Mode and Repeat values when each has a small finite option set.
-    ☐ Use Dropdown Control for Mode or Repeat only when exposing the complete option set in a popup is more usable.
-    ☐ Do not include reproduce-command editing or permanent debug configuration.
-    ☐ Create a dedicated component page for Runner Header and its states.
+    ☒ Create Runner Header from Panel, product title, Run Summary, compact TextButton actions, CycleHotkeyLabel or Dropdown Control configuration controls, optional ConfigureButton and HelpButton actions, and connection Status Badge.
+    ☒ Provide Run Scope, Rerun Selected, Rerun Failed, Debug Selected, and Stop actions.
+    ☒ Define enabled, disabled, focused, running, and stopping action states.
+    ☒ Show current scope, run state, progress, elapsed time, and active test without decorative workflow copy.
+    ☒ Use CycleHotkeyLabel for configurable Mode and Repeat values when each has a small finite option set.
+    ☒ Use Dropdown Control for Mode or Repeat only when exposing the complete option set in a popup is more usable.
+    ☒ Do not include reproduce-command editing or permanent debug configuration.
+    ☒ Create a dedicated component page for Runner Header and its states.
+        - Evidence: Penpot "Panel - Runner Header" shows idle, focused,
+          running, and stopping action states with supplied scope, active test,
+          compact run summary, and connection status. Mode and Repeat use
+          finite-cycle presentations; no Dropdown Control, reproduce-command
+          editing, or permanent debug configuration is shown.
 
 4.2 Reusable screen panel: Test Explorer Panel:
-    ☐ Create Test Explorer Panel from Panel, Tree View With Columns, EditField, CycleHotkeyLabel or Dropdown Control, Status Indicator, Divider, and active-scope text.
-    ☐ Show file, suite, and test hierarchy.
-    ☐ Show one supplied, right-aligned aggregate status per visible tree item.
-    ☐ Add search or text filtering.
-    ☐ Add status filtering for failed, errored, flaky, cleanup-failed, and not-run tests.
-    ☐ Evaluate tag and category filters against actual discovery metadata.
-    ☐ Use FilteredList for any flat auxiliary filter-choice list instead of rebuilding its List, EditField, and no-match behavior.
-    ☐ Do not replace the hierarchical Tree View With Columns with FilteredList.
-    ☐ Define empty, loading, no-match, discovery-error, and disconnected states.
-    ☐ Keep discovery, filtering, selection, and status aggregation outside the panel.
-    ☐ Create a dedicated component page for Test Explorer Panel and its states.
+    ☒ Create Test Explorer Panel from Panel, Tree View With Columns, EditField, CycleHotkeyLabel or Dropdown Control, Status Indicator, Divider, and active-scope text.
+    ☒ Show file, suite, and test hierarchy.
+    ☒ Show one supplied, right-aligned aggregate status per visible tree item.
+    ☒ Add search or text filtering.
+    ☒ Add status filtering for failed, errored, flaky, cleanup-failed, and not-run tests.
+    ☒ Evaluate tag and category filters against actual discovery metadata.
+    ☒ Use FilteredList for any flat auxiliary filter-choice list instead of rebuilding its List, EditField, and no-match behavior.
+    ☒ Do not replace the hierarchical Tree View With Columns with FilteredList.
+    ☒ Define empty, loading, no-match, discovery-error, and disconnected states.
+    ☒ Keep discovery, filtering, selection, and status aggregation outside the panel.
+    ☒ Create a dedicated component page for Test Explorer Panel and its states.
+        - Evidence: Penpot "Panel - Test Explorer" has hierarchy, empty,
+          loading, no-match, discovery-error, and disconnected specimens.
+          It keeps the hierarchical Tree View With Columns distinct from the
+          flat auxiliary filter-choice behavior and treats filters, discovery,
+          selection, and aggregate statuses as supplied state.
 
 4.3 Reusable screen panel: Test Results Panel:
     ☐ Create Test Results Panel from Panel, Divider, its pane title, Breadcrumb, selection context, Run Summary, Generic Table View, and Attempt Selector.

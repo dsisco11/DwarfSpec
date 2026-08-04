@@ -137,7 +137,7 @@ options.
 DwarfSpec provides a run-scoped `ds` object inside each live spec. It does not
 add `ds` to the process-wide Lua globals.
 
-Mount a component class or already-created instance to create test-owned UI:
+Mount a component class to create test-owned UI:
 
 ```lua
 describe('search dialog', function()
@@ -153,9 +153,10 @@ end)
 ```
 
 DwarfSpec accepts `widgets.Widget`, `overlay.OverlayWidget`, and `gui.ZScreen`
-classes or instances through the same component entry point. Component mounts
-own their UI host, instrument successful renders automatically, and use a 128
-by 64 DF-cell viewport by default; pass
+classes through the same component entry point. Already-created instances are
+rejected because DwarfSpec must own component construction and cleanup.
+Component mounts own their UI host, instrument successful renders
+automatically, and use a 128 by 64 DF-cell viewport by default; pass
 `viewport={width=..., height=...}` to select another size. Reusable factories
 remain ordinary Lua helpers.
 
@@ -466,6 +467,7 @@ selection, abort behavior, and exit codes.
 
 - [Installation](docs/installation.md)
 - [Writing live tests](docs/writing-tests.md)
+- [TestBed module and script graphs](docs/testbed.md)
 - [Configuration](docs/configuration.md)
 - [Command-line reference](docs/command-line.md)
 - [Architecture](docs/architecture.md)

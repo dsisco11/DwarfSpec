@@ -3244,7 +3244,11 @@ describe('DwarfSpec public mount commands', function()
             frame_body={x1=5, y1=4, x2=15, y2=8},
             subviews={child},
         })
-        ds.mount(root)
+        ds.mount(TestWidget, {
+            visible=true,
+            frame_body={x1=5, y1=4, x2=15, y2=8},
+            subviews={child},
+        })
         local subject = ds.get('child')
 
         assert.same({x1=8, y1=6, x2=12, y2=6},
@@ -3417,11 +3421,11 @@ describe('DwarfSpec public mount commands', function()
             frame_body={x1=90, y1=30, x2=95, y2=35},
             subviews={},
         })
-        ds.mount(TestWidget({
+        ds.mount(TestWidget, {
             visible=true,
             frame_body={x1=0, y1=0, x2=100, y2=40},
             subviews={hidden, unbounded, offscreen},
-        }))
+        })
         assert.has_error(function()
             ds.search({text='x'}, ds.get('hidden'))
         end, 'DwarfSpec search requires an effectively visible subject: ' ..

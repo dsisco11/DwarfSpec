@@ -67,7 +67,6 @@ try {
     }
     if ($null -ne $oldLuaCPath) { $luaCPath += ";$oldLuaCPath" }
     Set-Item -LiteralPath Env:LUA_CPATH -Value $luaCPath
-
     $bustedRockDir = & luarocks show busted $bustedVersion `
         --tree $rockTree `
         --rock-dir
@@ -81,7 +80,7 @@ try {
         throw "Busted's Lua runner was not found at '$bustedRunner'."
     }
 
-    & lua $bustedRunner '--defer-print' '-o' 'plainTerminal' `
+    & $luaCommand.Source $bustedRunner '--defer-print' '-o' 'plainTerminal' `
         @BustedArgs $testsRoot
     $testExitCode = $LASTEXITCODE
 }

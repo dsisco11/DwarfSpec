@@ -1,0 +1,1 @@
+return reqscript('worker').value

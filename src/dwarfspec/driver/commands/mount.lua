@@ -61,8 +61,19 @@ function M.new(dependencies)
     end
     return {
         ---Mounts one owned component or complete screen.
-        mount=function(component, options)
+        mount=function(component, options, testbed_config)
             assert(component ~= nil, 'DwarfSpec ds.mount() requires a component; use ds.mountNativeScreen() to mount the current native DF screen')
+            if type(component) == 'table' and component.kind ~= nil then
+                return context.mount_context:mount_descriptor(component, options,
+                    testbed_config)
+            end
+            assert(testbed_config == nil,
+                'DwarfSpec class mount does not accept a third argument')
+            if context.mount_context.boundary then
+                local classification = context.mount_context.boundary:classify(component)
+                assert(classification.input_form == 'class',
+                    'DwarfSpec ds.mount() accepts a component class, not an instance')
+            end
             return context.mount_context:mount(component, options)
         end,
         ---Mounts the current native DF screen without taking ownership of it.

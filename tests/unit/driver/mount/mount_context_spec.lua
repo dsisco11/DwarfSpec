@@ -49,12 +49,14 @@ describe('DwarfSpec mount context', function()
     local invalid_result
     local fail_subject
     local fail_render
+    local fail_adapter_cleanup
     local native_observer_installs
     local native_observer_restores
     local native_observer_install_failure
     local native_observer_restore_failure
     local cleanup_push_count
     local cleanup_push_failure_at
+    local expected_pending
     local native_cleanup_events
 
     before_each(function()
@@ -70,12 +72,14 @@ describe('DwarfSpec mount context', function()
         invalid_result = false
         fail_subject = false
         fail_render = false
+        fail_adapter_cleanup = false
         native_observer_installs = 0
         native_observer_restores = 0
         native_observer_install_failure = nil
         native_observer_restore_failure = nil
         cleanup_push_count = 0
         cleanup_push_failure_at = nil
+        expected_pending = 1
         native_cleanup_events = {}
         local boundary = component.new({
             Widget=Widget,
@@ -135,13 +139,17 @@ describe('DwarfSpec mount context', function()
                 assert.equals('widget', category)
                 return {
                     mount=function(_, mount, prepared, register_cleanup)
-                        assert.equals(1, cleanup.pending_count(registry))
+                        assert.equals(expected_pending, cleanup.pending_count(registry))
                         local screen = {active=true, name=prepared.component.name}
                         table.insert(screens, screen)
                         table.insert(events, 'mount:' .. screen.name)
                         register_cleanup('adapter resource ' .. screen.name,
                             function()
                                 table.insert(events, 'resource:' .. screen.name)
+                                if fail_adapter_cleanup then
+                                    error('adapter cleanup exploded for ' ..
+                                        screen.name)
+                                end
                             end)
                         mount.adapter_screen = screen
                         if fail_activation then
@@ -206,6 +214,342 @@ describe('DwarfSpec mount context', function()
                 }
             end,
         })
+    end)
+
+    it('mounts a module descriptor through one fresh TestBed and closes it after the component', function()
+        local close_count = 0
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function(config)
+            assert.is_nil(config)
+            return {
+                require=function(_, name)
+                    assert.equals('fixture', name)
+                    return TestWidget
+                end,
+                reqscript=function() error('unexpected script load') end,
+                close=function()
+                    close_count = close_count + 1
+                    table.insert(events, 'bed-close')
+                end,
+            }
+        end}
+
+        local mounted = context:mount_descriptor({kind='module', name='fixture'},
+            {name='descriptor'})
+        assert.equals(1, mounted.mount_id)
+        context:unmount()
+        assert.equals(1, close_count)
+        assert.equals('unmount:descriptor', events[#events - 2])
+        assert.equals('bed-close', events[#events])
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('uses reqscript and forwards explicit TestBed configuration separately', function()
+        local received_config
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function(config)
+            received_config = config
+            return {require=function() error('unexpected module load') end,
+                reqscript=function(_, name)
+                    assert.equals('fixture', name)
+                    return {Named=TestWidget}
+                end,
+                close=function() end}
+        end}
+        local subject = context:mount_descriptor(
+            {kind='script', name='fixture', export='Named'},
+            {name='component'}, {component_imports=false})
+        assert.equals('component', subject:raw().name)
+        assert.same({component_imports=false}, received_config)
+    end)
+
+    it('forwards omitted and explicit configuration for both descriptor kinds', function()
+        local received = {}
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function(config)
+            table.insert(received, {config=config})
+            return {
+                require=function() return TestWidget end,
+                reqscript=function() return TestWidget end,
+                close=function() end,
+            }
+        end}
+
+        context:mount_descriptor({kind='script', name='omitted'}, {name='script'})
+        context:unmount()
+        context:mount_descriptor({kind='module', name='explicit'},
+            {name='module'}, {component_imports=false})
+        context:unmount()
+
+        assert.is_nil(received[1].config)
+        assert.same({component_imports=false}, received[2].config)
+    end)
+
+    it('passes empty descriptor names and exports to the underlying loader', function()
+        local requested_name
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            return {require=function(_, name)
+                requested_name = name
+                return {['']=TestWidget}
+            end, reqscript=function() error('unexpected script load') end,
+                close=function() end}
+        end}
+        context:mount_descriptor({kind='module', name='', export=''},
+            {name='empty'})
+        assert.equals('', requested_name)
+    end)
+
+    it('keeps overlapping component options and TestBed configuration separate', function()
+        local received_config
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function(config)
+            received_config = config
+            return {require=function() return TestWidget end,
+                reqscript=function() error('unexpected script load') end,
+                close=function() end}
+        end}
+        local subject = context:mount_descriptor({kind='module', name='fixture'},
+            {globals='component value', name='separate'},
+            {globals={custom='TestBed value'}})
+        assert.equals('component value', subject:raw().globals)
+        assert.equals('TestBed value', received_config.globals.custom)
+    end)
+
+    it('creates a fresh TestBed for each consecutive descriptor mount', function()
+        local beds = {}
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            local bed = {closed=false, require=function() return TestWidget end,
+                reqscript=function() error('unexpected script load') end,
+                close=function(self) self.closed = true end}
+            table.insert(beds, bed)
+            return bed
+        end}
+        context:mount_descriptor({kind='module', name='first'}, {name='first'})
+        context:unmount()
+        context:mount_descriptor({kind='module', name='second'}, {name='second'})
+        context:unmount()
+        assert.equals(2, #beds)
+        assert.is_not_equal(beds[1], beds[2])
+        assert.is_true(beds[1].closed)
+        assert.is_true(beds[2].closed)
+    end)
+
+    it('rejects malformed descriptors before allocating a TestBed', function()
+        local allocations = 0
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function() allocations = allocations + 1 end}
+        for _, descriptor in ipairs({
+            {}, {kind='other', name='fixture'}, {kind='module', name=1},
+            {kind='module', name='fixture', export=1},
+            {kind='module', name='fixture', extra=true},
+        }) do
+            assert.has_error(function() context:mount_descriptor(descriptor) end)
+        end
+        assert.equals(0, allocations)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('rejects instantiated TestBeds and invalid descriptor exports before mounting', function()
+        local TestBed = require('dwarfspec.testbed')
+        local bed = TestBed.new()
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            return {require=function() return {missing=nil, invalid={}} end,
+                reqscript=function() error('unexpected script load') end,
+                close=function() end}
+        end}
+        assert.has_error(function()
+            context:mount_descriptor({kind='module', name='fixture'}, nil, bed)
+        end)
+        bed:close()
+        assert.has_error(function()
+            context:mount_descriptor({kind='module', name='fixture'}, nil, bed)
+        end)
+        assert.has_error(function()
+            context:mount_descriptor({kind='module', name='fixture', export='missing'})
+        end)
+        assert.has_error(function()
+            context:mount_descriptor({kind='module', name='fixture', export='invalid'})
+        end)
+    end)
+
+    it('closes a descriptor TestBed after loader and export failures', function()
+        local close_count = 0
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            return {require=function() error('loader failed') end,
+                reqscript=function() error('loader failed') end,
+                close=function() close_count = close_count + 1 end}
+        end}
+        local ok, failure = pcall(function()
+            context:mount_descriptor({kind='module', name='fixture'})
+        end)
+        assert.is_false(ok)
+        assert.matches('loader failed', failure, 1, true)
+        assert.equals(1, close_count)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('closes an unregistered TestBed when cleanup registration fails', function()
+        local close_count = 0
+        cleanup_push_failure_at = 1
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            return {close=function() close_count = close_count + 1 end}
+        end}
+        assert.has_error(function()
+            context:mount_descriptor({kind='module', name='fixture'})
+        end)
+        assert.equals(1, close_count)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('leaves no cleanup registration when TestBed construction fails', function()
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function() error('adapter setup failed') end}
+        local ok, failure = pcall(function()
+            context:mount_descriptor({kind='module', name='fixture'})
+        end)
+        assert.is_false(ok)
+        assert.matches('adapter setup failed', failure, 1, true)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('does not allocate TestBeds for ordinary class mount success or failure', function()
+        local allocations = 0
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            allocations = allocations + 1
+            error('ordinary class mounts must not construct TestBeds')
+        end}
+
+        context:mount(TestWidget, {name='class-success'})
+        context:unmount()
+        fail_activation = true
+        assert.has_error(function()
+            context:mount(TestWidget, {name='class-failure'})
+        end)
+
+        assert.equals(0, allocations)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('closes exactly once without component teardown after descriptor construction fails', function()
+        local close_count = 0
+        local ConstructorFailure = make_class(Widget, function()
+            error('descriptor constructor exploded')
+        end)
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            return {
+                require=function() return ConstructorFailure end,
+                reqscript=function() error('unexpected script load') end,
+                close=function()
+                    close_count = close_count + 1
+                    table.insert(events, 'bed-close')
+                end,
+            }
+        end}
+
+        assert.has_error(function()
+            context:mount_descriptor({kind='module', name='constructor'})
+        end)
+
+        assert.equals(1, close_count)
+        assert.equals(1, #events)
+        assert.equals('bed-close', events[1])
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('closes descriptor TestBeds for mount, assertion, and cleanup failures', function()
+        local close_count = 0
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            return {
+                require=function() return TestWidget end,
+                reqscript=function() error('unexpected script load') end,
+                close=function()
+                    close_count = close_count + 1
+                    table.insert(events, 'bed-close')
+                end,
+            }
+        end}
+
+        fail_activation = true
+        assert.has_error(function()
+            context:mount_descriptor({kind='module', name='mount'}, {name='mount'})
+        end)
+        fail_activation = false
+        invalid_result = true
+        assert.has_error(function()
+            context:mount_descriptor({kind='module', name='assertion'}, {name='assertion'})
+        end)
+        invalid_result = false
+        fail_adapter_cleanup = true
+        context:mount_descriptor({kind='module', name='cleanup'}, {name='cleanup'})
+        assert.has_error(function() context:unmount() end)
+
+        assert.equals(3, close_count)
+        assert.equals(0, cleanup.pending_count(registry))
+        assert.equals('bed-close', events[#events])
+    end)
+
+    it('closes exactly once after component teardown on descriptor success and failures', function()
+        local close_count = 0
+        expected_pending = 2
+        context.testbed_host = {}
+        context.testbed_adapter = {new=function()
+            return {
+                require=function() return TestWidget end,
+                reqscript=function() error('unexpected script load') end,
+                close=function()
+                    close_count = close_count + 1
+                    table.insert(events, 'bed-close')
+                end,
+            }
+        end}
+        local function assert_component_before_bed(name, configure,
+                cleanup_fails)
+            configure()
+            local ok = pcall(function()
+                context:mount_descriptor({kind='module', name=name}, {name=name})
+            end)
+            if ok then
+                local unmount_ok = pcall(function() context:unmount() end)
+                assert.equals(not cleanup_fails, unmount_ok)
+            end
+            assert.equals('bed-close', events[#events])
+            local unmount_index
+            for index, event in ipairs(events) do
+                if event == 'unmount:' .. name then unmount_index = index end
+            end
+            assert.is_not_nil(unmount_index)
+            assert.is_true(unmount_index < #events)
+        end
+
+        assert_component_before_bed('normal', function() end)
+        assert_component_before_bed('mount-failure', function()
+            fail_activation = true
+        end)
+        fail_activation = false
+        assert_component_before_bed('assertion-failure', function()
+            invalid_result = true
+        end)
+        invalid_result = false
+        fail_adapter_cleanup = true
+        assert_component_before_bed('cleanup-failure', function() end, true)
+
+        assert.equals(4, close_count)
+        assert.equals(0, cleanup.pending_count(registry))
     end)
 
     after_each(function()

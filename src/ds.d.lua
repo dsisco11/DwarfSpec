@@ -430,9 +430,31 @@ function DS.getViewPos(origin) end
 ---@return dwarfspec.MapViewPosition
 function DS.setViewPos(position, origin) end
 
+---Identifies a callable DFHack defclass table accepted by `ds.mount`.
+---Runtime validation distinguishes a class from an already-created instance.
+---@alias dwarfspec.ComponentClass table
+
+---Identifies a component exported by a bed-local Lua module.
+---@class dwarfspec.ModuleComponentSource
+---@field kind 'module'
+---@field name string
+---@field export? string
+
+---Identifies a component exported by a bed-local DFHack script module.
+---@class dwarfspec.ScriptComponentSource
+---@field kind 'script'
+---@field name string
+---@field export? string
+
+---Selects a component source that must be resolved through a TestBed.
+---@alias dwarfspec.TestBedComponentSource
+---| dwarfspec.ModuleComponentSource
+---| dwarfspec.ScriptComponentSource
+
 ---Mounts one owned component or complete screen.
 ---DwarfSpec automatically unmounts it during example cleanup.
----@param component any
+---@overload fun(source: dwarfspec.TestBedComponentSource, options?: dwarfspec.MountOptions, testbed?: dwarfspec.TestBedConfig): dwarfspec.Subject
+---@param component dwarfspec.ComponentClass
 ---@param options? dwarfspec.MountOptions
 ---@return dwarfspec.Subject
 function DS.mount(component, options) end

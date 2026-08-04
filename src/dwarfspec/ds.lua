@@ -74,6 +74,8 @@ local component_module = load_automation_module(package_root,
     'dwarfspec.driver.mount.component')
 local mount_context_module = load_automation_module(package_root,
     'dwarfspec.driver.mount.mount_context')
+local testbed_adapter_module = load_automation_module(package_root,
+    'dwarfspec.driver.mount.testbed_adapter')
 local mount_adapters_module = load_automation_module(package_root,
     'dwarfspec.driver.mount.mount_adapters')
 local overlay_mount_module = load_automation_module(package_root,
@@ -606,6 +608,9 @@ local command_observer_module = load_automation_module(package_root,
         native_render_observer_factory=native_render_observer_factory,
         subject_module=mount_dependencies.subject_module or subject_module,
         command_observer=command_observer,
+        testbed_adapter=testbed_adapter_module,
+        testbed_host={require=require, reqscript=dfhack.reqscript,
+            base=dfhack.BASE_G, dfhack=dfhack},
     })
     local search_command = text_search_command.new_command({
         mount_context=context.mount_context,
