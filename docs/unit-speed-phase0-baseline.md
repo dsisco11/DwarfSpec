@@ -39,7 +39,7 @@ declaration, test, package, or live-automation files were changed.
 | One active controller per example | Phase 3.3 ownership | Phase 3.4 rejection and consecutive-example tests |
 | Pause and TPS remain independent | Phase 3.3 activation and the existing game-state command | Phases 3.4, 7.2, and 8.1 |
 | Automatic deactivation and verified cleanup | Phase 2.3 cleanup integration | Phases 2.4 and 7.3 terminal-path evidence |
-| One shared teleport implementation and first-coordinate baseline per moved unit | Phase 5.1 shared unit-position controller | Phases 5.5, 7.2, 7.3, and 8.4 |
+| One shared teleport implementation and first position plus helper-coupled `idle_area` baseline per moved unit | Phase 5.1 shared unit-position controller | Phases 5.5, 7.2, 7.3, and 8.4 |
 | Coordinate rollback for explicit placement and job travel | Phase 5.1 cleanup restoration | Phases 5.5 and 7.2 live coordinate verification |
 | Cancel recurring job travel before coordinate restoration | Phase 5.1 LIFO cleanup ordering | Phases 5.5 and 7.3 terminal-path verification |
 | `unit_position_active` cleanup ownership probe | Phase 5.1 shared controller and authoritative cleanup probe | Phases 5.5 and 7.3 terminal reports |
@@ -90,9 +90,10 @@ simulation consequences are not restored.
 coordinate, teleports through the shared controller, and returns no value. It is
 not restricted to the citizen/resident population used by `setUnitSpeed`.
 Before the first successful explicit or job-travel teleport of a unit, the
-controller captures its original coordinate. Later moves share that baseline,
-and cleanup restores and verifies the coordinate. Phase 1 must characterize and
-constrain adjacent native state that coordinate rollback cannot safely reverse.
+controller captures its original coordinate and helper-coupled `idle_area`.
+Later moves share that baseline, and cleanup restores and verifies both values.
+Phase 1 must characterize and constrain adjacent native state that coordinate
+rollback cannot safely reverse.
 
 ## Targeting rules
 
