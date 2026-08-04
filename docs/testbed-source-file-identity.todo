@@ -168,12 +168,11 @@ Phase 3: Build the source-node registry, request context, and execution contract
 3.3 Execution contracts:
     ☐ Detect annotated DFHack script mode from source declarations through the configured source interface.
     ☐ Treat annotated sources as script-environment producers and ordinary Lua sources as module-value producers.
-    ☐ Reject `reqscript()` access to ordinary module sources before execution.
-    ☐ Reject `require()` access to annotated script sources before execution.
-    ☐ Compare `use_source` replacement declarations with the target contract before execution.
-    ☐ Keep `use_value` protocol-neutral and validate it at each access boundary instead of classifying it by first use.
-    ☐ Reuse the same configured value for every later compatible request to the target regardless of which compatible operation reached it first.
-    ☐ Make `use_existing` adopt the referenced node's execution contract.
+    ☐ Implement provider-neutral access-contract validation that rejects a `reqscript` operation on an ordinary module source before execution.
+    ☐ Implement provider-neutral access-contract validation that rejects a `require` operation on an annotated script source before execution.
+    ☐ Implement provider-neutral comparison of two readable sources' execution contracts for later strategy use.
+    ☐ Keep contract detection, comparison, and access validation independent of provider selection and request order.
+    ☐ Do not consult the provider registry, traverse `use_existing`, or apply any provider strategy in this phase; Phase 7 owns that behavior.
 
 3.4 Loader primitives:
     ☐ Compile file-backed source through injected read/compile or loadfile capabilities without coupling the core to a real filesystem.
@@ -186,8 +185,8 @@ Phase 3: Build the source-node registry, request context, and execution contract
     ☐ Prove file and virtual nodes remain disjoint and virtual nodes cannot be provider targets.
     ☐ Prove request context is removed after success and every failure path.
     ☐ Prove cycles use canonical source chains and do not create persistent graph state.
+    ☐ Prove provider-neutral contract detection, comparison, and incompatible module/script access validation without selecting or applying a provider.
     ☐ Prove incompatible module/script access fails before source execution and never creates a second node.
-    ☐ Prove `use_source` content identity and loader data remain separate from target identity.
 
 Completion criteria:
     ☐ A single tested source engine can load, retry, diagnose, and close nodes without knowing whether a later caller uses `load`, `require`, or `reqscript`.
@@ -332,7 +331,8 @@ Phase 7: Implement provider selection and all source strategies
     ☐ Exercise every provider strategy through internal direct-source access and through module and script adapters where compatible; repeat the public direct-load cases after Phase 8 exposes them.
     ☐ Prove two logical names and both adapters select the same provider for one readable target and cannot create separate provider-backed source generations.
     ☐ Prove a provider cannot create a missing candidate or shadow a later readable candidate.
-    ☐ Prove `use_source` isolation, `use_existing` shared identity, lazy target providers, cycle diagnostics, and failure usage marking.
+    ☐ Prove `use_source` target/replacement contract comparison, target identity, replacement loader-data separation, and isolation across distinct targets.
+    ☐ Prove `use_existing` shared identity, lazy target providers, adopted contracts, cycle diagnostics, and failure usage marking.
 
 Completion criteria:
     ☐ Provider behavior depends only on the selected readable target identity, with adapter-specific validation limited to the source-access boundary.
