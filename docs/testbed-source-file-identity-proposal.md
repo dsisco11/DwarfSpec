@@ -110,8 +110,9 @@ relative to the effective consumer root:
 src/my_plugin/clock.lua
 ```
 
-Absolute paths remain supported for sources intentionally outside the
-consumer project.
+Normal absolute paths remain supported for sources intentionally outside the
+consumer project. On Windows, this includes drive-absolute and UNC paths but
+excludes drive-relative and device-namespace paths.
 
 ### Source identity
 
@@ -172,6 +173,12 @@ local bed = TestBed.new{
 Every target is resolved relative to the effective consumer root when the
 TestBed is constructed. Duplicate canonical targets are configuration errors,
 including targets written with lexically equivalent paths.
+
+Each provider must specify exactly one of `use_value`, `use_source`,
+`use_existing`, or `use_host`. Supplying none or more than one is a
+configuration error. `use_value=nil` is indistinguishable from an omitted Lua
+table field and therefore counts as no strategy; providers cannot use it to
+represent a supplied `nil` value.
 
 ### Provider strategies
 
@@ -295,6 +302,13 @@ local controller = bed:load('src/my_plugin/controller.lua')
 provider, and returns the source node's value. This becomes the preferred
 entry point for new tests and source descriptors.
 
+An absent direct target can be loaded when a provider supplies it. `use_value`
+returns its configured value directly; `use_source` executes according to the
+provided source's declared contract; `use_existing` adopts the referenced
+source's contract and value; and `use_host` uses its explicit host operation
+and name. An absent target without a provider fails with the ordinary
+source-resolution diagnostic.
+
 `bed:require(name)` and `bed:reqscript(name)` remain supported as compatibility
 entry points and as the implementations bound into production source
 environments. They resolve the requested name to a source identity before
@@ -366,11 +380,11 @@ represent canonical file paths. Private `package.preload` entries and custom
 also supports adapter-owned virtual identities.
 
 The default preload searcher assigns `virtual:preload:<name>` identities.
-Custom searcher results receive bed-local virtual identities containing the
-searcher identity, request name, and bounded loader data. These identities are
-diagnostic and cache keys; they are not valid public import targets. A custom
-searcher may opt into a file-backed identity by returning documented TestBed
-source metadata with its loader.
+Every custom-searcher result receives a stable bed-local virtual identity based
+on the searcher and requested name. Loader data remains ordinary loader data
+and does not provide or alter source identity. Virtual identities are
+diagnostic and cache keys; they are not valid public provider targets. TestBed
+defines no custom-searcher protocol for claiming a file-backed identity.
 
 The private `package.preload` and `package.searchers` tables remain mutable and
 authoritative. Their ordering is preserved. Source-targeted provider lookup
@@ -551,7 +565,10 @@ requests produce candidate source files. They no longer partition provider
 identity.
 
 Relative `target`, `use_source`, `use_existing`, and direct `load()` paths all
-resolve from the same effective consumer root. Absolute paths remain accepted.
+resolve from the same effective consumer root. Normal absolute paths remain
+accepted. On Windows, TestBed accepts drive-absolute and UNC paths and rejects
+ambiguous drive-relative paths such as `C:src/clock.lua` and device-namespace
+paths such as `\\?\C:\src\clock.lua` or `\\.\device`.
 
 Lexical normalization must make these references identical:
 
@@ -660,6 +677,8 @@ process-wide `package.path`, `package.loaded`, or DFHack script cache.
 
 Focused unit coverage must prove:
 
+- provider configuration accepts exactly one strategy and rejects missing or
+  competing strategies, including `use_value=nil` as a missing strategy;
 - lexically equivalent target paths produce one provider identity;
 - two different logical module names resolving to one file share one source
   node and one result;
@@ -696,8 +715,11 @@ Focused unit coverage must prove:
 - `use_host` uses explicit operation/name metadata and is independent of alias
   or request order;
 - direct loading exercises present and absent targets for every compatible
-  provider strategy;
-- Windows and Unix path normalization follow the declared identity rules;
+  provider strategy and rejects absent targets without a provider;
+- filesystem-free canonicalization and candidate-resolution tests cover
+  project-relative paths, normal absolute paths, Windows drive-absolute and UNC
+  paths, rejected Windows drive-relative and device-namespace paths, and the
+  declared platform case rules;
 - standalone configuration remains independent from live-host support;
 - the reserved `dfhack` facade and protected loader bindings cannot be
   intercepted by source providers;
@@ -787,3 +809,12 @@ The refactor is complete only when:
 - The first `close()` creates and attempts delivery of one warning, in
   declaration order, for every user-configured provider that was never
   selected.
+- Every provider specifies exactly one strategy; `use_value=nil` counts as an
+  omitted strategy and is invalid.
+- Direct loading supports absent targets through the configured provider
+  strategy and rejects an absent target without a provider.
+- Custom-searcher results always use stable bed-local virtual identities and
+  cannot declare file-backed source metadata.
+- Path validation accepts project-relative and normal absolute paths, including
+  Windows drive-absolute and UNC paths, while rejecting Windows drive-relative
+  and device-namespace paths. Path tests remain filesystem-free.
