@@ -2,9 +2,8 @@
 
 ## Status
 
-This is a draft proposal for discussion. It defines a direction for the
-TestBed model and public API. It does not authorize or describe a completed
-implementation.
+This proposal is accepted as the design contract for implementation planning.
+It does not describe a completed implementation.
 
 ## Summary
 
@@ -12,11 +11,11 @@ Refactor TestBed so that a resolved source file is the primary identity of a
 dependency. `require()` and `dfhack.reqscript()` remain supported ways for
 production code to reach dependencies, but they become request adapters at the
 edges of the TestBed graph. They no longer determine the identity used for
-replacements, caching, aliases, or diagnostics. `mkmodule()` remains a
+providers, caching, aliases, or diagnostics. `mkmodule()` remains a
 publication operation and binds a module name to the source that is currently
 executing instead of resolving another source.
 
-The current import form:
+The current provider form:
 
 ```lua
 {
@@ -25,7 +24,7 @@ The current import form:
 }
 ```
 
-would become source-focused:
+will become source-focused:
 
 ```lua
 {
@@ -34,7 +33,7 @@ would become source-focused:
 }
 ```
 
-The replacement applies when any supported TestBed loader resolves a request
+The provider applies when any supported TestBed loader resolves a request
 to that target file. Callers do not specify whether the target is reached with
 `require()` or `reqscript()`.
 
@@ -66,16 +65,17 @@ then consult one registry keyed by canonical source identity.
 
 ## Goals
 
-- Make the source file being replaced explicit in every user-configured
-  import.
-- Remove `kind` from ordinary TestBed import configuration.
+- Make the source file being provided explicit in every user-configured
+  provider.
+- Remove `kind` from ordinary TestBed provider configuration.
 - Make one canonical lexical source path one TestBed graph identity, even when
   multiple logical names can reach it.
-- Allow `require()` and `reqscript()` to share replacement selection without
+- Allow `require()` and `reqscript()` to share provider selection without
   erasing their production-compatible call behavior.
-- Preserve `mkmodule()` as immediate publication of the currently executing
-  source environment so circular module imports continue to work.
-- Keep replacements deterministic when roots, `package.path`, or aliases
+- Preserve `mkmodule()` as immediate publication of a module environment
+  associated with the currently executing source so circular module imports
+  continue to work.
+- Keep providers deterministic when roots, `package.path`, or aliases
   produce multiple candidate files.
 - Preserve the ability to replace a source that is intentionally absent from
   the test filesystem.
@@ -83,6 +83,9 @@ then consult one registry keyed by canonical source identity.
 - Preserve mount-scoped ownership and cleanup for live descriptor mounts.
 - Produce diagnostics in terms of source paths, with request method and
   logical name included only as context.
+- Create one deterministic warning record and perform the defined delivery
+  attempt for each user-configured provider that was never selected before its
+  TestBed closes.
 
 ## Non-goals
 
@@ -113,15 +116,16 @@ consumer project.
 ### Source identity
 
 A source identity is TestBed's canonical internal filename. It uses an
-absolute path, forward slashes, a normalized drive prefix on Windows, and
-lexically normalized `.` and `..` segments. It does not use `realpath()` or
-resolve symlinks.
+absolute path, forward slashes, and lexically normalized `.` and `..` segments.
+On Windows, deterministic ASCII case folding makes the complete path
+case-insensitive. On other platforms, path identity remains case-sensitive.
+TestBed does not use `realpath()` or resolve symlinks.
 
-This follows the existing TestBed path policy while making the normalized
-filename the graph key. Symlinks, hard links, and path spellings that remain
-distinct after the declared lexical normalization may still create distinct
-source identities even when the filesystem ultimately reaches the same
-physical file.
+This extends the existing TestBed lexical path policy by folding the complete
+Windows path and by making the normalized filename the graph key. Symlinks,
+hard links, and path spellings that remain distinct after the declared lexical
+normalization may still create distinct source identities even when the
+filesystem ultimately reaches the same physical file.
 
 ### Request edge
 
@@ -135,17 +139,19 @@ A request edge records how one source reached another source. It includes:
 The operation and logical name belong to the edge, not to the target's
 identity.
 
-### Replacement
+### Provider
 
-A replacement is a test policy attached to a target source identity. It
-selects one of the supported strategies: a value, another source file, a
-shared existing source identity, or a value borrowed from the live host.
+A provider is a test policy attached to a target source identity. It selects
+one of the supported strategies: a value, another source file, a shared
+existing source identity, or a value borrowed from the live host. A provider
+can satisfy an existing source or act as a virtual source when the target file
+is intentionally absent.
 
 ## Proposed public API
 
-### Source-targeted imports
+### Source-targeted providers
 
-Retain the `imports` configuration field initially, but replace `provide` with
+Replace the `imports` configuration field with `providers`. Each provider has
 one required `target` source reference:
 
 ```lua
@@ -154,7 +160,7 @@ local MOCK_CLOCK = {
 }
 
 local bed = TestBed.new{
-    imports={
+    providers={
         {
             target='src/my_plugin/clock.lua',
             use_value=MOCK_CLOCK,
@@ -163,15 +169,11 @@ local bed = TestBed.new{
 }
 ```
 
-Keeping `imports` limits the public rename surface while the identity model is
-being corrected. Renaming the field to `replacements` can be considered
-separately after the new semantics are accepted.
-
 Every target is resolved relative to the effective consumer root when the
 TestBed is constructed. Duplicate canonical targets are configuration errors,
 including targets written with lexically equivalent paths.
 
-### Replacement strategies
+### Provider strategies
 
 `use_value` continues to return the exact borrowed value:
 
@@ -182,7 +184,7 @@ including targets written with lexically equivalent paths.
 }
 ```
 
-`use_source` executes a replacement file under the target source's graph
+`use_source` executes a provided file under the target source's graph
 identity:
 
 ```lua
@@ -192,7 +194,7 @@ identity:
 }
 ```
 
-The replacement filename is not a second graph identity. If the same fake
+The provided filename is not a second graph identity. If the same fake
 file is used for two targets, TestBed creates two isolated target nodes. Use
 `use_existing` when shared identity is intended.
 
@@ -206,15 +208,15 @@ node:
 }
 ```
 
-The referenced source does not need to be loaded first. Its own replacement,
-if any, is applied normally. An absent referenced source without a replacement
+The referenced source does not need to be loaded first. Its own provider, if
+any, is applied normally. An absent referenced source without a provider
 fails when the alias is first requested. Self-aliases and longer
 `use_existing` cycles are errors reported with the complete source chain. The
 request reaching the alias must be compatible with the referenced source's
 execution contract.
 
 Host borrowing remains live-only, but its core registry entry is attached to a
-source identity instead of a module or script token. The replacement carries
+source identity instead of a module or script token. The provider carries
 explicit adapter metadata so its result does not depend on which request edge
 happens to arrive first:
 
@@ -225,12 +227,61 @@ happens to arrive first:
 }
 ```
 
-`operation` is either `require` or `reqscript`. It describes how the
-replacement value is obtained from DFHack; it is not part of the target source
+`operation` is either `require` or `reqscript`. It describes how the provided
+value is obtained from DFHack; it is not part of the target source
 identity. Because the metadata is explicit, direct source loading, aliases,
 and repeated access all borrow the same deterministic host value. A request
 whose execution contract is incompatible with the configured host operation
 fails before the host loader is called.
+
+### Unused-provider warnings
+
+Each user-configured provider begins unused. TestBed marks it used at definitive
+provider selection, before provider-specific contract validation, alias
+traversal, source loading, or host invocation. A selected provider remains used
+even if compatibility validation, its strategy, or subsequent source execution
+fails. Merely validating configuration or generating a matching candidate path
+does not mark a provider used.
+
+On the first `bed:close()`, TestBed creates one warning record for each provider
+that remains unused and performs the delivery defined below. Records follow the
+original provider declaration order and include the configured target,
+canonical target, and selected strategy:
+
+```text
+TestBed unused provider: target "src/my_plugin/clock.lua"
+  resolved to "D:/project/src/my_plugin/clock.lua" (use_value)
+```
+
+Only user-configured providers participate. Internal source nodes, preload and
+custom-searcher results, and automatic live host fallbacks do not produce
+unused-provider warnings.
+
+`use_existing` marks its own target provider used when the alias is selected.
+The referenced target's provider is marked used only if lazy resolution
+selects it. Repeated provider use produces no additional warning or event.
+
+Warnings are processed once even when `close()` is called repeatedly. The first
+close snapshots one unused-provider warning record per provider in declaration
+order, completes graph cleanup, and then delivers those records.
+
+The warning sink is an internal constructor or live-adapter capability, not a
+public `TestBedConfig` field. Standalone construction defaults it to standard
+error. Live descriptor mounts inject DwarfSpec's host diagnostic sink. Focused
+tests inject a recording sink instead of writing to a real process stream.
+
+Delivery is per record and preserves order. TestBed attempts the active sink
+once for each record. If a non-default sink raises, TestBed attempts standard
+error once for that record, disables the failed sink, and sends all remaining
+records directly to standard error. If standard error itself fails, TestBed
+suppresses that delivery error and continues processing later records.
+Warning-delivery failure never prevents graph cleanup, makes `close()` raise,
+or causes records to be processed again on a later `close()`.
+
+For standalone tests, `close()` defines the end of the TestBed lifetime. For
+live descriptor tests, DwarfSpec processes warnings while closing the
+mount-owned TestBed after component destruction and unmounting. A TestBed that
+is never closed cannot report unused providers reliably.
 
 ### Direct source loading
 
@@ -241,16 +292,13 @@ local controller = bed:load('src/my_plugin/controller.lua')
 ```
 
 `bed:load(source)` resolves a source reference directly, applies any matching
-replacement, and returns the source node's value. This becomes the preferred
+provider, and returns the source node's value. This becomes the preferred
 entry point for new tests and source descriptors.
 
 `bed:require(name)` and `bed:reqscript(name)` remain supported as compatibility
 entry points and as the implementations bound into production source
 environments. They resolve the requested name to a source identity before
 loading it.
-
-The final method name (`load`, `load_source`, or another spelling) remains an
-API naming decision. This proposal uses `load` for readability.
 
 ### Source-focused component descriptors
 
@@ -263,7 +311,7 @@ ds.mount({
 }, {
     title='Saved value',
 }, {
-    imports={
+    providers={
         {
             target='src/my_plugin/storage.lua',
             use_value=MOCK_STORAGE,
@@ -290,8 +338,8 @@ of source candidates:
 - `load('src/my_plugin/clock.lua')` supplies one direct candidate.
 
 Every candidate is canonicalized before lookup. Resolution selects the first
-candidate that either exists as a readable file or has a configured
-replacement. A replacement therefore acts as a virtual source file and can
+candidate that either exists as a readable file or has a configured provider.
+A provider therefore acts as a virtual source file and can
 intentionally shadow a later real candidate.
 
 Relative templates inserted into the mutable private `package.path` resolve
@@ -325,7 +373,7 @@ searcher may opt into a file-backed identity by returning documented TestBed
 source metadata with its loader.
 
 The private `package.preload` and `package.searchers` tables remain mutable and
-authoritative. Their ordering is preserved. Source-targeted replacement lookup
+authoritative. Their ordering is preserved. Source-targeted provider lookup
 occurs inside the default file-source searcher after earlier searchers have had
 their normal opportunity to satisfy the request.
 
@@ -401,7 +449,7 @@ environment.
 When `mkmodule(name)` is called without an active file-backed source, TestBed
 preserves current behavior by creating or returning a bed-local virtual
 publication node. Its public `package.loaded[name]` value is returned before
-searchers or replacements are consulted, while the reserved `dfhack` facade
+searchers or providers are consulted, while the reserved `dfhack` facade
 continues to bypass mutable package state.
 
 ### Execution contract
@@ -420,17 +468,17 @@ file determines its execution contract:
 error. TestBed never creates a second identity or executes the file through the
 wrong adapter. Callers must use the operation declared by the source.
 
-A source replacement supplied with `use_source` must have an execution
+A source provider supplied with `use_source` must have an execution
 contract compatible with the target. When the target exists, TestBed can
 compare their declarations before execution. When the target is absent, the
-replacement source declaration establishes the contract.
+provided source declaration establishes the contract.
 
 `use_value` has no declared execution contract. It is valid through a module
 request with any non-`nil` value and through a script request only when its
 value is a table. The first request does not permanently classify the value;
 later compatible requests to the same target reuse the same value. Script-table
 validation therefore moves from configuration normalization to the request
-boundary because an import no longer declares a loader kind.
+boundary because a provider no longer declares a loader kind.
 
 `use_existing` adopts the referenced node's execution contract. `use_host`
 uses its explicit host operation as its contract. These rules make behavior
@@ -442,69 +490,54 @@ The live adapter is the one boundary where loader-specific information is
 unavoidable: DFHack exposes host `require` and `reqscript` operations rather
 than a general source-file loader.
 
-The core TestBed must still remain source-keyed. The live adapter will:
+The core TestBed remains source-keyed and exposes no special public naming
+scheme for DFHack-owned files. A live request follows this order:
 
-1. resolve automatic foundational host imports to canonical host source
-   identities when possible;
-2. create an exact request binding that injects the host source candidate ahead
-   of consumer candidates for the automatic foundational request;
-3. register deterministic host operation/name metadata against that source
-   identity; and
-4. call the configured host loader when the host source node is loaded.
+1. Run the normal private searchers and generate ordinary consumer source
+   candidates.
+2. Select a matching user provider or readable consumer source using normal
+   candidate precedence.
+3. Only when nothing satisfies the request, allow the live adapter to borrow
+   an approved foundational dependency from the DFHack host.
+4. Record the discovered host filename as an internal canonical source
+   identity when possible, or use an internal virtual identity for native or
+   preloaded host values.
 
-Preloaded or native host modules may not have a discoverable source file. They
-require an explicit virtual host-source identity. Such identities are an
-exception confined to the live adapter and must not reintroduce `(kind, name)`
-as the core graph key.
+The automatic foundational fallbacks apply only to `require` module requests
+for exactly `class`, `utils`, `gui`, `gui.widgets`, and `gui.dwarfmode`.
+`reqscript` never receives an automatic foundational fallback. These fallbacks
+preserve real DFHack class identity without taking precedence over a readable
+consumer source or user-configured source provider.
 
-The automatic component imports (`class`, `utils`, `gui`, `gui.widgets`, and
-`gui.dwarfmode`) continue to preserve host identity and their current
-request-level precedence. Their request bindings are live-adapter metadata,
-not core source identities.
+The boolean `component_host_fallbacks` configuration field controls this
+behavior. It defaults to `false` for standalone TestBeds and `true` for live
+descriptor mounts. Setting it to `false` on a live mount disables all
+automatic foundational fallbacks. It replaces the loader-focused
+`component_imports` field.
 
-Live configuration accepts a stable host-root-relative source reference for a
-user replacement. This proposal uses `@host/` as the provisional spelling:
+For example, production code continues to use an ordinary request:
 
 ```lua
-{
-    target='@host/lua/gui.lua',
-    use_value=MOCK_GUI,
+local gui = require('gui')
+```
+
+A test can preempt the live fallback with an ordinary source target, even when
+that consumer file does not exist:
+
+```lua
+providers={
+    {
+        target='src/gui.lua',
+        use_value=MOCK_GUI,
+    },
 }
 ```
 
-The live adapter resolves `@host/` against the active DFHack installation and
-canonicalizes the result. A user replacement for that canonical host source
-takes precedence over the synthesized host borrow policy while retaining the
-same automatic request binding. Standalone TestBeds reject `@host/` targets.
-
-Non-file host dependencies use a stable public live-only virtual reference:
-
-```lua
-{
-    target='@host/virtual/require/native_api',
-    use_value=MOCK_NATIVE_API,
-}
-```
-
-The operation segment is `require` or `reqscript`; the final path segment is a
-canonical encoding of the complete logical name. Encode the logical name's
-UTF-8 bytes by leaving only ASCII letters, digits, `_`, and `-` unchanged and
-writing every other byte as an uppercase `%HH` escape. Encode the empty name as
-the reserved segment `~`; a literal `~` is `%7E`. The decoder rejects lowercase
-or malformed escapes, escapes that decode to the literal safe set
-`[A-Za-z0-9_-]`, and any bare `~` that is not the complete empty-name segment.
-It never treats the decoded value as a path. This makes the encoding
-reversible, canonical, collision-free, and safe for names containing `/`, `.`,
-`..`, `%`, empty segments, or non-ASCII characters.
-
-This representation is used only when the live adapter cannot discover a
-file-backed host identity. It gives automatic native or preloaded host
-bindings the same user-replacement precedence as file-backed host sources
-without returning the core registry to loader-token identity.
-
-The exact host-root layout and final prefix spelling must be verified against
-the supported DFHack installation before implementation, but public
-configuration must not require machine-specific absolute host paths.
+No `@host/`, URI, encoded logical name, or installation-relative path is part
+of the public API. Host filenames and virtual identities are live-adapter
+implementation details and are not valid public provider targets. Explicit
+`use_host` remains available when a normal consumer source target should be
+satisfied by a deterministic host request.
 
 ## Configuration and path behavior
 
@@ -514,7 +547,7 @@ The effective consumer root remains:
 - the active DwarfSpec project root for live descriptor mounts.
 
 `module_roots` and `script_roots` continue to define how existing production
-requests produce candidate source files. They no longer partition replacement
+requests produce candidate source files. They no longer partition provider
 identity.
 
 Relative `target`, `use_source`, `use_existing`, and direct `load()` paths all
@@ -528,10 +561,10 @@ src/my_plugin/clock.lua
 src/my_plugin/../my_plugin/clock.lua
 ```
 
-Windows path comparison must also normalize separator and drive-letter case.
-Whether the remainder of a Windows path is compared case-sensitively must be
-decided and tested explicitly; it must not depend accidentally on Lua table
-key spelling.
+Windows path comparison folds ASCII case across the complete canonical path,
+not only the drive letter. TestBed therefore does not distinguish files whose
+Windows paths differ only by case, including on an unusually case-sensitive
+Windows directory. Non-Windows path comparison preserves case.
 
 ## Compatibility policy
 
@@ -547,16 +580,20 @@ The refactor preserves these existing TestBed contracts:
   failed state for retry;
 - `require('dfhack')` remains the reserved bed-local facade and cannot be
   redirected through `package.loaded`, preload, custom searchers, or a source
-  replacement;
+  provider;
 - protected loader bindings and the `dfhack` facade cannot be replaced through
   ordinary source global writes; and
 - close invalidates all retained loaders and clears graph-owned references.
 
 The refactor intentionally changes these contracts:
 
-- public replacement identity changes from `(kind, name)` to a canonical
+- public provider identity changes from `(kind, name)` to a canonical
   source target;
 - source-focused descriptors replace loader-specific descriptors;
+- automatic foundational host modules change from provider-before-source
+  precedence to fallback-after-consumer-source-and-provider precedence;
+- Windows canonical identity changes from drive-prefix-only normalization to
+  deterministic ASCII case folding across the complete path;
 - incompatible access to a declared module or script source fails rather than
   creating a second identity; and
 - explicit invalidation through a known `package.loaded` alias invalidates the
@@ -566,22 +603,22 @@ All other behavioral changes require an explicit amendment to this proposal.
 
 ## Migration
 
-The new import form is not mechanically equivalent to every old token import.
-A legacy `(kind, name)` can resolve differently after private `package.path`
-mutation, can refer to a provider-only dependency with no discoverable file,
-and can intentionally distinguish module and script namespaces for the same
-name.
+TestBed has not been released, so this proposal makes an immediate breaking
+change without a compatibility adapter. The `imports` field, `provide` token,
+`kind`, `component_imports`, and `(kind, name)` registry are removed together.
+Configuration using any legacy field is rejected with an error that identifies
+the unsupported field and points to `providers` or
+`component_host_fallbacks`, as appropriate.
 
-For that reason, the core should not silently translate legacy tokens and
-claim source-focused semantics. Two migration approaches are viable:
+The implementation must not silently translate legacy tokens. A token can
+resolve differently after private `package.path` mutation, can represent a
+provider-only dependency with no discoverable source, and can distinguish
+module and script namespaces for the same name. Retaining that behavior would
+preserve the loader-focused model outside the new core without serving a
+released compatibility contract.
 
-1. Make this an explicit breaking configuration change and reject `provide`.
-2. Provide a temporary legacy adapter that retains the old token registry
-   outside the new source graph and emits deprecation diagnostics.
-
-The first option is cleaner and is recommended unless compatibility policy
-requires a transition period. If a legacy adapter is required, new and legacy
-forms must not be mixed in one TestBed configuration.
+All repository consumers, fixtures, declarations, technical documentation,
+and wiki examples migrate in the same change.
 
 The refactor also updates:
 
@@ -595,25 +632,26 @@ The refactor also updates:
 ## Implementation outline
 
 1. Introduce an immutable canonical `SourceId` value and source-targeted
-   replacement configuration.
+   provider configuration.
 2. Extend path resolution to return ordered canonical candidates without
    requiring that every candidate already exist.
-3. Replace the split provider registry with one source replacement registry.
+3. Replace the split token registry with one source provider registry.
 4. Introduce the source-node registry, alias maps, virtual-source support, and
    request-edge records.
 5. Route private `require` and `reqscript` through source resolution before
-   replacement lookup, while binding `mkmodule` publication to the active
+   provider lookup, while binding `mkmodule` publication to the active
    source node.
 6. Preserve mutable preload/searcher and public package-cache behavior around
    the new registry.
 7. Add direct source loading and source-focused component descriptors.
 8. Move script-result validation and incompatible-access errors to the source
    request boundary.
-9. Adapt live host borrowing and automatic component imports without exposing
-   loader tokens to the core registry.
-10. Remove or isolate the legacy token implementation according to the chosen
-   migration policy.
-11. Update declarations, documentation, fixtures, and diagnostics.
+9. Adapt live host borrowing as a fallback after ordinary sources and
+   providers without exposing host naming through the public API.
+10. Track provider selection, create ordered unused-provider warning records,
+    and perform their defined delivery attempts during close.
+11. Remove the legacy token implementation and update declarations,
+   documentation, fixtures, and diagnostics.
 
 Each step must preserve deterministic close behavior and must not mutate the
 process-wide `package.path`, `package.loaded`, or DFHack script cache.
@@ -622,13 +660,13 @@ process-wide `package.path`, `package.loaded`, or DFHack script cache.
 
 Focused unit coverage must prove:
 
-- lexically equivalent target paths produce one replacement identity;
+- lexically equivalent target paths produce one provider identity;
 - two different logical module names resolving to one file share one source
   node and one result;
 - module and script adapters resolving to one target consult the same
-  replacement; compatible protocol-neutral values are shared, while declared
+  provider; compatible protocol-neutral values are shared, while declared
   contract mismatches fail before execution;
-- a replacement can satisfy an otherwise missing first-precedence candidate;
+- a provider can satisfy an otherwise missing first-precedence candidate;
 - an earlier virtual candidate shadows a later real candidate;
 - `?.lua` and `?/init.lua` candidates retain normal precedence;
 - private `package.path` mutation affects new names without changing an
@@ -647,42 +685,53 @@ Focused unit coverage must prove:
   results, and creates a virtual publication when no file source is active;
 - mutable preload and custom searchers retain their order and produce stable
   bed-local virtual source identities;
-- `use_source` isolates the replacement under the target identity;
+- `use_source` isolates the provided source under the target identity;
 - `use_existing` shares the referenced source identity;
 - an unprimed `use_existing` lazily loads its target, applies the target's own
   strategy, and reports missing, self, and cyclic targets;
-- replacement and dependency cycles report canonical source chains;
+- provider and dependency cycles report canonical source chains;
 - incompatible module/script access fails without executing a source twice;
 - `use_value` is protocol-neutral but enforces table results at a script
   request boundary;
 - `use_host` uses explicit operation/name metadata and is independent of alias
   or request order;
 - direct loading exercises present and absent targets for every compatible
-  replacement strategy;
+  provider strategy;
 - Windows and Unix path normalization follow the declared identity rules;
 - standalone configuration remains independent from live-host support;
 - the reserved `dfhack` facade and protected loader bindings cannot be
-  intercepted by source replacements; and
+  intercepted by source providers;
+- used providers create no warning record, while every unused user provider
+  creates one record and receives the defined delivery attempt in declaration
+  order on the first `close()`;
+- provider selection marks the provider used before strategy execution, while
+  candidate generation alone does not;
+- selected `use_source` and `use_host` providers remain used, and therefore do
+  not warn, when their compatibility checks or strategy execution fail;
+- provider failures, lazy `use_existing`, preload/custom-searcher precedence,
+  repeated `close()`, and an injected warning sink follow the warning contract;
+- when a non-default warning sink fails, the failed record is attempted once on
+  standard error, the sink is disabled, later records continue through standard
+  error in declaration order, and graph cleanup remains complete; and
 - closing a TestBed invalidates every retained source loader and request
   adapter.
 
 Declaration fixtures must prove that source-targeted configurations and
-descriptors type-check while legacy `kind`/`provide` forms fail or are marked
-deprecated according to the selected migration policy.
+descriptors type-check through `providers` and `component_host_fallbacks`,
+while `imports`, `kind`, `provide`, and `component_imports` are rejected.
 
 Focused live coverage must prove:
 
 - source-focused descriptor mounts construct the intended component;
-- source replacements apply to transitive component dependencies;
-- automatic foundational host imports preserve real DFHack class identity;
+- source providers apply to transitive component dependencies;
+- automatic foundational host fallbacks preserve real DFHack class identity;
 - explicit host borrowing selects the appropriate host adapter;
-- automatic host request bindings inject deterministic canonical host source
-  candidates and accept user replacement of that same source identity;
-- both file-backed and native/preloaded automatic host sources have stable
-  public replacement references;
-- virtual host references round-trip empty, separator-containing, escaped, and
-  non-ASCII logical names without collisions, and reject lowercase, malformed,
-  or over-escaped forms such as `%41`;
+- readable consumer module sources and ordinary source providers preempt
+  automatic host fallback without special host-path syntax;
+- `reqscript` requests never receive automatic foundational host fallback;
+- file-backed and native/preloaded host identities remain internal;
+- unused mount-owned providers warn after component destruction and unmounting
+  when DwarfSpec closes the TestBed;
 - separate mounts receive fresh source graphs; and
 - unmount destroys the component before closing its mount-owned TestBed.
 
@@ -694,36 +743,47 @@ TestBed automation set.
 
 The refactor is complete only when:
 
-- no ordinary public TestBed import requires a loader `kind`;
-- the core replacement registry is keyed only by canonical source identity;
+- the direct source entry point is exactly `bed:load(source)`;
+- public TestBed configuration uses `providers` with source `target` values and
+  uses `component_host_fallbacks` for automatic foundational live borrowing;
+- `imports`, `provide`, loader `kind`, and `component_imports` are removed
+  immediately without a compatibility adapter;
+- the core provider registry is keyed only by canonical source identity;
 - request methods and logical names are stored as graph-edge metadata rather
   than source-node identity;
 - one canonical lexical source cannot be silently executed twice under
   separate module and script caches;
-- source-focused imports can replace both present and intentionally absent
+- source-focused providers can satisfy both present and intentionally absent
   source candidates;
 - `mkmodule`, private package tables, module cache-result rules, custom
   searchers, and failed-load retry behavior satisfy the compatibility policy;
 - live host borrowing is deterministic and does not depend on the first
   request edge;
+- ordinary source providers take precedence over automatic live host fallback,
+  with no special public host-source naming convention;
+- the first close creates one ordered warning record and makes the defined
+  delivery attempt for every unused user-configured provider, including the
+  specified sink fallback behavior, without interfering with cleanup;
+- canonical source paths use deterministic ASCII case folding across the
+  complete path on Windows and preserve case on other platforms;
 - standalone and live behavior retain their documented ownership and cleanup
   guarantees;
 - public declarations, technical documentation, and the wiki describe the
   source-file model consistently; and
 - all required focused, full, declaration, package, and live checks pass.
 
-## Open decisions
+## Accepted decisions
 
-The following decisions should be resolved before converting this proposal
-into an implementation checklist. Acceptance requires recording their answers
-in this document and removing the corresponding open items:
-
-1. Is `load` the right name for the direct source entry point, or should it be
-   `load_source`?
-2. Should `imports` be retained, or renamed to `replacements` in the same
-   breaking change?
-3. Should legacy token imports be rejected immediately or supported through a
-   temporary, explicitly separate adapter?
-4. Is `@host/` the correct spelling and root model for portable public DFHack
-   host source references?
-5. Should Windows source identity compare the full path case-insensitively?
+- The direct source entry point is `bed:load(source)`.
+- Source-targeted configuration uses the `providers` field.
+- The unreleased loader-token API is removed immediately without a legacy
+  adapter.
+- DFHack host filenames and virtual identities remain internal; public
+  configuration has no special host-source naming format.
+- Automatic foundational live borrowing is controlled by
+  `component_host_fallbacks`.
+- Canonical source identity uses deterministic ASCII case folding across the
+  complete path on Windows and preserves case on other platforms.
+- The first `close()` creates and attempts delivery of one warning, in
+  declaration order, for every user-configured provider that was never
+  selected.
