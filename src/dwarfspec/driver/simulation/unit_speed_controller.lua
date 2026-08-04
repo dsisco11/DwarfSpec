@@ -122,6 +122,10 @@ function M.new(dependencies)
         'unit-speed controller requires action adapter')
     assert(type(actions.accelerate) == 'function',
         'unit-speed action adapter requires accelerate')
+    local job_travel = assert(dependencies.job_travel,
+        'unit-speed controller requires job travel')
+    assert(type(job_travel.attempt) == 'function',
+        'unit-speed job travel requires attempt')
     local register_cleanup = assert(dependencies.register_cleanup,
         'unit-speed controller requires cleanup registration')
     assert(type(register_cleanup) == 'function',
@@ -149,14 +153,10 @@ function M.new(dependencies)
 
     ---Activates immutable behavior and target snapshots for this example.
     ---@param options table
-    ---@param update fun(unit:any, configuration:table, id:integer)|nil
-    function controller:activate(options, update)
+    function controller:activate(options)
         assert(not self.active and not recurring:is_active(),
             'setUnitSpeed is already active for this example')
         local normalized = normalize_options(options)
-        update = update or function() end
-        assert(type(update) == 'function',
-            'unit-speed update must be a function')
         targets:assert_ready()
         local captured
         if normalized.unit_ids == nil then
@@ -178,7 +178,9 @@ function M.new(dependencies)
             recurring:start(function()
                 if not targets:for_each_available(captured,
                         function(unit, id)
-                            update(unit, configuration, id)
+                            if configuration.teleport_jobs then
+                                job_travel:attempt(id)
+                            end
                             if configuration.fast_actions then
                                 actions:accelerate(unit)
                             end

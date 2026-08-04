@@ -17,6 +17,8 @@ describe('driver unit speed controller', function()
             update_callback=nil,
             retained=nil,
             action_calls={},
+            job_calls={},
+            job_result=true,
         }
         local recurring = {}
         ---Returns whether recurring work is active.
@@ -70,6 +72,12 @@ describe('driver unit speed controller', function()
             actions={
                 accelerate=function(_, unit)
                     state.action_calls[#state.action_calls + 1] = unit.id
+                end,
+            },
+            job_travel={
+                attempt=function(_, id)
+                    state.job_calls[#state.job_calls + 1] = id
+                    return state.job_result
                 end,
             },
             register_cleanup=function(name, callback)
@@ -163,15 +171,12 @@ describe('driver unit speed controller', function()
         local state, controller = fixture()
         state.available[2] = {id=2}
         state.available[7] = {id=7}
-        local visited = {}
-        controller:activate({fast_actions=true}, function(_, _, id)
-            visited[#visited + 1] = id
-        end)
+        controller:activate({fast_actions=true})
         state.defaults[#state.defaults + 1] = 10
         state.available[10] = {id=10}
         state.update_callback()
 
-        assert.same({2, 7}, visited)
+        assert.same({2, 7}, state.action_calls)
         assert.same({2, 7}, state.retained)
     end)
 
@@ -180,21 +185,14 @@ describe('driver unit speed controller', function()
         local state, controller = fixture()
         state.available[8] = {generation=1}
         state.available[3] = {generation=1}
-        local visited = {}
-        controller:activate({teleport_jobs=true, unit_ids={8, 3}},
-            function(unit, configuration, id)
-                visited[#visited + 1] = {id=id, unit=unit,
-                    teleport=configuration.teleport_jobs}
-            end)
+        controller:activate({teleport_jobs=true, unit_ids={8, 3}})
         state.update_callback()
         state.available[8] = {generation=2}
         state.available[3] = nil
         state.update_callback()
 
         assert.same({8, 3}, state.retained)
-        assert.equals(3, #visited)
-        assert.equals(2, visited[3].unit.generation)
-        assert.is_true(visited[3].teleport)
+        assert.same({8, 3, 8}, state.job_calls)
     end)
 
     it('accelerates each available captured target once in stable order',
@@ -227,14 +225,11 @@ describe('driver unit speed controller', function()
     it('leaves actions untouched when only teleportation is enabled', function()
         local state, controller = fixture()
         state.available[2] = {id=2}
-        local teleport_visits = 0
-        controller:activate({teleport_jobs=true}, function()
-            teleport_visits = teleport_visits + 1
-        end)
+        controller:activate({teleport_jobs=true})
 
         state.update_callback()
 
-        assert.equals(1, teleport_visits)
+        assert.same({2}, state.job_calls)
         assert.same({}, state.action_calls)
     end)
 
@@ -301,17 +296,56 @@ describe('driver unit speed controller', function()
 
     it('stops without visiting units after loaded state disappears', function()
         local state, controller = fixture()
-        local visits = 0
-        controller:activate({fast_actions=true}, function()
-            visits = visits + 1
-        end)
+        controller:activate({fast_actions=true})
         state.ready = false
         state.update_callback()
 
-        assert.equals(0, visits)
+        assert.equals(0, #state.action_calls)
         assert.equals(1, state.stops)
         assert.is_false(controller.active)
         assert.is_nil(controller.configuration)
         assert.is_nil(controller.target_ids)
+    end)
+
+    it('attempts job travel before action acceleration for each target', function()
+        local state, controller = fixture()
+        state.available[2] = {id=2}
+        local order = {}
+        controller = module.new({
+            recurring={
+                is_active=function() return false end,
+                start=function(_, callback) state.update_callback = callback end,
+                stop=function() end,
+            },
+            targets={
+                assert_ready=function() end,
+                capture_default_ids=function() return {2} end,
+                for_each_available=function(_, ids, callback)
+                    callback(state.available[ids[1]], ids[1])
+                    return true
+                end,
+            },
+            job_travel={attempt=function()
+                order[#order + 1] = 'teleport'
+            end},
+            actions={accelerate=function()
+                order[#order + 1] = 'action'
+            end},
+            register_cleanup=function() end,
+        })
+        controller:activate({fast_actions=true, teleport_jobs=true})
+        state.update_callback()
+        assert.same({'teleport', 'action'}, order)
+    end)
+
+    it('continues after an ordinary job-travel skip', function()
+        local state, controller = fixture()
+        state.available[2] = {id=2}
+        state.available[7] = {id=7}
+        state.job_result = false
+        controller:activate({fast_actions=true, teleport_jobs=true})
+        state.update_callback()
+        assert.same({2, 7}, state.job_calls)
+        assert.same({2, 7}, state.action_calls)
     end)
 end)

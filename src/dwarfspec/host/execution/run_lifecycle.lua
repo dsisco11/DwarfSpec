@@ -103,9 +103,11 @@ function M.new(dependencies)
             if probe_ok and type(result) == 'table' then
                 unit_speed_state = result
                 unit_speed_ok = result.unit_speed_active ~= true and
+                    result.unit_position_active ~= true and
                     result.callback_scheduled ~= true and
                     result.ownership_active ~= true and
-                    (result.retained_id_count or 0) == 0
+                    (result.retained_id_count or 0) == 0 and
+                    (result.owned_position_count or 0) == 0
             else
                 unit_speed_ok = false
                 unit_speed_state = {probe_error=tostring(result)}

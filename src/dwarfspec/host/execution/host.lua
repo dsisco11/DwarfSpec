@@ -226,9 +226,11 @@ local function verify_executor_clean_state(proof)
     end
     local unit_speed = run.unit_speed_cleanup_state
     if unit_speed and (unit_speed.unit_speed_active == true or
+            unit_speed.unit_position_active == true or
             unit_speed.callback_scheduled == true or
             unit_speed.ownership_active == true or
             (unit_speed.retained_id_count or 0) ~= 0 or
+            (unit_speed.owned_position_count or 0) ~= 0 or
             unit_speed.verified ~= true) then
         return false, 'quarantined unit speed state is not clean'
     end

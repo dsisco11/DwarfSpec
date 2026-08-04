@@ -86,9 +86,11 @@ describe('host run lifecycle', function()
         run.unit_speed_cleanup_probe=function()
             return {
                 unit_speed_active=false,
+                unit_position_active=false,
                 callback_scheduled=false,
                 ownership_active=false,
                 retained_id_count=0,
+                owned_position_count=0,
             }
         end
 
@@ -98,6 +100,27 @@ describe('host run lifecycle', function()
         assert.is_true(run.cleanup_confirmed)
         assert.is_true(run.mount_cleanup_verified)
         assert.is_true(run.unit_speed_cleanup_state.verified)
+    end)
+
+    it('rejects cleanup confirmation while unit positions remain owned',
+            function()
+        local calls = {}
+        local lifecycle = module.new(dependencies(calls))
+        local run = cleanable_run(calls)
+        run.unit_speed_cleanup_probe=function()
+            return {
+                unit_speed_active=false,
+                unit_position_active=true,
+                callback_scheduled=false,
+                ownership_active=false,
+                retained_id_count=0,
+                owned_position_count=1,
+            }
+        end
+
+        assert.is_false(lifecycle.clean(run, 'position restoration failed'))
+        assert.is_false(run.cleanup_confirmed)
+        assert.is_false(run.unit_speed_cleanup_state.verified)
     end)
 
     it('rejects cleanup confirmation while recurring ownership remains',

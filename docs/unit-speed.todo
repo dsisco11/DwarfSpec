@@ -364,91 +364,91 @@ Completion criteria:
       example owns an active fast-action controller.
 
 Phase 5: Implement reusable unit positioning and job-destination teleportation
-    ☐ Exit with one reusable coordinate-rollback controller, the public
+    ☒ Exit with one reusable coordinate-rollback controller, the public
       `ds.setUnitPos` command, and targeted fastdwarf-equivalent job travel guarded by
       explicit native eligibility and safe path checks.
 
 5.1 Shared unit-position controller:
-    ☐ Add one focused driver simulation module that owns native teleport calls,
+    ☒ Add one focused driver simulation module that owns native teleport calls,
       per-unit baseline coordinates and helper-coupled `idle_area`, cleanup
       restoration, and restoration verification.
-    ☐ Accept stable integer ids and copied `dwarfspec.UnitPosition` values and
+    ☒ Accept stable integer ids and copied `dwarfspec.UnitPosition` values and
       re-resolve the unit immediately before each forward or cleanup teleport.
-    ☐ Capture one position and `idle_area` baseline immediately before the first
+    ☒ Capture one position and `idle_area` baseline immediately before the first
       successful owned teleport and retain it across later `setUnitPos` and
       job-travel moves in the example.
-    ☐ If the first teleport fails, discard provisional ownership without creating
+    ☒ If the first teleport fails, discard provisional ownership without creating
       a false restoration obligation.
-    ☐ Restore moved units in deterministic reverse ownership order and fail cleanup
+    ☒ Restore moved units in deterministic reverse ownership order and fail cleanup
       when a surviving owned unit cannot be restored or verified.
-    ☐ Expose `unit_position_active` through the authoritative cleanup probe and
+    ☒ Expose `unit_position_active` through the authoritative cleanup probe and
       prevent cleanup confirmation while any owned baseline remains.
-    ☐ Prearm shared position cleanup before registering recurring-controller cleanup
+    ☒ Prearm shared position cleanup before registering recurring-controller cleanup
       so LIFO teardown cancels callbacks before it restores coordinates, regardless of
       whether `setUnitPos` or `setUnitSpeed` is activated first.
-    ☐ Apply the characterized restrictions for projectile, rider, grounded,
+    ☒ Apply the characterized restrictions for projectile, rider, grounded,
       idle-area, invalidation, occupied-destination, and world-unload states.
-    ☐ Keep path clearing outside the generic controller so only successful job
+    ☒ Keep path clearing outside the generic controller so only successful job
       travel clears a remaining job path.
 
 5.2 Explicit `setUnitPos` behavior:
-    ☐ Require an integer unit id that resolves to a currently valid unit and a
+    ☒ Require an integer unit id that resolves to a currently valid unit and a
       `dwarfspec.UnitPosition` whose coordinate identifies a valid loaded map tile.
-    ☐ Teleport through the shared controller without requiring citizen status, a
+    ☒ Teleport through the shared controller without requiring citizen status, a
       current job, destination visibility, or path connectivity.
-    ☐ Return no value and leave pause state, TPS, jobs, and paths unchanged.
-    ☐ Allow repeated moves of the same unit while preserving its first baseline.
-    ☐ Share the same per-unit baseline when `setUnitPos` and accelerated job travel
+    ☒ Return no value and leave pause state, TPS, jobs, and paths unchanged.
+    ☒ Allow repeated moves of the same unit while preserving its first baseline.
+    ☒ Share the same per-unit baseline when `setUnitPos` and accelerated job travel
       both move one unit during the same example.
 
 5.3 Job-travel decision:
-    ☐ Re-resolve the unit and its current job and destination within the same update
+    ☒ Re-resolve the unit and its current job and destination within the same update
       that attempts teleportation.
-    ☐ Skip dragging and dragged units, units following another unit, unconscious
+    ☒ Skip dragging and dragged units, units following another unit, unconscious
       units, units without current jobs, invalid positions or destinations, and units
       already at the destination.
-    ☐ Require `dfhack.maps.canWalkBetween(current, destination)` and a visible
+    ☒ Require `dfhack.maps.canWalkBetween(current, destination)` and a visible
       destination before teleporting.
-    ☐ Do not infer safety from path existence alone and do not reveal a destination
+    ☒ Do not infer safety from path existence alone and do not reveal a destination
       for the test.
-    ☐ Request exactly one shared-controller teleport for an eligible target.
-    ☐ Clear the unit's remaining path only after teleportation reports success by
+    ☒ Request exactly one shared-controller teleport for an eligible target.
+    ☒ Clear the unit's remaining path only after teleportation reports success by
       resizing each Lua-visible `path.path.x`, `.y`, and `.z` vector to zero.
-    ☐ Leave position and path unchanged when teleportation reports failure.
+    ☒ Leave position and path unchanged when teleportation reports failure.
 
 5.4 Combined behavior:
-    ☐ When both flags are enabled, attempt teleportation before applying fast-action
+    ☒ When both flags are enabled, attempt teleportation before applying fast-action
       timers to the same target.
-    ☐ Prove each behavior remains independently selectable.
-    ☐ Keep one target's ordinary skip from preventing later targets from being
+    ☒ Prove each behavior remains independently selectable.
+    ☒ Keep one target's ordinary skip from preventing later targets from being
       processed.
-    ☐ Route invariant or adapter failures through the controller fault path rather
+    ☒ Route invariant or adapter failures through the controller fault path rather
       than silently treating them as ordinary eligibility skips.
 
 5.5 Focused verification:
-    ☐ Prove `setUnitPos` validation, successful placement, void return, repeated
+    ☒ Prove `setUnitPos` validation, successful placement, void return, repeated
       moves, shared first baseline, cleanup restoration, and restoration failure.
-    ☐ Prove `unit_position_active` becomes true only after a successful first move
+    ☒ Prove `unit_position_active` becomes true only after a successful first move
       and returns false only after every owned coordinate is restored and released.
-    ☐ Prove explicit positioning works for valid noncitizen units without weakening
+    ☒ Prove explicit positioning works for valid noncitizen units without weakening
       the citizen/resident target contract of `setUnitSpeed`.
-    ☐ Prove `setUnitPos` and job travel call the same injected teleport adapter and
+    ☒ Prove `setUnitPos` and job travel call the same injected teleport adapter and
       never create competing baselines for one unit.
-    ☐ Prove success, assertion failure, timeout, abort, callback fault, and both
+    ☒ Prove success, assertion failure, timeout, abort, callback fault, and both
       command activation orders cancel recurring work before restoring coordinates.
-    ☐ Cover every teleport guard independently with in-memory unit, map, and DFHack
+    ☒ Cover every teleport guard independently with in-memory unit, map, and DFHack
       adapter doubles.
-    ☐ Prove visible reachable destinations teleport and clear the path after success.
-    ☐ Prove disconnected, hidden, invalid, or failed destinations follow the
+    ☒ Prove visible reachable destinations teleport and clear the path after success.
+    ☒ Prove disconnected, hidden, invalid, or failed destinations follow the
       accepted contract without unsafe fallback.
-    ☐ Prove occupied destinations preserve DFHack behavior for already-grounded
+    ☒ Prove occupied destinations preserve DFHack behavior for already-grounded
       arrivals and reject standing arrivals whose forced `on_ground` transition
       could not be reversed by coordinate cleanup.
-    ☐ Prove combined action and teleport calls have deterministic ordering and
+    ☒ Prove combined action and teleport calls have deterministic ordering and
       cleanup stops both behaviors.
 
 Completion criteria:
-    ☐ Explicit positioning and job travel share one tested coordinate-rollback
+    ☒ Explicit positioning and job travel share one tested coordinate-rollback
       controller, job teleportation occurs only for captured units satisfying every
       accepted guard, and failure paths neither clear routes incorrectly nor leak
       recurring or restoration work.
