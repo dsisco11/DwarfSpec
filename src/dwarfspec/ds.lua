@@ -5,19 +5,26 @@ local M = {}
 ---Loads an installed DwarfSpec module or its source-tree equivalent.
 ---@param package_root string
 ---@param module_name string
+---@param dependencies? table
 ---@return table
-local function load_automation_module(package_root, module_name)
+function M.load_automation_module(package_root, module_name, dependencies)
+    dependencies = dependencies or {}
+    local open_file = dependencies.open_file or io.open
+    local load_file = dependencies.load_file or loadfile
+    local require_module = dependencies.require_module or require
     local source_path = package_root .. '/src/' ..
         module_name:gsub('%.', '/') .. '.lua'
-    local source_file = io.open(source_path, 'rb')
+    local source_file = open_file(source_path, 'rb')
     if source_file then
         source_file:close()
-        return assert(loadfile(source_path))()
+        return assert(load_file(source_path))()
     end
-    local ok, module = pcall(require, module_name)
+    local ok, module = pcall(require_module, module_name)
     if ok then return module end
     error(module, 0)
 end
+
+local load_automation_module = M.load_automation_module
 
 ---Returns whether a mounted screen is still active.
 ---@param screen table
@@ -73,6 +80,22 @@ function M.new(package_root, project, scheduler_module, scheduler,
         report_failure=run_capabilities.recurring.report_failure,
         register_cleanup=run_capabilities.cleanup.register,
     })
+    local unit_speed_command = load_automation_module(package_root,
+        'dwarfspec.driver.commands.unit_speed')
+    local unit_position_command = load_automation_module(package_root,
+        'dwarfspec.driver.commands.unit_position')
+    local unit_speed_controller_module = load_automation_module(package_root,
+        'dwarfspec.driver.simulation.unit_speed_controller')
+    local unit_target_adapter_module = load_automation_module(package_root,
+        'dwarfspec.driver.simulation.unit_target_adapter')
+    local unit_action_adapter_module = load_automation_module(package_root,
+        'dwarfspec.driver.simulation.unit_action_adapter')
+    local unit_job_travel_module = load_automation_module(package_root,
+        'dwarfspec.driver.simulation.unit_job_travel')
+    local unit_position_adapter_module = load_automation_module(package_root,
+        'dwarfspec.driver.simulation.unit_position_adapter')
+    local unit_position_controller_module = load_automation_module(package_root,
+        'dwarfspec.driver.simulation.unit_position_controller')
 local diagnostics_module = load_automation_module(package_root,
     'dwarfspec.driver.diagnostics.diagnostics')
 local pointer_adapter_module = load_automation_module(package_root,
@@ -169,6 +192,92 @@ local command_observer_module = load_automation_module(package_root,
     'dwarfspec.driver.render.command_observer')
     extensions = extensions or {settings={}, commands={}}
     mount_dependencies = mount_dependencies or {}
+    local unit_system
+
+    ---Returns the shared lazily composed unit simulation system for this run.
+    ---@return table
+    local function get_unit_system()
+        if unit_system then return unit_system end
+        local native = mount_dependencies.unit_simulation or {}
+
+        ---Returns occupancy for one valid map coordinate.
+        ---@param position table
+        ---@return any
+        local function get_occupancy(position)
+            local block = dfhack.maps.getTileBlock(position)
+            if block == nil then return nil end
+            return block.occupancy[position.x % 16][position.y % 16]
+        end
+
+        local positions = unit_position_controller_module.new({
+            adapter=unit_position_adapter_module.new({
+                is_map_loaded=native.is_map_loaded or dfhack.isMapLoaded,
+                is_valid_position=native.is_valid_position or
+                    dfhack.maps.isValidTilePos,
+                resolve_unit=native.resolve_unit or df.unit.find,
+                get_occupancy=native.get_occupancy or get_occupancy,
+                teleport=native.teleport or dfhack.units.teleport,
+                is_projectile=native.is_projectile or function(unit)
+                    return unit.flags1.projectile
+                end,
+                has_rider=native.has_rider or function(unit)
+                    return #unit.riders > 0
+                end,
+                is_rider=native.is_rider or function(unit)
+                    return unit.relationship_ids[
+                        df.unit_relationship_type.RiderMount] ~= -1
+                end,
+            }),
+            register_cleanup=run_capabilities.cleanup.register,
+        })
+        local travel = unit_job_travel_module.new({
+            resolve_unit=native.resolve_unit or df.unit.find,
+            is_valid_position=native.is_valid_position or
+                dfhack.maps.isValidTilePos,
+            can_walk_between=native.can_walk_between or
+                dfhack.maps.canWalkBetween,
+            is_tile_visible=native.is_tile_visible or
+                dfhack.maps.isTileVisible,
+            resize_vector=native.resize_vector or function(vector, size)
+                vector:resize(size)
+            end,
+            dragger_relationship=native.dragger_relationship or
+                df.unit_relationship_type.Dragger,
+            draggee_relationship=native.draggee_relationship or
+                df.unit_relationship_type.Draggee,
+            position_controller=positions,
+        })
+        local targets = unit_target_adapter_module.new({
+            is_world_loaded=native.is_world_loaded or dfhack.isWorldLoaded,
+            is_map_loaded=native.is_map_loaded or dfhack.isMapLoaded,
+            is_fortress_mode=native.is_fortress_mode or
+                dfhack.world.isFortressMode,
+            enumerate_units=native.enumerate_units or
+                dfhack.units.getCitizens,
+            resolve_unit=native.resolve_unit or df.unit.find,
+            is_active=native.is_active or dfhack.units.isActive,
+            is_alive=native.is_alive or dfhack.units.isAlive,
+            is_citizen=native.is_citizen or dfhack.units.isCitizen,
+            is_resident=native.is_resident or dfhack.units.isResident,
+        })
+        local actions = unit_action_adapter_module.new({
+            set_group_action_timers=native.set_group_action_timers or
+                dfhack.units.setGroupActionTimers,
+            all_action_group=native.all_action_group or
+                df.unit_action_type_group.All,
+        })
+        unit_system = {
+            positions=positions,
+            speed=unit_speed_controller_module.new({
+                recurring=recurring_operation,
+                targets=targets,
+                actions=actions,
+                job_travel=travel,
+                register_cleanup=run_capabilities.cleanup.register,
+            }),
+        }
+        return unit_system
+    end
     local wait_settings = extensions.settings.wait or {}
     local pointer_screen = mount_dependencies.pointer_screen or dfhack.screen
     local pointer_gui = mount_dependencies.pointer_gui or dfhack.gui
@@ -253,7 +362,16 @@ local command_observer_module = load_automation_module(package_root,
     ---Returns recurring-operation ownership for terminal cleanup verification.
     ---@return table
     context.run.unit_speed_cleanup_probe = function()
-        return recurring_operation:cleanup_state()
+        local state = recurring_operation:cleanup_state()
+        if unit_system then
+            local position_state = unit_system.positions:cleanup_state()
+            state.unit_position_active = position_state.unit_position_active
+            state.owned_position_count = position_state.owned_position_count
+        else
+            state.unit_position_active = false
+            state.owned_position_count = 0
+        end
+        return state
     end
 
     local diagnostics = diagnostics_module.new({
@@ -2056,6 +2174,24 @@ local command_observer_module = load_automation_module(package_root,
         origins=EScreenOrigin,
     })
     capture_command.bind(ds, {run=context.run, diagnostics=diagnostics})
+    unit_speed_command.bind(ds, {controller={
+        ---Activates the shared run-owned unit-speed controller.
+        ---@param _ table
+        ---@param options table
+        activate=function(_, options)
+            get_unit_system().speed:activate(options)
+        end,
+    }})
+    unit_position_command.bind(ds, {position_controller={
+        ---Moves a unit through the shared run-owned position controller.
+        ---@param _ table
+        ---@param unit_id integer
+        ---@param position table
+        ---@return boolean
+        move=function(_, unit_id, position)
+            return get_unit_system().positions:move(unit_id, position)
+        end,
+    }})
     local mount_commands = mount_command.new({
         context=context,
         subject_source=ESubjectSource,

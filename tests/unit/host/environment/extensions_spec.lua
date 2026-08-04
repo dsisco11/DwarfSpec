@@ -224,6 +224,20 @@ describe('DwarfSpec consumer extensions', function()
             'ds.setGameSpeed')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={setUnitSpeed=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.setUnitSpeed')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={setUnitPos=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: custom command conflicts with ' ..
+            'ds.setUnitPos')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={mountSaveGame=function() end},
         }
         assert.has_error(function() extensions.load(descriptor, loader) end,

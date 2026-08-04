@@ -391,6 +391,38 @@ function DS.getGameSpeed() end
 ---@return integer
 function DS.setGameSpeed(tps) end
 
+---Selects unit-speed behavior for one example.
+---Both behaviors default to false, and at least one must be true. When
+---`unit_ids` is omitted, DwarfSpec snapshots the currently eligible active,
+---living citizens and long-term residents when the command is called.
+---@class dwarfspec.UnitSpeedOptions
+---@field fast_actions? boolean Sets supported positive unit action timers to one each simulation tick. Defaults to false.
+---@field teleport_jobs? boolean Moves eligible units to guarded current-job destinations each simulation tick. Defaults to false.
+---@field unit_ids? integer[] Restricts activation to a nonempty list of unique stable ids for the same active, living citizen and long-term-resident population used by omitted targeting.
+
+---Identifies one loaded-map unit coordinate.
+---@class dwarfspec.UnitPosition
+---@field x integer
+---@field y integer
+---@field z integer
+
+---Activates per-unit action speed and/or guarded job travel for this example.
+---Unlike `setGameSpeed`, this does not change the game's TPS target. Cleanup
+---disables the accelerator and restores coordinates changed through the shared
+---position controller, but does not reverse paths, jobs, timers, or broader
+---gameplay effects.
+---@param options dwarfspec.UnitSpeedOptions
+function DS.setUnitSpeed(options) end
+
+---Moves one resolvable unit to a valid loaded-map coordinate.
+---The integer id is re-resolved at use time. The first successful move owns the
+---unit's original coordinate for this example; later explicit or job-travel
+---moves share that baseline. Cleanup restores owned coordinates but does not
+---reverse broader gameplay effects.
+---@param unit_id integer
+---@param position dwarfspec.UnitPosition
+function DS.setUnitPos(unit_id, position) end
+
 ---Returns the current in-year simulation tick for the loaded DF world.
 ---@return integer
 function DS.getTick() end

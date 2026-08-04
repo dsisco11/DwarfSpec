@@ -454,50 +454,50 @@ Completion criteria:
       recurring or restoration work.
 
 Phase 6: Bind the public API and declarations
-    ☐ Exit with documented `ds.setUnitSpeed` and `ds.setUnitPos` entry points
+    ☒ Exit with documented `ds.setUnitSpeed` and `ds.setUnitPos` entry points
       composed through the existing driver boundary and visible to source and
       installed-package users.
 
 6.1 Public composition:
-    ☐ Load and bind the focused unit-speed command from `src/dwarfspec/ds.lua`.
-    ☐ Load and bind the focused unit-position command to the same injected shared
+    ☒ Load and bind the focused unit-speed command from `src/dwarfspec/ds.lua`.
+    ☒ Load and bind the focused unit-position command to the same injected shared
       position controller used by job travel.
-    ☐ Supply only injected controller, target, native-operation, recurring-task,
+    ☒ Supply only injected controller, target, native-operation, recurring-task,
       cleanup, and failure-reporting dependencies required by the command.
-    ☐ Avoid adding an inline duplicate implementation in the root `ds.lua` facade.
-    ☐ Reserve `setUnitSpeed` and `setUnitPos` against project command collisions.
-    ☐ Preserve all existing `ds` commands and project extension behavior.
+    ☒ Avoid adding an inline duplicate implementation in the root `ds.lua` facade.
+    ☒ Reserve `setUnitSpeed` and `setUnitPos` against project command collisions.
+    ☒ Preserve all existing `ds` commands and project extension behavior.
 
 6.2 Declaration surface:
-    ☐ Add `dwarfspec.UnitSpeedOptions` to `src/ds.d.lua` with the three accepted
+    ☒ Add `dwarfspec.UnitSpeedOptions` to `src/ds.d.lua` with the three accepted
       fields and precise default and targeting documentation.
-    ☐ Add `dwarfspec.UnitPosition` with integer `x`, `y`, and `z` fields.
-    ☐ Add `DS.setUnitSpeed(options)` with documentation distinguishing unit action
+    ☒ Add `dwarfspec.UnitPosition` with integer `x`, `y`, and `z` fields.
+    ☒ Add `DS.setUnitSpeed(options)` with documentation distinguishing unit action
       speed from `setGameSpeed` TPS.
-    ☐ Define `DS.setUnitSpeed(options)` as a void command with no declared return
+    ☒ Define `DS.setUnitSpeed(options)` as a void command with no declared return
       value; assigning its Lua result therefore yields `nil`.
-    ☐ Add void `DS.setUnitPos(unit_id, position)` documentation describing stable
+    ☒ Add void `DS.setUnitPos(unit_id, position)` documentation describing stable
       integer ids, valid loaded-map coordinates, first-baseline ownership, and cleanup
       coordinate rollback.
-    ☐ State that cleanup disables the accelerator and restores coordinates changed
+    ☒ State that cleanup disables the accelerator and restores coordinates changed
       by either command but does not reverse broader gameplay effects.
-    ☐ Add valid declaration coverage for omitted and explicit `unit_ids` and both
+    ☒ Add valid declaration coverage for omitted and explicit `unit_ids` and both
       independent behavior flags.
-    ☐ Add invalid declaration coverage for unknown fields, wrong flag types, and
+    ☒ Add invalid declaration coverage for unknown fields, wrong flag types, and
       invalid id element types.
-    ☐ Add valid and invalid declaration coverage for `setUnitPos` unit ids and
+    ☒ Add valid and invalid declaration coverage for `setUnitPos` unit ids and
       `UnitPosition` coordinate fields.
 
 6.3 Public-contract verification:
-    ☐ Prove both commands are present only during an active run and unavailable to
+    ☒ Prove both commands are present only during an active run and unavailable to
       conflicting custom command registration.
-    ☐ Prove source-tree and installed-package composition load the same focused
+    ☒ Prove source-tree and installed-package composition load the same focused
       implementation.
-    ☐ Prove the declaration surface matches runtime names, option and position
+    ☒ Prove the declaration surface matches runtime names, option and position
       fields, and both commands' void return behavior.
 
 Completion criteria:
-    ☐ End-user specs can call typed `ds.setUnitSpeed(options)` and
+    ☒ End-user specs can call typed `ds.setUnitSpeed(options)` and
       `ds.setUnitPos(unit_id, position)` commands without accessing internal
       scheduling, position ownership, native adapters, or the fastdwarf plugin.
 

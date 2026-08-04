@@ -669,6 +669,13 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('exposes unit commands only on the run-scoped namespace', function()
+        assert.is_function(ds.setUnitSpeed)
+        assert.is_function(ds.setUnitPos)
+        assert.is_nil(ds_factory.setUnitSpeed)
+        assert.is_nil(ds_factory.setUnitPos)
+    end)
+
     it('returns the current world tick without requiring a mount', function()
         assert.equals(12345, ds.getTick())
         df.global.cur_year_tick = 12346
