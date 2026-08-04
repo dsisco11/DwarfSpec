@@ -393,6 +393,14 @@ and does not provide or alter source identity. Virtual identities are
 diagnostic and cache keys; they are not valid public provider targets. TestBed
 defines no custom-searcher protocol for claiming a file-backed identity.
 
+Automatic live host fallback also always uses a stable bed-local virtual
+identity, `virtual:host:require:<name>`, because TestBed borrows a host value
+rather than executing the reported file as a TestBed source. A filename
+reported by the host is retained only as diagnostic loader data and never
+becomes the fallback node's source identity. Directly loading that exact
+filename remains an ordinary, separate file-backed access subject to every
+normal source-reference rule.
+
 The private `package.preload` and `package.searchers` tables remain mutable and
 authoritative. Their ordering is preserved. Source-targeted provider lookup
 occurs inside the default file-source searcher after earlier searchers have had
@@ -555,9 +563,8 @@ scheme for DFHack-owned files. A live request follows this order:
    default file-source searcher.
 3. Only after every private searcher declines the request may the live adapter
    borrow an approved foundational dependency from the DFHack host.
-4. Record a discovered host filename as an internal canonical source
-   identity when possible, or use an internal virtual identity for native or
-   preloaded host values.
+4. Record the borrowed value under its stable internal virtual host identity.
+   Retain any discovered host filename only as diagnostic loader data.
 
 The automatic foundational fallbacks apply only to `require` module requests
 for exactly `class`, `utils`, `gui`, `gui.widgets`, and `gui.dwarfmode`.
@@ -591,11 +598,13 @@ providers={
 ```
 
 No `@host/`, URI, encoded logical name, or installation-relative path is part
-of the public API. Host filenames and virtual identities are live-adapter
-implementation details and are not valid public provider targets. TestBed has
-no public provider mechanism for borrowing an arbitrary host module or script;
-additional foundational dependencies require an explicit amendment to the
-versioned live-adapter fallback policy.
+of the public API. Virtual host identities and host-reported filenames are
+live-adapter implementation details, not public references to borrowed values.
+Writing the same normal filesystem path in `target` or `load()` denotes a
+separate file-backed TestBed source and does not address or intercept the host
+fallback node. TestBed has no public provider mechanism for borrowing an
+arbitrary host module or script; additional foundational dependencies require
+an explicit amendment to the versioned live-adapter fallback policy.
 
 ## Configuration and path behavior
 
@@ -613,6 +622,10 @@ resolve from the same effective consumer root. Normal absolute paths remain
 accepted. On Windows, TestBed accepts drive-absolute and UNC paths and rejects
 ambiguous drive-relative paths such as `C:src/clock.lua` and device-namespace
 paths such as `\\?\C:\src\clock.lua` or `\\.\device`.
+
+Source-reference requirements are cumulative. A reference that violates any
+applicable form, base, platform, readability, or configuration rule is invalid;
+satisfying one rule never overrides a violation of another.
 
 Lexical normalization must make these references identical:
 
@@ -735,7 +748,8 @@ Focused unit coverage must prove:
   loaded;
 - lexically equivalent target paths produce one provider identity;
 - two different logical module names resolving to one file share one source
-  node and one result;
+  node and one default source result, while their name-specific private-package
+  values may differ;
 - module and script adapters resolving to one target consult the same
   provider; compatible protocol-neutral values are shared, while declared
   contract mismatches fail before execution;
@@ -828,7 +842,12 @@ Focused live coverage must prove:
 - readable consumer module sources and ordinary source providers preempt
   automatic host fallback without special host-path syntax;
 - `reqscript` requests never receive automatic foundational host fallback;
-- file-backed and native/preloaded host identities remain internal;
+- every automatic host fallback uses a stable internal virtual identity, any
+  host-reported filename remains diagnostic loader data, and directly loading
+  that filename creates or selects a separate file-backed source node;
+- a provider targeting the exact normal path reported for a host fallback
+  applies only when ordinary file-backed resolution selects that path and never
+  intercepts the virtual host fallback;
 - unused mount-owned providers warn after component destruction and unmounting
   when DwarfSpec closes the TestBed;
 - separate mounts receive fresh TestBed-owned source state; and
@@ -861,7 +880,8 @@ The refactor is complete only when:
 - `mkmodule`, private package tables, module cache-result rules, custom
   searchers, and failed-load retry behavior satisfy the compatibility policy;
 - automatic live host borrowing occurs only after every private searcher
-  declines and remains limited to the versioned foundational allowlist;
+  declines, remains limited to the versioned foundational allowlist, and uses
+  only internal virtual identities;
 - ordinary source providers take precedence over automatic live host fallback,
   with no special public host-source naming convention;
 - the first close creates one ordered warning record and makes the defined
@@ -882,8 +902,10 @@ The refactor is complete only when:
 - Source-targeted configuration uses the `providers` field.
 - The unreleased loader-token API is removed immediately without a legacy
   adapter.
-- DFHack host filenames and virtual identities remain internal; public
-  configuration has no special host-source naming format.
+- Automatic host fallback always uses an internal virtual identity, even when
+  DFHack reports a filename. The filename remains diagnostic loader data;
+  public configuration has no special host-source naming format and an exact
+  normal path denotes a separate file-backed TestBed source.
 - Automatic foundational live borrowing is controlled by
   `component_host_fallbacks`.
 - Canonical source identity uses deterministic ASCII case folding across the
@@ -913,7 +935,8 @@ The refactor is complete only when:
   cannot declare file-backed source metadata.
 - Path validation accepts project-relative and normal absolute paths, including
   Windows drive-absolute and UNC paths, while rejecting Windows drive-relative
-  and device-namespace paths. Path tests remain filesystem-free.
+  and device-namespace paths. All applicable path requirements are cumulative,
+  and path tests remain filesystem-free.
 - Relative source references are configuration conveniences only; TestBed
   resolves them to canonical absolute identities before registration or
   comparison.
