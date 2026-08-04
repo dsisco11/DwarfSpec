@@ -853,8 +853,11 @@ Focused live coverage must prove:
 - automatic foundational host fallbacks preserve real DFHack class identity;
 - a custom searcher positioned after the default file-source searcher preempts
   automatic host fallback when it returns a loader;
-- readable consumer module sources and ordinary source providers preempt
-  automatic host fallback without special host-path syntax;
+- a provider matching the readable consumer candidate selected by the default
+  file-source searcher applies normally and preempts automatic host fallback
+  without special host-path syntax;
+- a provider whose readable target is not generated and selected for the
+  request remains unused and does not prevent automatic host fallback;
 - `reqscript` requests never receive automatic foundational host fallback;
 - every automatic host fallback uses a stable internal virtual identity and any
   host-reported filename remains diagnostic loader data;
@@ -901,8 +904,10 @@ The refactor is complete only when:
 - automatic live host borrowing occurs only after every private searcher
   declines, remains limited to the versioned foundational allowlist, and uses
   only internal virtual identities;
-- ordinary source providers take precedence over automatic live host fallback,
-  with no special public host-source naming convention;
+- a provider takes precedence over automatic live host fallback only when the
+  default file-source searcher selects its readable target; provider
+  registration alone does not affect fallback and requires no special public
+  host-source naming convention;
 - the first close creates one ordered warning record and makes the defined
   delivery attempt for every unused user-configured provider, including the
   specified sink fallback behavior, without interfering with cleanup;
@@ -973,4 +978,7 @@ The refactor is complete only when:
   source identity.
 - Automatic live host fallback runs only after every private searcher declines,
   including custom searchers positioned after the default file-source searcher.
+- A provider preempts automatic live host fallback only when the default
+  file-source searcher selects its readable target. A readable provider target
+  that the request cannot reach remains unused and does not block fallback.
 - Standalone construction rejects `component_host_fallbacks=true`.
