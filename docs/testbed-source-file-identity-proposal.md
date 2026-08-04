@@ -10,11 +10,12 @@ It does not describe a completed implementation.
 Refactor TestBed so that a resolved source file is the primary identity of a
 dependency. `require()` and `dfhack.reqscript()` remain supported ways for
 production code to reach dependencies, but they become request adapters at the
-TestBed boundary. They no longer determine the identity used for
-providers, caching, aliases, or diagnostics. `mkmodule()` remains a bed-local,
-name-based private-package helper that immediately publishes a newly created
-module environment through `package.loaded`; it does not resolve or identify a
-source.
+TestBed boundary. For file-backed dependencies, they no longer determine the
+identity used for providers, caching, aliases, or diagnostics. Adapter-owned
+virtual dependencies use the narrow namespaced identities defined below.
+`mkmodule()` remains a bed-local, name-based private-package helper that
+immediately publishes a newly created module environment through
+`package.loaded`; it does not resolve or identify a source.
 
 The current provider form:
 
@@ -62,7 +63,7 @@ That loader-token identity has several undesirable consequences:
 The current implementation reflects this model directly. It stores separate
 module and script provider maps and consults them before resolving a source
 path. The refactor will invert that order: resolve source candidates first,
-then consult one registry keyed by canonical source identity.
+then consult one provider registry keyed by canonical file source identity.
 
 ## Goals
 
@@ -85,8 +86,9 @@ then consult one registry keyed by canonical source identity.
   files.
 - Keep TestBed framework-neutral and usable without a live DFHack process.
 - Preserve mount-scoped ownership and cleanup for live descriptor mounts.
-- Produce diagnostics in terms of source paths, with request operation and
-  operand included only as context.
+- Produce diagnostics in terms of source paths for file-backed nodes and
+  namespaced identities for virtual nodes, with request operation and operand
+  included as active-request context.
 - Create one deterministic warning record and perform the defined delivery
   attempt for each user-configured provider that was never selected before its
   TestBed closes.
@@ -121,16 +123,24 @@ excludes drive-relative and device-namespace paths.
 
 ### Source identity
 
-A source identity is TestBed's canonical internal filename. It uses an
-absolute path, forward slashes, and lexically normalized `.` and `..` segments.
+A `SourceId` is TestBed's immutable internal source-registry key. It has two
+disjoint variants:
+
+- a file source identity is a canonical absolute filename; and
+- a virtual source identity is an adapter-owned, namespaced key for a value
+  that TestBed did not resolve to and execute as a file-backed source.
+
+Only file source identities are valid public provider targets. A file source
+identity uses forward slashes and lexically normalized `.` and `..` segments.
 On Windows, deterministic ASCII case folding makes the complete path
-case-insensitive. On other platforms, path identity remains case-sensitive.
+case-insensitive. On other platforms, file identity remains case-sensitive.
 TestBed does not use `realpath()` or resolve symlinks.
 
 This extends the existing TestBed lexical path policy by folding the complete
-Windows path and by making the normalized filename the source-registry key.
+Windows path and by making the normalized filename the file-source registry
+key.
 Symlinks, hard links, and path spellings that remain distinct after the
-declared lexical normalization may still create distinct source identities
+declared lexical normalization may still create distinct file source identities
 even when the filesystem ultimately reaches the same physical file.
 
 The replacement-content path supplied through `use_source` is resolved and
@@ -149,7 +159,11 @@ resolution, circular-dependency diagnostics, and errors. It includes:
 - the resolved target source identity once resolution succeeds.
 
 Request context is not a persistent relationship in a dependency graph. The
-operation and request operand do not become part of the target identity.
+operation and request operand do not become part of a file-backed target's
+identity. The explicitly defined preload, custom-searcher, and host adapters may
+derive an opaque virtual identity from their adapter or searcher identity and
+requested name. That namespaced node key does not retain the caller, active
+request context, or a dependency-edge record.
 
 ### Provider
 
@@ -842,12 +856,15 @@ Focused live coverage must prove:
 - readable consumer module sources and ordinary source providers preempt
   automatic host fallback without special host-path syntax;
 - `reqscript` requests never receive automatic foundational host fallback;
-- every automatic host fallback uses a stable internal virtual identity, any
-  host-reported filename remains diagnostic loader data, and directly loading
-  that filename creates or selects a separate file-backed source node;
-- a provider targeting the exact normal path reported for a host fallback
-  applies only when ordinary file-backed resolution selects that path and never
-  intercepts the virtual host fallback;
+- every automatic host fallback uses a stable internal virtual identity and any
+  host-reported filename remains diagnostic loader data;
+- when a host-reported filename is a valid, readable normal source reference,
+  directly loading it creates or selects a separate file-backed source node and
+  a provider for that exact path applies only through ordinary file-backed
+  resolution, never to the virtual host fallback;
+- when a host-reported filename is unreadable or violates any applicable source
+  reference rule, direct loading and provider configuration produce their
+  ordinary validation errors without affecting the virtual host fallback;
 - unused mount-owned providers warn after component destruction and unmounting
   when DwarfSpec closes the TestBed;
 - separate mounts receive fresh TestBed-owned source state; and
@@ -866,9 +883,11 @@ The refactor is complete only when:
   uses `component_host_fallbacks` for automatic foundational live borrowing;
 - `imports`, `provide`, loader `kind`, public `use_host`, and
   `component_imports` are removed immediately without a compatibility adapter;
-- the core provider registry is keyed only by canonical source identity;
-- request operations and operands remain transient active-load context rather
-  than persistent graph relationships or source-node identity;
+- the core provider registry is keyed only by canonical file source identity;
+- request operations and operands remain transient active-load context, never
+  affect file-backed identity, and do not create persistent graph
+  relationships; the enumerated virtual adapters may derive only their
+  namespaced node keys from the requested name;
 - one canonical absolute target source cannot be silently executed twice under
   separate module and script caches;
 - direct loading and loader-adapter access in either order share the same
@@ -905,11 +924,11 @@ The refactor is complete only when:
 - Automatic host fallback always uses an internal virtual identity, even when
   DFHack reports a filename. The filename remains diagnostic loader data;
   public configuration has no special host-source naming format and an exact
-  normal path denotes a separate file-backed TestBed source.
+  valid, readable normal path denotes a separate file-backed TestBed source.
 - Automatic foundational live borrowing is controlled by
   `component_host_fallbacks`.
-- Canonical source identity uses deterministic ASCII case folding across the
-  complete path on Windows and preserves case on other platforms.
+- Canonical file source identity uses deterministic ASCII case folding across
+  the complete path on Windows and preserves case on other platforms.
 - The first `close()` creates and attempts delivery of one warning, in
   declaration order, for every user-configured provider that was never
   selected.
@@ -938,10 +957,13 @@ The refactor is complete only when:
   and device-namespace paths. All applicable path requirements are cumulative,
   and path tests remain filesystem-free.
 - Relative source references are configuration conveniences only; TestBed
-  resolves them to canonical absolute identities before registration or
+  resolves them to canonical absolute file identities before registration or
   comparison.
 - Request operations, operands, and callers remain transient active-load
-  context. TestBed does not persist dependency-edge records.
+  context and never affect file-backed identity. The enumerated virtual
+  adapters may derive namespaced node keys from their adapter or searcher and
+  requested name, but TestBed does not persist caller or dependency-edge
+  records.
 - `mkmodule()` is a name-based private-package helper. It returns an existing
   authoritative non-`nil`, non-`false` `package.loaded` value exactly, or
   creates and immediately publishes a stable environment when no such value
