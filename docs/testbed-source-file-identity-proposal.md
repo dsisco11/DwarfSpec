@@ -152,9 +152,9 @@ operation and request operand do not become part of the target identity.
 ### Provider
 
 A provider is a test policy attached to an existing target source identity. It
-selects one of the supported strategies: a value, another source file, a shared
-existing source identity, or a value borrowed from the live host. It replaces
-how that readable production source is supplied within the TestBed.
+selects one of the supported strategies: a value, another source file, or a
+shared existing source identity. It replaces how that readable production
+source is supplied within the TestBed.
 
 ## Proposed public API
 
@@ -184,11 +184,11 @@ configured source interface. A missing or unreadable target is a configuration
 error. Duplicate canonical targets are also configuration errors, including
 targets written with lexically equivalent paths.
 
-Each provider must specify exactly one of `use_value`, `use_source`,
-`use_existing`, or `use_host`. Supplying none or more than one is a
-configuration error. `use_value=nil` is indistinguishable from an omitted Lua
-table field and therefore counts as no strategy; providers cannot use it to
-represent a supplied `nil` value.
+Each provider must specify exactly one of `use_value`, `use_source`, or
+`use_existing`. Supplying none or more than one is a configuration error.
+`use_value=nil` is indistinguishable from an omitted Lua table field and
+therefore counts as no strategy; providers cannot use it to represent a
+supplied `nil` value.
 
 ### Provider strategies
 
@@ -231,24 +231,10 @@ provider, if any, is applied normally. Self-aliases and longer `use_existing`
 cycles are errors reported with the complete source chain. The request reaching
 the alias must be compatible with the referenced source's execution contract.
 
-Host borrowing remains live-only, but its core registry entry is attached to a
-source identity instead of a module or script token. The provider carries
-explicit adapter metadata so its result does not depend on which access route
-reaches the target first:
-
-```lua
-{
-    target='src/my_plugin/platform.lua',
-    use_host={operation='require', name='my_plugin.platform'},
-}
-```
-
-`operation` is either `require` or `reqscript`. It describes how the provided
-value is obtained from DFHack; it is not part of the target source
-identity. Because the metadata is explicit, direct source loading, aliases,
-and repeated access all borrow the same deterministic host value. A request
-whose execution contract is incompatible with the configured host operation
-fails before the host loader is called.
+Host borrowing is not a provider strategy. The live adapter owns the narrow
+automatic fallback policy described under **Live host integration**; ordinary
+providers remain source-focused and contain no host loader operation or
+logical name.
 
 ### Unused-provider warnings
 
@@ -313,10 +299,19 @@ provider, and returns the source node's value. This becomes the preferred
 entry point for new tests and source descriptors.
 
 The direct target must be readable. `use_value` returns its configured value
-directly; `use_source` executes according to the replacement source's declared
-contract; `use_existing` adopts the referenced source's contract and value;
-and `use_host` uses its explicit host operation and name. A missing or
-unreadable direct target fails with the ordinary source-resolution diagnostic.
+after validation against the target's declared contract; an annotated script
+target requires a table and an ordinary module target requires a non-`nil`
+value. `use_source` executes according to the compatible replacement source
+contract, and `use_existing` adopts the referenced source's contract and value.
+A missing or unreadable direct target fails with the ordinary source-resolution
+diagnostic.
+
+Direct loading and loader-adapter access share the same source node, execution
+state, and cacheable result. Loading a source directly and then reaching it
+through `require()` or `reqscript()`, or doing those operations in the reverse
+order, does not execute a cacheable source twice. A newly associated module
+name still receives the shared result through its private `package.loaded`
+entry.
 
 `bed:require(name)` and `bed:reqscript(name)` remain supported as compatibility
 entry points and as the implementations bound into production source
@@ -497,12 +492,12 @@ before execution.
 request with any non-`nil` value and through a script request only when its
 value is a table. The first request does not permanently classify the value;
 later compatible requests to the same target reuse the same value. Script-table
-validation therefore moves from configuration normalization to the request
-boundary because a provider no longer declares a loader kind.
+validation therefore occurs at the source-access boundary, including direct
+loading, because a provider no longer declares a loader kind. Direct loading
+uses the readable target's declaration to select the applicable validation.
 
-`use_existing` adopts the referenced node's execution contract. `use_host`
-uses its explicit host operation as its contract. These rules make behavior
-independent of request order.
+`use_existing` adopts the referenced node's execution contract. These rules
+make behavior independent of request order.
 
 ## Live host integration
 
@@ -513,13 +508,15 @@ than a general source-file loader.
 The core TestBed remains source-keyed and exposes no special public naming
 scheme for DFHack-owned files. A live request follows this order:
 
-1. Run the normal private searchers and generate ordinary consumer source
-   candidates.
-2. Select the first readable consumer source using normal candidate precedence,
-   then apply its matching provider, if any.
-3. Only when no readable consumer source satisfies the request, allow the live
-   adapter to borrow an approved foundational dependency from the DFHack host.
-4. Record the discovered host filename as an internal canonical source
+1. Run every private searcher in its configured order. Within the default
+   file-source searcher, select the first readable consumer source and apply its
+   matching provider, if any.
+2. If any private searcher returns a loader, use that result and do not consult
+   automatic host fallback. This includes custom searchers positioned after the
+   default file-source searcher.
+3. Only after every private searcher declines the request may the live adapter
+   borrow an approved foundational dependency from the DFHack host.
+4. Record a discovered host filename as an internal canonical source
    identity when possible, or use an internal virtual identity for native or
    preloaded host values.
 
@@ -532,7 +529,8 @@ consumer source or user-configured source provider.
 The boolean `component_host_fallbacks` configuration field controls this
 behavior. It defaults to `false` for standalone TestBeds and `true` for live
 descriptor mounts. Setting it to `false` on a live mount disables all
-automatic foundational fallbacks. It replaces the loader-focused
+automatic foundational fallbacks. Setting it to `true` without a live adapter
+is a construction-time configuration error. It replaces the loader-focused
 `component_imports` field.
 
 For example, production code continues to use an ordinary request:
@@ -555,9 +553,10 @@ providers={
 
 No `@host/`, URI, encoded logical name, or installation-relative path is part
 of the public API. Host filenames and virtual identities are live-adapter
-implementation details and are not valid public provider targets. Explicit
-`use_host` remains available when a normal consumer source target should be
-satisfied by a deterministic host request.
+implementation details and are not valid public provider targets. TestBed has
+no public provider mechanism for borrowing an arbitrary host module or script;
+additional foundational dependencies require an explicit amendment to the
+versioned live-adapter fallback policy.
 
 ## Configuration and path behavior
 
@@ -613,6 +612,8 @@ The refactor intentionally changes these contracts:
 
 - public provider identity changes from `(kind, name)` to a canonical
   source target;
+- public `use_host` providers are removed; host borrowing is owned exclusively
+  by the versioned live-adapter fallback policy;
 - source-focused descriptors replace loader-specific descriptors;
 - automatic foundational host modules change from provider-before-source
   precedence to fallback-after-consumer-source-and-provider precedence;
@@ -631,10 +632,10 @@ All other behavioral changes require an explicit amendment to this proposal.
 
 TestBed has not been released, so this proposal makes an immediate breaking
 change without a compatibility adapter. The `imports` field, `provide` token,
-`kind`, `component_imports`, and `(kind, name)` registry are removed together.
-Configuration using any legacy field is rejected with an error that identifies
-the unsupported field and points to `providers` or
-`component_host_fallbacks`, as appropriate.
+`kind`, public `use_host` strategy, `component_imports`, and `(kind, name)`
+registry are removed together. Configuration using any legacy field or
+strategy is rejected with an error that identifies the unsupported input and
+points to `providers` or `component_host_fallbacks`, as appropriate.
 
 The implementation must not silently translate legacy tokens. A token can
 resolve differently after private `package.path` mutation, can represent a
@@ -672,8 +673,8 @@ The refactor also updates:
 7. Add direct source loading and source-focused component descriptors.
 8. Move script-result validation and incompatible-access errors to the source
    request boundary.
-9. Adapt live host borrowing as a fallback after ordinary sources and
-   providers without exposing host naming through the public API.
+9. Adapt live host borrowing as a fallback only after every private searcher
+   declines, without exposing host naming through the public API.
 10. Track provider selection, create ordered unused-provider warning records,
     and perform their defined delivery attempts during close.
 11. Remove the legacy token implementation and update declarations,
@@ -686,10 +687,12 @@ process-wide `package.path`, `package.loaded`, or DFHack script cache.
 
 Focused unit coverage must prove:
 
-- provider configuration accepts exactly one strategy and rejects missing or
-  competing strategies, including `use_value=nil` as a missing strategy;
-- provider construction rejects missing or unreadable targets before any
-  source is loaded;
+- provider configuration accepts exactly one of `use_value`, `use_source`, or
+  `use_existing` and rejects missing or competing strategies,
+  `use_value=nil`, and the removed `use_host` strategy;
+- provider construction separately rejects a missing or unreadable `target`,
+  `use_source` replacement, or `use_existing` reference before any source is
+  loaded;
 - lexically equivalent target paths produce one provider identity;
 - two different logical module names resolving to one file share one source
   node and one result;
@@ -725,16 +728,18 @@ Focused unit coverage must prove:
 - provider and dependency cycles report canonical source chains;
 - incompatible module/script access fails without executing a source twice;
 - `use_value` is protocol-neutral but enforces table results at a script
-  request boundary;
-- `use_host` uses explicit operation/name metadata and is independent of alias
-  or request order;
+  request boundary and when directly loading an annotated script target;
 - direct loading exercises readable targets for every compatible provider
   strategy and rejects missing or unreadable targets;
+- direct loading followed by `require()` or `reqscript()`, and either adapter
+  followed by direct loading, share one source node and cacheable result without
+  executing the source twice;
 - filesystem-free canonicalization and candidate-resolution tests cover
   project-relative paths, normal absolute paths, Windows drive-absolute and UNC
   paths, rejected Windows drive-relative and device-namespace paths, and the
   declared platform case rules;
-- standalone configuration remains independent from live-host support;
+- standalone configuration remains independent from live-host support and
+  rejects `component_host_fallbacks=true` during construction;
 - the reserved `dfhack` facade and protected loader bindings cannot be
   intercepted by source providers;
 - used providers create no warning record, while every unused user provider
@@ -742,8 +747,8 @@ Focused unit coverage must prove:
   order on the first `close()`;
 - provider selection marks the provider used before strategy execution, while
   candidate generation alone does not;
-- selected `use_source` and `use_host` providers remain used, and therefore do
-  not warn, when their compatibility checks or strategy execution fail;
+- a selected `use_source` provider remains used, and therefore does not warn,
+  when its compatibility check or strategy execution fails;
 - provider failures, lazy `use_existing`, preload/custom-searcher precedence,
   repeated `close()`, and an injected warning sink follow the warning contract;
 - when a non-default warning sink fails, the failed record is attempted once on
@@ -754,14 +759,16 @@ Focused unit coverage must prove:
 
 Declaration fixtures must prove that source-targeted configurations and
 descriptors type-check through `providers` and `component_host_fallbacks`,
-while `imports`, `kind`, `provide`, and `component_imports` are rejected.
+while `imports`, `kind`, `provide`, `use_host`, and `component_imports` are
+rejected.
 
 Focused live coverage must prove:
 
 - source-focused descriptor mounts construct the intended component;
 - source providers apply to transitive component dependencies;
 - automatic foundational host fallbacks preserve real DFHack class identity;
-- explicit host borrowing selects the appropriate host adapter;
+- a custom searcher positioned after the default file-source searcher preempts
+  automatic host fallback when it returns a loader;
 - readable consumer module sources and ordinary source providers preempt
   automatic host fallback without special host-path syntax;
 - `reqscript` requests never receive automatic foundational host fallback;
@@ -782,18 +789,20 @@ The refactor is complete only when:
 - the direct source entry point is exactly `bed:load(source)`;
 - public TestBed configuration uses `providers` with source `target` values and
   uses `component_host_fallbacks` for automatic foundational live borrowing;
-- `imports`, `provide`, loader `kind`, and `component_imports` are removed
-  immediately without a compatibility adapter;
+- `imports`, `provide`, loader `kind`, public `use_host`, and
+  `component_imports` are removed immediately without a compatibility adapter;
 - the core provider registry is keyed only by canonical source identity;
 - request operations and operands remain transient active-load context rather
   than persistent graph relationships or source-node identity;
 - one canonical absolute target source cannot be silently executed twice under
   separate module and script caches;
+- direct loading and loader-adapter access in either order share the same
+  source node and cacheable result;
 - source-focused providers apply only to readable target source files;
 - `mkmodule`, private package tables, module cache-result rules, custom
   searchers, and failed-load retry behavior satisfy the compatibility policy;
-- live host borrowing is deterministic and does not depend on the first access
-  route;
+- automatic live host borrowing occurs only after every private searcher
+  declines and remains limited to the versioned foundational allowlist;
 - ordinary source providers take precedence over automatic live host fallback,
   with no special public host-source naming convention;
 - the first close creates one ordered warning record and makes the defined
@@ -802,7 +811,8 @@ The refactor is complete only when:
 - canonical source paths use deterministic ASCII case folding across the
   complete path on Windows and preserve case on other platforms;
 - standalone and live behavior retain their documented ownership and cleanup
-  guarantees;
+  guarantees, and standalone construction rejects
+  `component_host_fallbacks=true`;
 - public declarations, technical documentation, and the wiki describe the
   source-file model consistently; and
 - all required focused, full, declaration, package, and live checks pass.
@@ -822,12 +832,19 @@ The refactor is complete only when:
 - The first `close()` creates and attempts delivery of one warning, in
   declaration order, for every user-configured provider that was never
   selected.
-- Every provider specifies exactly one strategy; `use_value=nil` counts as an
-  omitted strategy and is invalid.
+- Every provider specifies exactly one of `use_value`, `use_source`, or
+  `use_existing`; `use_value=nil` counts as an omitted strategy and is invalid.
+- The public `use_host` provider strategy is removed. Host borrowing exists
+  only as the live adapter's versioned automatic foundational fallback.
 - Provider targets must resolve to readable production source files during
   TestBed construction; providers cannot create virtual file candidates.
+- `target`, `use_source`, and `use_existing` paths must each identify readable
+  files during configuration validation.
 - Direct loading applies compatible provider strategies only to readable
-  targets and rejects missing or unreadable targets.
+  targets, validates `use_value` against the target's declared contract, and
+  rejects missing or unreadable targets.
+- Direct loading and `require()` or `reqscript()` share one source node and
+  cacheable result in either access order.
 - Custom-searcher results always use stable bed-local virtual identities and
   cannot declare file-backed source metadata.
 - Path validation accepts project-relative and normal absolute paths, including
@@ -843,3 +860,6 @@ The refactor is complete only when:
 - `use_source` deliberately executes replacement contents under the readable
   provider target's identity; its replacement-content path is not another
   source identity.
+- Automatic live host fallback runs only after every private searcher declines,
+  including custom searchers positioned after the default file-source searcher.
+- Standalone construction rejects `component_host_fallbacks=true`.
