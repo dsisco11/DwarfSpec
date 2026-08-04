@@ -288,51 +288,51 @@ Completion criteria:
       fault behavior are fully owned and observable by DwarfSpec cleanup.
 
 Phase 3: Implement option normalization and unit targeting
-    ☐ Exit with an immutable per-example configuration and stable target-id set that
+    ☒ Exit with an immutable per-example configuration and stable target-id set that
       later update behaviors can consume without reinterpreting public input.
 
 3.1 Option validation:
-    ☐ Require one table argument and reject unknown fields.
-    ☐ Require `fast_actions` and `teleport_jobs`, when present, to be booleans.
-    ☐ Reject configurations where neither behavior is `true`.
-    ☐ Require `unit_ids`, when present, to be a nonempty dense array of integer ids;
+    ☒ Require one table argument and reject unknown fields.
+    ☒ Require `fast_actions` and `teleport_jobs`, when present, to be booleans.
+    ☒ Reject configurations where neither behavior is `true`.
+    ☒ Require `unit_ids`, when present, to be a nonempty dense array of integer ids;
       define validity by successful unit resolution and activation-time eligibility
       instead of imposing a separate positive-number range.
-    ☐ Reject duplicate ids with a diagnostic that identifies the duplicate.
-    ☐ Copy and freeze normalized options before scheduling work so caller mutation
+    ☒ Reject duplicate ids with a diagnostic that identifies the duplicate.
+    ☒ Copy and freeze normalized options before scheduling work so caller mutation
       cannot change an active example.
 
 3.2 Target capture:
-    ☐ Implement one injected target adapter for enumerating default eligible units,
+    ☒ Implement one injected target adapter for enumerating default eligible units,
       resolving explicit ids, and re-resolving ids on updates.
-    ☐ Snapshot default targets exactly once during activation in deterministic id
+    ☒ Snapshot default targets exactly once during activation in deterministic id
       order.
-    ☐ Validate every explicit id before owning or scheduling the controller and
+    ☒ Validate every explicit id before owning or scheduling the controller and
       report invalid and ineligible ids together in bounded diagnostics.
-    ☐ Store only copied ids and normalized behavior flags in controller state.
-    ☐ Apply the characterized later-lifecycle policy consistently when a captured
+    ☒ Store only copied ids and normalized behavior flags in controller state.
+    ☒ Apply the characterized later-lifecycle policy consistently when a captured
       unit becomes unavailable or ineligible.
 
 3.3 Ownership rules:
-    ☐ Reject a second activation while one controller is active in the example.
-    ☐ Allow a later example to create a fresh controller only after cleanup proved
+    ☒ Reject a second activation while one controller is active in the example.
+    ☒ Allow a later example to create a fresh controller only after cleanup proved
       the prior controller inactive.
-    ☐ Fail before mutation if no world, map, or fortress site required by the
+    ☒ Fail before mutation if no world, map, or fortress site required by the
       operation is loaded.
-    ☐ Leave pause state and TPS unchanged during validation and activation.
+    ☒ Leave pause state and TPS unchanged during validation and activation.
 
 3.4 Focused verification:
-    ☐ Cover every valid flag combination and every unknown, missing, mistyped,
+    ☒ Cover every valid flag combination and every unknown, missing, mistyped,
       empty, sparse, duplicate, invalid, and ineligible input case.
-    ☐ Prove caller tables and id arrays are copied and later mutations have no
+    ☒ Prove caller tables and id arrays are copied and later mutations have no
       effect.
-    ☐ Prove default snapshot ordering, explicit subset behavior, no later-arrival
+    ☒ Prove default snapshot ordering, explicit subset behavior, no later-arrival
       expansion, id re-resolution, and one-active-controller rejection.
-    ☐ Prove every validation failure occurs before cleanup ownership, scheduling,
+    ☒ Prove every validation failure occurs before cleanup ownership, scheduling,
       timer mutation, or teleportation.
 
 Completion criteria:
-    ☐ One immutable validated configuration and deterministic target-id set enters
+    ☒ One immutable validated configuration and deterministic target-id set enters
       the controller, and invalid input cannot create partial runtime state.
 
 Phase 4: Implement fast action timers
