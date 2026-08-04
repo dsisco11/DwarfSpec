@@ -11,9 +11,10 @@ Refactor TestBed so that a resolved source file is the primary identity of a
 dependency. `require()` and `dfhack.reqscript()` remain supported ways for
 production code to reach dependencies, but they become request adapters at the
 TestBed boundary. They no longer determine the identity used for
-providers, caching, aliases, or diagnostics. `mkmodule()` remains a
-publication operation and binds a module name to the source that is currently
-executing instead of resolving another source.
+providers, caching, aliases, or diagnostics. `mkmodule()` remains a bed-local,
+name-based private-package helper that immediately publishes a newly created
+module environment through `package.loaded`; it does not resolve or identify a
+source.
 
 The current provider form:
 
@@ -74,17 +75,18 @@ then consult one registry keyed by canonical source identity.
   identity.
 - Allow `require()` and `reqscript()` to share provider selection without
   erasing their production-compatible call behavior.
-- Preserve `mkmodule()` as immediate publication of a module environment
-  associated with the currently executing source so circular module imports
-  continue to work.
+- Preserve `mkmodule()` as an authoritative name-based private-package helper
+  that immediately publishes any environment it creates, so supported circular
+  module imports continue to work without making the publication source-owned
+  state.
 - Keep providers deterministic when roots, `package.path`, or aliases
   produce multiple candidate files.
 - Reject provider targets that do not resolve to readable production source
   files.
 - Keep TestBed framework-neutral and usable without a live DFHack process.
 - Preserve mount-scoped ownership and cleanup for live descriptor mounts.
-- Produce diagnostics in terms of source paths, with request method and
-  logical name included only as context.
+- Produce diagnostics in terms of source paths, with request operation and
+  operand included only as context.
 - Create one deterministic warning record and perform the defined delivery
   attempt for each user-configured provider that was never selected before its
   TestBed closes.
@@ -240,10 +242,10 @@ logical name.
 
 Each user-configured provider begins unused. TestBed marks it used at definitive
 provider selection, before provider-specific contract validation, alias
-traversal, source loading, or host invocation. A selected provider remains used
-even if compatibility validation, its strategy, or subsequent source execution
-fails. Merely validating configuration or generating a matching candidate path
-does not mark a provider used.
+traversal, or source loading. A selected provider remains used even if
+compatibility validation, its strategy, or subsequent source execution fails.
+Merely validating configuration or generating a matching candidate path does
+not mark a provider used.
 
 On the first `bed:close()`, TestBed creates one warning record for each provider
 that remains unused and performs the delivery defined below. Records follow the
@@ -307,11 +309,12 @@ A missing or unreadable direct target fails with the ordinary source-resolution
 diagnostic.
 
 Direct loading and loader-adapter access share the same source node, execution
-state, and cacheable result. Loading a source directly and then reaching it
-through `require()` or `reqscript()`, or doing those operations in the reverse
-order, does not execute a cacheable source twice. A newly associated module
-name still receives the shared result through its private `package.loaded`
-entry.
+state, and default source result. Loading a source directly and then reaching
+it through `require()` or `reqscript()`, or doing those operations in the
+reverse order, does not execute a cacheable source twice. A module name can
+still expose its own value through private `package.loaded`; such a
+name-specific publication does not replace the default source result unless
+the source explicitly returns that value.
 
 `bed:require(name)` and `bed:reqscript(name)` remain supported as compatibility
 entry points and as the implementations bound into production source
@@ -395,21 +398,35 @@ their normal opportunity to satisfy the request.
 
 The source-node registry is separate from the public private-package tables.
 It records source ownership, load status, request aliases, execution contract,
-the default execution result, name-specific publications, and loader data.
+the default execution result, and loader data. Name-specific publications
+belong to the private package state instead of to source nodes.
 `package.loaded[name]` continues to expose public values, not internal
 source-node objects.
 
 The module adapter preserves Lua-compatible result rules:
 
-- a non-`nil` loader result becomes `package.loaded[name]` and the source-node
-  result;
-- a `nil` result preserves a value published specifically for the requesting
-  module name;
-- a `nil` result without a requesting-name publication caches `true`, even if
-  the source published a different module name;
+- a non-`nil` loader result becomes the default source result and
+  `package.loaded[name]`;
+- a `nil` result gives the source a default result of `true`, while preserving
+  a value published specifically for the requesting module name;
+- a `nil` result without a requesting-name publication exposes `true` for that
+  name, even if the source published a different module name;
 - a `false` result remains non-cacheable and allows the same source node to be
   executed again; and
 - a failed load clears in-progress state and permits a later retry.
+
+Before invoking a module loader, the adapter records the requesting name's
+pre-attempt `package.loaded` value, which is normally `nil` or `false`. If the
+loader fails, the adapter restores that exact pre-attempt value even when the
+loader called `mkmodule()` with the requesting name. Changes made under other
+module names remain authoritative private-package side effects. Restoring the
+requesting slot prevents a partially published environment from suppressing
+the promised retry without assigning the publication to a source node.
+
+Direct loading returns the default source result. It never selects or infers a
+result from a name-specific `package.loaded` publication. A later module alias
+receives its name-specific publication when one exists and otherwise receives
+the default source result.
 
 The loader-data value is returned only for an execution attempt. Cache hits
 continue to return no loader data.
@@ -420,12 +437,23 @@ same file share one cacheable source result. Repeating a cached logical request
 retains its alias even if later `package.path` mutation would resolve that name
 differently.
 
+Source ownership of a name-to-source alias is separate from ownership of the
+value currently stored at that name. A requesting alias remains attached to its
+source when the module adapter preserves a same-name value published by
+`mkmodule()`. The adapter records that preserved value as the alias's expected
+private-package value for later override detection, but the value does not
+become source-node state. Source-wide invalidation clears the private
+`package.loaded` entry for every still-attached alias, including one whose
+expected value came from `mkmodule()`. A detached caller override remains
+protected by the rules below.
+
 Direct mutation of `package.loaded` remains authoritative at the requesting
 name. Assigning a non-`nil`, non-`false` value overrides that name without
 changing the underlying source node or its other aliases. When TestBed next
-observes that the value differs from the value it published for the name, it
-detaches that name from source ownership. The explicit override then survives
-later source invalidation through another alias.
+observes that the value differs from the alias's recorded expected
+private-package value, it detaches that name from source ownership. The
+explicit override then survives later source invalidation through another
+alias.
 
 Clearing an owned alias, or setting it to `false`, invalidates that alias and
 the cacheable source result on its next request. TestBed then clears only the
@@ -445,28 +473,35 @@ the logical names or direct references and operations that formed the cycle.
 
 ### `mkmodule()` publication
 
-`mkmodule(name)` does not resolve a dependency. It creates or returns a stable
-bed-local module environment, immediately publishes that environment through
-`package.loaded[name]`, and associates the name-specific publication with the
-active source node. The published environment is not necessarily the chunk's
-original execution environment: production code can bind `_ENV` to the table
-returned by `mkmodule()`.
+`mkmodule(name)` does not resolve a dependency or identify a source. It first
+consults the authoritative private `package.loaded[name]`. When that entry is
+non-`nil` and non-`false`, `mkmodule()` returns the exact cached value, whatever
+its type, without creating or replacing an environment. Otherwise it creates a
+stable bed-local module environment, immediately publishes that environment at
+the name, and returns it. The publication is owned by the private package
+state, not by the active source node. Production code can bind `_ENV` to a
+newly created or previously published environment table:
+
+```lua
+local _ENV = mkmodule('my_plugin.clock')
+
+function now()
+    return 42
+end
+
+return _ENV
+```
 
 A later `require(name)` can observe that partial module environment during a
-circular import. If the source was requested under the same name and later
-returns a non-`nil` value, the explicit return replaces the publication for
-that requesting name. A `nil` return preserves the publication. If source A
-was requested under one name but calls `mkmodule()` with a different name B,
-a `nil` return caches `true` for A while B retains its published module
-environment.
+circular import. If a loader requested under that name later returns a
+non-`nil` value, the explicit return replaces the requesting name's published
+value. A `nil` return preserves it. Calling `mkmodule()` outside active source
+execution has the same name-based behavior and creates no source node.
 
-When `mkmodule(name)` is called from any active source loader, including a
-preload or custom-searcher loader, the active file or virtual source node owns
-the publication. Only a call with no active source node creates or returns a
-standalone bed-local virtual publication node. Its public
-`package.loaded[name]` value is returned before searchers or providers are
-consulted, while the reserved `dfhack` facade continues to bypass mutable
-package state.
+Direct loading does not infer its result from `mkmodule()` calls. It returns
+the source's default result under the cache rules above. A conventional DFHack
+module explicitly returns its `_ENV`, so that environment naturally becomes
+the default result without any special source-to-publication relationship.
 
 ### Execution contract
 
@@ -596,8 +631,8 @@ The refactor preserves these existing TestBed contracts:
   `package.path` remain bed-local, mutable, and authoritative;
 - module loaders preserve `nil`, `false`, explicit publication, loader-data,
   and failed-retry behavior described above;
-- `mkmodule()` publishes immediately and continues to break supported circular
-  module dependencies;
+- `mkmodule()` immediately publishes any environment it creates and continues
+  to break supported circular module dependencies;
 - annotated scripts publish their environment before execution and clear
   failed state for retry;
 - `require('dfhack')` remains the reserved bed-local facade and cannot be
@@ -616,7 +651,8 @@ The refactor intentionally changes these contracts:
   by the versioned live-adapter fallback policy;
 - source-focused descriptors replace loader-specific descriptors;
 - automatic foundational host modules change from provider-before-source
-  precedence to fallback-after-consumer-source-and-provider precedence;
+  precedence to fallback only after every private searcher declines, as
+  defined under **Live host integration**;
 - provider targets that do not identify readable source files are rejected
   instead of creating provider-only virtual candidates;
 - Windows canonical identity changes from drive-prefix-only normalization to
@@ -666,8 +702,8 @@ The refactor also updates:
 4. Introduce the source-node registry, alias maps, virtual-source support, and
    a transient active request stack.
 5. Route private `require` and `reqscript` through source resolution before
-   provider lookup, while binding `mkmodule` publication to the active
-   source node.
+   provider lookup, while preserving `mkmodule` as immediate name-based
+   publication in the private package state.
 6. Preserve mutable preload/searcher and public package-cache behavior around
    the new registry.
 7. Add direct source loading and source-focused component descriptors.
@@ -711,14 +747,21 @@ Focused unit coverage must prove:
   root;
 - clearing or setting `false` through a known `package.loaded` alias performs
   the declared source-wide invalidation and re-resolution;
+- a still-attached alias whose expected cached value came from same-name
+  `mkmodule()` publication participates in source-wide invalidation, while its
+  value never becomes source-node state;
 - a detached explicit `package.loaded` override survives invalidation through
   another alias to the same source;
 - module `nil`, `false`, explicit publication, loader-data, and failed-retry
   behavior remains compatible;
-- `mkmodule()` binds partial publication to the active source, supports
-  circular imports, preserves distinct requesting-name and published-name
-  results, binds publications to active virtual loaders, and creates a
-  standalone virtual publication only when no source node is active;
+- a failed module loader restores the requesting name's exact pre-attempt
+  `package.loaded` value after same-name `mkmodule()` publication, so the next
+  request retries, while publications under other names remain untouched;
+- `mkmodule()` returns any authoritative non-`nil`, non-`false`
+  `package.loaded` value exactly as stored; otherwise it creates and immediately
+  publishes a stable bed-local environment, supports circular imports, behaves
+  the same inside and outside source execution, and creates no source-node
+  ownership relationship;
 - mutable preload and custom searchers retain their order and produce stable
   bed-local virtual source identities;
 - `use_source` isolates the provided source under the target identity;
@@ -732,8 +775,11 @@ Focused unit coverage must prove:
 - direct loading exercises readable targets for every compatible provider
   strategy and rejects missing or unreadable targets;
 - direct loading followed by `require()` or `reqscript()`, and either adapter
-  followed by direct loading, share one source node and cacheable result without
-  executing the source twice;
+  followed by direct loading, share one source node, execution, and default
+  source result without executing a cacheable source twice;
+- direct loading of `nil`-returning modules yields the default `true` result and
+  never infers a result from same-name or different-name `mkmodule()`
+  publications, while module aliases retain their name-specific values;
 - filesystem-free canonicalization and candidate-resolution tests cover
   project-relative paths, normal absolute paths, Windows drive-absolute and UNC
   paths, rejected Windows drive-relative and device-namespace paths, and the
@@ -797,7 +843,8 @@ The refactor is complete only when:
 - one canonical absolute target source cannot be silently executed twice under
   separate module and script caches;
 - direct loading and loader-adapter access in either order share the same
-  source node and cacheable result;
+  source node, execution, and default source result while preserving
+  name-specific private-package publications;
 - source-focused providers apply only to readable target source files;
 - `mkmodule`, private package tables, module cache-result rules, custom
   searchers, and failed-load retry behavior satisfy the compatibility policy;
@@ -844,7 +891,8 @@ The refactor is complete only when:
   targets, validates `use_value` against the target's declared contract, and
   rejects missing or unreadable targets.
 - Direct loading and `require()` or `reqscript()` share one source node and
-  cacheable result in either access order.
+  default source result in either access order without executing a cacheable
+  source twice; module names can still expose name-specific publications.
 - Custom-searcher results always use stable bed-local virtual identities and
   cannot declare file-backed source metadata.
 - Path validation accepts project-relative and normal absolute paths, including
@@ -855,8 +903,10 @@ The refactor is complete only when:
   comparison.
 - Request operations, operands, and callers remain transient active-load
   context. TestBed does not persist dependency-edge records.
-- `mkmodule()` attaches publication to any active file or virtual source node
-  and creates a standalone virtual publication only when no source is active.
+- `mkmodule()` is a name-based private-package helper. It returns an existing
+  authoritative non-`nil`, non-`false` `package.loaded` value exactly, or
+  creates and immediately publishes a stable environment when no such value
+  exists. It creates no source node and no source-owned publication.
 - `use_source` deliberately executes replacement contents under the readable
   provider target's identity; its replacement-content path is not another
   source identity.
