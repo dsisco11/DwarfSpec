@@ -583,8 +583,9 @@ scheme for DFHack-owned files. A live request follows this order:
 The automatic foundational fallbacks apply only to `require` module requests
 for exactly `class`, `utils`, `gui`, `gui.widgets`, and `gui.dwarfmode`.
 `reqscript` never receives an automatic foundational fallback. These fallbacks
-preserve real DFHack class identity without taking precedence over a readable
-consumer source or user-configured source provider.
+preserve real DFHack class identity without taking precedence over the readable
+consumer candidate selected by the default file-source searcher or that
+candidate's matching provider.
 
 The boolean `component_host_fallbacks` configuration field controls this
 behavior. It defaults to `false` for standalone TestBeds and `true` for live
@@ -599,8 +600,8 @@ For example, production code continues to use an ordinary request:
 local gui = require('gui')
 ```
 
-A test can preempt the live fallback with a provider for a readable consumer
-source target:
+If the private `package.path` resolves `require('gui')` to
+`src/gui.lua`, a test can preempt the live fallback with the matching provider:
 
 ```lua
 providers={
