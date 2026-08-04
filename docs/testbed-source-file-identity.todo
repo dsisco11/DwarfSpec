@@ -234,7 +234,7 @@ Phase 5: Refactor the private `require()` adapter and module cache semantics
     ☐ Assign every custom-searcher result a stable bed-local virtual identity based on searcher identity and requested name.
     ☐ Treat custom-searcher loader data as ordinary loader data and never as source identity metadata.
     ☐ Define no custom-searcher protocol for claiming a file-backed identity.
-    ☐ Perform source-targeted provider lookup only inside the default file-source searcher after it selects the first readable candidate.
+    ☐ Make the default file-source searcher select the first readable file-backed target and invoke a provider-neutral source-access seam from within the searcher; Phase 7 adds registry selection at that seam.
 
 5.2 Module execution results:
     ☐ Store a non-`nil` loader result as the default source result and requesting `package.loaded` value.
@@ -281,14 +281,12 @@ Phase 6: Refactor `reqscript()` onto the shared source engine
 
 6.2 Cross-adapter behavior:
     ☐ Make `reqscript()` and direct loading select the same file node when they resolve the same readable target.
-    ☐ Make `require()` and `reqscript()` consult the same target provider when both operations resolve the same file.
-    ☐ Share protocol-neutral `use_value` tables across compatible accesses.
     ☐ Reject incompatible source declarations before executing a file through the wrong adapter.
     ☐ Keep request operation and script logical name only in transient context and diagnostics.
 
 6.3 Focused verification:
     ☐ Prove script environment publication, successful cache behavior, circular access, failure cleanup, and retry.
-    ☐ Prove module and script requests resolving one target consult one provider and cannot execute one canonical source twice under separate caches.
+    ☐ Prove module and script adapters resolving one ordinary unprovided target cannot execute one canonical source twice under separate caches.
     ☐ Prove `reqscript()` receives no automatic host fallback path.
     ☐ Keep focused script tests filesystem-free through injected source and loader doubles.
 
@@ -299,7 +297,9 @@ Phase 7: Implement provider selection and all source strategies
     ☐ Exit with deterministic provider application, lazy aliases, and contract validation in the shared source engine; the public direct-load wrapper follows in Phase 8.
 
 7.1 Definitive selection and usage state:
+    ☐ Add source-targeted provider lookup at the shared source-engine seam invoked from within the default `require` file searcher after candidate selection, from the `reqscript` resolver after candidate selection, and from internal direct-source access after readability validation.
     ☐ Consult the provider registry only after a readable file candidate is selected.
+    ☐ Make `require()` and `reqscript()` resolving the same readable target consult the same provider record.
     ☐ Mark a provider used at definitive selection before contract validation, alias traversal, strategy execution, or source execution.
     ☐ Do not mark a provider used during configuration validation or candidate generation.
     ☐ Preserve used state after every later compatibility, strategy, or source failure.
@@ -307,6 +307,7 @@ Phase 7: Implement provider selection and all source strategies
 
 7.2 `use_value`:
     ☐ Return the exact borrowed configured value without copying it.
+    ☐ Share one protocol-neutral configured table across compatible module and script accesses to the same target.
     ☐ Accept any non-`nil` value through compatible module access.
     ☐ Require a table at every script access boundary.
     ☐ For direct loading, validate the value against the readable target's declaration: table for annotated script and non-`nil` for ordinary module.
@@ -329,7 +330,7 @@ Phase 7: Implement provider selection and all source strategies
 
 7.5 Focused verification:
     ☐ Exercise every provider strategy through internal direct-source access and through module and script adapters where compatible; repeat the public direct-load cases after Phase 8 exposes them.
-    ☐ Prove two logical names and both adapters select the same provider for one readable target.
+    ☐ Prove two logical names and both adapters select the same provider for one readable target and cannot create separate provider-backed source generations.
     ☐ Prove a provider cannot create a missing candidate or shadow a later readable candidate.
     ☐ Prove `use_source` isolation, `use_existing` shared identity, lazy target providers, cycle diagnostics, and failure usage marking.
 
