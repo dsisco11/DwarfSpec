@@ -1,6 +1,7 @@
 -- Native DFHack binding for the save-game unload workflow.
 
 local M = {}
+local title_menu = require('dwarfspec.driver.commands.title_menu')
 
 ---Creates the live DFHack save-game unloader.
 ---@param dependencies table
@@ -28,6 +29,12 @@ function M.new(dependencies)
     assert(native_game.main_menu_option_type ~= nil,
         'DwarfSpec save-game unload command requires ' ..
             'native_game.main_menu_option_type')
+    assert(native_game.title_screen_type ~= nil,
+        'DwarfSpec save-game unload command requires ' ..
+            'native_game.title_screen_type')
+    assert(native_game.title_mode_type ~= nil,
+        'DwarfSpec save-game unload command requires ' ..
+            'native_game.title_mode_type')
     local pointer_adapter = assert(dependencies.pointer_adapter,
         'DwarfSpec save-game unload command requires a pointer adapter')
     local pointer = assert(dependencies.pointer,
@@ -100,6 +107,9 @@ function M.new(dependencies)
         get_viewscreen=function()
             local screen = native_game.current_viewscreen()
             return screen and screen._type
+        end,
+        get_title_state=function()
+            return title_menu.read(native_game)
         end,
     })
 end

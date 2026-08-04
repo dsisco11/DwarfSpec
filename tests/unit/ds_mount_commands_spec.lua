@@ -469,12 +469,22 @@ describe('DwarfSpec public mount commands', function()
                 end,
                 save_game_unloader={
                     unload=function(_, loaded_directory,
-                            requested_directory)
+                            destination)
                         table.insert(save_game_unload_calls, {
                             loaded_directory=loaded_directory,
-                            requested_directory=requested_directory,
+                            destination=destination,
                         })
                         world_loaded = false
+                    end,
+                    exit_to_main_menu=function()
+                        if not world_loaded then return nil end
+                        local exited_directory = save_directory_name
+                        table.insert(save_game_unload_calls, {
+                            loaded_directory=exited_directory,
+                            destination='main-menu',
+                        })
+                        world_loaded = false
+                        return exited_directory
                     end,
                 },
                 save_game_loader={
@@ -961,7 +971,7 @@ describe('DwarfSpec public mount commands', function()
         assert.same({
             {
                 loaded_directory='region1',
-                requested_directory='region2',
+                destination='region2',
             },
         }, save_game_unload_calls)
         assert.same({'region2'}, save_game_load_calls)
@@ -974,6 +984,28 @@ describe('DwarfSpec public mount commands', function()
         assert.same({'region2', 'region3'}, save_game_load_calls)
         assert.equals('region3', ds.getSaveDirectoryName())
         assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('exports and delegates idempotent main-menu exit without cleanup ownership',
+            function()
+        assert.equals('function', type(ds.exitToMainMenu))
+
+        assert.equals('region1', ds.exitToMainMenu())
+        assert.is_false(world_loaded)
+        assert.same({{
+            loaded_directory='region1',
+            destination='main-menu',
+        }}, save_game_unload_calls)
+        assert.equals(0, cleanup.pending_count(registry))
+
+        assert.is_nil(ds.exitToMainMenu())
+        assert.equals(1, #save_game_unload_calls)
+        assert.equals(0, cleanup.pending_count(registry))
+
+        assert.has_error(function()
+            ds.exitToMainMenu('unexpected')
+        end, 'DwarfSpec exitToMainMenu does not accept arguments')
+        assert.equals(1, #save_game_unload_calls)
     end)
 
     it('validates mountSaveGame arguments before adapter delegation',

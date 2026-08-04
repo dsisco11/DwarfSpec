@@ -1299,6 +1299,17 @@ local command_observer_module = load_automation_module(package_root,
         return name
     end
 
+    ---Discards the loaded save and waits for the native title main menu.
+    ---An already-visible title main menu is an idempotent no-op. The resulting
+    ---state is not cleanup-owned and remains in effect for later examples.
+    ---@param ... any
+    ---@return string|nil
+    function ds.exitToMainMenu(...)
+        assert(select('#', ...) == 0,
+            'DwarfSpec exitToMainMenu does not accept arguments')
+        return save_game_unloader:exit_to_main_menu()
+    end
+
     ---Ensures that one exact save directory is loaded.
     ---A different loaded world is discarded without saving. The requested
     ---world remains loaded for subsequent examples and is not cleanup-owned.

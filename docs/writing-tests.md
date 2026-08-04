@@ -695,6 +695,12 @@ It fails explicitly when no save is loaded or DFHack cannot provide a nonempty
 directory name. This is the save-directory identifier, not the translated
 world name or a fortress/site name.
 
+`ds.exitToMainMenu()` discards the currently loaded save without saving and
+waits until the native title main menu is visible. It returns the exited save
+directory name. Calling it when the title main menu is already visible is an
+idempotent no-op that returns `nil`. The resulting title state is not restored
+during example cleanup.
+
 `ds.wait_ticks(count, options)` suspends the test until exactly `count`
 unpaused Dwarf Fortress simulation ticks have passed:
 

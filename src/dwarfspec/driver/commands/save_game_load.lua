@@ -1,6 +1,7 @@
 -- Native DFHack binding for the save-game load workflow.
 
 local M = {}
+local title_menu = require('dwarfspec.driver.commands.title_menu')
 
 ---Returns a stable identity for one native save header's world.
 ---@param header any
@@ -103,27 +104,14 @@ function M.new(dependencies)
     ---Returns the current normalized native title state.
     ---@return table|nil
     local function get_native_title_state()
-        local screen = native_game.current_viewscreen()
-        local title_type = native_game.title_screen_type
-        if not title_type or not title_type:is_instance(screen) then return nil end
-        local modes = native_game.title_mode_type
-        local mode
-        if screen.mode == modes.MAIN_MENU then
-            mode = 'main'
-        elseif screen.mode == modes.CONTINUE_ACTIVE_WORLD then
-            mode = 'world-list'
-        elseif screen.mode == modes.CONTINUE_ACTIVE then
-            mode = 'save-list'
-        else
-            mode = tostring(screen.mode)
-        end
-        return {
-            mode=mode,
-            screen=screen,
-            all_saves=normalize_save_headers(screen.savegame_header),
-            world_saves=normalize_save_headers(screen.savegame_header_world),
-            game_saves=normalize_save_headers(screen.savegame_header_game),
-        }
+        local state = title_menu.read(native_game)
+        if not state then return nil end
+        state.all_saves = normalize_save_headers(state.screen.savegame_header)
+        state.world_saves = normalize_save_headers(
+            state.screen.savegame_header_world)
+        state.game_saves = normalize_save_headers(
+            state.screen.savegame_header_game)
+        return state
     end
 
     ---Returns the center of the generated Continue title button.
@@ -202,20 +190,8 @@ function M.new(dependencies)
                 native_game.current_viewscreen())
         end,
         reach_main_menu=function()
-            for _ = 1, 3 do
-                local state = get_native_title_state()
-                assert(state,
-                    'DwarfSpec save-game load requires the title screen')
-                if state.mode == 'main' then return end
-                local previous_mode = state.mode
-                simulate_native_input(state.screen, 'LEAVESCREEN')
-                wait_for_save_game_state('return to title main menu',
-                    function()
-                        local current = get_native_title_state()
-                        return current and current.mode ~= previous_mode
-                    end)
-            end
-            error('DwarfSpec could not reach the title main menu', 2)
+            return title_menu.reach_main_menu(native_game,
+                simulate_native_input, wait_for_save_game_state)
         end,
         select_continue=function(title)
             local x, y = continue_title_button_position(title)

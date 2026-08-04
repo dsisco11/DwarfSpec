@@ -435,6 +435,12 @@ function DS.getTime() end
 ---@return string
 function DS.getSaveDirectoryName() end
 
+---Discards the loaded save and waits for the native title main menu.
+---An already-visible title main menu is an idempotent no-op. The resulting
+---state is not restored during example cleanup.
+---@return string|nil exited_directory
+function DS.exitToMainMenu() end
+
 ---Ensures that one exact save directory is loaded.
 ---If another world is loaded, it is discarded without saving first. The
 ---requested world remains loaded for subsequent examples and is not restored

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `ds.exitToMainMenu()` discards the loaded save without saving, confirms the
+  native title main menu, and leaves that state in place for later examples.
 - `dwarfspec.testbed` provides a private, per-instance Lua module and annotated
   script graph for standalone tests, while tagged `ds.mount` descriptors provide
   the same configuration model for fresh live component construction.
