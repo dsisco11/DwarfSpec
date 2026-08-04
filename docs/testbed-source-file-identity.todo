@@ -1,0 +1,579 @@
+Source-file-focused TestBed Refactor Implementation
+===================================================
+
+Source proposal: `docs/testbed-source-file-identity-proposal.md`
+
+Purpose:
+    ☐ Refactor TestBed so canonical source files, rather than loader kinds and logical names, identify file-backed dependencies.
+    ☐ Add `bed:load(source)` as the preferred source-first entry point while retaining production-compatible `require()` and `dfhack.reqscript()` request adapters.
+    ☐ Replace loader-focused imports with readable source-targeted providers and preserve the proposal's private-package, caching, diagnostic, and cleanup contracts.
+    ☐ Migrate live component descriptors and foundational host borrowing to the source-focused model without changing process-global Lua or DFHack loaders.
+
+Completion contract:
+    ☐ Treat this checklist and `docs/testbed-source-file-identity-proposal.md` as the implementation contract; if they disagree, stop and reconcile the documents before implementing the disputed behavior.
+    ☐ Keep every task unchecked until its implementation and stated evidence are complete.
+    ☐ Complete production changes, focused tests, declaration checks, documentation, package verification, live automation, cleanup proof, and a final proposal-to-implementation audit.
+    ☐ Keep source-level, unit, declaration, integration, package, and live-runtime evidence distinct; do not use one evidence class as a substitute for another.
+    ☐ Preserve unrelated worktree and index changes; do not stash, commit, reset, or overwrite them.
+    ☐ Add language-standard documentation comments to every new or changed class, public method, internal method, and callable module API.
+    ☐ Keep `dwarfspec.testbed` framework-neutral and free of DFHack, DwarfSpec driver, scheduler, `ds`, and Busted dependencies.
+    ☐ Preserve deterministic close behavior throughout the refactor and never mutate process-wide `package.path`, `package.loaded`, or the DFHack script cache.
+
+Scope boundaries:
+    ☐ Implement TestBed as a source-loading isolation boundary, not as a Lua VM or security sandbox.
+    ☐ Do not add persistent dependency-edge records, graph inspection, reload APIs, provider factories, automatic mocks, class providers, scopes, or multi-provider behavior.
+    ☐ Do not resolve symlinks, collapse hard links, call `realpath()`, or impose project-directory containment.
+    ☐ Do not roll back files, hooks, timers, screens, plugins, native state, host caches, borrowed-table writes, or any effects outside TestBed-owned loader state.
+    ☐ Do not make borrowed host dependency graphs private retroactively or expose arbitrary host module or script borrowing.
+    ☐ Do not preserve or silently translate the unreleased `(kind, name)` provider model, `imports`, `provide`, public `use_host`, `component_imports`, or loader-focused descriptors.
+    ☐ Do not change ordinary production calls to `require()`, `mkmodule()`, or `dfhack.reqscript()`.
+
+Phase 0: Freeze the implementation map and baseline
+    ☐ Exit with the accepted proposal mapped to concrete production, test, declaration, documentation, package, and live-validation seams, and with pre-change evidence recorded.
+
+0.1 Contract inventory:
+    ☐ Map every goal, compatibility rule, migration requirement, verification item, and acceptance criterion from the source proposal to a checklist row below.
+    ☐ Record the public surface after refactoring: `TestBed.new(config?)`, `bed:load(source)`, `bed:require(name)`, `bed:reqscript(name)`, `bed:close()`, source-targeted `providers`, `component_host_fallbacks`, and `{source, export?}` component descriptors.
+    ☐ Record the two disjoint internal `SourceId` variants: canonical absolute file identity and adapter-owned namespaced virtual identity.
+    ☐ Record the only public provider strategies: `use_value`, `use_source`, and `use_existing`.
+    ☐ Record the automatic live `require` fallback allowlist exactly as `class`, `utils`, `gui`, `gui.widgets`, and `gui.dwarfmode`.
+    ☐ Record the intentional compatibility exceptions and boundaries: reserved `require('dfhack')`, protected loader bindings, annotated-script contracts, private package authority, source-wide invalidation, and retry semantics.
+
+0.2 Repository seam map:
+    ☐ Confirm `src/dwarfspec/testbed.lua` as the framework-neutral public facade and `src/dwarfspec/testbed/internal.lua` as the internal assembly seam.
+    ☐ Confirm `src/dwarfspec/testbed/config.lua` as the configuration-copying, validation, provider-registry, and freezing seam.
+    ☐ Confirm `src/dwarfspec/testbed/paths.lua` as the path classification, canonicalization, candidate generation, and readability seam.
+    ☐ Assign source identity, source-node registry, request-stack, execution-contract, and provider-policy ownership to focused internal modules; document any new module split before implementation.
+    ☐ Confirm `src/dwarfspec/testbed/package_state.lua` as the private package, searcher, module-alias, `require`, and `mkmodule` seam.
+    ☐ Confirm `src/dwarfspec/testbed/script_loader.lua` as the `reqscript` resolution, annotated-environment, and script-cache seam.
+    ☐ Confirm `src/dwarfspec/testbed/base_environment.lua` as the base environment, protected facade, and bound-loader seam.
+    ☐ Confirm `src/dwarfspec/driver/mount/testbed_adapter.lua` as the only live host adapter and diagnostic-sink injection seam.
+    ☐ Map source descriptor validation and resolution through `src/dwarfspec/driver/mount/mount_descriptor.lua`, mount construction, component destruction, unmounting, and resource cleanup.
+    ☐ Map public annotations through `src/dwarfspec/testbed.lua` and `src/ds.d.lua` without duplicating incompatible type definitions.
+    ☐ Map focused tests to `tests/unit/testbed`, mount integration tests to `tests/unit/driver/mount`, declaration fixtures to `tests/declarations`, consumer fixtures to `tests/fixtures/testbed`, and live coverage to `tests/automation`.
+    ☐ Map user and technical documentation to `wiki/TestBed.md`, `docs/testbed.md`, `docs/writing-tests.md`, `docs/architecture.md`, the README, and any other discovered TestBed references.
+
+0.3 Baseline evidence:
+    ☐ Record `git status --short` and distinguish pre-existing work from refactor changes.
+    ☐ Run the existing focused TestBed and mount unit suites and record exact success, failure, error, and pending counts.
+    ☐ Run the full unit suite and record the baseline result without weakening later gates for pre-existing failures.
+    ☐ Run source-declaration and Lua checks and record their baseline results.
+    ☐ Record the currently established package-verification and live-TestBed automation commands before changing fixtures.
+
+Completion criteria:
+    ☐ Every proposal obligation has an owner below, every affected repository seam is named, and baseline evidence is recorded before runtime changes begin.
+
+Phase 1: Establish canonical source identity and path behavior
+    ☐ Exit with an immutable, deterministic `SourceId` model and filesystem-free path primitives that every later registry and adapter can share.
+
+1.1 File source identities:
+    ☐ Implement a file `SourceId` whose value is the canonical absolute filename and whose equality and key representation are immutable.
+    ☐ Normalize separators to `/` and lexically normalize `.` and `..` without resolving symlinks or physical aliases.
+    ☐ Resolve relative source references from the effective consumer root before registration or comparison.
+    ☐ Preserve normal absolute paths outside the consumer project.
+    ☐ Apply deterministic ASCII case folding across the complete canonical path on Windows.
+    ☐ Preserve path case on non-Windows platforms.
+    ☐ Keep distinct spellings distinct when they remain different after the declared lexical normalization, even if the filesystem reaches the same physical file.
+
+1.2 Source-reference validation:
+    ☐ Accept project-relative paths and normal platform absolute paths.
+    ☐ Accept Windows drive-absolute and UNC paths.
+    ☐ Reject Windows drive-relative and device-namespace paths.
+    ☐ Apply path form, base, platform, readability, and configuration requirements cumulatively so violating any applicable rule makes the reference invalid.
+    ☐ Preserve the effective consumer-root rule: process current directory for standalone beds and active DwarfSpec project root for live descriptor beds.
+    ☐ Keep configured roots and source references consumer-root-relative while relative templates in mutable private `package.path` remain process-current-directory-relative.
+
+1.3 Virtual source identities:
+    ☐ Implement a disjoint virtual `SourceId` variant that cannot compare equal to or be accepted as a file provider target.
+    ☐ Define stable bed-local key construction for `virtual:preload:<name>`.
+    ☐ Define stable bed-local custom-searcher identities derived only from the searcher identity and requested name.
+    ☐ Reserve `virtual:host:require:<name>` for automatic live host fallback.
+    ☐ Keep callers, active request context, loader data, and dependency-edge records out of virtual identities.
+
+1.4 Candidate generation and diagnostics:
+    ☐ Refactor module resolution to return ordered canonical candidates for all private `package.path` templates, including `?.lua` and `?/init.lua`.
+    ☐ Refactor script resolution to return ordered canonical candidates from configured script roots and the DFHack filename convention.
+    ☐ Represent direct `load(source)` as one canonical candidate.
+    ☐ Select the first readable candidate before provider lookup; a provider must not make a missing candidate selectable or shadow a later readable candidate.
+    ☐ Preserve all generated candidates and their bases for failure diagnostics.
+    ☐ Report operation, operand, ordered candidates, configured roots or private path, and the active source chain when resolution fails.
+
+1.5 Filesystem-free verification:
+    ☐ Extend the injected filesystem/source doubles instead of creating real files or directories in focused path tests.
+    ☐ Prove lexical equivalence for plain, `./`, and normalized `..` references.
+    ☐ Prove Windows whole-path ASCII case folding and non-Windows case preservation.
+    ☐ Prove accepted Windows drive-absolute and UNC forms and rejected drive-relative and device-namespace forms.
+    ☐ Prove consumer-root versus process-current-directory resolution bases.
+    ☐ Prove ordered candidate selection and complete missing-source diagnostics.
+
+Completion criteria:
+    ☐ All later components can use one tested `SourceId` and candidate-resolution API without reproducing path normalization or platform rules.
+
+Phase 2: Replace imports with validated source-targeted providers
+    ☐ Exit with copied and frozen source-focused configuration, one canonical provider registry, and immediate rejection of every legacy provider surface.
+
+2.1 Public and internal provider types:
+    ☐ Replace `TestBedImportKind`, import tokens, and import variants with source-targeted provider annotations.
+    ☐ Define provider variants with required `target` and exactly one of `use_value`, `use_source`, or `use_existing`.
+    ☐ Define `providers?` and `component_host_fallbacks?` on `TestBedConfig` while retaining supported roots and globals.
+    ☐ Document that `target`, `use_source`, and `use_existing` are source references and that `use_value` is borrowed rather than copied.
+    ☐ Keep the warning sink and live host capabilities internal constructor options, not public `TestBedConfig` fields.
+
+2.2 Construction-time validation:
+    ☐ Reject providers with no strategy, multiple strategies, or `use_value=nil` as an omitted strategy.
+    ☐ Resolve every `target` to a canonical file identity during TestBed construction and require it to be readable.
+    ☐ Resolve every `use_source` replacement path during construction and require it to be readable.
+    ☐ Resolve every `use_existing` reference during construction and require it to be readable without forcing its source node to load.
+    ☐ Reject duplicate canonical targets, including lexically equivalent and Windows case-equivalent spellings.
+    ☐ Reject virtual identities as public targets.
+    ☐ Preserve configured target text, canonical target, strategy, and declaration order for diagnostics and warning records.
+    ☐ Copy caller-owned configuration before freezing normalized internal state.
+    ☐ Reject `component_host_fallbacks=true` when no live adapter capability is present.
+
+2.3 Provider registry and legacy removal:
+    ☐ Replace the split module/script maps with one registry keyed only by canonical file `SourceId`.
+    ☐ Remove the `(kind, name)` token comparison and namespace helpers from the new core.
+    ☐ Reject `imports`, `provide`, `kind`, `use_host`, and `component_imports` with errors that identify the unsupported input and direct users to `providers` or `component_host_fallbacks`.
+    ☐ Do not synthesize provider records for foundational host modules.
+    ☐ Do not silently translate a legacy token into a source reference.
+
+2.4 Focused verification:
+    ☐ Prove each valid strategy independently and every missing or competing strategy failure.
+    ☐ Prove construction-time failures separately for unreadable `target`, `use_source`, and `use_existing` paths before any source executes.
+    ☐ Prove canonical duplicate detection and declaration-order retention.
+    ☐ Prove normalized configuration is immutable and caller mutation cannot alter the registry.
+    ☐ Prove all removed fields and strategies fail with migration-oriented diagnostics.
+    ☐ Keep configuration tests filesystem-free through injected readability and canonicalization doubles.
+
+Completion criteria:
+    ☐ TestBed construction produces one immutable source-keyed provider registry and no loader-token provider state remains reachable.
+
+Phase 3: Build the source-node registry, request context, and execution contracts
+    ☐ Exit with one engine that owns file and virtual node state independently of the operation used to reach it.
+
+3.1 Source-node state:
+    ☐ Introduce a registry keyed by `SourceId` that records load status, source ownership, default result, execution contract, request aliases, and loader data where applicable.
+    ☐ Ensure name-specific `package.loaded` publications remain private-package state rather than source-node values.
+    ☐ Ensure `use_source` replacement filenames never become node identities; execute replacement contents under the readable provider target's identity.
+    ☐ Ensure two providers using one replacement-content file still create isolated target nodes.
+    ☐ Provide explicit node states for unstarted, loading, successfully cacheable, successfully non-cacheable, failed/retryable, and closed access as required by the proposal.
+
+3.2 Transient request stack:
+    ☐ Record caller source identity, operation, operand, and resolved target only for active requests.
+    ☐ Support root requests with no caller.
+    ☐ Use source identities for circular dependency detection.
+    ☐ Include the full canonical source chain and transient request operations and operands in cycle diagnostics.
+    ☐ Clear request state after success or failure and retain no persistent caller or dependency-edge records.
+
+3.3 Execution contracts:
+    ☐ Detect annotated DFHack script mode from source declarations through the configured source interface.
+    ☐ Treat annotated sources as script-environment producers and ordinary Lua sources as module-value producers.
+    ☐ Reject `reqscript()` access to ordinary module sources before execution.
+    ☐ Reject `require()` access to annotated script sources before execution.
+    ☐ Compare `use_source` replacement declarations with the target contract before execution.
+    ☐ Keep `use_value` protocol-neutral and validate it at each access boundary instead of classifying it by first use.
+    ☐ Reuse the same configured value for every later compatible request to the target regardless of which compatible operation reached it first.
+    ☐ Make `use_existing` adopt the referenced node's execution contract.
+
+3.4 Loader primitives:
+    ☐ Compile file-backed source through injected read/compile or loadfile capabilities without coupling the core to a real filesystem.
+    ☐ Execute a cacheable file source at most once per source generation regardless of direct, module, or script access order.
+    ☐ Clear in-progress state after loader failure so later requests can retry.
+    ☐ Return loader data only for an execution attempt and no loader data for cache hits.
+    ☐ Keep source-node loaders and request adapters guard-bound so close invalidates retained closures consistently.
+
+3.5 Focused verification:
+    ☐ Prove file and virtual nodes remain disjoint and virtual nodes cannot be provider targets.
+    ☐ Prove request context is removed after success and every failure path.
+    ☐ Prove cycles use canonical source chains and do not create persistent graph state.
+    ☐ Prove incompatible module/script access fails before source execution and never creates a second node.
+    ☐ Prove `use_source` content identity and loader data remain separate from target identity.
+
+Completion criteria:
+    ☐ A single tested source engine can load, retry, diagnose, and close nodes without knowing whether a later caller uses `load`, `require`, or `reqscript`.
+
+Phase 4: Preserve base environments, private package authority, and `mkmodule()`
+    ☐ Exit with production-compatible isolated environments and name-based publication semantics ready for the source-aware adapters.
+
+4.1 Base and module environments:
+    ☐ Preserve standard Lua bindings, configured globals, and bed-local `package` state in TestBed environments.
+    ☐ Bind bed-local `require`, `mkmodule`, and `dfhack.reqscript` into every executed source environment.
+    ☐ Preserve the reserved bed-local `dfhack` facade and prevent `require('dfhack')` interception through `package.loaded`, preload, custom searchers, or source providers.
+    ☐ Preserve protected loader bindings and facade fields against ordinary source global writes.
+    ☐ Keep unavailable native loading operations rejected consistently where the current isolation contract requires it.
+
+4.2 Private package state:
+    ☐ Keep `package.loaded`, `package.preload`, `package.searchers`, and `package.path` bed-local, mutable, and authoritative.
+    ☐ Keep `package.loaded[name]` values public Lua values rather than internal source nodes.
+    ☐ Preserve caller replacement and mutation of private preload/searcher/path tables.
+    ☐ Keep process-global package tables untouched in standalone and live construction.
+
+4.3 `mkmodule()` semantics:
+    ☐ Return any existing non-`nil`, non-`false` private `package.loaded[name]` value exactly, regardless of its type.
+    ☐ Otherwise create a stable bed-local module environment, publish it immediately at the requested name, and return it.
+    ☐ Make calls inside and outside active source execution follow identical name-based behavior.
+    ☐ Create no source node, source identity, or source-owned publication for `mkmodule()`.
+    ☐ Preserve partial publication for supported circular module imports.
+    ☐ Ensure a conventional module that explicitly returns its `_ENV` obtains that environment as its ordinary default source result without a special relationship.
+
+4.4 Focused verification:
+    ☐ Prove every protected and reserved binding remains non-interceptable.
+    ☐ Prove private package mutations never reach process-global package state.
+    ☐ Prove `mkmodule()` exact-value reuse, immediate stable publication, circular visibility, outside-load behavior, and absence of source ownership.
+
+Completion criteria:
+    ☐ Source execution has isolated production-compatible environments, while `mkmodule()` remains strictly name-based and independent of source identity.
+
+Phase 5: Refactor the private `require()` adapter and module cache semantics
+    ☐ Exit with ordered private searchers, file and virtual resolution, Lua-compatible module results, and source-aware alias invalidation.
+
+5.1 Searcher ordering and identities:
+    ☐ Preserve the authoritative order of mutable private `package.searchers`.
+    ☐ Keep `package.loaded` short-circuit behavior ahead of searcher execution, subject to the reserved `dfhack` rule.
+    ☐ Assign default preload results stable `virtual:preload:<name>` identities.
+    ☐ Assign every custom-searcher result a stable bed-local virtual identity based on searcher identity and requested name.
+    ☐ Treat custom-searcher loader data as ordinary loader data and never as source identity metadata.
+    ☐ Define no custom-searcher protocol for claiming a file-backed identity.
+    ☐ Perform source-targeted provider lookup only inside the default file-source searcher after it selects the first readable candidate.
+
+5.2 Module execution results:
+    ☐ Store a non-`nil` loader result as the default source result and requesting `package.loaded` value.
+    ☐ Give a `nil`-returning source the default result `true` while preserving an explicit same-name publication.
+    ☐ Expose `true` for a requesting name without its own publication even when the source published a different name.
+    ☐ Preserve `false` as non-cacheable so a later request executes the source again.
+    ☐ Clear failed in-progress state and allow retry.
+    ☐ Record the requesting name's exact pre-attempt `package.loaded` value and restore it after loader failure, including after same-name `mkmodule()` publication.
+    ☐ Leave publications under other names authoritative after a failed load.
+    ☐ Let a non-`nil` explicit loader return replace a same-name `mkmodule()` publication and let a `nil` return preserve it.
+
+5.3 Alias ownership and invalidation:
+    ☐ Maintain private name-to-source aliases separately from `package.loaded` values.
+    ☐ Make different names that resolve to one file share one cacheable default source result.
+    ☐ Preserve a cached alias even when later private `package.path` mutation would resolve that name elsewhere.
+    ☐ Record each attached alias's expected private-package value, including preserved same-name `mkmodule()` values, without copying it into source-node state.
+    ☐ Detach an alias when an authoritative non-`nil`, non-`false` caller override differs from its expected value.
+    ☐ Preserve detached caller overrides during later source invalidation.
+    ☐ On the next request through a known owned alias that was cleared or set to `false`, invalidate its source generation, clear every other still-owned alias, and re-resolve the requesting name.
+    ☐ Prevent two TestBed-owned generations of one source from coexisting silently.
+
+5.4 Focused verification:
+    ☐ Prove `?.lua` and `?/init.lua` precedence and process-current-directory handling for relative private templates.
+    ☐ Prove preload and custom-searcher precedence before the default file-source searcher.
+    ☐ Prove stable virtual identities, ordinary loader-data behavior, and mutable searcher ordering.
+    ☐ Prove all `nil`, `false`, explicit-publication, failure-restoration, retry, and cache-hit loader-data rules.
+    ☐ Prove same-file aliases share one default result while retaining name-specific publications.
+    ☐ Prove source-wide invalidation, still-attached `mkmodule()` values, detached overrides, and re-resolution after path mutation.
+
+Completion criteria:
+    ☐ `require()` preserves the accepted private-package behavior while file-backed identity and ownership are source-based.
+
+Phase 6: Refactor `reqscript()` onto the shared source engine
+    ☐ Exit with production-compatible annotated-script resolution that shares file nodes with direct and module adapters without keeping a separate source identity.
+
+6.1 Script resolution and execution:
+    ☐ Resolve `reqscript(name)` through configured script roots and the DFHack filename convention before provider lookup.
+    ☐ Require annotated script mode and reject ordinary module sources before execution.
+    ☐ Publish the script environment before execution so supported circular script access can observe it.
+    ☐ Cache the environment table after successful execution in private script state.
+    ☐ Clear the environment and in-progress state after failure so later requests retry.
+    ☐ Keep the private script cache non-public and separate from module alias detachment rules.
+    ☐ Never offer automatic foundational host fallback to `reqscript` requests.
+
+6.2 Cross-adapter behavior:
+    ☐ Make `reqscript()` and direct loading select the same file node when they resolve the same readable target.
+    ☐ Make `require()` and `reqscript()` consult the same target provider when both operations resolve the same file.
+    ☐ Share protocol-neutral `use_value` tables across compatible accesses.
+    ☐ Reject incompatible source declarations before executing a file through the wrong adapter.
+    ☐ Keep request operation and script logical name only in transient context and diagnostics.
+
+6.3 Focused verification:
+    ☐ Prove script environment publication, successful cache behavior, circular access, failure cleanup, and retry.
+    ☐ Prove module and script requests resolving one target consult one provider and cannot execute one canonical source twice under separate caches.
+    ☐ Prove `reqscript()` receives no automatic host fallback path.
+    ☐ Keep focused script tests filesystem-free through injected source and loader doubles.
+
+Completion criteria:
+    ☐ `reqscript()` is a request adapter over the common source engine, with only its production-specific resolution and execution contract remaining adapter-owned.
+
+Phase 7: Implement provider selection and all source strategies
+    ☐ Exit with deterministic provider application, lazy aliases, and contract validation in the shared source engine; the public direct-load wrapper follows in Phase 8.
+
+7.1 Definitive selection and usage state:
+    ☐ Consult the provider registry only after a readable file candidate is selected.
+    ☐ Mark a provider used at definitive selection before contract validation, alias traversal, strategy execution, or source execution.
+    ☐ Do not mark a provider used during configuration validation or candidate generation.
+    ☐ Preserve used state after every later compatibility, strategy, or source failure.
+    ☐ Produce no repeated use event or warning state change after the first selection.
+
+7.2 `use_value`:
+    ☐ Return the exact borrowed configured value without copying it.
+    ☐ Accept any non-`nil` value through compatible module access.
+    ☐ Require a table at every script access boundary.
+    ☐ For direct loading, validate the value against the readable target's declaration: table for annotated script and non-`nil` for ordinary module.
+    ☐ Keep validation independent of access order and do not permanently classify the value after first use.
+
+7.3 `use_source`:
+    ☐ Compare target and replacement execution contracts before execution.
+    ☐ Execute replacement contents under the original provider target identity.
+    ☐ Keep replacement loader data and diagnostics available without turning the replacement path into a node identity.
+    ☐ Isolate the same replacement file independently when used for different provider targets.
+    ☐ Leave the selected provider used when compatibility validation or replacement execution fails.
+
+7.4 `use_existing`:
+    ☐ Lazily resolve the referenced readable file node without requiring it to be loaded first.
+    ☐ Apply the referenced target's own provider normally when lazy resolution selects it.
+    ☐ Share the referenced source identity, execution contract, source generation, and value.
+    ☐ Mark the alias target provider used when selected and mark the referenced provider used only if its lazy resolution selects it.
+    ☐ Reject self-aliases and longer alias cycles with the complete canonical source chain.
+    ☐ Reject access whose operation is incompatible with the referenced contract.
+
+7.5 Focused verification:
+    ☐ Exercise every provider strategy through internal direct-source access and through module and script adapters where compatible; repeat the public direct-load cases after Phase 8 exposes them.
+    ☐ Prove two logical names and both adapters select the same provider for one readable target.
+    ☐ Prove a provider cannot create a missing candidate or shadow a later readable candidate.
+    ☐ Prove `use_source` isolation, `use_existing` shared identity, lazy target providers, cycle diagnostics, and failure usage marking.
+
+Completion criteria:
+    ☐ Provider behavior depends only on the selected readable target identity, with adapter-specific validation limited to the source-access boundary.
+
+Phase 8: Add direct loading and assemble the public TestBed facade
+    ☐ Exit with `bed:load(source)` as the preferred root access and all public entry points using one source registry and one lifetime guard.
+
+8.1 Direct source loading:
+    ☐ Add the public method exactly as `TestBed:load(source)`.
+    ☐ Resolve direct references from the effective consumer root and reject missing or unreadable targets with ordinary source-resolution diagnostics.
+    ☐ Apply a matching provider only after the direct target is confirmed readable.
+    ☐ Return the source node's default result rather than any name-specific private-package publication.
+    ☐ Return `true` for a direct load of a `nil`-returning ordinary module.
+    ☐ Never infer a direct result from same-name or different-name `mkmodule()` publications.
+
+8.2 Cross-access identity and caching:
+    ☐ Share one source node, execution state, and default result when direct loading and the default `require` file searcher select the same readable target in either order.
+    ☐ Share one source node, execution state, and default result when direct loading and the `reqscript` resolver select the same readable target in either order.
+    ☐ Do not execute a cacheable source twice across those access orders.
+    ☐ Keep `require` requests satisfied earlier by `package.loaded`, preload, or a custom searcher separate from a direct file load in either order.
+    ☐ Preserve name-specific module publications without allowing them to replace the default result unless the source explicitly returns that value.
+
+8.3 Construction and public facade:
+    ☐ Assemble canonical paths, normalized configuration, provider registry, source registry, private package state, script adapter, and base environment through `internal.new` without a dependency cycle.
+    ☐ Retain `TestBed.is_instance`, `TestBed.new`, `TestBed:require`, `TestBed:reqscript`, and `TestBed:close` alongside the new method.
+    ☐ Bind every public and retained internal loader to the same open/closed guard.
+    ☐ Keep standalone construction usable with no live DFHack globals or driver modules present.
+
+8.4 Focused verification:
+    ☐ Exercise direct loading for an ordinary module, annotated script, and every compatible provider strategy.
+    ☐ Prove direct-first and adapter-first sharing for `require` and `reqscript`.
+    ☐ Prove preload, custom-searcher, and `package.loaded` separation from direct file access.
+    ☐ Prove default `true` and name-specific `mkmodule()` publication behavior under direct loading.
+    ☐ Prove all public operations and retained loaders use the same closed-state error after close.
+
+Completion criteria:
+    ☐ The framework-neutral public API is source-first, production adapters remain compatible, and all file-backed access converges on one source registry.
+
+Phase 9: Implement unused-provider warnings and deterministic close
+    ☐ Exit with exactly-once ordered warning processing that cannot interfere with TestBed-owned cleanup.
+
+9.1 Warning records:
+    ☐ On the first close, snapshot one warning record for every user-configured provider that was never selected.
+    ☐ Preserve original provider declaration order.
+    ☐ Include configured target, canonical target, and selected strategy in every record.
+    ☐ Exclude internal nodes, preload results, custom-searcher results, live host fallback nodes, and already-used providers.
+    ☐ Make repeated provider use produce no additional record or event.
+
+9.2 Warning delivery:
+    ☐ Default standalone delivery to standard error.
+    ☐ Accept an internal injected warning sink for focused tests and the live adapter.
+    ☐ Attempt the active sink once per record in order.
+    ☐ If a non-default sink raises, attempt standard error once for that record, disable the sink, and send remaining records directly to standard error.
+    ☐ Suppress standard-error delivery failures and continue later records.
+    ☐ Never make `close()` raise because warning delivery failed.
+
+9.3 Cleanup order and idempotence:
+    ☐ Snapshot unused records on the first close, complete TestBed-owned source cleanup, and only then deliver records.
+    ☐ Invalidate every retained source loader and request adapter.
+    ☐ Clear TestBed-owned source references, alias ownership, private script state, request stacks, and other retained loader state.
+    ☐ Process warnings once even when `close()` is called repeatedly.
+    ☐ Preserve returned ordinary Lua values while making their retained TestBed-owned loader calls fail after close.
+
+9.4 Focused verification:
+    ☐ Prove used providers emit no record and every unused user provider emits exactly one ordered record.
+    ☐ Prove selection-before-failure semantics for `use_value`, `use_source`, and `use_existing` paths.
+    ☐ Prove candidate generation, preload/custom-searcher precedence, and unselected aliases leave providers unused.
+    ☐ Prove repeated close does not reprocess warnings.
+    ☐ Prove sink failure fallback, standard-error suppression, record order, and completed source cleanup.
+
+Completion criteria:
+    ☐ First close deterministically cleans owned state and attempts each required warning exactly as specified; later closes are harmless.
+
+Phase 10: Replace synthesized host providers with live fallback
+    ☐ Exit with versioned foundational borrowing owned entirely by the live adapter and reached only after all private searchers decline.
+
+10.1 Live adapter policy:
+    ☐ Replace synthesized `use_host` providers with a versioned exact foundational `require` allowlist.
+    ☐ Keep the allowlist limited to `class`, `utils`, `gui`, `gui.widgets`, and `gui.dwarfmode` for the supported DFHack release.
+    ☐ Default `component_host_fallbacks` to `true` for live descriptor mounts and `false` for standalone beds.
+    ☐ Honor `component_host_fallbacks=false` on live mounts by disabling every automatic foundational fallback.
+    ☐ Inject exact host `require`, host environment inputs, active project root, and DwarfSpec's host diagnostic sink only through the live adapter.
+    ☐ Remove the arbitrary host `reqscript` borrowing path from provider behavior.
+
+10.2 Fallback ordering:
+    ☐ Run every private searcher in configured order.
+    ☐ Let any private loader preempt fallback, including preload and custom searchers positioned after the default file-source searcher.
+    ☐ Within the default file-source searcher, select the first readable consumer candidate and apply its matching provider before fallback.
+    ☐ Borrow an allowlisted host module only after every private searcher declines.
+    ☐ Ensure a readable provider target that the request cannot generate and select remains unused and does not block fallback.
+    ☐ Ensure `reqscript` requests never enter the fallback policy.
+
+10.3 Host virtual identity and loader data:
+    ☐ Record every borrowed host value under stable `virtual:host:require:<name>` identity.
+    ☐ Retain a host-reported filename only as diagnostic loader data.
+    ☐ Do not expose `@host/`, URI, installation-relative, or other special public naming formats.
+    ☐ Treat direct loading of an exact valid readable host-reported filename as a separate ordinary file-backed source.
+    ☐ Let a provider for that exact path apply only through ordinary file-backed resolution and never intercept the virtual fallback.
+    ☐ Let invalid or unreadable host-reported filenames fail ordinary direct-load/provider validation without affecting fallback.
+
+10.4 Focused adapter verification:
+    ☐ Prove construction capabilities, default and disabled fallback settings, allowlist versioning, and standalone rejection.
+    ☐ Prove every private-searcher ordering case, including a custom searcher after the default file searcher.
+    ☐ Prove selected readable providers preempt fallback and unselected readable providers do not.
+    ☐ Prove stable virtual identities, diagnostic-only host filenames, and separate direct file-backed access.
+    ☐ Prove the live adapter never mutates process-global package or DFHack script caches.
+
+Completion criteria:
+    ☐ Live borrowing is an internal `require` fallback rather than provider policy, with no public host identity or arbitrary borrowing surface.
+
+Phase 11: Migrate component descriptors and mount ownership
+    ☐ Exit with source-focused descriptors resolved through fresh mount-owned TestBeds and the required destruction, unmount, warning, and close order.
+
+11.1 Source descriptors:
+    ☐ Replace `{kind, name, export?}` validation with `{source, export?}`.
+    ☐ Reject unknown fields and every loader-focused descriptor field with clear migration diagnostics.
+    ☐ Resolve descriptor source through `bed:load(source)`.
+    ☐ Preserve optional export selection, table-result validation, and missing-export diagnostics.
+    ☐ Update `ds.mount` overload annotations and runtime classification for source descriptors.
+
+11.2 Construction and ownership:
+    ☐ Create one fresh TestBed for each source descriptor mount using the active project root and live adapter.
+    ☐ Pass the mount's TestBed configuration through the source-focused `providers` and `component_host_fallbacks` surface.
+    ☐ Apply providers to transitive dependencies loaded while resolving and constructing the component.
+    ☐ Keep ordinary already-loaded class or instance mounting behavior outside TestBed creation.
+    ☐ Preserve separate source state across separate mounts.
+
+11.3 Teardown order:
+    ☐ Destroy the mounted component before closing its TestBed.
+    ☐ Complete unmounting before the mount-owned TestBed processes unused-provider warnings.
+    ☐ Close the TestBed through mount resource ownership on success, construction failure, command failure, and cleanup paths.
+    ☐ Preserve existing cleanup-verification behavior and do not duplicate mount lifecycle ownership in the adapter.
+
+11.4 Focused mount verification:
+    ☐ Prove source descriptor validation, export selection, provider configuration, and legacy descriptor rejection.
+    ☐ Prove source providers apply to transitive component dependencies.
+    ☐ Prove separate mounts receive fresh source state.
+    ☐ Prove component destruction, unmounting, warning processing, and TestBed close occur in the required order.
+    ☐ Prove every mount failure path closes owned state without hiding the original error.
+
+Completion criteria:
+    ☐ Source descriptor mounts own exactly one fresh live TestBed and release it deterministically after component destruction and unmounting.
+
+Phase 12: Migrate declarations, fixtures, diagnostics, and documentation
+    ☐ Exit with no repository consumer or published guidance using the legacy loader-focused surface.
+
+12.1 Public declarations:
+    ☐ Update production LuaLS annotations for source providers, `component_host_fallbacks`, and `TestBed:load(source)`.
+    ☐ Remove import-token, loader-kind, `use_host`, `component_imports`, and loader-focused descriptor declarations.
+    ☐ Update every `ds.mount` overload while preserving existing non-descriptor overload behavior.
+    ☐ Add valid declaration fixtures for all provider strategies, direct loading, and source descriptors.
+    ☐ Add invalid declaration fixtures for `imports`, `provide`, `kind`, `use_host`, `component_imports`, missing/competing strategies, and loader-focused descriptors.
+
+12.2 Repository fixtures and consumers:
+    ☐ Convert unit and automation fixture providers to readable source targets.
+    ☐ Add fixtures for two names resolving to one file, name-specific publication, aliases, cycles, direct/adapter access order, and fallback ordering.
+    ☐ Convert live component fixtures and descriptor calls to `{source, export?}`.
+    ☐ Remove provider-only virtual-file assumptions from fixtures.
+    ☐ Keep focused TestBed fixtures in memory through the established virtual filesystem and loader doubles; do not create real files or directories.
+
+12.3 Diagnostics:
+    ☐ Express file-backed diagnostics with canonical source paths and virtual diagnostics with namespaced identities.
+    ☐ Include active operation and operand where request context is relevant.
+    ☐ Include complete ordered candidates and source chains for resolution and cycle failures.
+    ☐ Remove loader-token and provider-namespace terminology from active errors.
+    ☐ Add focused assertions for migration, incompatibility, invalid path, unused provider, and host-fallback messages.
+
+12.4 Technical and end-user documentation:
+    ☐ Rewrite `docs/testbed.md` around canonical source identity, providers, `load`, request adapters, private package behavior, fallback, and cleanup.
+    ☐ Rewrite `wiki/TestBed.md` as a simple end-user source-focused guide with `bed:load()` as the preferred entry point.
+    ☐ Use separate `MOCK_...` table declarations in `use_value` examples where that makes the borrowed test value clear.
+    ☐ Explain that providers name readable source files and work regardless of whether compatible production code reaches them through `require` or `reqscript`.
+    ☐ Explain unused-provider warnings, including that candidate generation alone is not use.
+    ☐ Explain automatic foundational live fallback without public `use_host` or special host paths.
+    ☐ Update `docs/writing-tests.md`, `docs/architecture.md`, README examples, and every other active TestBed reference discovered by repository search.
+    ☐ Keep the proposal and this implementation checklist identified as planning contracts rather than shipped-feature evidence.
+
+12.5 Immediate-break cleanup:
+    ☐ Search active source, tests, declarations, docs, and wiki for every removed legacy term and classify any intentional historical reference.
+    ☐ Remove obsolete token registries, provider helpers, synthesized host-provider code, loader-focused descriptor branches, and dead tests.
+    ☐ Ensure no compatibility adapter, deprecated alias, or silent translation path remains.
+    ☐ Update package contents and changelog/release notes where the repository's unreleased-change policy requires it.
+
+Completion criteria:
+    ☐ Public declarations, fixtures, technical documentation, and end-user guidance consistently describe only the source-file-focused API, with legacy inputs rejected rather than supported.
+
+Phase 13: Qualify the complete refactor and audit acceptance
+    ☐ Exit only after focused, full, declaration, syntax, package, and live evidence is green and the implementation is independently reconciled against the entire proposal.
+
+13.1 Focused unit and integration qualification:
+    ☐ Run every TestBed unit suite, including config, paths, source registry, environments, package state, providers, script loader, public facade, and internal assembly.
+    ☐ Run focused mount descriptor, mount context, resource ownership, cleanup verification, and live-adapter unit suites.
+    ☐ Confirm focused path and source-loader tests create no real files or directories.
+    ☐ Record exact success, failure, error, and pending counts and retain failure output until resolved.
+
+13.2 Full static and offline qualification:
+    ☐ Run the full unit suite.
+    ☐ Run valid and invalid source-declaration checks and confirm each invalid fixture fails for its intended reason.
+    ☐ Run Lua syntax and formatting checks across the repository.
+    ☐ Run `git diff --check` and inspect the final diff for accidental generated files or unrelated changes.
+    ☐ Re-run searches for removed active API terms and document any remaining intentional historical references.
+
+13.3 Package qualification:
+    ☐ Build or pack the current rock with the repository's established package workflow.
+    ☐ Verify the archive contains every new or moved TestBed runtime module, declaration, fixture-support file required at runtime, and updated documentation expected in the package.
+    ☐ Install through the established local-package workflow and prove the installed package exposes `bed:load`, source-targeted providers, and the updated live adapter rather than workspace-only files.
+    ☐ Re-run the applicable installed-package smoke or integration checks and record exact artifact identity and result.
+
+13.4 Live automation qualification:
+    ☐ Run the established TestBed live automation through `tools/Run-AutomationTests.ps1`.
+    ☐ Prove source-focused descriptor construction and transitive provider replacement.
+    ☐ Prove real DFHack class identity through automatic foundational fallback.
+    ☐ Prove a custom searcher after the default file searcher preempts fallback when it returns a loader.
+    ☐ Prove a matching selected readable provider preempts fallback without special syntax.
+    ☐ Prove an unselected readable provider remains unused, warns at teardown, and does not block fallback.
+    ☐ Prove `reqscript` receives no automatic foundational fallback.
+    ☐ Prove host fallback virtual identity and diagnostic-only filename behavior.
+    ☐ Prove direct loading of a valid readable host-reported file is a separate file node and invalid or unreadable filenames receive ordinary validation errors.
+    ☐ Prove separate mounts receive fresh state and unmount destroys the component before closing the TestBed.
+    ☐ Record terminal run status, exact counts, and cleanup confirmation; do not claim live success from partial output or a timeout.
+
+13.5 Final implementation review:
+    ☐ Map every proposal verification bullet and acceptance criterion to concrete production code and passing evidence.
+    ☐ Review every public declaration, constructor path, adapter, provider strategy, cache transition, failure path, and close path against the proposal.
+    ☐ Reconcile suspected discrepancies against the full proposal before classifying them as defects.
+    ☐ Resolve every confirmed discrepancy or record an explicit proposal amendment before completion.
+    ☐ Confirm no unchecked task is being treated as implicitly complete because another broad test passed.
+
+Completion criteria:
+    ☐ Every qualification class is green with recorded evidence, live cleanup is confirmed, and the final proposal-to-implementation review has no unresolved discrepancy.
+
+Final acceptance:
+    ☐ The direct source entry point is exactly `bed:load(source)` and is the preferred documented root access.
+    ☐ Public provider configuration uses readable file `target` identities and exactly one of `use_value`, `use_source`, or `use_existing`.
+    ☐ `imports`, `provide`, loader `kind`, public `use_host`, `component_imports`, and loader-focused descriptors are removed immediately without a compatibility adapter.
+    ☐ One canonical absolute file identity cannot be silently executed twice through separate direct, module, or script caches.
+    ☐ Request operations, operands, and callers remain transient context and no persistent dependency-edge graph is introduced.
+    ☐ Private package/searcher behavior, `mkmodule()`, result caching, publication, alias detachment, invalidation, and retry semantics match the proposal.
+    ☐ Automatic live host borrowing occurs only after every private searcher declines, remains allowlisted, and uses internal virtual identities.
+    ☐ First close completes cleanup and makes exactly one defined delivery attempt for every unused user provider in declaration order.
+    ☐ Source descriptor mounts preserve fresh ownership and component-destroy, unmount, warning, and close ordering.
+    ☐ Windows and non-Windows canonicalization, accepted and rejected path forms, readability rules, and root bases are fully verified without real filesystem fixtures in focused tests.
+    ☐ Public declarations, technical reference, end-user wiki, examples, fixtures, diagnostics, and package contents consistently describe the source-focused model.
+    ☐ Focused, full, declaration, syntax, package, and live-runtime gates pass with recorded evidence and cleanup confirmation.
+    ☐ A final proposal-to-implementation audit finds no unresolved discrepancy or unsupported scope.
