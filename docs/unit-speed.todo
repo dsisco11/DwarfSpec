@@ -1,18 +1,22 @@
-Unit Speed Test Support Implementation
-======================================
+Unit Speed and Position Test Support Implementation
+===================================================
 
-Source proposal: the accepted `ds.setUnitSpeed` design from the current
-conversation, informed by DFHack's `fastdwarf` implementation and DwarfSpec's
-existing per-example game-state and cleanup contracts.
+Source proposal: the accepted `ds.setUnitSpeed` and `ds.setUnitPos` design from
+the current conversation, informed by DFHack's `fastdwarf` implementation and
+DwarfSpec's existing per-example game-state and cleanup contracts.
 
 Purpose:
     ☐ Add a small, explicit `ds.setUnitSpeed(options)` API for end-user live tests.
+    ☐ Add a reusable `ds.setUnitPos(unit_id, position)` API for explicit unit
+      placement in end-user live tests.
     ☐ Let one example accelerate supported unit action timers, teleport eligible
       units to current-job destinations, or request both behaviors.
     ☐ Keep behavior selection visible in test code through `fast_actions`,
       `teleport_jobs`, and optional `unit_ids` fields.
     ☐ Own, stop, and verify the recurring accelerator through DwarfSpec's normal
-      per-example cleanup path without claiming to reverse gameplay progression.
+      per-example cleanup path.
+    ☐ Encapsulate unit teleportation and coordinate rollback once so explicit
+      positioning and accelerated job travel use the same internal behavior.
 
 Completion contract:
     ☐ Treat this checklist and the accepted conversation design as the
@@ -35,6 +39,8 @@ Completion contract:
 Accepted public contract:
     ☐ Name the public command `ds.setUnitSpeed(options)` and the declaration type
       `dwarfspec.UnitSpeedOptions`.
+    ☐ Name the public position command `ds.setUnitPos(unit_id, position)` and the
+      declaration type `dwarfspec.UnitPosition` with integer `x`, `y`, and `z` fields.
     ☐ Define `fast_actions? boolean`, `teleport_jobs? boolean`, and
       `unit_ids? integer[]` as the complete first-version option surface.
     ☐ Require at least one behavior flag to be `true`.
@@ -53,6 +59,16 @@ Accepted public contract:
     ☐ Reject a second `setUnitSpeed` activation in the same example while the first
       remains active.
     ☐ Return no value from `ds.setUnitSpeed(options)`.
+    ☐ Require `setUnitPos` to resolve one integer unit id and one valid loaded-map
+      destination, use the shared teleport controller, and return no value.
+    ☐ Apply `setUnitPos` synchronously even while simulation is paused without
+      changing the inherited pause state or TPS.
+    ☐ Before the first successful DwarfSpec-owned teleport of each unit in an
+      example, snapshot its original coordinate; repeated moves retain that baseline.
+    ☐ During cleanup, restore every surviving moved unit to its captured coordinate
+      through the shared controller and verify the restored coordinate.
+    ☐ When job travel is active, cancel and verify the recurring accelerator before
+      restoring owned coordinates so no callback can move a restored unit again.
     ☐ Keep `ds.setGameSpeed(tps)` as the separate simulation-TPS command; do not
       change its behavior or overload it with unit-speed options.
     ☐ Do not implicitly unpause the game. Tests that need simulation advancement
@@ -70,8 +86,9 @@ Scope boundaries:
       named presets, arbitrary filters, or a general background-task public API.
     ☐ Do not dynamically include migrants, visitors, hostiles, animals, or other
       units that were not captured as eligible targets at activation.
-    ☐ Do not promise restoration of action timers, positions, paths, completed
-      jobs, produced items, RNG state, needs, or other gameplay consequences.
+    ☐ Promise rollback only for coordinates changed through the shared DwarfSpec
+      teleport controller; do not promise restoration of action timers, paths,
+      completed jobs, produced items, RNG state, needs, or other gameplay consequences.
     ☐ Do not treat removal of the recurring accelerator as proof that the loaded
       fortress was restored.
     ☐ Keep managed-world fixture integration limited to a documented future seam;
@@ -88,57 +105,64 @@ Assumptions and open questions:
     ☐ Use the actual current `fastdwarf.cpp` teleport guards as the behavioral
       baseline. Treat documentation-only claims about pushing or being followed as
       unconfirmed until native state and Lua-visible fields are characterized.
+    ☐ Characterize the position-adjacent side effects that cannot be safely rolled
+      back, including projectile state, riders, grounded state, and idle area, and
+      constrain the shared controller rather than overstating its cleanup guarantee.
 Phase 0: Freeze the behavior map and baseline
-    ☐ Exit with every accepted behavior mapped to current production, declaration,
+    ☒ Exit with every accepted behavior mapped to current production, declaration,
       test, documentation, package, and live-runtime seams, plus recorded pre-change
       evidence.
+    ☒ Keep the authoritative Phase 0 ledger and evidence in
+      `docs/unit-speed-phase0-baseline.md`.
 
 0.1 Contract inventory:
-    ☐ Map `setUnitSpeed`, `UnitSpeedOptions`, both behavior flags, optional target
-      ids, one-active-controller ownership, pause independence, and automatic
-      deactivation to checklist rows below.
-    ☐ Record the difference between game TPS, supported action-timer acceleration,
+    ☒ Map `setUnitSpeed`, `setUnitPos`, their declaration types, both behavior
+      flags, optional target ids, shared position rollback, one-active-controller
+      ownership, pause independence, and automatic deactivation to checklist rows
+      below.
+    ☒ Record the difference between game TPS, supported action-timer acceleration,
       job-destination teleportation, and excluded native global turbo speed.
-    ☐ Record that activation cleanup is reversible but gameplay effects are not.
-    ☐ Record the default and explicit targeting rules, including snapshot timing,
+    ☒ Record that accelerator deactivation and owned coordinate rollback are
+      reversible but broader gameplay effects are not.
+    ☒ Record the default and explicit targeting rules, including snapshot timing,
       duplicate handling, eligibility validation, and later unit re-resolution.
-    ☐ Record the actual fastdwarf teleport guards and the state changed by
+    ☒ Record the actual fastdwarf teleport guards and the state changed by
       `dfhack.units.teleport()` and path clearing.
 
 0.2 Repository seam map:
-    ☐ Confirm `src/dwarfspec/driver/commands/game_state.lua` or a focused sibling
+    ☒ Confirm `src/dwarfspec/driver/commands/game_state.lua` or a focused sibling
       command module as the public command-binding seam.
-    ☐ Assign target selection, action mutation, teleport eligibility, controller
-      state, and update execution to focused modules beneath
+    ☒ Assign target selection, action mutation, reusable unit positioning,
+      teleport eligibility, controller state, and update execution to focused modules beneath
       `src/dwarfspec/driver/simulation/` if a split remains justified after review.
-    ☐ Confirm `src/dwarfspec/host/execution/run_capabilities.lua` as the boundary for
+    ☒ Confirm `src/dwarfspec/host/execution/run_capabilities.lua` as the boundary for
       any host-owned recurring scheduling, cancellation, verification, and
       asynchronous-failure capability exposed to the driver.
-    ☐ Confirm `src/dwarfspec/ds.lua` as composition only and avoid adding another
+    ☒ Confirm `src/dwarfspec/ds.lua` as composition only and avoid adding another
       inline implementation alongside the driver command binding.
-    ☐ Map public annotations to `src/ds.d.lua` and reserve the new command in
+    ☒ Map public annotations to `src/ds.d.lua` and reserve the new command in
       `src/dwarfspec/protocol/configuration/schema.lua`.
-    ☐ Map focused tests to `tests/unit/driver`, run-capability tests to
+    ☒ Map focused tests to `tests/unit/driver`, run-capability tests to
       `tests/unit/host/execution`, declaration fixtures to `tests/declarations`, and
       live coverage to `tests/automation`.
-    ☐ Map user documentation to `docs/writing-tests.md`, command summaries to
+    ☒ Map user documentation to `docs/writing-tests.md`, command summaries to
       `docs/command-line.md` where applicable, architecture ownership to
       `docs/architecture.md`, and release notes to `CHANGELOG.md` when release policy
       requires them.
 
 0.3 Baseline evidence:
-    ☐ Record `git status --short` and distinguish pre-existing work from this task.
-    ☐ Run the focused game-state, run-capability, cleanup, schema, and declaration
+    ☒ Record `git status --short` and distinguish pre-existing work from this task.
+    ☒ Run the focused game-state, run-capability, cleanup, schema, and declaration
       unit suites and record exact success, failure, error, and pending counts.
-    ☐ Run the full unit suite and record its baseline result without weakening later
+    ☒ Run the full unit suite and record its baseline result without weakening later
       gates for any pre-existing failure.
-    ☐ Run `tools/Check-Lua.ps1` and both valid and invalid
+    ☒ Run `tools/Check-Lua.ps1` and both valid and invalid
       `tools/Check-SourceDeclarations.ps1` modes and record baseline results.
-    ☐ Record the established focused and complete live-automation commands and the
+    ☒ Record the established focused and complete live-automation commands and the
       package publication and inspection procedure before changing production files.
 
 Completion criteria:
-    ☐ Every proposal obligation and exclusion has an implementation or evidence
+    ☒ Every proposal obligation and exclusion has an implementation or evidence
       owner, unresolved native behavior is isolated behind characterization, and
       baseline evidence is recorded before production changes.
 
@@ -185,6 +209,11 @@ Phase 1: Characterize native unit-speed behavior
       onto the ground when another unit is already standing at the destination.
     ☐ Record the risks of riders, projectile state, occupancy updates, and other
       side effects handled by DFHack's teleport helper.
+    ☐ Prove the supported way to capture an original coordinate, teleport a unit
+      back during cleanup, and verify coordinate and occupancy consistency.
+    ☐ Determine which projectile, rider, grounded, idle-area, invalidation, and
+      world-unload states must be rejected or treated as cleanup failures because a
+      coordinate-only rollback cannot reverse them safely.
     ☐ Confirm the fastdwarf-compatible combined order: attempt job teleportation
       before applying fast action timers to the same target.
 
@@ -330,11 +359,43 @@ Completion criteria:
     ☐ Captured eligible units receive supported one-tick actions only while their
       example owns an active fast-action controller.
 
-Phase 5: Implement job-destination teleportation
-    ☐ Exit with targeted fastdwarf-equivalent job travel guarded by explicit native
-      eligibility and safe path checks.
+Phase 5: Implement reusable unit positioning and job-destination teleportation
+    ☐ Exit with one reusable coordinate-rollback controller, the public
+      `ds.setUnitPos` command, and targeted fastdwarf-equivalent job travel guarded by
+      explicit native eligibility and safe path checks.
 
-5.1 Teleport decision:
+5.1 Shared unit-position controller:
+    ☐ Add one focused driver simulation module that owns native teleport calls,
+      per-unit baseline coordinates, cleanup restoration, and restoration verification.
+    ☐ Accept stable integer ids and copied `dwarfspec.UnitPosition` values and
+      re-resolve the unit immediately before each forward or cleanup teleport.
+    ☐ Capture one baseline immediately before the first successful owned teleport
+      and retain it across later `setUnitPos` and job-travel moves in the example.
+    ☐ If the first teleport fails, discard provisional ownership without creating
+      a false restoration obligation.
+    ☐ Restore moved units in deterministic reverse ownership order and fail cleanup
+      when a surviving owned unit cannot be restored or verified.
+    ☐ Expose `unit_position_active` through the authoritative cleanup probe and
+      prevent cleanup confirmation while any owned baseline remains.
+    ☐ Prearm shared position cleanup before registering recurring-controller cleanup
+      so LIFO teardown cancels callbacks before it restores coordinates, regardless of
+      whether `setUnitPos` or `setUnitSpeed` is activated first.
+    ☐ Apply the characterized restrictions for projectile, rider, grounded,
+      idle-area, invalidation, occupied-destination, and world-unload states.
+    ☐ Keep path clearing outside the generic controller so only successful job
+      travel clears a remaining job path.
+
+5.2 Explicit `setUnitPos` behavior:
+    ☐ Require an integer unit id that resolves to a currently valid unit and a
+      `dwarfspec.UnitPosition` whose coordinate identifies a valid loaded map tile.
+    ☐ Teleport through the shared controller without requiring citizen status, a
+      current job, destination visibility, or path connectivity.
+    ☐ Return no value and leave pause state, TPS, jobs, and paths unchanged.
+    ☐ Allow repeated moves of the same unit while preserving its first baseline.
+    ☐ Share the same per-unit baseline when `setUnitPos` and accelerated job travel
+      both move one unit during the same example.
+
+5.3 Job-travel decision:
     ☐ Re-resolve the unit and its current job and destination within the same update
       that attempts teleportation.
     ☐ Skip dragging and dragged units, units following another unit, unconscious
@@ -344,11 +405,11 @@ Phase 5: Implement job-destination teleportation
       destination before teleporting.
     ☐ Do not infer safety from path existence alone and do not reveal a destination
       for the test.
-    ☐ Call `dfhack.units.teleport()` exactly once for an eligible target.
+    ☐ Request exactly one shared-controller teleport for an eligible target.
     ☐ Clear the unit's remaining path only after teleportation reports success.
     ☐ Leave position and path unchanged when teleportation reports failure.
 
-5.2 Combined behavior:
+5.4 Combined behavior:
     ☐ When both flags are enabled, attempt teleportation before applying fast-action
       timers to the same target.
     ☐ Prove each behavior remains independently selectable.
@@ -357,7 +418,17 @@ Phase 5: Implement job-destination teleportation
     ☐ Route invariant or adapter failures through the controller fault path rather
       than silently treating them as ordinary eligibility skips.
 
-5.3 Focused verification:
+5.5 Focused verification:
+    ☐ Prove `setUnitPos` validation, successful placement, void return, repeated
+      moves, shared first baseline, cleanup restoration, and restoration failure.
+    ☐ Prove `unit_position_active` becomes true only after a successful first move
+      and returns false only after every owned coordinate is restored and released.
+    ☐ Prove explicit positioning works for valid noncitizen units without weakening
+      the citizen/resident target contract of `setUnitSpeed`.
+    ☐ Prove `setUnitPos` and job travel call the same injected teleport adapter and
+      never create competing baselines for one unit.
+    ☐ Prove success, assertion failure, timeout, abort, callback fault, and both
+      command activation orders cancel recurring work before restoring coordinates.
     ☐ Cover every teleport guard independently with in-memory unit, map, and DFHack
       adapter doubles.
     ☐ Prove visible reachable destinations teleport and clear the path after success.
@@ -369,50 +440,63 @@ Phase 5: Implement job-destination teleportation
       cleanup stops both behaviors.
 
 Completion criteria:
-    ☐ Job teleportation occurs only for captured units satisfying every accepted
-      guard, and failure paths do not clear routes or leak recurring work.
+    ☐ Explicit positioning and job travel share one tested coordinate-rollback
+      controller, job teleportation occurs only for captured units satisfying every
+      accepted guard, and failure paths neither clear routes incorrectly nor leak
+      recurring or restoration work.
 
 Phase 6: Bind the public API and declarations
-    ☐ Exit with one documented `ds.setUnitSpeed` entry point composed through the
-      existing driver boundary and visible to source and installed-package users.
+    ☐ Exit with documented `ds.setUnitSpeed` and `ds.setUnitPos` entry points
+      composed through the existing driver boundary and visible to source and
+      installed-package users.
 
 6.1 Public composition:
     ☐ Load and bind the focused unit-speed command from `src/dwarfspec/ds.lua`.
+    ☐ Load and bind the focused unit-position command to the same injected shared
+      position controller used by job travel.
     ☐ Supply only injected controller, target, native-operation, recurring-task,
       cleanup, and failure-reporting dependencies required by the command.
     ☐ Avoid adding an inline duplicate implementation in the root `ds.lua` facade.
-    ☐ Reserve `setUnitSpeed` against project command collisions.
+    ☐ Reserve `setUnitSpeed` and `setUnitPos` against project command collisions.
     ☐ Preserve all existing `ds` commands and project extension behavior.
 
 6.2 Declaration surface:
     ☐ Add `dwarfspec.UnitSpeedOptions` to `src/ds.d.lua` with the three accepted
       fields and precise default and targeting documentation.
+    ☐ Add `dwarfspec.UnitPosition` with integer `x`, `y`, and `z` fields.
     ☐ Add `DS.setUnitSpeed(options)` with documentation distinguishing unit action
       speed from `setGameSpeed` TPS.
     ☐ Define `DS.setUnitSpeed(options)` as a void command with no declared return
       value; assigning its Lua result therefore yields `nil`.
-    ☐ State that cleanup disables the accelerator but does not reverse gameplay
-      effects.
+    ☐ Add void `DS.setUnitPos(unit_id, position)` documentation describing stable
+      integer ids, valid loaded-map coordinates, first-baseline ownership, and cleanup
+      coordinate rollback.
+    ☐ State that cleanup disables the accelerator and restores coordinates changed
+      by either command but does not reverse broader gameplay effects.
     ☐ Add valid declaration coverage for omitted and explicit `unit_ids` and both
       independent behavior flags.
     ☐ Add invalid declaration coverage for unknown fields, wrong flag types, and
       invalid id element types.
+    ☐ Add valid and invalid declaration coverage for `setUnitPos` unit ids and
+      `UnitPosition` coordinate fields.
 
 6.3 Public-contract verification:
-    ☐ Prove `ds.setUnitSpeed` is present only during an active run and is unavailable
-      to conflicting custom command registration.
+    ☐ Prove both commands are present only during an active run and unavailable to
+      conflicting custom command registration.
     ☐ Prove source-tree and installed-package composition load the same focused
       implementation.
-    ☐ Prove the declaration surface matches runtime names and option fields and that
-      runtime and declaration surfaces both expose void return behavior.
+    ☐ Prove the declaration surface matches runtime names, option and position
+      fields, and both commands' void return behavior.
 
 Completion criteria:
-    ☐ End-user specs can call one typed `ds.setUnitSpeed(options)` command without
-      accessing internal scheduling, native adapters, or the fastdwarf plugin.
+    ☐ End-user specs can call typed `ds.setUnitSpeed(options)` and
+      `ds.setUnitPos(unit_id, position)` commands without accessing internal
+      scheduling, position ownership, native adapters, or the fastdwarf plugin.
 
 Phase 7: Qualify lifecycle and live behavior
-    ☐ Exit with focused native evidence for action acceleration, teleportation,
-      selection, pause behavior, failure cleanup, and consecutive-run isolation.
+    ☐ Exit with focused native evidence for explicit positioning, action
+      acceleration, job teleportation, coordinate rollback, selection, pause behavior,
+      failure cleanup, and consecutive-run isolation.
 
 7.1 Focused live fixture design:
     ☐ Use a controlled disposable fortress fixture and identify target units and
@@ -429,6 +513,12 @@ Phase 7: Qualify lifecycle and live behavior
       game TPS or pause state.
     ☐ Prove `teleport_jobs=true` moves an eligible target to its current visible,
       reachable job destination and clears its remaining path.
+    ☐ Prove `ds.setUnitPos` moves a valid citizen and a valid noncitizen to explicit
+      loaded-map coordinates without changing pause state, TPS, jobs, or paths.
+    ☐ Prove explicit positioning completes while paused without advancing the
+      simulation or enabling the recurring accelerator.
+    ☐ Prove repeated explicit and job-travel moves of one unit retain one original
+      coordinate and cleanup restores and verifies that coordinate.
     ☐ Prove explicit `unit_ids` excludes an otherwise eligible control citizen.
     ☐ Prove an omitted target list uses the activation snapshot and does not add a
       later eligible unit.
@@ -438,20 +528,24 @@ Phase 7: Qualify lifecycle and live behavior
 
 7.3 Terminal cleanup evidence:
     ☐ Run a passing scenario and confirm `unit_speed_active=false` and
-      `cleanup_confirmed=true` in the terminal report.
+      `unit_position_active=false` with `cleanup_confirmed=true` in the terminal report.
     ☐ Run a controlled assertion-failure scenario and prove the accelerator is still
-      cancelled and cleanup is confirmed even though the test result fails.
+      cancelled, owned coordinates are restored, and cleanup is confirmed even though
+      the test result fails.
     ☐ Run the focused suite consecutively and prove the second run inherits no
-      callback, target ids, controller fault, fastdwarf setting, or native turbo flag
-      from the first.
+      callback, target ids, position baseline, controller fault, fastdwarf setting, or
+      native turbo flag from the first.
     ☐ Confirm the service ends with an idle executor, empty queue, no quarantine,
-      responsive DFHack process, and no owned recurring task.
-    ☐ Keep gameplay-restoration evidence separate from accelerator cleanup; do not
-      report the world pristine unless the fixture-specific verifier proves it.
+      responsive DFHack process, no owned recurring task, and no owned position
+      baseline.
+    ☐ Keep coordinate-restoration evidence separate from accelerator cleanup and
+      broader gameplay restoration; do not report the world pristine unless the
+      fixture-specific verifier proves it.
 
 Completion criteria:
-    ☐ Focused live runs prove both behaviors and all terminal paths end with verified
-      accelerator cleanup, bounded execution, and no cross-example or cross-run leak.
+    ☐ Focused live runs prove explicit positioning and both speed behaviors, and all
+      terminal paths end with verified accelerator and position cleanup, bounded
+      execution, and no cross-example or cross-run leak.
 
 Phase 8: Documentation, package, regression, and final audit
     ☐ Exit with the feature documented, packaged, regression-tested, and audited
@@ -460,11 +554,14 @@ Phase 8: Documentation, package, regression, and final audit
 8.1 User documentation:
     ☐ Document individual-test and suite-wide `before_each` examples in
       `docs/writing-tests.md`.
+    ☐ Document `setUnitPos` arguments, valid-unit scope, repeated-call baseline,
+      shared ownership with job travel, and coordinate-only cleanup guarantee.
     ☐ Document all option defaults, eligibility rules, pause independence,
       one-active-controller rule, and explicit target behavior.
     ☐ Clearly distinguish `setUnitSpeed` from `setGameSpeed` and fastdwarf mode 2.
-    ☐ Warn that cleanup removes the accelerator but cannot rewind gameplay and
-      recommend controlled disposable or managed-world fixtures.
+    ☐ Explain that cleanup removes the accelerator and restores owned coordinates
+      but cannot rewind paths, jobs, timers, or broader gameplay; recommend controlled
+      disposable or managed-world fixtures.
     ☐ Document that Busted tags and DwarfSpec CLI flags select tests but do not
       enable unit-speed behavior.
     ☐ Update architecture and public-command summaries without presenting excluded
@@ -472,7 +569,8 @@ Phase 8: Documentation, package, regression, and final audit
 
 8.2 Regression verification:
     ☐ Run focused unit suites for the recurring capability, unit-speed controller,
-      command binding, cleanup, schema reservation, and declarations.
+      shared position controller, both command bindings, cleanup, schema reservation,
+      and declarations.
     ☐ Run the complete unit suite and record exact success, failure, error, and
       pending counts.
     ☐ Run `tools/Check-Lua.ps1` and record the exact checked-file count.
@@ -486,38 +584,44 @@ Phase 8: Documentation, package, regression, and final audit
       declaration, and required documentation artifact is present at the expected
       path.
     ☐ Install or inspect the exact generated artifact according to the established
-      release checklist and prove `ds.setUnitSpeed` resolves from the installed layout.
+      release checklist and prove both public commands resolve from the installed layout.
     ☐ Re-run the focused installed-package contract without falling back to source
       files from the checkout.
 
 8.4 Final implementation audit:
     ☐ Map every accepted public-contract, scope-boundary, cleanup, fault,
       documentation, and verification row to implemented source and evidence.
+    ☐ Confirm `setUnitPos` and job travel share one position controller and one
+      baseline per moved unit rather than parallel teleport or rollback implementations.
     ☐ Confirm there is no CLI flag, Busted tag behavior, project default, global
       turbo mode, fastdwarf persistent-data mutation, or unsupported target expansion.
     ☐ Confirm every new or changed method, class, and callable module API has the
       required documentation comment.
-    ☐ Confirm cleanup proof refers only to owned accelerator state and does not imply
-      world restoration.
+    ☐ Confirm cleanup proof distinguishes owned accelerator state, owned coordinate
+      rollback, and broader world restoration.
     ☐ Perform the required follow-up code review and reconcile every discrepancy
       before checking final acceptance.
 
 Completion criteria:
     ☐ Source, unit, declaration, package, and focused live evidence independently
-      support the shipped `setUnitSpeed` contract, and the final audit finds no
-      unresolved proposal drift or cleanup gap.
+      support the shipped unit-speed and unit-position contracts, and the final audit
+      finds no unresolved proposal drift or cleanup gap.
 
 Final acceptance:
-    ☐ `ds.setUnitSpeed(options)` is the only new public command and accepts exactly
+    ☐ The only new public commands are `ds.setUnitSpeed(options)` and
+      `ds.setUnitPos(unit_id, position)`; unit-speed options remain exactly
       `fast_actions`, `teleport_jobs`, and optional `unit_ids`.
     ☐ `ds.setUnitSpeed(options)` returns no value.
+    ☐ `ds.setUnitPos(unit_id, position)` returns no value and accepts one resolvable
+      unit id plus one valid loaded-map `dwarfspec.UnitPosition`.
     ☐ Fast actions and job teleportation are independently and jointly usable for
       the captured eligible target ids.
     ☐ The command neither changes pause/TPS implicitly nor touches native global
       turbo speed or fastdwarf configuration.
     ☐ Every success, failure, timeout, abort, and callback-fault path stops and
-      verifies the recurring accelerator before cleanup can be confirmed.
-    ☐ Documentation accurately distinguishes reversible accelerator ownership from
-      irreversible gameplay effects.
+      verifies the recurring accelerator and restores and verifies owned unit
+      coordinates before cleanup can be confirmed.
+    ☐ Documentation accurately distinguishes reversible accelerator ownership and
+      coordinate rollback from irreversible broader gameplay effects.
     ☐ All required focused, full, declaration, syntax, package, installed-layout,
       live-runtime, repeatability, cleanup, and final-review evidence is recorded.
