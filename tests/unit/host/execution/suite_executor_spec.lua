@@ -66,6 +66,9 @@ describe('host suite executor', function()
             create_overlay_services=function()
                 return {identity='overlay-services'}
             end,
+            create_recurring_operations=function()
+                return {identity='recurring-operations'}
+            end,
             ds_factory={new=function(_, _, _, _, _, _, _, _, value)
                 forwarded_capabilities = value
                 table.insert(calls, 'ds')
@@ -100,6 +103,8 @@ describe('host suite executor', function()
             options={seed=9, shuffle=false, sort=true}}, executed)
         assert.equals('run-1', capability_options.run_id)
         assert.equals(project, capability_options.project)
+        assert.same({identity='recurring-operations'},
+            capability_options.recurring_operations)
         assert.equals(capabilities, forwarded_capabilities)
         assert.same({'dependencies', 'busted', 'project_environment', 'ds',
             'export:ds', 'entry', 'exit', 'output', 'filter', 'discovery',
@@ -146,6 +151,7 @@ describe('host suite executor', function()
                 end,
                 new_run_capabilities=function() return {} end,
                 create_overlay_services=function() return {} end,
+                create_recurring_operations=function() return {} end,
                 ds_factory={new=function() error('ds assembly failed') end},
             })
         end, 'ds assembly failed')
@@ -190,6 +196,7 @@ describe('host suite executor', function()
                 end,
                 new_run_capabilities=function() return {} end,
                 create_overlay_services=function() return {} end,
+                create_recurring_operations=function() return {} end,
                 ds_factory={new=function() return {}, function() end end},
                 new_lifecycle=function() return lifecycle end,
                 install_entry=function() end, install_exit=function() end,

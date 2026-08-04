@@ -74,6 +74,23 @@ describe('host run capabilities', function()
                 end,
             },
             cleanup_registry=cleanup_registry,
+            recurring_operations={
+                schedule=function(callback)
+                    table.insert(calls, {'recurring_schedule', callback})
+                    return 'opaque-handle'
+                end,
+                cancel=function(handle)
+                    table.insert(calls, {'recurring_cancel', handle})
+                end,
+                is_scheduled=function(handle)
+                    table.insert(calls, {'recurring_is_scheduled', handle})
+                    return handle == 'opaque-handle'
+                end,
+                report_failure=function(message, trace)
+                    table.insert(calls, {'recurring_failure', message, trace})
+                    return true
+                end,
+            },
             project_module={
                 relative_path=function(path)
                     assert.not_equals('../outside.lua', path)
@@ -140,6 +157,11 @@ describe('host run capabilities', function()
         assert.same({'push', cleanup_registry, 'restore', action}, calls[4])
         assert.same({'run_from', cleanup_registry, 7,
             'construction failed'}, calls[5])
+        assert.equals('opaque-handle',
+            capabilities.recurring.schedule(action))
+        assert.is_true(capabilities.recurring.is_scheduled('opaque-handle'))
+        capabilities.recurring.cancel('opaque-handle')
+        assert.is_true(capabilities.recurring.report_failure('broken', 'trace'))
         assert.is_nil(capabilities.scheduler)
         assert.is_nil(capabilities.cleanup_registry)
         assert.is_nil(capabilities.project_environment)

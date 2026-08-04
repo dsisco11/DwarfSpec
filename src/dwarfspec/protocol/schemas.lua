@@ -297,6 +297,22 @@ function M.validate_run(value)
         'automation run cleanup confirmation must be boolean')
     assert(type(value.mount_cleanup_verified) == 'boolean',
         'automation run mount cleanup verification must be boolean')
+    if value.unit_speed_cleanup_verified ~= nil then
+        assert(type(value.unit_speed_cleanup_verified) == 'boolean',
+            'automation run unit speed cleanup verification must be boolean')
+    end
+    if value.unit_speed_active ~= nil then
+        assert(type(value.unit_speed_active) == 'boolean',
+            'automation run unit speed activity must be boolean')
+    end
+    if value.unit_position_active ~= nil then
+        assert(type(value.unit_position_active) == 'boolean',
+            'automation run unit position activity must be boolean')
+    end
+    if value.owned_position_count ~= nil then
+        assert(is_nonnegative_integer(value.owned_position_count),
+            'automation run owned position count must be a nonnegative integer')
+    end
     events.copy_json(value, 'automation run')
     return value
 end

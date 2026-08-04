@@ -579,6 +579,16 @@ describe('DwarfSpec public mount commands', function()
                         return cleanup.run_from(registry, marker, reason)
                     end,
                 },
+                recurring={
+                    schedule=function()
+                        error('unexpected recurring operation scheduling')
+                    end,
+                    cancel=function() end,
+                    is_scheduled=function() return false end,
+                    report_failure=function()
+                        error('unexpected recurring operation failure')
+                    end,
+                },
                 overlay={
                     destination_directory='unused/overlay',
                     config_path='unused/overlay.json',
@@ -657,6 +667,13 @@ describe('DwarfSpec public mount commands', function()
 
         assert.is_false(screen.active)
         assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('exposes unit commands only on the run-scoped namespace', function()
+        assert.is_function(ds.setUnitSpeed)
+        assert.is_function(ds.setUnitPos)
+        assert.is_nil(ds_factory.setUnitSpeed)
+        assert.is_nil(ds_factory.setUnitPos)
     end)
 
     it('returns the current world tick without requiring a mount', function()

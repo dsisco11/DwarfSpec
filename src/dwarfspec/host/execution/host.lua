@@ -22,6 +22,8 @@ local transport_publication =
 local run_assembly = require('dwarfspec.host.execution.run_assembly')
 local run_capabilities_module =
     require('dwarfspec.host.execution.run_capabilities')
+local recurring_operation_adapter_module =
+    require('dwarfspec.host.execution.recurring_operation_adapter')
 local example_lifecycle_module = require('dwarfspec.host.execution.example_lifecycle')
 local suite_executor_module = require('dwarfspec.host.execution.suite_executor')
 local run_lifecycle_module = require('dwarfspec.host.execution.run_lifecycle')
@@ -198,6 +200,9 @@ local function verify_executor_clean_state(proof)
     if run.mount_cleanup_probe ~= nil then
         return false, 'quarantined mount cleanup probe remains active'
     end
+    if run.unit_speed_cleanup_probe ~= nil then
+        return false, 'quarantined unit speed cleanup probe remains active'
+    end
     local mount = run.mount_cleanup_state
     if mount and (mount.current_mount_id ~= nil or
             mount.active_screen_count ~= 0 or
@@ -218,6 +223,16 @@ local function verify_executor_clean_state(proof)
     if modules and (modules.restored ~= true or
             modules.path_restored ~= true) then
         return false, 'quarantined project module environment is not restored'
+    end
+    local unit_speed = run.unit_speed_cleanup_state
+    if unit_speed and (unit_speed.unit_speed_active == true or
+            unit_speed.unit_position_active == true or
+            unit_speed.callback_scheduled == true or
+            unit_speed.ownership_active == true or
+            (unit_speed.retained_id_count or 0) ~= 0 or
+            (unit_speed.owned_position_count or 0) ~= 0 or
+            unit_speed.verified ~= true) then
+        return false, 'quarantined unit speed state is not clean'
     end
     return true, 'quarantined generation has no remaining live resources'
 end
@@ -377,6 +392,40 @@ local function execute_suite(package_root, project_root, run, scheduler_module,
             ds_factory=run.ds_factory,
             new_run_capabilities=run_capabilities_module.new,
             create_overlay_services=create_overlay_services,
+            create_recurring_operations=function(active_run)
+                return recurring_operation_adapter_module.new({
+                    schedule_tick=function(delay, callback)
+                        return dfhack.timeout(delay, 'ticks', callback)
+                    end,
+                    cancel_timeout=function(handle)
+                        return dfhack.timeout_active(handle, nil)
+                    end,
+                    timeout_active=function(handle)
+                        return dfhack.timeout_active(handle)
+                    end,
+                    is_run_active=function()
+                        local registry = dfhack.dwarfspec
+                        return type(registry) == 'table' and
+                            registry.active_run_id == active_run.run_id and
+                            registry.runs[active_run.run_id] == active_run and
+                            not active_run.terminal
+                    end,
+                    report_failure=function(message, trace)
+                        active_run.counts.errors =
+                            active_run.counts.errors + 1
+                        active_run.totals.errors =
+                            active_run.totals.errors + 1
+                        table.insert(active_run.output_lines,
+                            'HOST_ERROR ' .. message)
+                        table.insert(active_run.failure_details, {
+                            kind='error',
+                            name='unit speed recurring operation',
+                            message=message,
+                            trace=trace or message,
+                        })
+                    end,
+                })
+            end,
             new_lifecycle=M.new_focus_lifecycle,
             install_entry=M.install_ds_example_entry,
             install_exit=M.install_ds_example_exit,

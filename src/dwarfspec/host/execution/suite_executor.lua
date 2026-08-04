@@ -42,6 +42,7 @@ function M.execute(package_root, project_root, run, scheduler_module,
         project_module=project_module,
         project=project,
         overlay_services=dependencies.create_overlay_services(),
+        recurring_operations=dependencies.create_recurring_operations(run),
     })
     local ds, reset = dependencies.ds_factory.new(package_root, project,
         scheduler_module, scheduler, run.cleanup_module,

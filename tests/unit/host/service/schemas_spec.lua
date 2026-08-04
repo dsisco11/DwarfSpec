@@ -92,6 +92,10 @@ describe('automation version 2 schemas and snapshots', function()
         assert.is_false(snapshot.execution_lease.active)
         assert.is_false(snapshot.cleanup_confirmed)
         assert.is_false(snapshot.mount_cleanup_verified)
+        assert.is_false(snapshot.unit_speed_cleanup_verified)
+        assert.is_false(snapshot.unit_speed_active)
+        assert.is_false(snapshot.unit_position_active)
+        assert.equals(0, snapshot.owned_position_count)
 
         snapshot.counts.successes = 10
         snapshot.queue_lease.active = false

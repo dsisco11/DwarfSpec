@@ -83,12 +83,65 @@ describe('host run lifecycle', function()
         run.mount_cleanup_probe=function()
             return {active_screen_count=0, subject_count=0}
         end
+        run.unit_speed_cleanup_probe=function()
+            return {
+                unit_speed_active=false,
+                unit_position_active=false,
+                callback_scheduled=false,
+                ownership_active=false,
+                retained_id_count=0,
+                owned_position_count=0,
+            }
+        end
 
         assert.is_true(lifecycle.clean(run, 'complete'))
         assert.same({'clear_focus', 'cancel_scheduler', 'cancel_timeout:9',
             'cleanup:complete', 'publish:cleanup_finished'}, calls)
         assert.is_true(run.cleanup_confirmed)
         assert.is_true(run.mount_cleanup_verified)
+        assert.is_true(run.unit_speed_cleanup_state.verified)
+    end)
+
+    it('rejects cleanup confirmation while unit positions remain owned',
+            function()
+        local calls = {}
+        local lifecycle = module.new(dependencies(calls))
+        local run = cleanable_run(calls)
+        run.unit_speed_cleanup_probe=function()
+            return {
+                unit_speed_active=false,
+                unit_position_active=true,
+                callback_scheduled=false,
+                ownership_active=false,
+                retained_id_count=0,
+                owned_position_count=1,
+            }
+        end
+
+        assert.is_false(lifecycle.clean(run, 'position restoration failed'))
+        assert.is_false(run.cleanup_confirmed)
+        assert.is_false(run.unit_speed_cleanup_state.verified)
+    end)
+
+    it('rejects cleanup confirmation while recurring ownership remains',
+            function()
+        local calls = {}
+        local lifecycle = module.new(dependencies(calls))
+        local run = cleanable_run(calls)
+        run.unit_speed_cleanup_probe=function()
+            return {
+                unit_speed_active=true,
+                callback_scheduled=true,
+                ownership_active=true,
+                retained_id_count=2,
+            }
+        end
+
+        assert.is_false(lifecycle.clean(run, 'callback cancellation failed'))
+        assert.is_false(run.cleanup_confirmed)
+        assert.is_false(run.unit_speed_cleanup_state.verified)
+        assert.matches('unit speed lifecycle verification failed',
+            run.output_lines[#run.output_lines], 1, true)
     end)
 
     it('ignores stale finalization and finalizes a current successful run', function()

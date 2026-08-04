@@ -42,6 +42,7 @@ function M.run(run, registry)
     assert(type(run) == 'table', 'automation run record must be a table')
     assert(type(registry) == 'table',
         'automation service registry must be a table')
+    local unit_speed_cleanup = run.unit_speed_cleanup_state or {}
     local snapshot = {
         schema='dwarfspec.run.v2',
         protocol_version=2,
@@ -70,6 +71,10 @@ function M.run(run, registry)
         cleanup_confirmed=run.cleanup_confirmed == true,
         cleanup_reason=run.cleanup_reason,
         mount_cleanup_verified=run.mount_cleanup_verified == true,
+        unit_speed_cleanup_verified=unit_speed_cleanup.verified == true,
+        unit_speed_active=unit_speed_cleanup.unit_speed_active == true,
+        unit_position_active=unit_speed_cleanup.unit_position_active == true,
+        owned_position_count=unit_speed_cleanup.owned_position_count or 0,
         host_error=run.host_error,
         failures=run.failures or {},
     }
