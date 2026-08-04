@@ -64,6 +64,15 @@ function M.new(package_root, project, scheduler_module, scheduler,
     assert(type(run_capabilities) == 'table',
         'DwarfSpec ds factory requires injected run capabilities')
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
+    local recurring_operation_module = load_automation_module(package_root,
+        'dwarfspec.driver.simulation.recurring_operation')
+    local recurring_operation = recurring_operation_module.new({
+        schedule=run_capabilities.recurring.schedule,
+        cancel=run_capabilities.recurring.cancel,
+        is_scheduled=run_capabilities.recurring.is_scheduled,
+        report_failure=run_capabilities.recurring.report_failure,
+        register_cleanup=run_capabilities.cleanup.register,
+    })
 local diagnostics_module = load_automation_module(package_root,
     'dwarfspec.driver.diagnostics.diagnostics')
 local pointer_adapter_module = load_automation_module(package_root,
@@ -241,6 +250,11 @@ local command_observer_module = load_automation_module(package_root,
         game_pause_cleanup_entry=nil,
         game_speed_cleanup_entry=nil,
     }
+    ---Returns recurring-operation ownership for terminal cleanup verification.
+    ---@return table
+    context.run.unit_speed_cleanup_probe = function()
+        return recurring_operation:cleanup_state()
+    end
 
     local diagnostics = diagnostics_module.new({
         get_window_size=context.get_window_size,

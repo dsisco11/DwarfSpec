@@ -96,11 +96,30 @@ function M.new(dependencies)
         run.mount_cleanup_state = mount_state
         run.mount_cleanup_verified = mount_ok
 
+        local unit_speed_state
+        local unit_speed_ok = true
+        if run.unit_speed_cleanup_probe then
+            local probe_ok, result = pcall(run.unit_speed_cleanup_probe)
+            if probe_ok and type(result) == 'table' then
+                unit_speed_state = result
+                unit_speed_ok = result.unit_speed_active ~= true and
+                    result.callback_scheduled ~= true and
+                    result.ownership_active ~= true and
+                    (result.retained_id_count or 0) == 0
+            else
+                unit_speed_ok = false
+                unit_speed_state = {probe_error=tostring(result)}
+            end
+            run.unit_speed_cleanup_probe = nil
+        end
+        if unit_speed_state then unit_speed_state.verified = unit_speed_ok end
+        run.unit_speed_cleanup_state = unit_speed_state
+
         local module_audit = run.module_environment_audit
         local module_environment_ok = module_audit == nil or
             module_audit.restored == true and module_audit.path_restored == true
         run.cleanup_confirmed = ok and #run.cleanup_registry.failures == 0 and
-            mount_ok and module_environment_ok and
+            mount_ok and unit_speed_ok and module_environment_ok and
             run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
             run.outstanding_wait == nil and run.coroutine == nil and
             run.scheduler == nil and run.scheduled_timeout_id == nil
@@ -126,9 +145,15 @@ function M.new(dependencies)
             report_verification_failure('project module environment',
                 'project module environment was not restored during ' .. reason)
         end
+        if not unit_speed_ok then
+            report_verification_failure('unit speed lifecycle verification',
+                'unit speed lifecycle verification failed during ' .. reason,
+                unit_speed_state and unit_speed_state.probe_error or nil)
+        end
         dependencies.publish_event(run, dependencies.events.cleanup_finished, {
             cleanup_confirmed=run.cleanup_confirmed,
             mount_cleanup_verified=mount_ok,
+            unit_speed_cleanup_verified=unit_speed_ok,
         })
         return run.cleanup_confirmed
     end

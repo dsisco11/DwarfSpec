@@ -237,54 +237,54 @@ Completion criteria:
       evidence or an explicitly reconciled contract change.
 
 Phase 2: Add a run-owned recurring-operation capability
-    ☐ Exit with a narrow internal capability that one driver controller can use to
+    ☒ Exit with a narrow internal capability that one driver controller can use to
       schedule, cancel, verify, and fault a recurring operation without importing host
       modules or exposing a public scheduler API.
 
 2.1 Host scheduling adapter:
-    ☐ Add a host-owned adapter for recurring simulation-tick callbacks using the
+    ☒ Add a host-owned adapter for recurring simulation-tick callbacks using the
       current supported DFHack mechanism.
-    ☐ Retain the opaque handle returned by the scheduler as the authoritative
+    ☒ Retain the opaque handle returned by the scheduler as the authoritative
       cancellation and scheduled-state identity; treat any human-readable label as
       diagnostic metadata rather than a global ownership key.
-    ☐ Register ownership before the first callback can mutate unit state.
-    ☐ Make cancellation idempotent and expose a read-only scheduled-state probe.
-    ☐ Guard every callback with active-run and controller-generation checks so a
+    ☒ Register ownership before the first callback can mutate unit state.
+    ☒ Make cancellation idempotent and expose a read-only scheduled-state probe.
+    ☒ Guard every callback with active-run and controller-generation checks so a
       late callback becomes a no-op.
-    ☐ Convert callback exceptions into one bounded active-run failure and stop the
+    ☒ Convert callback exceptions into one bounded active-run failure and stop the
       recurring operation before further callbacks occur.
 
 2.2 Capability injection:
-    ☐ Extend `run_capabilities.lua` with only the scheduling, cancellation,
+    ☒ Extend `run_capabilities.lua` with only the scheduling, cancellation,
       scheduled-state, and failure-reporting operations required by unit-speed
       control.
-    ☐ Keep the capability private to driver composition; do not export it on `ds`.
-    ☐ Preserve the rule that driver modules import no module beneath
+    ☒ Keep the capability private to driver composition; do not export it on `ds`.
+    ☒ Preserve the rule that driver modules import no module beneath
       `dwarfspec.host`.
-    ☐ Inject deterministic in-memory scheduler doubles for focused driver tests.
+    ☒ Inject deterministic in-memory scheduler doubles for focused driver tests.
 
 2.3 Cleanup integration:
-    ☐ Register recurring-operation cleanup before scheduling the first callback.
-    ☐ Stop the controller, cancel its callback, clear retained ids and state, and
+    ☒ Register recurring-operation cleanup before scheduling the first callback.
+    ☒ Stop the controller, cancel its callback, clear retained ids and state, and
       verify the schedule is absent during cleanup.
-    ☐ Continue later LIFO cleanup entries after a cancellation failure while
+    ☒ Continue later LIFO cleanup entries after a cancellation failure while
       retaining the primary cleanup error.
-    ☐ Expose `unit_speed_active` through the authoritative run cleanup probe.
-    ☐ Make final cleanup confirmation fail if the unit-speed controller, callback,
+    ☒ Expose `unit_speed_active` through the authoritative run cleanup probe.
+    ☒ Make final cleanup confirmation fail if the unit-speed controller, callback,
       or ownership token remains active.
 
 2.4 Focused verification:
-    ☐ Prove scheduling, opaque-handle cancellation, idempotence, generation guards,
+    ☒ Prove scheduling, opaque-handle cancellation, idempotence, generation guards,
       and read-only verification with injected in-memory doubles.
-    ☐ Prove cleanup after success, assertion failure, command timeout, explicit
+    ☒ Prove cleanup after success, assertion failure, command timeout, explicit
       abort, world unload, scheduling rejection, cancellation rejection, and callback
       failure.
-    ☐ Prove a callback failure is reported once and cannot recur into a later
+    ☒ Prove a callback failure is reported once and cannot recur into a later
       example or run.
-    ☐ Prove no process-global recurring entry remains after every terminal path.
+    ☒ Prove no process-global recurring entry remains after every terminal path.
 
 Completion criteria:
-    ☐ The driver has a tested recurring-operation capability whose lifecycle and
+    ☒ The driver has a tested recurring-operation capability whose lifecycle and
       fault behavior are fully owned and observable by DwarfSpec cleanup.
 
 Phase 3: Implement option normalization and unit targeting

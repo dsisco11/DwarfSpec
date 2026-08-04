@@ -17,7 +17,7 @@ function M.initialize(run, package_root, project_root, options, dependencies)
         'run assembly requires an injected dwarfspec.ds factory')
     run.ds_factory = dependencies.ds_factory
     run.state_changed_ms, run.created_ms, run.created_frame = created_ms, created_ms, dependencies.current_frame()
-    for _, field in ipairs({'started_ms','started_frame','finished_ms','finished_frame','last_status_poll_ms','last_status_poll_frame','current_test','coroutine','scheduled_timeout_id','outstanding_wait','cleanup_registry','cleanup_reason','mount_cleanup_probe','mount_cleanup_state','module_environment_audit','scheduler_module','scheduler'}) do run[field] = nil end
+    for _, field in ipairs({'started_ms','started_frame','finished_ms','finished_frame','last_status_poll_ms','last_status_poll_frame','current_test','coroutine','scheduled_timeout_id','outstanding_wait','cleanup_registry','cleanup_reason','mount_cleanup_probe','mount_cleanup_state','unit_speed_cleanup_probe','unit_speed_cleanup_state','module_environment_audit','scheduler_module','scheduler'}) do run[field] = nil end
     run.output_lines, run.failure_details, run.discovered_files, run.recorded_cleanup_failures = {}, {}, {}, {}
     run.cleanup_module, run.cleanup_failure_reported_by_busted, run.suspended, run.terminal_observed = cleanup, false, false, false
     assert(type(run.lease_check_frames) == 'number' and run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0, 'lease check interval must be a positive integer')

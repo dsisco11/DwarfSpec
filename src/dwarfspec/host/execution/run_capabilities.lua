@@ -42,6 +42,17 @@ function M.new(dependencies)
     local run_from_impl = require_function(
         cleanup_module, 'run_from', 'cleanup')
 
+    local recurring_operations = assert(dependencies.recurring_operations,
+        'run capabilities require recurring operations')
+    local recurring_schedule_impl = require_function(
+        recurring_operations, 'schedule', 'recurring operations')
+    local recurring_cancel_impl = require_function(
+        recurring_operations, 'cancel', 'recurring operations')
+    local recurring_is_scheduled_impl = require_function(
+        recurring_operations, 'is_scheduled', 'recurring operations')
+    local recurring_report_failure_impl = require_function(
+        recurring_operations, 'report_failure', 'recurring operations')
+
     local project_module = assert(dependencies.project_module,
         'run capabilities require a project-environment module')
     local relative_path_impl = require_function(
@@ -117,6 +128,35 @@ function M.new(dependencies)
     ---@return boolean, table
     local function rollback_cleanup(marker, reason)
         return run_from_impl(cleanup_registry, marker, reason)
+    end
+
+    ---Schedules one run-owned simulation-tick callback.
+    ---@param callback function
+    ---@return any
+    local function schedule_recurring_tick(callback)
+        return recurring_schedule_impl(callback)
+    end
+
+    ---Cancels one opaque recurring-operation handle.
+    ---@param handle any
+    ---@return any
+    local function cancel_recurring_tick(handle)
+        return recurring_cancel_impl(handle)
+    end
+
+    ---Returns whether one opaque recurring-operation handle is scheduled.
+    ---@param handle any
+    ---@return boolean
+    local function recurring_tick_scheduled(handle)
+        return recurring_is_scheduled_impl(handle)
+    end
+
+    ---Reports one bounded recurring-operation failure.
+    ---@param message string
+    ---@param trace string|nil
+    ---@return boolean
+    local function report_recurring_failure(message, trace)
+        return recurring_report_failure_impl(message, trace)
     end
 
     ---Resolves one validated project-relative Lua source.
@@ -207,6 +247,12 @@ function M.new(dependencies)
             mark=mark_cleanup,
             register=register_cleanup,
             rollback=rollback_cleanup,
+        },
+        recurring={
+            schedule=schedule_recurring_tick,
+            cancel=cancel_recurring_tick,
+            is_scheduled=recurring_tick_scheduled,
+            report_failure=report_recurring_failure,
         },
         project={
             resolve_lua_source=resolve_lua_source,

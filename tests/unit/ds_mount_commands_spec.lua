@@ -579,6 +579,16 @@ describe('DwarfSpec public mount commands', function()
                         return cleanup.run_from(registry, marker, reason)
                     end,
                 },
+                recurring={
+                    schedule=function()
+                        error('unexpected recurring operation scheduling')
+                    end,
+                    cancel=function() end,
+                    is_scheduled=function() return false end,
+                    report_failure=function()
+                        error('unexpected recurring operation failure')
+                    end,
+                },
                 overlay={
                     destination_directory='unused/overlay',
                     config_path='unused/overlay.json',
