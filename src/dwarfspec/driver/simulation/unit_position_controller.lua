@@ -22,7 +22,19 @@ function M.new(dependencies)
         'unit position controller requires cleanup registration')
     assert(type(register_cleanup) == 'function',
         'unit position cleanup registration must be a function')
-    local controller = {baselines={}, ownership_order={}}
+    local controller = {
+        baselines={}, ownership_order={}, cleanup_registered=false,
+    }
+
+    ---Prearms position restoration for the current ownership cycle.
+    function controller:ensure_cleanup()
+        if self.cleanup_registered then return end
+        register_cleanup('restore DwarfSpec-owned unit positions', function()
+            self.cleanup_registered = false
+            self:restore_all()
+        end)
+        self.cleanup_registered = true
+    end
 
     ---Moves one resolved unit and records its first successful baseline.
     ---@param unit_id integer
@@ -38,6 +50,7 @@ function M.new(dependencies)
         local baseline = self.baselines[unit_id]
         local provisional
         if baseline == nil then
+            self:ensure_cleanup()
             provisional = adapter:capture_baseline(unit)
             if provisional == nil then return false end
         end
@@ -87,9 +100,6 @@ function M.new(dependencies)
         }
     end
 
-    register_cleanup('restore DwarfSpec-owned unit positions', function()
-        controller:restore_all()
-    end)
     return controller
 end
 

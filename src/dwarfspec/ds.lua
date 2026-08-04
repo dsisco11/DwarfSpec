@@ -96,6 +96,8 @@ function M.new(package_root, project, scheduler_module, scheduler,
         'dwarfspec.driver.simulation.unit_position_adapter')
     local unit_position_controller_module = load_automation_module(package_root,
         'dwarfspec.driver.simulation.unit_position_controller')
+    local unit_native_module = load_automation_module(package_root,
+        'dwarfspec.driver.simulation.unit_native')
 local diagnostics_module = load_automation_module(package_root,
     'dwarfspec.driver.diagnostics.diagnostics')
 local pointer_adapter_module = load_automation_module(package_root,
@@ -220,13 +222,8 @@ local command_observer_module = load_automation_module(package_root,
                 is_projectile=native.is_projectile or function(unit)
                     return unit.flags1.projectile
                 end,
-                has_rider=native.has_rider or function(unit)
-                    return #unit.riders > 0
-                end,
-                is_rider=native.is_rider or function(unit)
-                    return unit.relationship_ids[
-                        df.unit_relationship_type.RiderMount] ~= -1
-                end,
+                has_rider=native.has_rider or unit_native_module.has_rider,
+                is_rider=native.is_rider or unit_native_module.is_rider,
             }),
             register_cleanup=run_capabilities.cleanup.register,
         })
@@ -273,6 +270,7 @@ local command_observer_module = load_automation_module(package_root,
                 targets=targets,
                 actions=actions,
                 job_travel=travel,
+                position_controller=positions,
                 register_cleanup=run_capabilities.cleanup.register,
             }),
         }

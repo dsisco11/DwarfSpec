@@ -8,7 +8,7 @@ describe('driver unit job travel', function()
             id=5, pos={x=1, y=2, z=3},
             path={dest={x=8, y=9, z=3},
                 path={x={1, 8}, y={2, 9}, z={3, 3}}},
-            relationship_ids={dragger=-1, draggee=-1}, following=0,
+            relationship_ids={dragger=-1, draggee=-1}, following=nil,
             counters={unconscious=0}, job={current_job={id=11}},
         }
         local state = {unit=unit, invalid={}, connected=true, visible=true,
@@ -42,6 +42,8 @@ describe('driver unit job travel', function()
         local state, travel = fixture()
         assert.is_true(travel:attempt(5))
         assert.equals(1, #state.moves)
+        assert.not_equals(state.unit.path.dest, state.moves[1].destination)
+        assert.same({x=8, y=9, z=3}, state.moves[1].destination)
         assert.equals(3, #state.clears)
         assert.same({}, state.unit.path.path.x)
         assert.same({}, state.unit.path.path.y)
@@ -60,7 +62,7 @@ describe('driver unit job travel', function()
         local mutations = {
             function(unit) unit.relationship_ids.dragger = 9 end,
             function(unit) unit.relationship_ids.draggee = 9 end,
-            function(unit) unit.following = 9 end,
+            function(unit) unit.following = {id=9} end,
             function(unit) unit.counters.unconscious = 1 end,
             function(unit) unit.job.current_job = nil end,
             function(unit) unit.path.dest = unit.pos end,

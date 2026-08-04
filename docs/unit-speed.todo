@@ -502,56 +502,56 @@ Completion criteria:
       scheduling, position ownership, native adapters, or the fastdwarf plugin.
 
 Phase 7: Qualify lifecycle and live behavior
-    ☐ Exit with focused native evidence for explicit positioning, action
+    ☒ Exit with focused native evidence for explicit positioning, action
       acceleration, job teleportation, coordinate rollback, selection, pause behavior,
       failure cleanup, and consecutive-run isolation.
 
 7.1 Focused live fixture design:
-    ☐ Use a controlled disposable fortress fixture and identify target units and
+    ☒ Use a controlled disposable fortress fixture and identify target units and
       jobs deterministically; do not depend on arbitrary player fortress state.
-    ☐ Keep the focused scenario bounded and avoid long organic waits.
-    ☐ Capture enough native state to prove the target action timer or job transition,
+    ☒ Keep the focused scenario bounded and avoid long organic waits.
+    ☒ Capture enough native state to prove the target action timer or job transition,
       destination, target scope, and absence of changes to a control unit.
-    ☐ Register any fixture-specific restoration and verification before mutating
+    ☒ Register any fixture-specific restoration and verification before mutating
       native assignments or positions.
-    ☐ Do not save mutated gameplay state as part of the test.
+    ☒ Do not save mutated gameplay state as part of the test.
 
 7.2 Live behavior evidence:
-    ☐ Prove `fast_actions=true` advances a supported target action without changing
+    ☒ Prove `fast_actions=true` advances a supported target action without changing
       game TPS or pause state.
-    ☐ Prove `teleport_jobs=true` moves an eligible target to its current visible,
+    ☒ Prove `teleport_jobs=true` moves an eligible target to its current visible,
       reachable job destination and clears its remaining path.
-    ☐ Prove `ds.setUnitPos` moves a valid citizen and a valid noncitizen to explicit
+    ☒ Prove `ds.setUnitPos` moves a valid citizen and a valid noncitizen to explicit
       loaded-map coordinates without changing pause state, TPS, jobs, or paths.
-    ☐ Prove explicit positioning completes while paused without advancing the
+    ☒ Prove explicit positioning completes while paused without advancing the
       simulation or enabling the recurring accelerator.
-    ☐ Prove repeated explicit and job-travel moves of one unit retain one original
+    ☒ Prove repeated explicit and job-travel moves of one unit retain one original
       coordinate and cleanup restores and verifies that coordinate.
-    ☐ Prove explicit `unit_ids` excludes an otherwise eligible control citizen.
-    ☐ Prove an omitted target list uses the activation snapshot and does not add a
+    ☒ Prove explicit `unit_ids` excludes an otherwise eligible control citizen.
+    ☒ Prove an omitted target list uses the activation snapshot and does not add a
       later eligible unit.
-    ☐ Prove disabled behavior flags have no corresponding native effect.
-    ☐ Prove a paused simulation performs no recurring unit-speed update until the
+    ☒ Prove disabled behavior flags have no corresponding native effect.
+    ☒ Prove a paused simulation performs no recurring unit-speed update until the
       test explicitly unpauses it.
 
 7.3 Terminal cleanup evidence:
-    ☐ Run a passing scenario and confirm `unit_speed_active=false` and
+    ☒ Run a passing scenario and confirm `unit_speed_active=false` and
       `unit_position_active=false` with `cleanup_confirmed=true` in the terminal report.
-    ☐ Run a controlled assertion-failure scenario and prove the accelerator is still
+    ☒ Run a controlled assertion-failure scenario and prove the accelerator is still
       cancelled, owned coordinates are restored, and cleanup is confirmed even though
       the test result fails.
-    ☐ Run the focused suite consecutively and prove the second run inherits no
+    ☒ Run the focused suite consecutively and prove the second run inherits no
       callback, target ids, position baseline, controller fault, fastdwarf setting, or
       native turbo flag from the first.
-    ☐ Confirm the service ends with an idle executor, empty queue, no quarantine,
+    ☒ Confirm the service ends with an idle executor, empty queue, no quarantine,
       responsive DFHack process, no owned recurring task, and no owned position
       baseline.
-    ☐ Keep coordinate-restoration evidence separate from accelerator cleanup and
+    ☒ Keep coordinate-restoration evidence separate from accelerator cleanup and
       broader gameplay restoration; do not report the world pristine unless the
       fixture-specific verifier proves it.
 
 Completion criteria:
-    ☐ Focused live runs prove explicit positioning and both speed behaviors, and all
+    ☒ Focused live runs prove explicit positioning and both speed behaviors, and all
       terminal paths end with verified accelerator and position cleanup, bounded
       execution, and no cross-example or cross-run leak.
 

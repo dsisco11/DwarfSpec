@@ -19,6 +19,7 @@ describe('driver unit speed controller', function()
             action_calls={},
             job_calls={},
             job_result=true,
+            position_prearms=0,
         }
         local recurring = {}
         ---Returns whether recurring work is active.
@@ -80,6 +81,9 @@ describe('driver unit speed controller', function()
                     return state.job_result
                 end,
             },
+            position_controller={ensure_cleanup=function()
+                state.position_prearms = state.position_prearms + 1
+            end},
             register_cleanup=function(name, callback)
                 state.cleanups[#state.cleanups + 1] = {
                     name=name,
@@ -113,6 +117,7 @@ describe('driver unit speed controller', function()
             controller:activate(options)
             assert.is_true(controller.active)
             assert.equals(1, state.starts)
+            assert.equals(1, state.position_prearms)
         end
     end)
 
@@ -331,6 +336,7 @@ describe('driver unit speed controller', function()
             actions={accelerate=function()
                 order[#order + 1] = 'action'
             end},
+            position_controller={ensure_cleanup=function() end},
             register_cleanup=function() end,
         })
         controller:activate({fast_actions=true, teleport_jobs=true})

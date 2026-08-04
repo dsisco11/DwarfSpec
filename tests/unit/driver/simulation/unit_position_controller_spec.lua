@@ -75,15 +75,28 @@ describe('driver unit position controller', function()
     it('prearms cleanup and owns only a successful first move', function()
         local state, controller = fixture()
         state.units[4] = unit(4)
-        assert.equals(1, #state.cleanups)
+        assert.equals(0, #state.cleanups)
         assert.is_false(controller:cleanup_state().unit_position_active)
         state.fail_move = true
         assert.is_false(controller:move(4, {x=8, y=9, z=2}))
+        assert.equals(1, #state.cleanups)
         assert.is_false(controller:cleanup_state().unit_position_active)
         state.fail_move = false
         assert.is_true(controller:move(4, {x=8, y=9, z=2}))
         assert.is_true(controller:cleanup_state().unit_position_active)
         assert.equals(1, controller:cleanup_state().owned_position_count)
+    end)
+
+    it('rearms cleanup after a completed ownership cycle', function()
+        local state, controller = fixture()
+        state.units[4] = unit(4)
+        assert.is_true(controller:move(4, {x=8, y=9, z=2}))
+        state.cleanups[1].callback()
+        assert.is_true(controller:move(4, {x=12, y=13, z=2}))
+        assert.equals(2, #state.cleanups)
+        state.cleanups[2].callback()
+        assert.same({4, 4}, state.restores)
+        assert.same({x=4, y=1, z=2}, state.units[4].pos)
     end)
 
     it('retains one baseline across explicit and job-travel moves', function()
@@ -141,6 +154,8 @@ describe('driver unit position controller', function()
             local order = {}
             if move_before_speed then
                 controller:move(1, {x=9, y=2, z=3})
+            else
+                controller:ensure_cleanup()
             end
             state.cleanups[#state.cleanups + 1] = {
                 name='recurring', callback=function()

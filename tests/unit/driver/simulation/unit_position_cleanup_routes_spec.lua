@@ -83,6 +83,7 @@ describe('shared unit position cleanup routes', function()
                     end
                     return false
                 end},
+                position_controller=positions,
                 register_cleanup=register,
             })
             speed:activate({teleport_jobs=true})

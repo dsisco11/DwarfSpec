@@ -281,9 +281,15 @@ function M.format_run_inspection(inspection)
         ('COUNTS successes=%d failures=%d errors=%d pending=%d'):format(
             run.totals.successes, run.totals.failures, run.totals.errors,
             run.totals.pending),
-        ('CLEANUP confirmed=%s mount_verified=%s'):format(
+        ('CLEANUP confirmed=%s mount_verified=%s ' ..
+            'unit_speed_verified=%s unit_speed_active=%s ' ..
+            'unit_position_active=%s owned_positions=%d'):format(
             tostring(run.cleanup_confirmed),
-            tostring(run.mount_cleanup_verified)),
+            tostring(run.mount_cleanup_verified),
+            tostring(run.unit_speed_cleanup_verified),
+            tostring(run.unit_speed_active),
+            tostring(run.unit_position_active),
+            run.owned_position_count or 0),
         ('EVENTS %d'):format(#inspection.events),
     }
     if inspection.project_name then

@@ -126,6 +126,10 @@ function M.new(dependencies)
         'unit-speed controller requires job travel')
     assert(type(job_travel.attempt) == 'function',
         'unit-speed job travel requires attempt')
+    local position_controller = assert(dependencies.position_controller,
+        'unit-speed controller requires position controller')
+    assert(type(position_controller.ensure_cleanup) == 'function',
+        'unit-speed position controller requires ensure_cleanup')
     local register_cleanup = assert(dependencies.register_cleanup,
         'unit-speed controller requires cleanup registration')
     assert(type(register_cleanup) == 'function',
@@ -164,6 +168,7 @@ function M.new(dependencies)
         else
             captured = targets:capture_explicit_ids(normalized.unit_ids)
         end
+        position_controller:ensure_cleanup()
         local immutable_ids = immutable_sequence(captured)
         local configuration = immutable_options(
             normalized.fast_actions, normalized.teleport_jobs, immutable_ids)

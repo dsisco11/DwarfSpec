@@ -48,18 +48,25 @@ function M.new(dependencies)
         if unit == nil or
                 unit.relationship_ids[dragger_relationship] ~= -1 or
                 unit.relationship_ids[draggee_relationship] ~= -1 or
-                unit.following ~= 0 or unit.counters.unconscious ~= 0 or
+                unit.following ~= nil and unit.following ~= 0 or
+                unit.counters.unconscious ~= 0 or
                 unit.job.current_job == nil then
             return false
         end
         local source = unit.pos
-        local destination = unit.path.dest
-        if not is_valid_position(source) or not is_valid_position(destination) or
-                positions_equal(source, destination) or
-                not can_walk_between(source, destination) or
-                not is_tile_visible(destination) then
+        local native_destination = unit.path.dest
+        if not is_valid_position(source) or
+                not is_valid_position(native_destination) or
+                positions_equal(source, native_destination) or
+                not can_walk_between(source, native_destination) or
+                not is_tile_visible(native_destination) then
             return false
         end
+        local destination = {
+            x=native_destination.x,
+            y=native_destination.y,
+            z=native_destination.z,
+        }
         if not position_controller:move(unit_id, destination) then return false end
         resize_vector(unit.path.path.x, 0)
         resize_vector(unit.path.path.y, 0)
