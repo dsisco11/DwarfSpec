@@ -308,13 +308,17 @@ contract, and `use_existing` adopts the referenced source's contract and value.
 A missing or unreadable direct target fails with the ordinary source-resolution
 diagnostic.
 
-Direct loading and loader-adapter access share the same source node, execution
-state, and default source result. Loading a source directly and then reaching
-it through `require()` or `reqscript()`, or doing those operations in the
-reverse order, does not execute a cacheable source twice. A module name can
-still expose its own value through private `package.loaded`; such a
-name-specific publication does not replace the default source result unless
-the source explicitly returns that value.
+When a loader-adapter request resolves to the same file-backed target through
+the default file-source searcher for `require()` or the script resolver for
+`reqscript()`, direct loading and loader-adapter access share the same source
+node, execution state, and default source result. Loading that source directly
+and then reaching it through either adapter, or doing those operations in the
+reverse order, does not execute a cacheable source twice. A `require()` request
+satisfied earlier by `package.loaded`, preload, or a custom searcher does not
+access that file-backed node and retains its ordinary private-package or
+virtual-source behavior. A module name can still expose its own value through
+private `package.loaded`; such a name-specific publication does not replace the
+default source result unless the source explicitly returns that value.
 
 `bed:require(name)` and `bed:reqscript(name)` remain supported as compatibility
 entry points and as the implementations bound into production source
@@ -774,12 +778,18 @@ Focused unit coverage must prove:
   request boundary and when directly loading an annotated script target;
 - direct loading exercises readable targets for every compatible provider
   strategy and rejects missing or unreadable targets;
-- direct loading followed by `require()` or `reqscript()`, and either adapter
-  followed by direct loading, share one source node, execution, and default
-  source result without executing a cacheable source twice;
+- when the default file-source searcher for `require()` or the script resolver
+  for `reqscript()` selects the same readable target, direct loading followed by
+  either adapter, and either adapter followed by direct loading, share one
+  source node, execution, and default source result without executing a
+  cacheable source twice;
+- a `package.loaded`, preload, or custom-searcher result that satisfies an
+  `require()` request before the default file-source searcher can select a file
+  remains separate from a direct load of that file in either access order and
+  is never attached to the file-backed source node;
 - direct loading of `nil`-returning modules yields the default `true` result and
   never infers a result from same-name or different-name `mkmodule()`
-  publications, while module aliases retain their name-specific values;
+  publications, while module names retain their name-specific values;
 - filesystem-free canonicalization and candidate-resolution tests cover
   project-relative paths, normal absolute paths, Windows drive-absolute and UNC
   paths, rejected Windows drive-relative and device-namespace paths, and the
@@ -843,8 +853,10 @@ The refactor is complete only when:
 - one canonical absolute target source cannot be silently executed twice under
   separate module and script caches;
 - direct loading and loader-adapter access in either order share the same
-  source node, execution, and default source result while preserving
-  name-specific private-package publications;
+  source node, execution, and default source result when `require()` selects
+  that same target through the default file-source searcher or `reqscript()`
+  selects it through the script resolver, while `require()` requests satisfied
+  earlier by `package.loaded`, preload, or a custom searcher remain separate;
 - source-focused providers apply only to readable target source files;
 - `mkmodule`, private package tables, module cache-result rules, custom
   searchers, and failed-load retry behavior satisfy the compatibility policy;
@@ -891,8 +903,12 @@ The refactor is complete only when:
   targets, validates `use_value` against the target's declared contract, and
   rejects missing or unreadable targets.
 - Direct loading and `require()` or `reqscript()` share one source node and
-  default source result in either access order without executing a cacheable
-  source twice; module names can still expose name-specific publications.
+  default source result in either access order when `require()` selects the same
+  target through the default file-source searcher or `reqscript()` selects it
+  through the script resolver, without executing that cacheable source twice.
+  `require()` requests satisfied earlier by `package.loaded`, preload, or a
+  custom searcher remain separate, and module names can still expose
+  name-specific publications.
 - Custom-searcher results always use stable bed-local virtual identities and
   cannot declare file-backed source metadata.
 - Path validation accepts project-relative and normal absolute paths, including
