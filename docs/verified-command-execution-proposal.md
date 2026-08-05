@@ -686,6 +686,10 @@ or matching coordinates. Consuming or transferring a claim requires an
 explicit command contract; otherwise a command may consume only a claim owned
 by its exact owner. Cleanup registries and execution indexes remain private to
 their individual owners even when the resource index relates their claims.
+An owning cleanup transaction cannot release a claim while another active
+claim depends on it. The dependent resource must first be cleaned or safely
+abandoned; dependency does not implicitly transfer either claim or its cleanup
+transaction to the other owner.
 
 A resource claim is reserved before mutation or publication and linked to its
 cleanup transaction. It remains active while cleanup is pending or running.
@@ -703,6 +707,8 @@ callbacks. Registration returns a handle with an explicit lifecycle:
 
 ```lua
 ---@class dwarfspec.CleanupTransaction
+---Binds bounded immutable restoration data exactly once before cleanup starts.
+---@field bindReceipt fun(self: dwarfspec.CleanupTransaction, receipt: any)
 ---Manually expends pending cleanup; raises after recording a cleanup failure.
 ---The boolean is returned only on the normal success/already-expended path.
 ---@field execute fun(self: dwarfspec.CleanupTransaction, reason?: string): boolean
@@ -710,12 +716,13 @@ callbacks. Registration returns a handle with an explicit lifecycle:
 ```
 
 A transaction contains a label, restore operation, required verification
-operation, stable cleanup evidence, and one of `pending`, `running`, `complete`,
-`failed`, `abandoned`, or `unconfirmed`. The first two states are nonterminal;
-the remaining four are terminal dispositions. `abandoned` is restricted to an
-internal prearmed reservation for which no mutation or publication occurred.
-`unconfirmed` means interruption or recoverable execution-host failure prevented
-the still-running automation service from establishing a normal cleanup outcome.
+operation, an immutable cleanup receipt, stable cleanup evidence, and one of
+`pending`, `running`, `complete`, `failed`, `abandoned`, or `unconfirmed`. The
+first two states are nonterminal; the remaining four are terminal dispositions.
+`abandoned` is restricted to an internal prearmed reservation for which no
+mutation or publication occurred. `unconfirmed` means interruption or
+recoverable execution-host failure prevented the still-running automation
+service from establishing a normal cleanup outcome.
 Caller registrations have owner lifetime: test-attempt lifetime when created
 inside an attempt, or suite-execution lifetime when created in suite-level
 setup/teardown. Internal registrations may instead have command lifetime for
@@ -750,6 +757,27 @@ internal pending ownership reservation may be abandoned only when the command
 proves that no mutation or publication occurred. Once a resource or reversible
 state is published, its transaction must be executed manually or remain pending
 for teardown.
+
+Cleanup receipts are the only supported path for passing restoration inputs to
+cleanup callbacks. A prearmed transaction begins with either an immutable
+receipt supplied at registration or an unbound receipt slot. The command or
+caller binds an unbound slot exactly once with bounded plain data; the cleanup
+engine defensively copies and freezes that value. Rebinding, binding after the
+transaction starts, binding userdata or cyclic data, and executing an unbound
+caller transaction are contract errors. An unbound caller transaction that
+reaches teardown is `failed`, because the engine cannot prove that mutation did
+not occur. Only an internal command may safely abandon an unbound transaction,
+and only after proving that no mutation or publication occurred.
+
+When primary execution creates a stable identity, it binds the cleanup receipt
+at the first point that identity is available and before any later fallible
+operation, scheduler yield, intrinsic verification, or publication to test
+code. The receipt contains the stable identity and immutable scalar baseline
+needed by both restoration and verification, never a live native pointer. If a
+native operation can allocate and then fail before returning that identity, its
+adapter must return a structured partial receipt or provide an operation key
+that can safely rediscover the partial resource; such an operation cannot use
+an unobservable allocation path.
 
 State setters capture their first inherited baseline and register an
 owner-lifetime transaction before mutation. Fixture commands reserve a pending transaction
@@ -791,16 +819,20 @@ from establishing an outcome. Cleanup callbacks have the same cooperative
 limitation as command callbacks and cannot safely be interrupted while executing
 synchronous native or Lua code.
 
-Cleanup callbacks have a restricted command boundary. A restore callback does
-not invoke public commands; it uses its transaction-owned bounded restoration
-capabilities so it cannot recursively register cleanup after owner registration
-has closed. Verification remains read-only: it may invoke public queries or
-assertions, but those nested invocations inherit the cleanup transaction's
-owner identity, cancellation state, and remaining cleanup deadline rather than
-starting a fresh command timeout. Mutating commands and cleanup registration
-are fatal contract errors from cleanup verification. Nested verification
-commands retain normal child command events while the transaction remains the
-owner of the cleanup outcome.
+Cleanup callbacks have a restricted command boundary. Restore and verification
+receive the same immutable cleanup receipt as their only contextual data; they
+do not receive mutable transaction state or capture required cleanup identity
+through closure variables. The cleanup engine runs each callback inside a
+transaction-owned execution context that privately supplies its owner,
+deadline, state transitions, and journal attribution and establishes the
+ambient command restrictions. A restore callback does not invoke public
+commands or register more cleanup. Verification remains read-only: it may
+invoke public queries or assertions, but those nested invocations inherit the
+cleanup transaction's owner identity, cancellation state, and remaining cleanup
+deadline rather than starting a fresh command timeout. Mutating commands and
+cleanup registration are fatal contract errors from cleanup verification.
+Nested verification commands retain normal child command events while the
+transaction remains the owner of the cleanup outcome.
 
 An expired verification deadline does not discard the execution receipt. The
 receipt remains available to its registered transaction so partial or
@@ -1218,11 +1250,15 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - caller verification cannot bypass intrinsic verification;
 - receipt preservation after execution and verification failure;
 - cleanup prearming, manual expenditure, command-lifetime cleanup, and teardown behavior;
+- cleanup receipt validation, defensive freezing, exactly-once binding,
+  callback delivery, rejection of closure-only cleanup identity, unbound
+  caller failure, and proven-safe internal abandonment;
 - cleanup state transitions through every terminal disposition, including an
   exactly-once journal event for `unconfirmed`;
 - resource-claim reservation before mutation, cross-level exclusive-conflict
   detection, explicit compatible sharing and dependency relationships, and
-  verified release or quarantine retention;
+  rejection of prerequisite-claim release while a dependent claim remains
+  active, followed by verified release or quarantine retention;
 - one-shot restoration and retryable cleanup verification under an independent
   finite cleanup deadline, including restoration errors followed by attempted
   verification and cleanup timeout reporting;
@@ -1482,8 +1518,13 @@ The architecture is complete when:
 - resource claims are tracked across service-run, suite-execution,
   test-attempt, and command-invocation levels, with exclusive conflicts checked
   across the complete run rather than only within one cleanup registry;
+- an active dependent claim prevents release of its prerequisite claim, and a
+  dependency never transfers cleanup ownership implicitly;
 - caller cleanup registrations return manually executable transactions, and
   teardown executes every transaction that remains pending;
+- cleanup callbacks receive an immutable transaction receipt, required cleanup
+  identity is not carried only by closure capture, and an unbound caller
+  transaction fails rather than disappearing;
 - caller cleanup registration requires an independent verification operation;
 - cleanup restoration is one-shot, cleanup verification is retryable, and every
   cleanup execution has a finite deadline independent of its owning command;

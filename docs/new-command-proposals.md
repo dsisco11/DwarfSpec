@@ -280,14 +280,21 @@ native userdata.
 ### `ds.registerCleanup(options)`
 
 ```lua
+---@alias dwarfspec.CleanupReceipt boolean|number|string|table
+
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
----@field restore fun()
----@field verify fun(): boolean|dwarfspec.GateResult|nil
+---@field receipt? dwarfspec.CleanupReceipt
+---@field restore fun(receipt: dwarfspec.CleanupReceipt)
+---@field verify fun(receipt: dwarfspec.CleanupReceipt): boolean|dwarfspec.GateResult|nil
 ---@field timeout_ms? integer
 
 ---@class dwarfspec.CleanupTransaction
 local CleanupTransaction = {}
+
+---Binds this transaction's immutable cleanup receipt exactly once.
+---@param receipt dwarfspec.CleanupReceipt
+function CleanupTransaction:bindReceipt(receipt) end
 
 ---Executes and unregisters this transaction when it is still pending.
 ---Raises after recording a restore or verification failure.
@@ -317,17 +324,30 @@ Contract:
   owner and fails after that owner's cleanup begins.
 - `verify` is required so the transaction can contribute authoritative evidence
   to `cleanup_confirmed`.
+- `receipt`, when supplied at registration, is defensively copied and frozen.
+  Otherwise the returned transaction has one unbound receipt slot that must be
+  bound exactly once with `bindReceipt()` before cleanup can execute.
+- Receipts are bounded plain data containing stable IDs and immutable scalar
+  baselines. They cannot contain native userdata, callbacks, cycles, or mutable
+  tables shared with test code.
 - `timeout_ms`, when present, is a positive finite cleanup deadline override;
   otherwise the project cleanup setting and then the framework default apply.
 - `restore` executes once. `verify` is read-only and retries under the cleanup
   deadline when it throws, returns `false`, or explicitly returns
   `cleanup.pending(...)`; a no-return assertion callback passes when it does not
   throw.
-- `restore` uses transaction-owned bounded restoration capabilities and cannot
-  invoke public commands or register more cleanup. `verify` may invoke only
-  read-only public queries or assertions; they inherit the transaction's owner,
-  cancellation state, and remaining cleanup deadline. Public mutations or
-  cleanup registration from verification are contract errors.
+- `restore` and `verify` receive the same immutable receipt as their only
+  contextual data. Capturing required cleanup identity through closure variables
+  is unsupported. DwarfSpec runs both callbacks inside the transaction's
+  private execution context, which owns the deadline, state, attribution, and
+  ambient command restrictions. `restore` cannot invoke public commands or
+  register more cleanup. `verify` may invoke only read-only public queries or
+  assertions; they inherit the transaction's owner, cancellation state, and
+  remaining cleanup deadline. Public mutations or cleanup registration from
+  verification are contract errors.
+- `bindReceipt()` fails if the receipt is invalid, already bound, or cleanup has
+  started. An unbound caller transaction fails during manual execution or
+  teardown; callers cannot abandon it merely by omitting the receipt.
 - A restore error does not suppress verification when time remains; both
   outcomes are retained and the transaction remains failed.
 - The returned transaction can be executed manually at any later point in its
@@ -352,14 +372,16 @@ Example:
 ```lua
 local cleanup = ds.registerCleanup{
     label='remove temporary native registration',
-    restore=function()
-        remove_registration()
+    restore=function(receipt)
+        remove_registration(receipt.registration_id)
     end,
-    verify=function()
-        assert.is_false(registration_exists())
+    verify=function(receipt)
+        assert.is_false(registration_exists(receipt.registration_id))
     end,
 }
-publish_registration()
+local registration_id = create_registration()
+cleanup:bindReceipt{registration_id=registration_id}
+publish_registration(registration_id)
 
 -- Optional early cleanup; teardown would otherwise execute it automatically.
 cleanup:execute('fixture no longer needed')
@@ -440,8 +462,10 @@ Contract:
 - The initial API deliberately does not model the complete native stockpile
   filter schema. Tests may configure the returned building through native APIs.
 - Cleanup removes native jobs owned because of the stockpile, deconstructs the
-  stockpile, releases its tile reservations, and verifies absence by ID and tile
-  occupancy.
+  stockpile, releases only tile reservations acquired atomically by this
+  command, and verifies absence by ID and tile occupancy. A reservation that
+  already existed when the command began remains owned by its original cleanup
+  transaction.
 - Cleanup does not delete unrelated items that later enter the stockpile.
 
 Example:
@@ -722,10 +746,14 @@ end, {
 
 `spawnItem()` may consume a reserved tile but does not release that reservation;
 the reservation remains valid until its owning suite or test cleanup.
-`createStockpile()` may
-consume one or more reservations and records their relationship in the
-resource ownership index. Cleanup removes dependent owned jobs before removing
-items or stockpiles and releases logical reservations last.
+`createStockpile()` records a dependency on every reservation that already
+exists when the command begins; it neither transfers nor releases those
+reservations. A reservation acquired atomically during stockpile creation is
+instead owned by the stockpile transaction and is released by stockpile
+cleanup. The resource ownership index rejects release of a pre-existing
+reservation while its stockpile claim remains active. Cleanup removes dependent
+owned jobs before removing items or stockpiles and releases atomically acquired
+logical reservations last.
 
 The resource ownership index must not infer ownership merely because an object
 occupies a reserved tile. Only explicit claims established by fixture commands
@@ -806,6 +834,9 @@ Each command requires unit tests for:
 - canonical enum acceptance and invalid-enum rejection;
 - callback and predicate error preservation;
 - rejection of cleanup registration without a verification callback;
+- cleanup receipt validation and freezing, receipt-at-registration and
+  exactly-once post-registration binding, identical receipt delivery to restore
+  and verification, and rejection of unbound caller cleanup;
 - cleanup registration before publication;
 - LIFO cleanup and continued cleanup after failure;
 - idempotent cleanup transaction execution;
@@ -816,8 +847,8 @@ Each command requires unit tests for:
 - stable suite/test owner and owning-command attribution;
 - isolation between suite executions, neighboring tests, and repeats;
 - cross-level resource-claim conflict detection, explicit sharing and
-  dependency relationships, and claim retention after failed or unconfirmed
-  cleanup;
+  dependency relationships, rejection of prerequisite release while dependent
+  claims remain active, and claim retention after failed or unconfirmed cleanup;
 - suite-owned registration during setup and teardown, manual suite-transaction
   expenditure from a nested test without ownership transfer, and automatic
   suite cleanup after setup failure or zero executed tests;
@@ -842,6 +873,11 @@ registration before the first flag write, overlapping-ownership rejection,
 flag-only mutation, stable-ID cleanup, fail-closed terminal-state handling, and
 verification that cleanup restores active classification without duplicating or
 reordering active-vector entries.
+
+`createStockpile()` additionally requires coverage that pre-existing tile
+reservations remain owned by their original transactions, atomically acquired
+reservations belong to stockpile cleanup, and an active stockpile dependency
+prevents premature reservation release.
 
 `spyJobs()` additionally requires event-before-scan, scan-before-event,
 removal-before-scan, repeated callback, job-ID reuse defense, filter
