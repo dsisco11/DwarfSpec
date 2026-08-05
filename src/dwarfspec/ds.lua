@@ -2191,9 +2191,11 @@ local command_observer_module = load_automation_module(package_root,
         ---@param _ table
         ---@param options table
         activate=function(_, options)
-            get_unit_system().speed:activate(options)
+            return get_unit_system().speed:activate(options)
         end,
-    }})
+    }, enable_fast_movement=function()
+        return ds.setTurboSpeed(true)
+    end})
     unit_position_command.bind(ds, {position_controller={
         ---Moves a unit through the shared run-owned position controller.
         ---@param _ table

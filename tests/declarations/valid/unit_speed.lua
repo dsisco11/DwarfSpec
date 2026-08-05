@@ -3,8 +3,13 @@
 local function declaration_fixture()
     return function()
         ds.setUnitSpeed({fast_actions=true})
+        ds.setUnitSpeed({fast_movement=true})
         ds.setUnitSpeed({teleport_jobs=true, unit_ids={1, 2}})
         ds.setUnitSpeed({fast_actions=true, teleport_jobs=true})
+
+        ---@type dwarfspec.FastMovementUnitSpeedOptions
+        local fast_movement_options = {fast_movement=true}
+        ds.setUnitSpeed(fast_movement_options)
 
         ---@type dwarfspec.UnitSpeedOptions
         local options = {fast_actions=true, unit_ids={3}}

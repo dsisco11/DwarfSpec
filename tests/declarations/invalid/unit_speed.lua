@@ -3,7 +3,9 @@
 local function invalid_declaration_fixture()
     return function()
         ds.setUnitSpeed({fast_actions='yes'})
+        ds.setUnitSpeed({fast_movement='yes'})
         ds.setUnitSpeed({teleport_jobs=1})
+        ds.setUnitSpeed({fast_movement=true, unit_ids={1}})
         ds.setUnitSpeed({unit_ids={'one'}})
         ---@type dwarfspec.UnitSpeedOptions
         local options_with_unknown_field = {fast_actions=true}

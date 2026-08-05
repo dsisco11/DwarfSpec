@@ -4,6 +4,7 @@ local M = {}
 
 local supported_fields = {
     fast_actions=true,
+    fast_movement=true,
     teleport_jobs=true,
     unit_ids=true,
 }
@@ -35,12 +36,15 @@ end
 
 ---Creates an immutable normalized option record.
 ---@param fast_actions boolean
+---@param fast_movement boolean
 ---@param teleport_jobs boolean
 ---@param unit_ids table|nil
 ---@return table
-local function immutable_options(fast_actions, teleport_jobs, unit_ids)
+local function immutable_options(fast_actions, fast_movement, teleport_jobs,
+        unit_ids)
     local backing = {
         fast_actions=fast_actions,
+        fast_movement=fast_movement,
         teleport_jobs=teleport_jobs,
         unit_ids=unit_ids,
     }
@@ -64,17 +68,21 @@ local function normalize_options(options)
         assert(supported_fields[name],
             'unsupported setUnitSpeed option: ' .. tostring(name))
     end
-    for _, name in ipairs({'fast_actions', 'teleport_jobs'}) do
+    for _, name in ipairs({'fast_actions', 'fast_movement', 'teleport_jobs'}) do
         assert(options[name] == nil or type(options[name]) == 'boolean',
             'setUnitSpeed ' .. name .. ' must be a boolean')
     end
     local fast_actions = options.fast_actions == true
+    local fast_movement = options.fast_movement == true
     local teleport_jobs = options.teleport_jobs == true
-    assert(fast_actions or teleport_jobs,
-        'setUnitSpeed requires fast_actions or teleport_jobs to be true')
+    assert(fast_actions or fast_movement or teleport_jobs,
+        'setUnitSpeed requires fast_actions, fast_movement, or ' ..
+            'teleport_jobs to be true')
 
     local copied_ids
     if options.unit_ids ~= nil then
+        assert(not fast_movement,
+            'setUnitSpeed fast_movement cannot be used with unit_ids')
         assert(type(options.unit_ids) == 'table',
             'setUnitSpeed unit_ids must be a nonempty array of integer ids')
         local count = 0
@@ -103,6 +111,7 @@ local function normalize_options(options)
     end
     return {
         fast_actions=fast_actions,
+        fast_movement=fast_movement,
         teleport_jobs=teleport_jobs,
         unit_ids=copied_ids,
     }
@@ -161,6 +170,9 @@ function M.new(dependencies)
         assert(not self.active and not recurring:is_active(),
             'setUnitSpeed is already active for this example')
         local normalized = normalize_options(options)
+        if not normalized.fast_actions and not normalized.teleport_jobs then
+            return normalized.fast_movement
+        end
         targets:assert_ready()
         local captured
         if normalized.unit_ids == nil then
@@ -171,7 +183,8 @@ function M.new(dependencies)
         position_controller:ensure_cleanup()
         local immutable_ids = immutable_sequence(captured)
         local configuration = immutable_options(
-            normalized.fast_actions, normalized.teleport_jobs, immutable_ids)
+            normalized.fast_actions, normalized.fast_movement,
+            normalized.teleport_jobs, immutable_ids)
 
         self.active = true
         self.configuration = configuration
@@ -198,6 +211,7 @@ function M.new(dependencies)
             clear_state()
             error(failure, 2)
         end
+        return normalized.fast_movement
     end
 
     return controller
