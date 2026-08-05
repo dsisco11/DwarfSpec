@@ -21,7 +21,8 @@ This document specifies only fixture-domain resource and cleanup policy.
 The proposed public entry points are:
 
 ```lua
-ds.registerCleanup(options)
+ds.reserveResourceClaims(claims, command_options)
+ds.registerCleanup(registration, command_options)
 ds.spawnItem(options)
 ds.createStockpile(options)
 ds.reserveMapTiles(options)
@@ -294,7 +295,17 @@ native userdata.
 
 ## Command contracts
 
-### `ds.registerCleanup(options)`
+### `ds.reserveResourceClaims(claims, command_options)`
+
+The verified command execution proposal owns this general lifecycle command.
+It atomically reserves `ResourceClaimRequest[]` before downstream native
+mutation and returns an owner-bound `ResourceClaimReservation`. This proposal
+uses that handle only as the resource-ownership input to `registerCleanup()`;
+it does not define a fixture-specific reservation mechanism. A caller releases
+the reservation when no effect is produced or atomically consumes it into the
+cleanup transaction after an effect exists.
+
+### `ds.registerCleanup(registration, command_options)`
 
 ```lua
 ---@alias dwarfspec.CleanupReceipt boolean|number|string|table
@@ -302,9 +313,11 @@ native userdata.
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
 ---@field receipt dwarfspec.CleanupReceipt
+---@field claim_reservation? dwarfspec.ResourceClaimReservation
+---@field resource_bindings? dwarfspec.ResourceClaimBinding[]
 ---@field restore fun(context: dwarfspec.CleanupExecutionContext, receipt: dwarfspec.CleanupReceipt)
 ---@field verify fun(context: dwarfspec.CleanupExecutionContext, receipt: dwarfspec.CleanupReceipt): boolean|dwarfspec.GateResult|nil
----@field timeout_ms? integer
+---@field cleanup_timeout_ms? integer
 
 ---@class dwarfspec.CleanupTransaction
 local CleanupTransaction = {}
@@ -319,9 +332,10 @@ function CleanupTransaction:execute(reason) end
 ---@return boolean
 function CleanupTransaction:isPending() end
 
----@param options dwarfspec.CleanupRegistration
+---@param registration dwarfspec.CleanupRegistration
+---@param command_options? dwarfspec.CommandOptions
 ---@return dwarfspec.CleanupTransaction
-function ds.registerCleanup(options) end
+function ds.registerCleanup(registration, command_options) end
 ```
 
 This public action command routes through the verified command runner and uses
@@ -342,14 +356,26 @@ Contract:
   to `cleanup_confirmed`.
 - `receipt` is required at registration and is defensively copied and frozen
   before the transaction enters the registry or journal.
+- `claim_reservation` and `resource_bindings` are either both omitted or both
+  supplied. When supplied, the reservation must be pending under the exact
+  active owner and the bindings must account for every reserved claim exactly
+  once. Registration atomically consumes those claims into the transaction;
+  foreign, released, consumed, duplicate, missing, or incompatible claims fail
+  without partially registering the transaction and leave the reservation
+  pending for correction or explicit release.
+- Omitting both resource fields declares a resource-independent cleanup
+  transaction. Such transactions participate in teardown but use LIFO ordering
+  because they introduce no dependency-graph edges.
 - The receipt identifies an effect that already exists. `registerCleanup()` is
   not a speculative reservation API; callers create or change the resource,
   then register its cleanup before yielding or publishing it to other test code.
 - Receipts are bounded plain data containing stable IDs and immutable scalar
   baselines. They cannot contain native userdata, callbacks, cycles, or mutable
   tables shared with test code.
-- `timeout_ms`, when present, is a positive finite cleanup deadline override;
-  otherwise the project cleanup setting and then the framework default apply.
+- `cleanup_timeout_ms`, when present, is a positive finite cleanup deadline
+  override; otherwise the project cleanup setting and then the framework default
+  apply. The separate trailing `command_options.timeout_ms` bounds the
+  registration command itself.
 - `restore` executes once. `verify` is read-only and retries under the cleanup
   deadline when it throws, returns `false`, or explicitly returns
   `cleanup.pending(...)`; a no-return assertion callback passes when it does not
@@ -808,8 +834,9 @@ unit.
 
 ### Public and automatic cleanup
 
-Fixture commands register private cleanup entries through the same registry
-exposed by `registerCleanup()`. Private entries may use stronger internal
+Fixture commands register private cleanup entries through the same internal
+`CleanupRegistrationService` used by the public `registerCleanup()` command.
+Private entries may use stronger internal
 identity metadata, but they obey the same ordering, aggregation, verification,
 and reporting rules as public entries. Every public or private registration is
 attributed to its owning suite execution or test attempt and appears in that
@@ -867,6 +894,10 @@ Each command requires unit tests for:
   be enforced;
 - cleanup registration immediately after a conclusive effect receipt and before
   later fallible work, yielding, verification, retry, or publication;
+- caller resource-claim reservation before mutation, owner-bound reservation
+  handles, exact/provisional binding, atomic all-claim consumption into
+  `registerCleanup`, explicit no-effect release, and automatic release of unused
+  reservations before owner cleanup;
 - structured partial-effect failure receipts and rejection of adapters that can
   mutate before throwing without reporting a cleanup identity;
 - verified cleanup of every effect created by a retry attempt before another
@@ -947,9 +978,9 @@ Passing assertions without verified cleanup are insufficient.
 
 1. Implement and qualify the
    [directed acyclic graph utility proposal](directed-acyclic-graph-proposal.md).
-2. Expose `registerCleanup()`, the run-scoped `ResourceDependencyIndex`, its
-   graph instance and `CleanupPlanner`, and the cleanup
-   history/result-journal integration
+2. Expose `reserveResourceClaims()`, `registerCleanup()`, the run-scoped
+   `ResourceDependencyIndex`, its graph instance and `CleanupPlanner`, and the
+   cleanup history/result-journal integration
    defined by the verified command execution proposal.
 3. Add `reserveMapTiles()` and `queryUnits()` as read-mostly discovery
    primitives.

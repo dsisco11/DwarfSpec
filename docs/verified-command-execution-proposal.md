@@ -170,6 +170,31 @@ scopes from independently claiming an exclusive resource merely because they
 use different cleanup registries. It is execution-safety state, not a second
 cleanup-history source of truth.
 
+`ResourceClaimRequest` is the pre-execution declaration returned by `claims()`.
+Every request has a nonempty `claim_key` unique within its invocation, plus its
+resource kind, exclusivity/sharing policy, dependency keys, and either an exact
+existing-resource identity or a provisional creation identity. The runner
+combines invocation ID and `claim_key` into the stable run-unique claim ID used
+as the graph node ID.
+
+`ResourceClaimBinding` is the post-execution projection returned by cleanup
+policy `resources(effect_receipt)`. It names the exact reserved `claim_key` and,
+for provisional creation claims, supplies the concrete stable resource identity
+established by the effect receipt. It cannot create a claim. This explicit key
+mapping lets one outcome retain or bind any subset of multiple reservations
+without relying on array position or inferred identity.
+
+That subset-binding rule applies to reservations managed internally for a
+command attempt. A caller-visible `ResourceClaimReservation` is instead
+consumed only as one complete, all-or-nothing set, as specified under
+**Caller resource-claim reservation**.
+
+`ResourceClaimReservation` is an owner-bound public handle for claims reserved
+before downstream caller code performs a native mutation. It is runtime
+resource-index state, not a cleanup transaction or historical cleanup ledger.
+It is `pending` until atomically consumed by cleanup registration or released;
+both terminal operations are idempotent from the caller's perspective.
+
 `CleanupPlanner` consumes eligible transactions and the
 `ResourceDependencyIndex` to produce dependency-safe reverse-topological
 execution order, with owner-local reverse registration order as the tie-breaker
@@ -287,19 +312,22 @@ stable descriptors. They do not retain an assumed-live widget or DF userdata
 across scheduler yields. The final successful preflight observation is checked
 again immediately before primary execution when a target can become stale.
 
-### Public commands do not call public commands internally
+### Primary execution does not call public commands internally
 
 Composite behavior uses internal operations or workflow steps. This avoids
 nested independent deadlines, duplicate command events, repeated cleanup
 registration, and misleading success records. For example, `click()` may use
 the pointer-placement operation internally, but it does not invoke a second
-public `move_pointer()` command.
+public `move_pointer()` command. Read-only public queries and assertions are the
+only exception, and only from preflight or verification where their nested
+lifecycle is explicitly defined below; primary execution never invokes them.
 
 ### Nested read-only commands inherit their parent invocation
 
-A query or assertion invoked by caller verification inherits the parent's
-absolute deadline, cancellation state, root command identity, and tagged suite
-or test owner identity. Each nested command or internal workflow step receives its own
+A query or assertion invoked by preflight or verification inherits the parent's
+absolute deadline, cancellation state, root command identity, tagged suite or
+test owner identity, and current read-only stage. Each nested command or
+internal workflow step receives its own
 run-unique invocation ID and records the immediate `parent_invocation_id`, so
 repeated same-named children remain distinguishable in the trace. It cannot
 extend or reset the parent timeout. Mutating public commands are rejected from
@@ -374,20 +402,20 @@ implementation:
 ---@class dwarfspec.CommandCleanupPolicy
 ---@field lifetime dwarfspec.ECleanupLifetime
 ---@field restore fun(context: dwarfspec.CleanupExecutionContext, receipt: any)
----@field verify fun(context: dwarfspec.CleanupExecutionContext, receipt: any): dwarfspec.GateResult
----@field resources? fun(receipt: any): dwarfspec.ResourceClaim[]
+---@field verify fun(context: dwarfspec.CleanupExecutionContext, receipt: any): boolean|dwarfspec.GateResult|nil
+---@field resources? fun(receipt: any): dwarfspec.ResourceClaimBinding[]
 
 ---@class dwarfspec.CommandDefinition
 ---@field name string
 ---@field kind dwarfspec.ECommandKind
 ---@field normalize fun(arguments: table): any
----@field preflight fun(context: dwarfspec.CommandContext, request: any): dwarfspec.GateResult
----@field claims? fun(context: dwarfspec.CommandContext, request: any, ready: any): dwarfspec.ResourceClaim[]
----@field execute fun(context: dwarfspec.CommandContext, request: any, ready: any): dwarfspec.ExecutionResult|dwarfspec.GateResult
+---@field preflight fun(context: dwarfspec.CommandReadContext, request: any): dwarfspec.GateResult
+---@field claims? fun(context: dwarfspec.CommandReadContext, request: any, ready: any): dwarfspec.ResourceClaimRequest[]
+---@field execute fun(context: dwarfspec.CommandExecutionContext, request: any, ready: any): dwarfspec.ExecutionResult|dwarfspec.GateResult
 ---@field execution_retry_policy dwarfspec.EExecutionRetryPolicy
 ---@field operation_key? fun(request: any): string
 ---@field intrinsic_verification dwarfspec.EIntrinsicVerificationKind
----@field verify? fun(context: dwarfspec.CommandContext, request: any, receipt: any): dwarfspec.GateResult
+---@field verify? fun(context: dwarfspec.CommandReadContext, request: any, receipt: any): dwarfspec.GateResult
 ---@field cleanup? dwarfspec.CommandCleanupPolicy
 ---@field default_timeout_ms? integer
 ---@field diagnostics? fun(request: any, receipt: any): table
@@ -398,41 +426,42 @@ The registry validates definitions before run execution begins:
 - names are nonempty and do not conflict;
 - kinds are supported immutable enum values;
 - normalize, preflight, and execute are callable;
-- normalize is bounded, synchronous, and non-yielding;
-- `claims`, when present, is callable, read-only, bounded, synchronous, and
-  non-yielding, returns bounded resource descriptions from the normalized
-  request and current ready value, and is the only definition hook that may
-  project new pre-execution reservations;
+- `claims`, when present, is callable and is the only definition hook that may
+  declare new pre-execution reservations;
 - `execution_retry_policy` is a supported immutable enum value;
-- `EXPLICIT_RETRY_SAFE` supplies a stable bounded `operation_key`; `ONCE`
-  forbids execution-retry outcomes;
-- `operation_key`, when required, is bounded, synchronous, non-yielding, and
-  derives the same scalar key from the same normalized request;
+- `EXPLICIT_RETRY_SAFE` supplies a callable `operation_key`, while `ONCE` omits
+  it;
 - `intrinsic_verification` is a supported immutable enum value compatible with
   the command kind;
 - `verify` is required for `CALLBACK`, forbidden for `PRIMARY_OBSERVATION`, and
   absent for `EXECUTION_RECEIPT` unless a separate diagnostic-only callback is
   introduced under a different field;
 - a definition whose outcomes can report reversible effects supplies one
-  immutable cleanup policy with supported lifetime, restore, required verify,
-  and bounded resource projection; its resource projection accepts only the
-  effect receipt and must select or concretely bind reservations produced by
-  `claims` rather than discovering a pre-existing unreserved exclusive resource
-  after mutation; definitions that cannot produce a cleanup effect omit it;
+  immutable cleanup policy with supported lifetime and callable restore,
+  required verify, and optional resource projection; definitions that cannot
+  produce a cleanup effect omit it;
 - verify and diagnostics are callable when present;
 - timeout defaults are positive finite integers;
-- definitions cannot replace reserved built-in commands; and
-- diagnostic adapters return plain bounded data.
+- definitions cannot replace reserved built-in commands.
 
 Definition tables are copied or frozen at registration so a consumer cannot
 change command behavior while a run is active.
 
 This registry pass is structural validation. It cannot prove semantic
-idempotency, inspect documentation, or discover a test fixture. Qualification
-separately requires every `EXPLICIT_RETRY_SAFE` definition to document its
-idempotency and attempt/effect-receipt guarantees and pass a command-specific
-conformance fixture. Likewise, each `EXECUTION_RECEIPT` definition documents
-and tests the receipt guarantee that the registry can only select structurally.
+idempotency, bounded execution, absence of yielding, read-only behavior, inspect
+documentation, or discover a test fixture. Stage-specific contexts enforce the
+available capabilities, while conformance tests prove callback behavior that
+function shape cannot establish. Qualification separately requires every
+normalizer and `claims` projector to be bounded, synchronous, and non-yielding,
+every preflight, claims, and verification callback to remain read-only, and
+every `EXPLICIT_RETRY_SAFE` definition to document its idempotency and
+attempt/effect-receipt guarantees and pass a command-specific conformance
+fixture. Operation-key conformance proves stable bounded scalar derivation from
+the same normalized request. Cleanup-resource conformance proves that the
+projection accepts only the effect receipt and emits valid bindings to
+pre-execution reservations. Diagnostic conformance proves bounded plain output.
+Likewise, each `EXECUTION_RECEIPT` definition documents and tests the receipt
+guarantee that the registry can only select structurally.
 At invocation time, the runner separately validates every returned outcome
 against its frozen definition: `ONCE` cannot return retry, a definition without
 a cleanup policy cannot return an effect receipt, each effect receipt must be
@@ -595,6 +624,9 @@ return value does not replace the command's public result.
 Read-only public queries and assertions called by the callback automatically
 inherit the active verification invocation. Their events are children of the
 parent command, and their effective deadline is the parent's remaining time.
+The same inheritance and child-event rules apply when a definition's preflight
+calls a read-only public query or assertion; the child remains attributed to the
+parent's preflight stage and cannot reset its polling budget.
 Attempting a mutating public command from preflight or verification is a fatal
 contract error.
 
@@ -712,7 +744,7 @@ For each invocation the runner performs the following operations:
 10. When an executed or failed outcome conclusively reports an effect, register
     and link its cleanup transaction from the explicit immutable effect receipt
     before any later fallible operation, yield, verification, or publication.
-    The cleanup resource projection must resolve to claims reserved by step 8.
+    Every cleanup resource binding must name a `claim_key` reserved by step 8.
     Release an unused reservation when the outcome proves that no effect
     occurred.
 11. Establish intrinsic evidence according to the definition's explicit
@@ -735,26 +767,44 @@ registered for manual execution or automatic test/suite teardown. Terminal
 command evidence is never published before command-lifetime cleanup can affect
 the command's final outcome.
 
-## Command context
+Reservation unwinding is runner-owned and applies on every exit path. Before
+publishing a terminal command event, returning, or propagating a failure, the
+runner releases every reservation from the current attempt that was not linked
+to a reported effect. This includes pre-execution cancellation, a deadline that
+expires after reservation but before mutation, and a thrown adapter error whose
+contract guarantees that no effect occurred. A reservation remains active only
+when an effect receipt linked it to cleanup or when effect absence cannot be
+established; the latter is a contract failure that retains the claim and invokes
+the existing executor-quarantine rules.
 
-The run-scoped command context exposes only bounded capabilities:
+## Command context boundaries
+
+Callbacks never receive the runner's mutable invocation state. A
+`CommandReadContext` exposes only bounded read capabilities:
 
 - monotonic time and remaining deadline;
-- cooperative frame, tick, event, and predicate waits;
 - cancellation state;
 - current mount and stable-subject resolution;
-- command-local cleanup checkpoint and ownership registration;
-- run-scoped resource-claim lookup and the private runner-mediated reservation,
-  dependency, and release operations required to realize a definition's
-  `claims` projection;
+- run-scoped resource-claim lookup without mutation;
 - render-generation capture and observation;
-- safe diagnostic recording;
-- internal workflow-step execution; and
+- bounded diagnostic recording; and
 - immutable run, execution-owner, and command identity.
 
-It does not expose the host service, controller transport, mutable command
-registry, or unrestricted result publisher. Driver modules continue to avoid
-imports from `dwarfspec.host`.
+`CommandExecutionContext` adds cooperative frame, tick, event, and predicate
+waits plus internal workflow-step execution. It still exposes no cleanup
+registration, resource reservation/link/release, mutable command registry,
+host service, controller transport, or unrestricted result publisher. The
+runner alone owns cleanup checkpoints and realizes `claims` through its private
+invocation state. The built-in `reserveResourceClaims` definition receives a
+narrow `ResourceClaimReservationCapability`, and the built-in
+`registerCleanup` definition receives a narrow `CleanupRegistrationCapability`,
+in their privileged execution contexts. Each capability exposes only its single
+lifecycle operation.
+
+Stage-specific context construction therefore enforces framework capability
+boundaries. Command conformance tests remain responsible for detecting direct
+native or global mutation that no Lua capability object can technically prevent.
+Driver modules continue to avoid imports from `dwarfspec.host`.
 
 ## Workflows and internal steps
 
@@ -768,17 +818,25 @@ The internal contract is deliberately the command contract without public
 registration or an independent timeout:
 
 ```lua
+---@class dwarfspec.WorkflowState
+---@field request any
+---@field outputs table<string, any>
+
+---@class dwarfspec.WorkflowDefinition
+---@field steps dwarfspec.WorkflowStepDefinition[]
+---@field result fun(state: dwarfspec.WorkflowState): any
+
 ---@class dwarfspec.WorkflowStepDefinition
 ---@field name string
----@field preflight fun(context: dwarfspec.CommandContext, state: any): dwarfspec.GateResult
----@field claims? fun(context: dwarfspec.CommandContext, state: any, ready: any): dwarfspec.ResourceClaim[]
----@field execute fun(context: dwarfspec.CommandContext, state: any, ready: any): dwarfspec.ExecutionResult
+---@field preflight fun(context: dwarfspec.CommandReadContext, state: dwarfspec.WorkflowState): dwarfspec.GateResult
+---@field claims? fun(context: dwarfspec.CommandReadContext, state: dwarfspec.WorkflowState, ready: any): dwarfspec.ResourceClaimRequest[]
+---@field execute fun(context: dwarfspec.CommandExecutionContext, state: dwarfspec.WorkflowState, ready: any): dwarfspec.ExecutionResult
 ---@field execution_retry_policy dwarfspec.EExecutionRetryPolicy
----@field operation_key? fun(state: any): string
+---@field operation_key? fun(state: dwarfspec.WorkflowState): string
 ---@field intrinsic_verification dwarfspec.EIntrinsicVerificationKind
----@field verify? fun(context: dwarfspec.CommandContext, state: any, receipt: any): dwarfspec.GateResult
+---@field verify? fun(context: dwarfspec.CommandReadContext, state: dwarfspec.WorkflowState, receipt: any): dwarfspec.GateResult
 ---@field cleanup? dwarfspec.CommandCleanupPolicy
----@field diagnostics? fun(state: any, receipt: any): table
+---@field diagnostics? fun(state: dwarfspec.WorkflowState, receipt: any): table
 ```
 
 Each step uses the same gate and execution-result constructors, explicit
@@ -786,10 +844,27 @@ effect-receipt rule, `claims` reservation boundary, retry policy, cleanup
 registration service, forced command-lifetime cleanup before an execution
 retry, intrinsic-verification policy, and bounded diagnostics as a public
 command. The workflow runner structurally validates step definitions when it
-validates the containing command. A step may update private workflow state only
-through its successful result; that state is not a substitute for an immutable
-cleanup receipt. A step cannot invent callbacks dynamically or bypass cleanup
-registration merely because it is not public.
+validates the containing command. Step names are unique within the workflow.
+
+The workflow runner creates an immutable `WorkflowState` whose `request` is the
+defensively copied normalized command request and whose initially empty
+`outputs` map is keyed by step name. On terminal successful
+`command.executed(step_output, receipt, effect_receipt)`, the runner validates
+`step_output` as bounded plain data, defensively copies and freezes it, and
+creates the next state with `outputs[step.name]=step_output`. Retry, fatal,
+thrown, cancelled, and timed-out outcomes do not commit an output. Later steps
+receive the new immutable state and re-resolve live native objects from stable
+descriptors in prior outputs; outputs never contain callbacks, userdata, or
+assumed-live targets.
+
+After all steps pass, a bounded, synchronous, non-yielding result projector
+derives the workflow command's stable public result from the completed state.
+The containing command may use that state as its private verification receipt,
+but it omits a composite `effect_receipt`: step effects have already been
+registered exactly once by the workflow runner. Workflow state is not a
+substitute for an immutable cleanup effect receipt, and a step cannot invent
+callbacks dynamically or bypass cleanup registration merely because it is not
+public.
 
 For example, save loading can retain the existing logical sequence:
 
@@ -862,10 +937,81 @@ an execution retry has cleaned every prior-attempt effect, the runner re-runs
 preflight, target validation, and `claims`, releasing or replacing unused prior
 reservations as needed before the next mutation. Cleanup policy
 `resources(effect_receipt)` may
-select an exact reservation or bind a provisional creation reservation to the
-stable resource identity returned in the effect receipt. It cannot introduce a
-claim for a pre-existing exclusive resource that was not reserved before
+select an exact reservation by `claim_key` or bind a provisional creation
+reservation by the same key to the stable resource identity returned in the
+effect receipt. The runner rejects duplicate or unknown binding keys, a concrete
+identity incompatible with its reservation, and any binding that attempts to
+introduce a pre-existing exclusive resource that was not reserved before
 mutation.
+
+### Caller resource-claim reservation
+
+Downstream code that will mutate an exclusive or dependency-tracked resource
+first calls the runner-routed public action
+`ds.reserveResourceClaims(claims, command_options)`. Its preflight proves that
+the active suite or test owner accepts reservations. Its ordinary definition
+`claims` projection is empty; its privileged `ONCE` execution atomically asks
+`ResourceDependencyIndex` to validate and reserve the supplied
+`ResourceClaimRequest[]`, then intrinsic verification proves that every claim is
+active under the expected owner. The returned `ResourceClaimReservation`
+contains only its stable reservation identity and bounded inspection methods;
+it does not expose the index.
+
+```lua
+---@class dwarfspec.ResourceClaimReservation
+local ResourceClaimReservation = {}
+
+---Releases every claim when this reservation remains pending.
+---@param reason? string
+---@return boolean released False when already released or consumed.
+function ResourceClaimReservation:release(reason) end
+
+---Returns whether this reservation can still be consumed or released.
+---@return boolean
+function ResourceClaimReservation:isPending() end
+
+---Atomically reserves caller-managed resource claims under the active owner.
+---@param claims dwarfspec.ResourceClaimRequest[]
+---@param command_options? dwarfspec.CommandOptions
+---@return dwarfspec.ResourceClaimReservation
+function ds.reserveResourceClaims(claims, command_options) end
+```
+
+The reservation command's execution outcome uses the reservation identity as
+verification receipt and omits `effect_receipt`. The claims are intentionally
+retained by the reservation capability rather than the ordinary attempt-claim
+path, so the runner's unlinked-reservation unwind does not release them when the
+command returns. This is a narrow lifecycle command exception analogous to
+`registerCleanup`, not a general capability available to command definitions.
+
+After caller code conclusively creates the effect, it passes the pending
+reservation and complete `ResourceClaimBinding[]` to `registerCleanup()` before
+yielding or publishing that effect. Registration atomically validates exact
+owner identity, pending state, every claim key and binding, dependency and
+lifetime policy, then consumes the entire reservation into the new cleanup
+transaction. Foreign, released, previously consumed, duplicate, missing, or
+incompatible claims are rejected. A reservation is deliberately all-or-nothing;
+callers needing independently produced partial effects reserve them separately.
+
+A pending caller reservation may declare dependencies on existing prerequisite
+claims, but no later claim may use that pending reservation as its prerequisite
+or compatible-sharing peer. It becomes available for those relationships only
+after a cleanup transaction consumes it. This guarantees that releasing an
+unused reservation cannot strand a dependent claim.
+
+If no effect is created, `reservation:release(reason)` releases every claim and
+returns `true`; a repeated release or release after consumption returns `false`
+without changing index state. Any unused pending reservation is automatically
+released when its suite or test owner closes. Because reservation release
+changes only runtime enforcement state and requires no external restoration, it
+does not create a cleanup transaction or cleanup-history event.
+
+This low-level sequence cannot make arbitrary caller mutation failure-atomic:
+an error can still occur after native mutation but before `registerCleanup()`.
+Failure-sensitive native construction should therefore be implemented as a
+project-defined verified command, whose adapter can return a structured partial
+effect receipt. The reservation API remains the supported escape hatch for
+callers that perform the short mutation-and-registration sequence themselves.
 
 ### Cleanup registration service and public command
 
@@ -876,13 +1022,18 @@ journal events. The command runner uses this service when an execution outcome
 returns an effect receipt. Internal command implementations receive no general
 registry access and cannot construct transaction handles themselves.
 
-`ds.registerCleanup(options)` is also a real public `ACTION` command routed
+`ds.registerCleanup(registration, command_options)` is also a real public
+`ACTION` command routed
 through the common runner. Its preflight proves that the current suite or test
-owner still accepts registrations, its `claims` projection is empty, and its
+owner still accepts registrations and that any supplied resource-claim
+reservation is pending under that exact owner. Its `claims` projection is empty,
+and its
 `ONCE` primary execution asks `CleanupRegistrationService` to register the
 caller-supplied immutable receipt, restore operation, and required verification
-operation. Its intrinsic verification proves that the returned transaction is
-pending under the expected owner and that its registration event exists, then
+operation while atomically consuming and binding the supplied resource
+reservation when present. Its intrinsic verification proves that the returned
+transaction is pending under the expected owner, owns every transferred claim,
+and that its registration event exists, then
 it returns the caller-visible handle. Its execution outcome uses the transaction
 identity as verification receipt and omits `effect_receipt`: the registration
 transaction is the command's intended framework effect, but it is not itself an
@@ -997,7 +1148,7 @@ labeled failures.
 
 Each call that expends a transaction receives a new finite cleanup deadline,
 independent of the command deadline that caused or preceded cleanup. Timeout
-precedence is the registration's `timeout_ms`, then
+precedence is the registration's `cleanup_timeout_ms`, then
 `settings.cleanup.timeout_ms`, then the framework default of 10,000
 milliseconds. Values must be positive finite integers; cleanup cannot be made
 unlimited. Manual execution, command-finally execution, and automatic teardown
@@ -1143,21 +1294,24 @@ their parent. Public commands and cleanup remain invalid when neither a suite
 execution nor a test attempt is active. Service-owned run cleanup is a separate
 run-level concern and does not appear in either owner projection.
 
-After attempt-local teardown hooks return, registration closes and automatic
-cleanup executes every transaction that remains pending. DwarfSpec then
+After attempt-local teardown hooks return, registration closes, every unused
+pending caller claim reservation is released, and automatic cleanup executes
+every transaction that remains pending. DwarfSpec then
 terminalizes interrupted transactions, materializes the attempt's
 `cleanup_transactions` result, and only afterward publishes `test.finished`.
 The event's behavior status remains distinct from cleanup disposition; failed
 or unconfirmed cleanup is reported separately and still contributes to the run
 failure and quarantine rules. If interruption prevents the ordinary test
-callback from finishing, the emergency finalizer first attempts remaining
-test-owned transactions in dependency-safe reverse-topological order with LIFO
-tie-breaking whenever the execution host is still usable. Run terminalization
+callback from finishing, the emergency finalizer first releases unused pending
+test-owned claim reservations and then attempts remaining test-owned
+transactions in dependency-safe reverse-topological order with LIFO tie-breaking
+whenever the execution host is still usable. Run terminalization
 then synthesizes the attempt result and marks only transactions that remain
 unresolved `unconfirmed` before `run.finished`.
 
-After suite-level teardown hooks return, suite registration closes and
-automatic cleanup executes every remaining suite-owned transaction in
+After suite-level teardown hooks return, suite registration closes, every
+unused pending suite-owned claim reservation is released, and automatic cleanup
+executes every remaining suite-owned transaction in
 dependency-safe reverse-topological order with LIFO tie-breaking. DwarfSpec
 terminalizes unresolved suite transactions, materializes
 the suite's cleanup result, and only afterward publishes `suite.finished`.
@@ -1170,7 +1324,8 @@ before `run.finished`.
 Suite finalization is guaranteed even when suite-level setup fails, discovers
 no runnable tests, or interruption prevents suite-level teardown from running.
 Any suite transaction already registered is executed when possible or
-terminalized `unconfirmed`; it is never reassigned to the first or last test.
+terminalized `unconfirmed`; unused pending claim reservations are released first,
+and neither kind of state is reassigned to the first or last test.
 
 Before publishing `test.finished`, the service's test-attempt finalizer folds
 only that attempt's authoritative transaction events into a
@@ -1364,7 +1519,8 @@ src/dwarfspec/driver/command/
     workflow.lua
 ```
 
-- `context.lua` exposes bounded run capabilities.
+- `context.lua` constructs the read-only, execution, and privileged
+  cleanup-registration capability views without exposing runner state.
 - `deadline.lua` owns monotonic deadline calculations.
 - `definition.lua` validates and freezes definitions.
 - `outcomes.lua` constructs ready, pending, fatal, executed, and explicit
@@ -1401,9 +1557,9 @@ and lifetime enums, and journal/result validation. The controller result interpr
 validates and persists the supplied journal and owner-scoped projections
 without interpreting pending registry state or cleanup semantics.
 
-The root `dwarfspec.ds` module builds the context and registry, then binds thin
-public functions that invoke the runner. It contains no duplicate pointer,
-input, game-state, or mount command implementation.
+The root `dwarfspec.ds` module builds the context factory and registry, then
+binds thin public functions that invoke the runner. It contains no duplicate
+pointer, input, game-state, or mount command implementation.
 
 The protocol namespace owns command-kind, execution-retry-policy,
 intrinsic-verification-kind, execution-owner-scope, and failure-stage enums,
@@ -1482,10 +1638,17 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - structural definition validation separately from documented retry-safety and
   execution-receipt qualification fixtures;
 - workflow-step conformance for gates, claims, execution outcomes, retry,
-  effect-driven cleanup, verification, child events, and shared deadlines;
+  effect-driven cleanup, verification, child events, shared deadlines, unique
+  step names, immutable named outputs, no output commit on nonsuccess, and final
+  result projection;
 - one `CleanupRegistrationService` used by runner-managed effect cleanup and by
   the fully runner-routed public `registerCleanup` command, without recursive
   transaction registration;
+- caller resource reservation before mutation, owner isolation, exact and
+  provisional binding, atomic all-claim consumption into `registerCleanup`,
+  manual no-effect release, rejection of partial/foreign/expended reservations,
+  dependency restrictions while pending, and automatic unused-reservation
+  release before owner cleanup;
 - cleanup receipt validation, defensive freezing, identical callback delivery,
   runtime enforcement of required receipt data without attempting to inspect
   callback closure semantics, and exceptional self-rollback abandonment;
@@ -1493,7 +1656,10 @@ introduced. An injected fake monotonic clock and scheduler prove:
   exactly-once journal event for `unconfirmed`;
 - `claims` projection and resource-claim reservation before mutation,
   cross-level exclusive-conflict detection, explicit compatible sharing and
-  dependency relationships, `DirectedAcyclicGraph` cycle validation,
+  dependency relationships, exact and provisional claim keys, deterministic
+  effect-receipt binding, rejection of duplicate/unknown/incompatible bindings,
+  release of every unlinked reservation on structured no-effect, thrown,
+  cancelled, and timed-out exits, `DirectedAcyclicGraph` cycle validation,
   `ResourceDependencyIndex` lifetime-direction validation, reverse-topological
   cleanup with LIFO tie-breaking, rejection of prerequisite-claim release while
   a dependent claim remains active, deterministic `dependency_blocked` failure
@@ -1527,6 +1693,9 @@ introduced. An injected fake monotonic clock and scheduler prove:
   callbacks, plus read-only cleanup-verification commands inheriting the
   transaction deadline and owner;
 - nested workflow steps sharing the parent deadline;
+- read-only public queries and assertions nested from preflight or verification
+  inheriting the exact parent deadline, cancellation, owner, stage, and event
+  identity, with nested mutations rejected;
 - unique nested invocation identities and exact parent-child event correlation;
 - target re-resolution across yields;
 - bounded and rate-limited diagnostics;
@@ -1618,8 +1787,9 @@ evidence; a silent or externally interrupted run is not.
   workflow-step contract, and the runner.
 - Add suite-execution and test-attempt cleanup indexes, stable transaction
   identities, `CleanupRegistrationService`, the runner-routed public
-  `registerCleanup` command, authoritative run-journal lifecycle events, and
-  the service-materialized owner-scoped cleanup result projections.
+  `reserveResourceClaims` and `registerCleanup` commands, authoritative
+  run-journal lifecycle events, and the service-materialized owner-scoped
+  cleanup result projections.
 - First implement and qualify the prerequisite
   [directed acyclic graph utility proposal](directed-acyclic-graph-proposal.md).
 - Add the run-scoped `ResourceDependencyIndex`, its graph instance, cross-level
@@ -1671,11 +1841,14 @@ of `spawnItem`, `createStockpile`, `reserveMapTiles`, `spyJobs`, `queryUnits`,
 command execution, timeout placement, cleanup-transaction, retry, migration, or
 validation-cadence language in that document. In particular:
 
+- `reserveResourceClaims` is the public pre-mutation reservation command used
+  when downstream cleanup registration must own tracked resources;
 - `registerCleanup` is a public command backed by the internal
   `CleanupRegistrationService` and returns the manually executable transaction
   defined here;
-- `timeout_ms` belongs to trailing `CommandOptions`, while a frame budget remains
-  a logical wait option where applicable;
+- command `timeout_ms` belongs to trailing `CommandOptions`; the distinct
+  `CleanupRegistration.cleanup_timeout_ms` controls later transaction execution,
+  while a frame budget remains a logical wait option where applicable;
 - initial managed fixture mutations use `ONCE`; any later retry-safe fixture
   must satisfy the shared explicit policy rather than inventing local retry;
 - command definitions replace direct command facades and bare callbacks; and
@@ -1752,6 +1925,13 @@ The architecture is complete when:
 - one runner owns every built-in and project command invocation;
 - every command resolves a finite wall-clock deadline;
 - every command has an explicit read-only preflight gate;
+- registry validation accepts only structurally valid definitions, while
+  capability boundaries and conformance tests enforce behavioral callback
+  contracts that function inspection cannot prove;
+- preflight, claims, and verification receive read-only contexts; primary
+  execution receives no cleanup or resource-index mutation capability; only the
+  runner and the two privileged lifecycle commands can reach their respective
+  resource-reservation or cleanup-registration capabilities;
 - every mutating primary operation is exactly once by default;
 - `EXPLICIT_RETRY_SAFE` is fully implemented, retries only explicit outcomes
   under one stable operation key and deadline, preserves attempt receipts,
@@ -1762,8 +1942,9 @@ The architecture is complete when:
   independently observable;
 - caller verification is optional, retryable, documented, and unable to weaken
   intrinsic verification;
-- nested read-only verification commands inherit the parent deadline and appear
-  as child events with unique invocation and parent identities;
+- nested read-only preflight and verification commands inherit the parent
+  deadline and appear as child events with unique invocation, parent, owner, and
+  stage identities;
 - command timeout errors identify the exact lifecycle stage and last bounded
   observation;
 - execution outcomes distinguish private verification evidence from an explicit
@@ -1778,12 +1959,18 @@ The architecture is complete when:
 - each workflow step uses the common gate, claims, outcome, retry, cleanup,
   verification, deadline, and child-event contracts rather than an implicit
   mutation path;
+- workflow state consists only of the immutable normalized request and bounded
+  frozen outputs keyed by unique successful step names; nonsuccessful outcomes
+  commit no output, and one pure result projector derives the public result;
 - resource claims are tracked across service-run, suite-execution,
   test-attempt, and command-invocation levels, with exclusive conflicts checked
   across the complete run rather than only within one cleanup registry;
 - mutating definitions project claims after preflight through a read-only
   `claims` method, and the runner reserves them before execution and validates
-  effect-linked resources against those reservations;
+  effect-linked resources against stable claim-key bindings to those
+  reservations;
+- the runner releases every reservation not linked to an effect on every exit
+  path and retains a claim only for registered cleanup or explicit quarantine;
 - one `DirectedAcyclicGraph` rejects cycles, `ResourceDependencyIndex` rejects
   invalid lifetime direction, and `CleanupPlanner` plans
   dependent-before-prerequisite cleanup and uses LIFO only to
@@ -1792,6 +1979,10 @@ The architecture is complete when:
   runner uses it for command effect receipts, while the public runner-routed
   `registerCleanup` command uses it for downstream registration without
   recursively creating a second transaction;
+- downstream callers can reserve owner-bound resource claims before mutation,
+  then atomically consume and bind the complete reservation into
+  `registerCleanup`; no-effect and unused reservations release without becoming
+  cleanup transactions;
 - caller cleanup registrations return manually executable transactions, and
   teardown executes every transaction that remains pending;
 - cleanup callbacks receive a required immutable transaction receipt, and the
