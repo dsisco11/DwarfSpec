@@ -399,8 +399,8 @@ function DS.setGameSpeed(tps) end
 ---@return boolean
 function DS.setTurboSpeed(enabled) end
 
----Selects unit-speed behavior for one example.
----Both behaviors default to false, and at least one must be true. When
+---Selects targeted unit-speed behavior for one example.
+---Each behavior defaults to false, and at least one must be true. When
 ---`unit_ids` is omitted, DwarfSpec snapshots the currently eligible active,
 ---living citizens and long-term residents when the command is called.
 ---@class dwarfspec.UnitSpeedOptions
@@ -408,17 +408,26 @@ function DS.setTurboSpeed(enabled) end
 ---@field teleport_jobs? boolean Moves eligible units to guarded current-job destinations each simulation tick. Defaults to false.
 ---@field unit_ids? integer[] Restricts activation to a nonempty list of unique stable ids for the same active, living citizen and long-term-resident population used by omitted targeting.
 
+---Selects whole-simulation fast movement without explicit unit targeting.
+---@class dwarfspec.FastMovementUnitSpeedOptions
+---@field fast_actions? boolean Sets supported positive unit action timers to one each simulation tick. Defaults to false.
+---@field fast_movement boolean Enables the process-global native turbo-speed switch.
+---@field teleport_jobs? boolean Moves eligible units to guarded current-job destinations each simulation tick. Defaults to false.
+
 ---Identifies one loaded-map unit coordinate.
 ---@class dwarfspec.UnitPosition
 ---@field x integer
 ---@field y integer
 ---@field z integer
 
----Activates per-unit action speed and/or guarded job travel for this example.
+---Activates per-unit action speed, guarded job travel, and/or whole-simulation
+---fast movement for this example. `fast_movement` uses the same cleanup-backed
+---native turbo-speed behavior as `setTurboSpeed(true)`.
 ---Unlike `setGameSpeed`, this does not change the game's TPS target. Cleanup
 ---disables the accelerator and restores coordinates changed through the shared
 ---position controller, but does not reverse paths, jobs, timers, or broader
 ---gameplay effects.
+---@overload fun(options: dwarfspec.FastMovementUnitSpeedOptions)
 ---@param options dwarfspec.UnitSpeedOptions
 function DS.setUnitSpeed(options) end
 

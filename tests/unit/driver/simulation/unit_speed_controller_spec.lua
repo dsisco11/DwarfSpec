@@ -110,24 +110,33 @@ describe('driver unit speed controller', function()
     it('accepts every enabled behavior combination', function()
         for _, options in ipairs({
             {fast_actions=true},
+            {fast_movement=true},
             {teleport_jobs=true},
-            {fast_actions=true, teleport_jobs=true},
+            {fast_actions=true, fast_movement=true, teleport_jobs=true},
         }) do
             local state, controller = fixture()
             controller:activate(options)
-            assert.is_true(controller.active)
-            assert.equals(1, state.starts)
-            assert.equals(1, state.position_prearms)
+            if options.fast_actions or options.teleport_jobs then
+                assert.is_true(controller.active)
+                assert.equals(1, state.starts)
+                assert.equals(1, state.position_prearms)
+            else
+                assert.is_false(controller.active)
+                assert.equals(0, state.starts)
+                assert.equals(0, state.position_prearms)
+            end
         end
     end)
 
     it('rejects missing, unknown, disabled, and mistyped flags', function()
         assert_validation_failure(nil, 'options must be a table')
-        assert_validation_failure({}, 'requires fast_actions or teleport_jobs')
+        assert_validation_failure({}, 'requires fast_actions, fast_movement, or teleport_jobs')
         assert_validation_failure({fast_actions=false, teleport_jobs=false},
-            'requires fast_actions or teleport_jobs')
+            'requires fast_actions, fast_movement, or teleport_jobs')
         assert_validation_failure({fast_actions='yes'},
             'fast_actions must be a boolean')
+        assert_validation_failure({fast_movement='yes'},
+            'fast_movement must be a boolean')
         assert_validation_failure({teleport_jobs=1},
             'teleport_jobs must be a boolean')
         assert_validation_failure({fast_actions=true, surprise=true},
@@ -135,6 +144,8 @@ describe('driver unit speed controller', function()
     end)
 
     it('rejects invalid unit id collection shapes and duplicates', function()
+        assert_validation_failure({fast_movement=true, unit_ids={1}},
+            'fast_movement cannot be used with unit_ids')
         assert_validation_failure({fast_actions=true, unit_ids='1'},
             'unit_ids must be a nonempty array')
         assert_validation_failure({fast_actions=true, unit_ids={}},
@@ -149,6 +160,16 @@ describe('driver unit speed controller', function()
             'contain only integer ids')
     end)
 
+    it('returns fast-movement ownership without creating targeted work', function()
+        local state, controller = fixture()
+        local fast_movement = controller:activate({fast_movement=true})
+
+        assert.is_true(fast_movement)
+        assert.is_false(controller.active)
+        assert.equals(0, state.starts)
+        assert.equals(0, #state.cleanups)
+    end)
+
     it('copies and freezes caller options and explicit ids', function()
         local state, controller = fixture()
         local ids = {-4, 9}
@@ -160,6 +181,7 @@ describe('driver unit speed controller', function()
         ids[3] = 200
 
         assert.is_true(controller.configuration.fast_actions)
+        assert.is_false(controller.configuration.fast_movement)
         assert.is_false(controller.configuration.teleport_jobs)
         assert.same({-4, 9}, state.explicit_calls)
         assert.same({-4, 9}, state.retained)

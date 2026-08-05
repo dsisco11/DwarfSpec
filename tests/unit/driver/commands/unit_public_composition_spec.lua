@@ -14,7 +14,8 @@ describe('unit command source and installed composition', function()
         local speed = {activate=function(_, options)
             calls[#calls + 1] = {'speed', options}
         end}
-        load_module('unit_speed').bind(ds, {controller=speed})
+        load_module('unit_speed').bind(ds, {controller=speed,
+            enable_fast_movement=function() end})
         load_module('unit_position').bind(ds,
             {position_controller=positions})
         return ds, calls
