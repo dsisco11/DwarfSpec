@@ -302,8 +302,8 @@ native userdata.
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
 ---@field receipt dwarfspec.CleanupReceipt
----@field restore fun(receipt: dwarfspec.CleanupReceipt)
----@field verify fun(receipt: dwarfspec.CleanupReceipt): boolean|dwarfspec.GateResult|nil
+---@field restore fun(context: dwarfspec.CleanupExecutionContext, receipt: dwarfspec.CleanupReceipt)
+---@field verify fun(context: dwarfspec.CleanupExecutionContext, receipt: dwarfspec.CleanupReceipt): boolean|dwarfspec.GateResult|nil
 ---@field timeout_ms? integer
 
 ---@class dwarfspec.CleanupTransaction
@@ -324,8 +324,11 @@ function CleanupTransaction:isPending() end
 function ds.registerCleanup(options) end
 ```
 
-This command exposes DwarfSpec's existing cleanup registry to live specs. It is
-the foundational command for project-defined native fixtures.
+This public action command routes through the verified command runner and uses
+its internal `CleanupRegistrationService`; it does not expose a cleanup registry
+directly. It is the foundational downstream command for project-defined native
+fixtures and produces the same transaction model as runner-managed command
+effects.
 
 Contract:
 
@@ -351,15 +354,16 @@ Contract:
   deadline when it throws, returns `false`, or explicitly returns
   `cleanup.pending(...)`; a no-return assertion callback passes when it does not
   throw.
-- `restore` and `verify` receive the same immutable receipt as their only
-  contextual data. Capturing required cleanup identity through closure variables
-  is unsupported. DwarfSpec runs both callbacks inside the transaction's
-  private execution context, which owns the deadline, state, attribution, and
-  ambient command restrictions. `restore` cannot invoke public commands or
-  register more cleanup. `verify` may invoke only read-only public queries or
-  assertions; they inherit the transaction's owner, cancellation state, and
-  remaining cleanup deadline. Public mutations or cleanup registration from
-  verification are contract errors.
+- `restore` and `verify` receive a restricted cleanup execution context plus the
+  same immutable receipt. The receipt is their only transaction-specific data.
+  Capturing required cleanup identity through closure variables is unsupported.
+  The context exposes bounded time, cleanup cancellation, safe diagnostics, and
+  read-only query/assertion execution during verification; mutable transaction
+  state and journal mutation remain private to the engine. `restore` cannot
+  invoke public commands or register more cleanup. `verify` may invoke only
+  read-only public queries or assertions; they inherit the transaction's owner,
+  fresh cleanup cancellation scope, and remaining cleanup deadline. Public
+  mutations or cleanup registration from verification are contract errors.
 - The runtime validates receipt shape and presence but does not attempt to
   inspect callback upvalues or prove that a callback uses no closure values.
   Correctness-critical stable identities, baselines, and operation keys are
@@ -378,7 +382,8 @@ Contract:
   invoked from a nested test remains attributed to the suite cleanup result,
   while the raised error is observed by the currently active test lifecycle.
 - One callback failure does not suppress later cleanup entries.
-- Registration itself performs no mutation. The caller cannot discard a
+- Registration performs no product or native mutation; its intended framework
+  effect is creation of the cleanup transaction. The caller cannot discard a
   transaction without executing it.
 - Test or suite teardown automatically executes every transaction that remains
   pending in dependency-safe reverse-topological order, using LIFO only to
@@ -391,10 +396,10 @@ local registration_id = create_registration()
 local cleanup = ds.registerCleanup{
     label='remove temporary native registration',
     receipt={registration_id=registration_id},
-    restore=function(receipt)
+    restore=function(_context, receipt)
         remove_registration(receipt.registration_id)
     end,
-    verify=function(receipt)
+    verify=function(_context, receipt)
         assert.is_false(registration_exists(receipt.registration_id))
     end,
 }
