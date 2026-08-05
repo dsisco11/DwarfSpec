@@ -1247,6 +1247,12 @@ Every test event and `host_report.test_attempts[]` record in the successor
 schema therefore carries its parent `suite_execution_id` as well as its stable
 test identity and repeat index.
 
+If interruption prevents ordinary test finalization, the surviving execution
+host first attempts remaining test-owned cleanup transactions in strict LIFO
+order. Only transactions that cannot reach a normal disposition are then
+terminalized as `unconfirmed` before the synthesized test result and
+`run.finished`.
+
 Every stage-aware command event carries a tagged owner scope and either the
 active suite-execution ID or nested test-attempt ID. All public commands are
 legal in suite-level setup and teardown. Commands invoked during test-local
@@ -1266,6 +1272,14 @@ Owner tags logically partition suite and test transactions without creating
 separate journals. Registration order is local to the tagged owner; transaction
 IDs remain unique within the run. Service-owned run cleanup retains its existing
 separate run-level events.
+
+The successor runtime also owns one run-scoped resource ownership index across
+service-run, suite-execution, test-attempt, and command-invocation levels. It
+provides cross-level exclusive-claim checks and explicit sharing or dependency
+relationships while cleanup registries remain owner-local. The index is
+runtime enforcement state, not a second historical publisher; cleanup events
+and their bounded resource evidence remain authoritative for retained and
+persisted results.
 
 Before publishing `test.finished`, the service folds the test attempt's events
 into `host_report.test_attempts[].cleanup_transactions`. Before publishing

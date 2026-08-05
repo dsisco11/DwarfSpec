@@ -106,10 +106,12 @@ All commands in this proposal execute inside the in-process DwarfSpec test
 environment. World-dependent commands require a loaded fortress map and fail
 before mutation if their preconditions are not met.
 
-Each suite execution and nested test attempt receives an isolated ownership
-ledger shared by these commands. The ledger records stable resource identities,
-logical tile reservations, spies, and project-registered cleanup entries. The
-owning test or suite completion drains its ledger in strict LIFO order.
+Each suite execution and nested test attempt receives an isolated cleanup
+ledger shared by these commands. One run-scoped resource ownership index tracks
+stable resource identities, logical tile reservations, spies, inactive-unit
+claims, and their tagged service-run, suite, test, or command owner across all
+active lifecycle levels. Cleanup remains owner-local and drains in strict LIFO
+order, while exclusivity checks consult the complete resource index.
 
 ### Register before publication
 
@@ -288,8 +290,9 @@ native userdata.
 local CleanupTransaction = {}
 
 ---Executes and unregisters this transaction when it is still pending.
+---Raises after recording a restore or verification failure.
 ---@param reason? string
----@return boolean executed
+---@return boolean executed_and_verified False only when already expended.
 function CleanupTransaction:execute(reason) end
 
 ---Returns whether this transaction remains registered for teardown.
@@ -320,14 +323,24 @@ Contract:
   deadline when it throws, returns `false`, or explicitly returns
   `cleanup.pending(...)`; a no-return assertion callback passes when it does not
   throw.
+- `restore` uses transaction-owned bounded restoration capabilities and cannot
+  invoke public commands or register more cleanup. `verify` may invoke only
+  read-only public queries or assertions; they inherit the transaction's owner,
+  cancellation state, and remaining cleanup deadline. Public mutations or
+  cleanup registration from verification are contract errors.
 - A restore error does not suppress verification when time remains; both
   outcomes are retained and the transaction remains failed.
 - The returned transaction can be executed manually at any later point in its
   owning suite or test lifecycle while it remains pending.
 - Manual execution unregisters and expends the transaction before calling
-  `restore` and `verify`; repeated execution does not invoke them again.
-- A manual failure is recorded in cleanup evidence and propagates to the active
-  suite or test lifecycle.
+  `restore` and `verify`; successful execution returns `true`, while repeated
+  execution returns `false` without invoking them again.
+- A manual failure is recorded with terminal `failed` disposition before its
+  composed cleanup error is raised into the active suite or test lifecycle. It
+  does not return `false` and is not silently retried during teardown.
+- Manual execution does not transfer ownership. A suite-owned transaction
+  invoked from a nested test remains attributed to the suite cleanup result,
+  while the raised error is observed by the currently active test lifecycle.
 - One callback failure does not suppress later cleanup entries.
 - Registration itself performs no mutation. The caller cannot discard a
   transaction without executing it.
@@ -485,9 +498,10 @@ Contract:
   unit.
 - The optional predicate receives a copied scalar position after built-in
   filters.
-- A reservation prevents overlap only among DwarfSpec commands in the same
-  example. It is not a native lock and must be revalidated immediately before a
-  later mutating command consumes it.
+- A reservation prevents overlap with every incompatible active reservation in
+  the run-scoped resource ownership index, including claims owned by an active
+  suite and its nested test attempts. It is not a native lock and must be
+  revalidated immediately before a later mutating command consumes it.
 - Cleanup releases logical reservations and verifies that DwarfSpec retains no
   reservation records. It does not modify the map.
 
@@ -636,7 +650,7 @@ Contract:
 - If a target disappears, changes world identity, leaves the map, dies, or
   otherwise reaches a state where clearing the bit would corrupt native
   lifecycle state, cleanup fails closed without forcing reactivation. The
-  unconfirmed cleanup quarantines the executor under the shared contract.
+  failed cleanup quarantines the executor under the shared contract.
 
 Example:
 
@@ -710,12 +724,14 @@ end, {
 the reservation remains valid until its owning suite or test cleanup.
 `createStockpile()` may
 consume one or more reservations and records their relationship in the
-ownership ledger. Cleanup removes dependent owned jobs before removing items or
-stockpiles and releases logical reservations last.
+resource ownership index. Cleanup removes dependent owned jobs before removing
+items or stockpiles and releases logical reservations last.
 
-The ownership ledger must not infer ownership merely because an object occupies
-a reserved tile. Only identities returned by successful fixture commands are
-owned.
+The resource ownership index must not infer ownership merely because an object
+occupies a reserved tile. Only explicit claims established by fixture commands
+are owned. Claims are tagged by owner, and consumption, sharing, or dependency
+across suite, test, command, or service-run levels requires an explicit domain
+relationship rather than being inferred from lifecycle nesting.
 
 ### Job spies and accelerated simulation
 
@@ -756,8 +772,12 @@ The implementation should preserve DwarfSpec's existing ownership boundaries:
 - Native unit, item, building, map, and job behavior lives in focused driver
   adapters or controllers.
 - The run's suite-execution and test-attempt contexts own isolated cleanup
-  registries, ownership ledgers, logical tile reservations, active job spies,
-  and inactive-unit flag transitions.
+  registries and cleanup execution indexes.
+- One run-scoped resource ownership index tracks owner-tagged resource claims,
+  logical tile reservations, active job spies, inactive-unit flag transitions,
+  cleanup linkage, dependencies, compatible sharing, and exclusive conflicts
+  across service-run, suite-execution, test-attempt, and command-invocation
+  levels.
 - Closed DwarfSpec discriminators live in protocol enum modules as immutable
   numeric tables.
 - Canonical DF discriminators such as `df.item_type`, `df.item_quality`, and
@@ -795,12 +815,17 @@ Each command requires unit tests for:
   execution;
 - stable suite/test owner and owning-command attribution;
 - isolation between suite executions, neighboring tests, and repeats;
+- cross-level resource-claim conflict detection, explicit sharing and
+  dependency relationships, and claim retention after failed or unconfirmed
+  cleanup;
 - suite-owned registration during setup and teardown, manual suite-transaction
   expenditure from a nested test without ownership transfer, and automatic
   suite cleanup after setup failure or zero executed tests;
 - one terminal transaction disposition in both the service journal and
   persisted result;
 - `unconfirmed` reporting when interruption prevents terminal verification;
+- cleanup callback command restrictions and inherited deadlines for read-only
+  queries or assertions used during cleanup verification;
 - rejection of duplicate, missing, or journal-inconsistent transaction result
   records;
 - verification failure aggregation; and
@@ -846,15 +871,16 @@ Passing assertions without verified cleanup are insufficient.
 
 ## Delivery order
 
-1. Expose `registerCleanup()`, the example ownership ledger, and the cleanup
-   history/result-journal integration defined by the verified command execution
-   proposal.
+1. Expose `registerCleanup()`, the run-scoped resource ownership index, and the
+   cleanup history/result-journal integration defined by the verified command
+   execution proposal.
 2. Add `reserveMapTiles()` and `queryUnits()` as read-mostly discovery
    primitives.
 3. Add `disableUnitsAi()` with flag-only ownership and fail-closed verified
    restoration.
 4. Add `spawnItem()` with complete ownership and removal verification.
-5. Add `createStockpile()` on top of tile reservations and the ownership ledger.
+5. Add `createStockpile()` on top of tile reservations and the resource
+   ownership index.
 6. Add `spyJobs()` with Busted compatibility and reconciled native observation.
 7. Add `runUntil()` as a pause-safe composition over `await()`.
 

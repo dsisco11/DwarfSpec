@@ -134,6 +134,21 @@ scope and stable owner ID travel together in command events, cleanup events,
 result projections, and nested invocation context. Service-owned run cleanup is
 outside this enum and keeps its separate run-level protocol.
 
+### Resource ownership index
+
+The resource ownership index is one run-scoped runtime index of every active
+DwarfSpec resource claim. Claims are tagged at the level that owns them:
+service-run, suite-execution, test-attempt, or command-invocation. Suite and
+test cleanup registries remain isolated, but conflict detection is not isolated:
+every claim lookup considers all active levels in the run.
+
+Each claim records a bounded resource kind and stable identity or logical
+region, its tagged owner and parent owner chain, its cleanup transaction when
+one exists, and any explicit dependency or compatible-sharing relationship.
+The index prevents two scopes from independently claiming an exclusive
+resource merely because they use different cleanup registries. It is an
+execution-safety index, not a second cleanup-history source of truth.
+
 ### Preflight gate
 
 The preflight gate is a read-only predicate that resolves current native or
@@ -227,9 +242,9 @@ An expired command can therefore fail and still restore or remove owned state.
 ### Register ownership before mutation
 
 Any command that creates or temporarily changes reversible state establishes
-cleanup ownership before the state can escape. When allocation and publication
-cannot be separated, the command reserves a pending ownership entry and later
-attaches the stable identity.
+both a resource claim and cleanup ownership before the state can escape. When
+allocation and publication cannot be separated, the command reserves pending
+resource and cleanup entries and later attaches the stable identity.
 
 ### Re-resolve live targets
 
@@ -624,6 +639,7 @@ The run-scoped command context exposes only bounded capabilities:
 - cancellation state;
 - current mount and stable-subject resolution;
 - command-local cleanup checkpoint and ownership registration;
+- run-scoped resource-claim lookup, reservation, dependency, and release;
 - render-generation capture and observation;
 - safe diagnostic recording;
 - internal workflow-step execution; and
@@ -655,11 +671,40 @@ but do not create independent public command results or reset timeout budgets.
 
 ## Cleanup and transactional ownership
 
+### Run-scoped resource ownership
+
+The resource ownership index spans service-run, suite-execution, test-attempt,
+and command-invocation lifetimes. Each active claim is tagged with its exact
+owner, but exclusive-resource checks query the complete run index. A nested
+test therefore cannot claim a unit, tile reservation, screen, pointer state, or
+other exclusive resource already claimed by its suite merely because its
+cleanup registry is different.
+
+Commands may use explicit compatible-sharing or dependency relationships when
+a domain contract permits them. Compatibility is never inferred from nesting
+or matching coordinates. Consuming or transferring a claim requires an
+explicit command contract; otherwise a command may consume only a claim owned
+by its exact owner. Cleanup registries and execution indexes remain private to
+their individual owners even when the resource index relates their claims.
+
+A resource claim is reserved before mutation or publication and linked to its
+cleanup transaction. It remains active while cleanup is pending or running.
+Successful verified cleanup releases it; safe abandonment releases a prearmed
+claim for which no mutation or publication occurred. Failed or unconfirmed
+cleanup leaves the claim unresolved and contributes to executor quarantine
+until the existing recovery contract proves the resource clean. Historical
+cleanup state remains authoritative in the service journal; the runtime index
+must not become a competing result ledger.
+
+### Cleanup transaction lifecycle
+
 The cleanup registry owns executable cleanup transactions rather than bare
 callbacks. Registration returns a handle with an explicit lifecycle:
 
 ```lua
 ---@class dwarfspec.CleanupTransaction
+---Manually expends pending cleanup; raises after recording a cleanup failure.
+---The boolean is returned only on the normal success/already-expended path.
 ---@field execute fun(self: dwarfspec.CleanupTransaction, reason?: string): boolean
 ---@field isPending fun(self: dwarfspec.CleanupTransaction): boolean
 ```
@@ -684,7 +729,14 @@ then records `complete` or `failed` and is expended. Repeated execution is
 idempotent: it reports that no pending work was executed and never invokes the
 callbacks again. A manual failure is recorded in authoritative cleanup evidence
 and propagates to the active suite or test lifecycle; it is not silently retried
-during teardown.
+during teardown. On normal return, `true` means the pending transaction was
+successfully restored and verified, while `false` means it had already been
+expended. Restore or verification failure first records the terminal `failed`
+disposition and then raises the composed cleanup failure into the currently
+active Busted lifecycle. Manual execution never changes the transaction's
+tagged owner: a suite-owned transaction invoked from a nested test remains in
+the suite cleanup journal and result projection even though its raised error is
+observed by the active test lifecycle.
 
 At test or suite teardown, the cleanup system automatically executes every
 transaction that remains pending in its owning scope in strict LIFO order. A
@@ -738,6 +790,17 @@ verification fatality, or cleanup-deadline expiry produces `failed`;
 from establishing an outcome. Cleanup callbacks have the same cooperative
 limitation as command callbacks and cannot safely be interrupted while executing
 synchronous native or Lua code.
+
+Cleanup callbacks have a restricted command boundary. A restore callback does
+not invoke public commands; it uses its transaction-owned bounded restoration
+capabilities so it cannot recursively register cleanup after owner registration
+has closed. Verification remains read-only: it may invoke public queries or
+assertions, but those nested invocations inherit the cleanup transaction's
+owner identity, cancellation state, and remaining cleanup deadline rather than
+starting a fresh command timeout. Mutating commands and cleanup registration
+are fatal contract errors from cleanup verification. Nested verification
+commands retain normal child command events while the transaction remains the
+owner of the cleanup outcome.
 
 An expired verification deadline does not discard the execution receipt. The
 receipt remains available to its registered transaction so partial or
@@ -842,9 +905,10 @@ terminalizes interrupted transactions, materializes the attempt's
 The event's behavior status remains distinct from cleanup disposition; failed
 or unconfirmed cleanup is reported separately and still contributes to the run
 failure and quarantine rules. If interruption prevents the ordinary test
-callback from finishing, run terminalization still synthesizes the attempt
-result and marks every unresolved transaction `unconfirmed` before
-`run.finished`.
+callback from finishing, the emergency finalizer first attempts remaining
+test-owned transactions in strict LIFO order whenever the execution host is
+still usable. Run terminalization then synthesizes the attempt result and marks
+only transactions that remain unresolved `unconfirmed` before `run.finished`.
 
 After suite-level teardown hooks return, suite registration closes and
 automatic cleanup executes every remaining suite-owned transaction in strict
@@ -1070,8 +1134,11 @@ about public API registration.
 
 The host cleanup subsystem owns separate pending-only LIFO registries and
 mutable cleanup execution indexes for suite executions and their nested test
-attempts. The automation service remains the sole publisher and owns the
-authoritative run-scoped event journal. Its suite and test-attempt finalizers
+attempts. A run-scoped resource ownership index relates active claims across
+service-run, suite-execution, test-attempt, and command-invocation levels while
+preserving those owner-local cleanup registries. The automation service remains
+the sole publisher and owns the authoritative run-scoped event journal. Its
+suite and test-attempt finalizers
 fold the selected owner's transaction events into terminal result projections.
 Protocol modules own execution-owner scopes, transaction event types, disposition
 and lifetime enums, and journal/result validation. The controller result interpreter
@@ -1153,6 +1220,9 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - cleanup prearming, manual expenditure, command-lifetime cleanup, and teardown behavior;
 - cleanup state transitions through every terminal disposition, including an
   exactly-once journal event for `unconfirmed`;
+- resource-claim reservation before mutation, cross-level exclusive-conflict
+  detection, explicit compatible sharing and dependency relationships, and
+  verified release or quarantine retention;
 - one-shot restoration and retryable cleanup verification under an independent
   finite cleanup deadline, including restoration errors followed by attempted
   verification and cleanup timeout reporting;
@@ -1162,7 +1232,8 @@ introduced. An injected fake monotonic clock and scheduler prove:
   `suite.finished` ordering after their cleanup-result materialization;
 - manual execution of a suite-owned transaction from a nested test without
   ownership transfer, plus suite terminalization after setup failure, skipped
-  teardown, or zero runnable tests;
+  teardown, or zero runnable tests, and emergency test cleanup before
+  interruption terminalization;
 - retention of completed, failed, abandoned, and unconfirmed transactions after
   removal from the pending registry;
 - exactly-once transaction lifecycle events with stable suite/test owner and
@@ -1176,6 +1247,9 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - coordinated protocol-version rejection for incompatible service, event, or
   result schemas;
 - combined primary and cleanup failures;
+- rejection of public mutations and cleanup registration from cleanup
+  callbacks, plus read-only cleanup-verification commands inheriting the
+  transaction deadline and owner;
 - nested workflow steps sharing the parent deadline;
 - unique nested invocation identities and exact parent-child event correlation;
 - target re-resolution across yields;
@@ -1266,6 +1340,8 @@ evidence; a silent or externally interrupted run is not.
 - Add suite-execution and test-attempt cleanup indexes, stable transaction
   identities, authoritative run-journal lifecycle events, and the
   service-materialized owner-scoped cleanup result projections.
+- Add the run-scoped resource ownership index, cross-level conflict policy,
+  explicit sharing/dependency relationships, and verified claim release.
 - Revise the service/event/result protocol together, including cursor reads,
   suite lifecycle events, retained-run inspection, controller interpretation,
   persistence, formatting, and compatibility rejection.
@@ -1403,6 +1479,9 @@ The architecture is complete when:
 - command timeout errors identify the exact lifecycle stage and last bounded
   observation;
 - command-owned mutations prearm cleanup before publication;
+- resource claims are tracked across service-run, suite-execution,
+  test-attempt, and command-invocation levels, with exclusive conflicts checked
+  across the complete run rather than only within one cleanup registry;
 - caller cleanup registrations return manually executable transactions, and
   teardown executes every transaction that remains pending;
 - caller cleanup registration requires an independent verification operation;
@@ -1426,6 +1505,9 @@ The architecture is complete when:
   `host_report.suite_executions[].cleanup_transactions` and
   `host_report.test_attempts[].cleanup_transactions`;
 - cleanup verification remains independent of the expired command deadline;
+- cleanup restore callbacks cannot recursively invoke public commands, while
+  read-only commands used by cleanup verification inherit the transaction's
+  owner and remaining cleanup deadline;
 - built-in command signatures and return values remain compatible through
   documented overloads;
 - project command modules use definitions exclusively and bare callbacks fail
