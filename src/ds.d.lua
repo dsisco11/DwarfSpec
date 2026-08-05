@@ -391,6 +391,14 @@ function DS.getGameSpeed() end
 ---@return integer
 function DS.setGameSpeed(tps) end
 
+---Sets DF's process-global native turbo-speed switch for the current example.
+---This affects the whole simulation, not selected units. DwarfSpec restores the
+---inherited switch value during cleanup, but cannot rewind gameplay that advances
+---while turbo speed is enabled.
+---@param enabled boolean
+---@return boolean
+function DS.setTurboSpeed(enabled) end
+
 ---Selects unit-speed behavior for one example.
 ---Both behaviors default to false, and at least one must be true. When
 ---`unit_ids` is omitted, DwarfSpec snapshots the currently eligible active,

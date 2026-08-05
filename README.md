@@ -283,6 +283,7 @@ are outside the `ds.awaitEvent()` contract.
 | `ds.setGamePaused(paused)` | Set the simulation pause state; DwarfSpec automatically restores the inherited state during example cleanup. |
 | `ds.getGameSpeed()` | Return the current game-speed target in ticks per second. |
 | `ds.setGameSpeed(tps)` | Set the target game speed in ticks per second; DwarfSpec automatically restores the inherited state during example cleanup. |
+| `ds.setTurboSpeed(enabled)` | Set DF's process-global native turbo-speed switch; cleanup restores the inherited switch but cannot rewind gameplay. |
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
 | `ds.getSaveDirectoryName()` | Return the directory name of the currently loaded save game. |

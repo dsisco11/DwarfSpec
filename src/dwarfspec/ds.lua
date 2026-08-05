@@ -356,6 +356,7 @@ local command_observer_module = load_automation_module(package_root,
         map_view_cleanup_entry=nil,
         game_pause_cleanup_entry=nil,
         game_speed_cleanup_entry=nil,
+        turbo_speed_cleanup_entry=nil,
     }
     ---Returns recurring-operation ownership for terminal cleanup verification.
     ---@return table
@@ -758,6 +759,8 @@ local command_observer_module = load_automation_module(package_root,
             context.game_pause_cleanup_entry ~= nil
         state.game_speed_active =
             context.game_speed_cleanup_entry ~= nil
+        state.turbo_speed_active =
+            context.turbo_speed_cleanup_entry ~= nil
         state.render_observer_active =
             context.mount_context.current ~= nil and
             context.mount_context.current.render_observer ~= nil

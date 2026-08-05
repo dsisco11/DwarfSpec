@@ -71,6 +71,37 @@ function M.bind(ds, dependencies)
         return paused
     end
 
+    ---Sets process-global native turbo speed and registers restoration once.
+    ---@param enabled boolean
+    ---@return boolean
+    function ds.setTurboSpeed(enabled)
+        assert(type(enabled) == 'boolean',
+            'turbo speed state must be a boolean')
+        local global = df and df.global
+        assert(global and type(global.debug_turbospeed) == 'boolean',
+            'DwarfSpec setTurboSpeed requires a valid ' ..
+                'df.global.debug_turbospeed')
+        if context.turbo_speed_cleanup_entry == nil then
+            local original = global.debug_turbospeed
+            context.turbo_speed_cleanup_entry = cleanup_module.push(
+                cleanup_registry, 'restore native turbo speed', function()
+                    local current = df and df.global
+                    assert(current and
+                            type(current.debug_turbospeed) == 'boolean',
+                        'DwarfSpec could not restore native turbo speed: ' ..
+                            'df.global.debug_turbospeed is unavailable')
+                    current.debug_turbospeed = original
+                    assert(current.debug_turbospeed == original,
+                        'DFHack rejected the original native turbo speed')
+                    context.turbo_speed_cleanup_entry = nil
+                end)
+        end
+        global.debug_turbospeed = enabled
+        assert(global.debug_turbospeed == enabled,
+            'DFHack rejected the requested native turbo speed')
+        return enabled
+    end
+
     ---Returns the current game ticks-per-second target.
     ---@return integer
     function ds.getGameSpeed()

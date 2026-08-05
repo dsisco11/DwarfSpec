@@ -297,6 +297,10 @@ function M.validate_run(value)
         'automation run cleanup confirmation must be boolean')
     assert(type(value.mount_cleanup_verified) == 'boolean',
         'automation run mount cleanup verification must be boolean')
+    if value.turbo_speed_active ~= nil then
+        assert(type(value.turbo_speed_active) == 'boolean',
+            'automation run turbo speed activity must be boolean')
+    end
     if value.unit_speed_cleanup_verified ~= nil then
         assert(type(value.unit_speed_cleanup_verified) == 'boolean',
             'automation run unit speed cleanup verification must be boolean')

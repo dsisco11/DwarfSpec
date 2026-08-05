@@ -664,6 +664,20 @@ requested tick rate. A low target can cause a `ds.wait_ticks()` wall-clock
 timeout, so tests that deliberately run slowly should provide a suitable
 `timeout_ms`.
 
+`ds.setTurboSpeed(enabled)` controls DF's process-global native turbo-speed
+switch and returns the applied Boolean value:
+
+```lua
+ds.setTurboSpeed(true)
+```
+
+This is whole-simulation acceleration, equivalent to fastdwarf mode 2. It is
+separate from both `ds.setGameSpeed(tps)` and targeted `ds.setUnitSpeed(...)`.
+The first call in an example captures the inherited switch value, and cleanup
+restores it after success, failure, timeout, or abort. Cleanup cannot rewind any
+gameplay that advances while turbo speed is enabled, so use it only with a
+controlled disposable or otherwise managed world fixture.
+
 `ds.getTick()` returns the current in-year Dwarf Fortress simulation tick from
 `df.global.cur_year_tick`. It is a read-only top-level command and does not
 require a mount:
@@ -851,7 +865,8 @@ The first-release surface is intentionally small:
 - real registration integration: `stage_overlay_registration`.
 
 Automatic cleanup applies explicitly to `mount`, `mountNativeScreen`,
-`setGamePaused`, `setGameSpeed`, `setViewPos`, `move_pointer`, `hover`,
+`setGamePaused`, `setGameSpeed`, `setTurboSpeed`, `setViewPos`, `move_pointer`,
+`hover`,
 `click`, persistent `mouseInput` button state, and
 `stage_overlay_registration`. The fluent subject forms of `move_pointer`,
 `hover`, and `click` have the same pointer-restoration guarantee. `viewport`

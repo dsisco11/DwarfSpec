@@ -215,6 +215,7 @@ local function verify_executor_clean_state(proof)
             mount.button_state_active == true or
             mount.game_pause_state_active == true or
             mount.game_speed_active == true or
+            mount.turbo_speed_active == true or
             mount.render_observer_active == true or
             mount.verified ~= true) then
         return false, 'quarantined mount state is not clean'

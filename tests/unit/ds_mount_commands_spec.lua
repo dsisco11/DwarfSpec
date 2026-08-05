@@ -302,6 +302,7 @@ describe('DwarfSpec public mount commands', function()
             global={
                 cur_year_tick=12345,
                 pause_state=false,
+                debug_turbospeed=false,
                 gps={
                     mouse_x=4,
                     mouse_y=5,
@@ -986,6 +987,41 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
+    it('sets and restores native turbo speed without requiring a mount',
+            function()
+        assert.is_true(ds.setTurboSpeed(true))
+        assert.is_true(df.global.debug_turbospeed)
+        assert.is_true(run.mount_cleanup_probe().turbo_speed_active)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        assert.is_false(ds.setTurboSpeed(false))
+        assert.is_false(df.global.debug_turbospeed)
+        assert.equals(1, cleanup.pending_count(registry))
+
+        assert.is_true(ds.setTurboSpeed(true))
+        reset('native turbo-speed example cleanup')
+
+        assert.is_false(df.global.debug_turbospeed)
+        assert.is_false(run.mount_cleanup_probe().turbo_speed_active)
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
+    it('validates native turbo speed before scheduling cleanup', function()
+        for _, value in ipairs({0, 'true', {}}) do
+            assert.has_error(function()
+                ds.setTurboSpeed(value)
+            end, 'turbo speed state must be a boolean')
+        end
+        assert.equals(0, cleanup.pending_count(registry))
+
+        df.global.debug_turbospeed = nil
+        assert.has_error(function()
+            ds.setTurboSpeed(true)
+        end, 'DwarfSpec setTurboSpeed requires a valid ' ..
+            'df.global.debug_turbospeed')
+        assert.equals(0, cleanup.pending_count(registry))
+    end)
+
     it('exports and delegates idempotent main-menu exit without cleanup ownership',
             function()
         assert.equals('function', type(ds.exitToMainMenu))
@@ -1147,6 +1183,7 @@ describe('DwarfSpec public mount commands', function()
             map_view_position_active=false,
             game_pause_state_active=false,
             game_speed_active=false,
+            turbo_speed_active=false,
             render_observer_active=true,
         }, run.mount_cleanup_probe())
         assert.has_error(function()

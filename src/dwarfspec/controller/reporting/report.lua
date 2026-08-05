@@ -282,10 +282,12 @@ function M.format_run_inspection(inspection)
             run.totals.successes, run.totals.failures, run.totals.errors,
             run.totals.pending),
         ('CLEANUP confirmed=%s mount_verified=%s ' ..
+            'turbo_speed_active=%s ' ..
             'unit_speed_verified=%s unit_speed_active=%s ' ..
             'unit_position_active=%s owned_positions=%d'):format(
             tostring(run.cleanup_confirmed),
             tostring(run.mount_cleanup_verified),
+            tostring(run.turbo_speed_active),
             tostring(run.unit_speed_cleanup_verified),
             tostring(run.unit_speed_active),
             tostring(run.unit_position_active),
