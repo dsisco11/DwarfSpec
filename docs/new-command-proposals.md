@@ -109,12 +109,13 @@ environment. World-dependent commands require a loaded fortress map and fail
 before mutation if their preconditions are not met.
 
 Each suite execution and nested test attempt receives an isolated cleanup
-ledger shared by these commands. One run-scoped resource ownership index tracks
+ledger shared by these commands. One run-scoped `ResourceDependencyIndex` tracks
 stable resource identities, logical tile reservations, spies, inactive-unit
 claims, and their tagged service-run, suite, test, or command owner across all
-active lifecycle levels. Its shared directed acyclic dependency graph validates
-prerequisite-to-dependent edges and cross-level lifetime direction and plans
-dependent-before-prerequisite cleanup;
+active lifecycle levels. Its domain-neutral `DirectedAcyclicGraph` validates
+prerequisite-to-dependent structure and cycles, while
+`ResourceDependencyIndex` validates cross-level lifetime direction and
+`CleanupPlanner` plans dependent-before-prerequisite cleanup;
 LIFO orders only independent transactions. Cleanup remains owner-local, while
 exclusivity and dependency checks consult the complete resource index.
 
@@ -534,7 +535,7 @@ Contract:
 - The optional predicate receives a copied scalar position after built-in
   filters.
 - A reservation prevents overlap with every incompatible active reservation in
-  the run-scoped resource ownership index, including claims owned by an active
+  the run-scoped `ResourceDependencyIndex`, including claims owned by an active
   suite and its nested test attempts. It is not a native lock and must be
   revalidated immediately before a later mutating command consumes it.
 - Cleanup releases logical reservations and verifies that DwarfSpec retains no
@@ -764,12 +765,12 @@ the reservation remains valid until its owning suite or test cleanup.
 exists when the command begins; it neither transfers nor releases those
 reservations. A reservation acquired atomically during stockpile creation is
 instead owned by the stockpile transaction and is released by stockpile
-cleanup. The resource ownership index rejects release of a pre-existing
+cleanup. `ResourceDependencyIndex` rejects release of a pre-existing
 reservation while its stockpile claim remains active. Cleanup removes dependent
 owned jobs before removing items or stockpiles and releases atomically acquired
 logical reservations last.
 
-The resource ownership index must not infer ownership merely because an object
+`ResourceDependencyIndex` must not infer ownership merely because an object
 occupies a reserved tile. Only explicit claims established by fixture commands
 are owned. Claims are tagged by owner, and consumption, sharing, or dependency
 across suite, test, command, or service-run levels requires an explicit domain
@@ -815,14 +816,15 @@ The implementation should preserve DwarfSpec's existing ownership boundaries:
   adapters or controllers.
 - The run's suite-execution and test-attempt contexts own isolated cleanup
   registries and cleanup execution indexes.
-- One run-scoped resource ownership index tracks owner-tagged resource claims,
+- One run-scoped `ResourceDependencyIndex` tracks owner-tagged resource claims,
   logical tile reservations, active job spies, inactive-unit flag transitions,
   cleanup linkage, compatible sharing, and exclusive conflicts across
-  service-run, suite-execution, test-attempt, and command-invocation levels. One
-  reusable directed acyclic graph inside that index owns
-  prerequisite-to-dependent edges, cycle and lifetime validation,
-  active-dependent queries, and deterministic reverse-topological cleanup
-  planning for every command family.
+  service-run, suite-execution, test-attempt, and command-invocation levels. Its
+  domain-neutral `DirectedAcyclicGraph` owns prerequisite-to-dependent edges,
+  cycle validation, active-dependent queries, and deterministic topological
+  ordering. `ResourceDependencyIndex` owns lifetime validation and resource
+  policy. `CleanupPlanner` produces deterministic reverse-topological cleanup
+  plans for every command family.
 - Closed DwarfSpec discriminators live in protocol enum modules as immutable
   numeric tables.
 - Canonical DF discriminators such as `df.item_type`, `df.item_quality`, and
@@ -934,8 +936,9 @@ Passing assertions without verified cleanup are insufficient.
 
 ## Delivery order
 
-1. Expose `registerCleanup()`, the run-scoped resource ownership index and its
-   shared dependency DAG, and the cleanup history/result-journal integration
+1. Expose `registerCleanup()`, the run-scoped `ResourceDependencyIndex`, its
+   `DirectedAcyclicGraph` and `CleanupPlanner`, and the cleanup
+   history/result-journal integration
    defined by the verified command execution proposal.
 2. Add `reserveMapTiles()` and `queryUnits()` as read-mostly discovery
    primitives.

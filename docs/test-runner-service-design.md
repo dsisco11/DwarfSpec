@@ -1274,12 +1274,14 @@ separate journals. Registration order is local to the tagged owner; transaction
 IDs remain unique within the run. Service-owned run cleanup retains its existing
 separate run-level events.
 
-The successor runtime also owns one run-scoped resource ownership index across
+The successor runtime also owns one run-scoped `ResourceDependencyIndex` across
 service-run, suite-execution, test-attempt, and command-invocation levels. One
-shared directed acyclic graph inside the index provides dependency edges,
-oriented from prerequisite to dependent, cycle and lifetime-direction
-validation, active-dependent queries, and
-deterministic reverse-topological cleanup planning. LIFO remains the tie-breaker
+domain-neutral `DirectedAcyclicGraph` inside the index provides dependency edges
+oriented from prerequisite to dependent, cycle validation, active-dependent
+queries, and deterministic topological ordering. `ResourceDependencyIndex`
+provides resource policy and lifetime-direction validation. `CleanupPlanner`
+produces deterministic reverse-topological cleanup plans. LIFO remains the
+tie-breaker
 only for independent transactions. Cross-level exclusive-claim checks and
 explicit compatible sharing remain in the same index while cleanup registries
 stay owner-local. The index and graph are runtime enforcement state, not a

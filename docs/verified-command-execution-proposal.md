@@ -140,10 +140,16 @@ scope and stable owner ID travel together in command events, cleanup events,
 result projections, and nested invocation context. Service-owned run cleanup is
 outside this enum and keeps its separate run-level protocol.
 
-### Resource ownership index and dependency graph
+### Explicit resource-dependency components
 
-The resource ownership index is one run-scoped runtime index of every active
-DwarfSpec resource claim. Claims are tagged at the level that owns them:
+`DirectedAcyclicGraph` is the domain-neutral graph mechanism. It owns node and
+edge mutation, cycle and self-edge rejection, dependent lookup, and
+deterministic topological ordering, but it knows nothing about DwarfSpec owners,
+resource claims, cleanup transactions, or lifetimes.
+
+`ResourceDependencyIndex` is the run-scoped DwarfSpec policy layer over one
+`DirectedAcyclicGraph` instance and every active DwarfSpec resource claim.
+Claims are tagged at the level that owns them:
 service-run, suite-execution, test-attempt, or command-invocation. Suite and
 test cleanup registries remain isolated, but conflict detection is not isolated:
 every claim lookup considers all active levels in the run.
@@ -151,11 +157,16 @@ every claim lookup considers all active levels in the run.
 Each claim records a bounded resource kind and stable identity or logical
 region, its tagged owner and parent owner chain, its cleanup transaction when
 one exists, and any explicit dependency or compatible-sharing relationship.
-One reusable directed acyclic graph inside the index represents dependency
-edges from a dependent claim to its prerequisite claim. The index prevents two
+Its `DirectedAcyclicGraph` stores edges from prerequisite claim to dependent
+claim. The index prevents two
 scopes from independently claiming an exclusive resource merely because they
 use different cleanup registries. It is execution-safety state, not a second
 cleanup-history source of truth.
+
+`CleanupPlanner` consumes eligible transactions and the
+`ResourceDependencyIndex` to produce dependency-safe reverse-topological
+execution order, with owner-local reverse registration order as the tie-breaker
+for independent transactions. It does not own claims, transactions, or history.
 
 ### Preflight gate
 
@@ -729,7 +740,7 @@ but do not create independent public command results or reset timeout budgets.
 
 ### Run-scoped resource ownership
 
-The resource ownership index spans service-run, suite-execution, test-attempt,
+`ResourceDependencyIndex` spans service-run, suite-execution, test-attempt,
 and command-invocation lifetimes. Each active claim is tagged with its exact
 owner, but exclusive-resource checks query the complete run index. A nested
 test therefore cannot claim a unit, tile reservation, screen, pointer state, or
@@ -743,13 +754,15 @@ explicit command contract; otherwise a command may consume only a claim owned
 by its exact owner. Cleanup registries and execution indexes remain private to
 their individual owners even when the resource index relates their claims.
 
-The shared dependency abstraction is a directed acyclic graph whose nodes are
-active claims and whose edges point from prerequisite to dependent. One graph
-implementation owns node insertion/removal, edge insertion/removal, cycle and
-self-edge rejection, active-dependent lookup, lifetime validation, and
-deterministic reverse-topological cleanup planning. Commands declare domain
-relationships through this abstraction instead of implementing local
-dependency lists or cleanup ordering.
+The shared dependency mechanism is `DirectedAcyclicGraph`, whose nodes are
+active claims and whose edges point from prerequisite to dependent. It owns
+node insertion/removal, edge insertion/removal, cycle and self-edge rejection,
+active-dependent lookup, and deterministic topological ordering.
+`ResourceDependencyIndex` owns DwarfSpec-specific lifetime-direction validation
+and claim policy. `CleanupPlanner` owns deterministic reverse-topological cleanup
+planning. Commands declare domain relationships through
+`ResourceDependencyIndex` instead of implementing local dependency lists or
+cleanup ordering.
 
 A dependent claim must have a lifetime no longer than every prerequisite.
 Command lifetime is nested within its tagged execution owner, a test attempt is
@@ -1242,11 +1255,14 @@ about public API registration.
 
 The host cleanup subsystem owns separate pending-only owner registries with
 stable registration ordinals and mutable cleanup execution indexes for suite
-executions and their nested test attempts. A run-scoped resource ownership index relates active claims across
+executions and their nested test attempts. A run-scoped
+`ResourceDependencyIndex` relates active claims across
 service-run, suite-execution, test-attempt, and command-invocation levels while
-preserving those owner-local cleanup registries. One reusable directed acyclic
-graph module inside the index owns dependency validation and cleanup planning
-for every command family; individual adapters do not duplicate graph logic.
+preserving those owner-local cleanup registries. Its
+`DirectedAcyclicGraph` owns generic dependency structure and ordering,
+`ResourceDependencyIndex` owns resource and lifetime policy, and
+`CleanupPlanner` produces transaction execution plans for every command family;
+individual adapters do not duplicate any of that logic.
 The automation service remains the sole publisher and owns the authoritative
 run-scoped event journal. Its
 suite and test-attempt finalizers
@@ -1460,9 +1476,9 @@ evidence; a silent or externally interrupted run is not.
 - Add suite-execution and test-attempt cleanup indexes, stable transaction
   identities, authoritative run-journal lifecycle events, and the
   service-materialized owner-scoped cleanup result projections.
-- Add the run-scoped resource ownership index, its shared directed acyclic
-  dependency graph, cross-level conflict and lifetime policy,
-  reverse-topological cleanup planner, and verified claim release.
+- Add the run-scoped `ResourceDependencyIndex`, its
+  `DirectedAcyclicGraph`, cross-level conflict and lifetime policy,
+  `CleanupPlanner`, and verified claim release.
 - Revise the service/event/result protocol together, including cursor reads,
   suite lifecycle events, retained-run inspection, controller interpretation,
   persistence, formatting, and compatibility rejection.
@@ -1607,8 +1623,9 @@ The architecture is complete when:
 - resource claims are tracked across service-run, suite-execution,
   test-attempt, and command-invocation levels, with exclusive conflicts checked
   across the complete run rather than only within one cleanup registry;
-- one shared acyclic dependency graph rejects cycles and invalid lifetime
-  direction, plans dependent-before-prerequisite cleanup, uses LIFO only to
+- one `DirectedAcyclicGraph` rejects cycles, `ResourceDependencyIndex` rejects
+  invalid lifetime direction, and `CleanupPlanner` plans
+  dependent-before-prerequisite cleanup and uses LIFO only to
   order independent transactions, and never transfers ownership implicitly;
 - caller cleanup registrations return manually executable transactions, and
   teardown executes every transaction that remains pending;
