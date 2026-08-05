@@ -7,7 +7,8 @@ commands. It is an architecture proposal, not an implementation checklist and
 not a description of shipped behavior.
 
 The proposal adopts Cypress-like command actionability, finite command
-deadlines, one-shot mutation, and retryable verification without adopting
+deadlines, one-shot mutation by default, proof-gated safe execution retry, and
+retryable verification without adopting
 Cypress's browser-specific command queue. DwarfSpec remains a synchronous Lua
 API from the test author's perspective, with cooperative waits driven by the
 existing in-process scheduler.
@@ -23,10 +24,13 @@ Every public command executes through one run-scoped command runner and has:
   observable; and
 - optional caller-supplied verification for product-specific outcomes.
 
-Preflight and verification may retry within the shared deadline. Primary
-execution runs exactly once unless a command definition explicitly proves that
-it is safe and useful to retry. No initial built-in mutating command will opt
-into execution retry.
+Preflight and verification may retry within the shared deadline. Every command
+definition explicitly selects `ONCE` or `EXPLICIT_RETRY_SAFE` primary execution.
+The latter is permitted only when the definition proves that repeated attempts
+with one stable operation key are idempotent and cannot duplicate logical
+effects. No initial built-in mutating command will opt into execution retry,
+but the runner, definition validator, outcomes, diagnostics, and conformance
+suite implement and prove the policy from the beginning.
 
 A caller is not required to supply a verification callback. DwarfSpec will
 encourage one for generic interaction commands, but omitting it remains valid.
@@ -111,14 +115,24 @@ This creates three problems:
 ### Command definition
 
 A command definition is immutable framework or project configuration that
-describes a command's name, kind, normalization, preflight, execution,
-verification, timeout default, and diagnostic policy.
+describes a command's name, kind, normalization, preflight, primary-execution
+policy, execution, verification, timeout default, and diagnostic policy.
 
 ### Command invocation
 
 A command invocation is one run-owned execution of a definition with normalized
-arguments, a fixed deadline, command identity, target identity, cleanup
-checkpoint, and trace.
+arguments, a fixed deadline, command identity, tagged execution-owner identity,
+target identity, cleanup checkpoint, and trace.
+
+### Execution owner
+
+Every public command and caller-visible cleanup transaction belongs to exactly
+one active execution owner. `EExecutionOwnerScope` contains exactly
+`SUITE_EXECUTION` and `TEST_ATTEMPT`. A suite execution is one selected spec file
+in one repeat; a test attempt is nested within that suite execution. The tagged
+scope and stable owner ID travel together in command events, cleanup events,
+result projections, and nested invocation context. Service-owned run cleanup is
+outside this enum and keeps its separate run-level protocol.
 
 ### Preflight gate
 
@@ -129,9 +143,10 @@ command immediately.
 
 ### Primary execution
 
-Primary execution performs the command's logical mutation or observation. It
-runs once for mutating commands. It returns a private receipt and a public
-result instead of requiring verification to infer what was attempted.
+Primary execution performs the command's logical mutation or observation.
+Mutating definitions use `ONCE` unless they satisfy the explicit retry-safe
+contract. Execution returns a private receipt and a public result instead of
+requiring verification to infer what was attempted.
 
 ### Intrinsic verification
 
@@ -173,11 +188,16 @@ duration. No timed command stage resets the timeout.
 
 ## Design principles
 
-### Retry observation, not mutation
+### Retry observation by default; retry mutation only by proof
 
 Preflight and verification are read-only and retryable. Primary mutation is
-one-shot. This prevents a delayed UI update from causing duplicate clicks,
-duplicated text, repeated save transitions, or multiple native resources.
+one-shot by default. A definition may select `EXPLICIT_RETRY_SAFE` only when
+repeating the same immutable request and stable operation key is idempotent,
+cannot duplicate externally visible logical effects, and preserves cleanup
+ownership after every attempt. This prevents delayed UI updates from causing
+duplicate clicks, duplicated text, repeated save transitions, or multiple
+native resources while still supporting the uncommon operations for which
+execution retry is genuinely safe and useful.
 
 ### Verify only declared effects
 
@@ -201,7 +221,7 @@ instead of silently multiplying the configured timeout.
 ### Cleanup outlives an expired command
 
 The command deadline does not suppress cleanup. Cleanup executes under the
-existing example and executor recovery contract with its own bounded lifecycle.
+active suite/test owner and executor recovery contract with its own bounded lifecycle.
 An expired command can therefore fail and still restore or remove owned state.
 
 ### Register ownership before mutation
@@ -229,8 +249,8 @@ public `move_pointer()` command.
 ### Nested read-only commands inherit their parent invocation
 
 A query or assertion invoked by caller verification inherits the parent's
-absolute deadline, cancellation state, root command identity, and test-attempt
-identity. Each nested command or internal workflow step receives its own
+absolute deadline, cancellation state, root command identity, and tagged suite
+or test owner identity. Each nested command or internal workflow step receives its own
 run-unique invocation ID and records the immediate `parent_invocation_id`, so
 repeated same-named children remain distinguishable in the trace. It cannot
 extend or reset the parent timeout. Mutating public commands are rejected from
@@ -248,10 +268,10 @@ meaningless callbacks into every command.
 | --- | --- | --- | --- |
 | Query | Observe current state | Its read-only primary observation may return pending and retry | Validate and return a stable observation, including a successful `nil` when declared |
 | Assertion | Observe a condition | Its read-only primary observation retries until ready | The assertion observation is the terminal condition |
-| Action | Perform input or another one-shot mutation | Retry preflight and verification only | Verify framework effects; caller verification is optional |
-| State setter | Change reversible state | Retry preflight and readback only | Exact state readback is intrinsic |
-| Workflow | Execute ordered internal steps | Each step gates once under the parent deadline | Verify every declared intermediate and terminal state |
-| Fixture | Create or reserve owned native state | Retry readiness and readback only | Verify identity/state after creation and absence/restoration during cleanup |
+| Action | Perform input or another mutation | Retry preflight and verification; retry execution only under `EXPLICIT_RETRY_SAFE` | Verify framework effects; caller verification is optional |
+| State setter | Change reversible state | Retry preflight and readback; retry execution only under `EXPLICIT_RETRY_SAFE` | Exact state readback is intrinsic |
+| Workflow | Execute ordered internal steps | Each step occurs once in sequence; its gates may retry and its mutation follows its declared execution policy under the parent deadline | Verify every declared intermediate and terminal state |
+| Fixture | Create or reserve owned native state | Retry readiness and readback; retry execution only under `EXPLICIT_RETRY_SAFE` | Verify identity/state after creation and absence/restoration during cleanup |
 
 `ECommandKind` contains exactly `QUERY`, `ASSERTION`, `ACTION`, `STATE_SETTER`,
 `WORKFLOW`, and `FIXTURE`. A definition selects exactly one kind. Recurrence,
@@ -264,6 +284,12 @@ mutating definitions use `CALLBACK` whenever their declared framework effect is
 independently observable and may use `EXECUTION_RECEIPT` only when the receipt
 is the strongest truthful generic evidence.
 
+`EExecutionRetryPolicy` contains exactly `ONCE` and `EXPLICIT_RETRY_SAFE`.
+Queries and assertions use `ONCE` because their observation loop is already
+owned by the query/assertion protocol rather than execution retry. A mutating
+definition may use `EXPLICIT_RETRY_SAFE` only with a documented stable operation
+key, idempotency guarantee, attempt-receipt policy, and conformance fixture.
+
 Every definition has an explicit preflight function. Commands with no dynamic
 readiness requirement use the shared always-ready predicate so the lifecycle
 and trace remain uniform.
@@ -273,7 +299,17 @@ that function performs the read-only observation and returns `ready`, `pending`,
 or `fatal`. A query uses `ready(nil, evidence)` when `nil` is a successful result,
 so ordinary misses are not confused with retryable pending state. For actions,
 state setters, workflows, and fixtures, primary execution returns `executed`
-and is never retried by the runner.
+or, only under `EXPLICIT_RETRY_SAFE`, an explicit retry outcome. Unexpected
+errors are fatal and never imply retry.
+
+Read-only means that an operation does not mutate Dwarf Fortress, mounted
+product state, or command/cleanup ownership. A query may append bounded,
+idempotent diagnostic data owned by its current command invocation. Therefore
+`capture_view_tree` and `capture_screen` may retain immutable named artifacts
+without becoming mutating product commands, including when nested in
+verification. Repeating such a query replaces or deduplicates the same
+invocation-owned artifact key; it cannot publish multiple logical artifacts or
+register cleanup.
 
 Intrinsic verification is required when the public contract declares an
 independently observable effect. A definition may explicitly declare that its
@@ -292,18 +328,26 @@ implementation:
 ---@field normalize fun(arguments: table): any
 ---@field preflight fun(context: dwarfspec.CommandContext, request: any): dwarfspec.GateResult
 ---@field execute fun(context: dwarfspec.CommandContext, request: any, ready: any): dwarfspec.ExecutionResult|dwarfspec.GateResult
+---@field execution_retry_policy dwarfspec.EExecutionRetryPolicy
+---@field operation_key? fun(request: any): string
 ---@field intrinsic_verification dwarfspec.EIntrinsicVerificationKind
 ---@field verify? fun(context: dwarfspec.CommandContext, request: any, receipt: any): dwarfspec.GateResult
 ---@field default_timeout_ms? integer
 ---@field diagnostics? fun(request: any, receipt: any): table
 ```
 
-The registry validates definitions before a test begins:
+The registry validates definitions before run execution begins:
 
 - names are nonempty and do not conflict;
 - kinds are supported immutable enum values;
 - normalize, preflight, and execute are callable;
 - normalize is bounded, synchronous, and non-yielding;
+- `execution_retry_policy` is a supported immutable enum value;
+- `EXPLICIT_RETRY_SAFE` supplies a stable bounded `operation_key`, documents
+  its idempotency and attempt-receipt guarantees, and has a command-specific
+  conformance fixture; `ONCE` forbids execution-retry outcomes;
+- `operation_key`, when required, is bounded, synchronous, non-yielding, and
+  derives the same scalar key from the same normalized request;
 - `intrinsic_verification` is a supported immutable enum value compatible with
   the command kind;
 - `verify` is required for `CALLBACK`, forbidden for `PRIMARY_OBSERVATION`, and
@@ -347,18 +391,30 @@ Primary execution returns a private structured result:
 
 ```lua
 command.executed(public_result, receipt)
+command.retry(reason, attempt_receipt, evidence)
 ```
 
 The public result preserves the command's documented return value. The receipt
-is available only to intrinsic and caller verification and to bounded failure
-diagnostics. Returning `false` from a native adapter is not silently interpreted
-as success; each definition must explicitly normalize its native acknowledgement
-into either a receipt or an execution failure.
+is available only to intrinsic verification, caller verification,
+command-owned cleanup execution and verification, and bounded failure
+diagnostics. It is never published directly to the service journal or result.
+Returning `false` from a native adapter is not silently interpreted as success;
+each definition must explicitly normalize its native acknowledgement into
+either a receipt or an execution failure.
+
+`command.retry(...)` is valid only for `EXPLICIT_RETRY_SAFE`. It means that the
+attempt completed without a terminal result and that executing again with the
+same operation key is safe. The runner stores the immutable attempt receipt in
+the private invocation and cleanup index before yielding, re-runs preflight and
+volatile-target validation, and then may attempt execution again under the same
+deadline. Retry is never inferred from `false`, `nil`, a thrown error, timeout,
+or cancellation. The retry loop yields cooperatively between attempts and
+retains bounded attempt counts and evidence for terminal diagnostics.
 
 If primary execution throws or returns a declared failure, verification does
 not run. Prearmed cleanup transactions remain owned. Command-lifetime
 transactions are expended by the command's finally boundary, while
-example-lifetime transactions remain pending for manual execution or teardown.
+owner-lifetime transactions remain pending for manual execution or teardown.
 
 ## Caller-supplied verification
 
@@ -520,7 +576,9 @@ The command authoring documentation must make this limitation explicit.
 For each invocation the runner performs the following operations:
 
 1. Resolve the definition and validate invocation-level command options.
-2. Normalize and defensively copy logical arguments synchronously.
+2. Normalize and defensively copy logical arguments synchronously. For
+   `EXPLICIT_RETRY_SAFE`, derive and freeze the stable operation key as part of
+   this bounded normalization boundary.
 3. Resolve the finite timeout and create the timed invocation deadline.
 4. Publish command-started evidence with sanitized arguments.
 5. Mark a cleanup checkpoint and construct the command context.
@@ -531,8 +589,12 @@ For each invocation the runner performs the following operations:
    fatal.
 8. Prearm required cleanup or pending ownership.
 9. For a query or assertion, poll its read-only primary observation until it
-   returns ready, fatal, cancelled, or timed out. For every mutating kind,
-   execute the primary operation exactly once and capture its receipt.
+   returns ready, fatal, cancelled, or timed out. For a mutating `ONCE`
+   definition, execute the primary operation exactly once. For an
+   `EXPLICIT_RETRY_SAFE` definition, accept only explicit retry outcomes,
+   preserve each attempt receipt, re-run preflight and target validation, and
+   repeat under the same deadline until executed, fatal, cancelled, or timed
+   out.
 10. Establish intrinsic evidence according to the definition's explicit
     verification kind. Poll the intrinsic callback for `CALLBACK`; retain the
     validated primary observation for `PRIMARY_OBSERVATION`; or accept the
@@ -548,8 +610,8 @@ For each invocation the runner performs the following operations:
 16. Return the original public result or propagate the composed failure.
 
 On any failure, the runner records the failing stage and latest evidence. It
-does not drain example-lifetime transactions. Remaining example transactions
-stay registered for manual execution or automatic test teardown. Terminal
+does not drain owner-lifetime transactions. Remaining owner transactions stay
+registered for manual execution or automatic test/suite teardown. Terminal
 command evidence is never published before command-lifetime cleanup can affect
 the command's final outcome.
 
@@ -565,7 +627,7 @@ The run-scoped command context exposes only bounded capabilities:
 - render-generation capture and observation;
 - safe diagnostic recording;
 - internal workflow-step execution; and
-- immutable run and command identity.
+- immutable run, execution-owner, and command identity.
 
 It does not expose the host service, controller transport, mutable command
 registry, or unrestricted result publisher. Driver modules continue to avoid
@@ -575,8 +637,9 @@ imports from `dwarfspec.host`.
 
 Commands such as `mountSaveGame()` are workflows rather than single native
 actions. A workflow has one public command identity, one deadline, and one
-terminal result. It contains named internal steps with their own preflight,
-one-shot execution, and verification callbacks.
+terminal result. It contains named internal steps with their own retryable
+preflight and verification callbacks. Each step occurs once in sequence; its
+mutation follows its explicit `ONCE` or `EXPLICIT_RETRY_SAFE` execution policy.
 
 For example, save loading can retain the existing logical sequence:
 
@@ -608,20 +671,27 @@ the remaining four are terminal dispositions. `abandoned` is restricted to an
 internal prearmed reservation for which no mutation or publication occurred.
 `unconfirmed` means interruption or recoverable execution-host failure prevented
 the still-running automation service from establishing a normal cleanup outcome.
-Caller registrations have example lifetime. Internal registrations may instead
-have command lifetime for transient input flags or similar state.
+Caller registrations have owner lifetime: test-attempt lifetime when created
+inside an attempt, or suite-execution lifetime when created in suite-level
+setup/teardown. Internal registrations may instead have command lifetime for
+transient input flags or similar state. The lifetime enum therefore contains
+`OWNER` and `COMMAND`; it does not encode test versus suite separately because
+the tagged owner identity supplies that distinction.
 
 Calling `transaction:execute()` manually removes the pending transaction from
 the active LIFO registry before invoking restore and verification. The handle
 then records `complete` or `failed` and is expended. Repeated execution is
 idempotent: it reports that no pending work was executed and never invokes the
 callbacks again. A manual failure is recorded in authoritative cleanup evidence
-and propagates to the test; it is not silently retried during teardown.
+and propagates to the active suite or test lifecycle; it is not silently retried
+during teardown.
 
-At test teardown, the cleanup system automatically executes every transaction
-that remains pending in strict LIFO order. One failure does not prevent later
-transactions from being attempted. Teardown combines all transaction failures
-with lifecycle probes before setting `cleanup_confirmed`.
+At test or suite teardown, the cleanup system automatically executes every
+transaction that remains pending in its owning scope in strict LIFO order. A
+command's finally boundary likewise executes its command-lifetime transactions
+in reverse registration order. One failure does not prevent later transactions
+from being attempted. Teardown combines all transaction failures with lifecycle
+probes before setting `cleanup_confirmed`.
 
 The public cleanup API does not expose cancellation without execution. An
 internal pending ownership reservation may be abandoned only when the command
@@ -629,12 +699,12 @@ proves that no mutation or publication occurred. Once a resource or reversible
 state is published, its transaction must be executed manually or remain pending
 for teardown.
 
-State setters capture their first inherited baseline and register an example
-transaction before mutation. Fixture commands reserve a pending transaction
+State setters capture their first inherited baseline and register an
+owner-lifetime transaction before mutation. Fixture commands reserve a pending transaction
 before native construction and attach stable identity evidence after
 publication. Command-lifetime transactions are automatically expended in the
 command's finally boundary. A command failure does not drain unrelated or
-example-lifetime transactions because callers may catch the failure and
+owner-lifetime transactions because callers may catch the failure and
 continue the test.
 
 Every cleanup transaction that mutates external state has an independent
@@ -677,21 +747,23 @@ test code.
 ### Cleanup history and result reporting
 
 The active LIFO registry and cleanup history have different responsibilities.
-Each test attempt owns its own active registry and mutable cleanup execution
-index. The registry contains only transactions that remain eligible for
-automatic execution. The execution index retains the in-process handles,
-private receipts, and current states required to execute those transactions;
-it is never shared between test attempts. Removing a transaction from the
-active registry therefore means only that teardown must not execute it again.
-Its already-published lifecycle events remain in the service journal.
+Each cleanup owner scope owns its own active registry and mutable cleanup
+execution index. An owner is either a suite execution or a test attempt nested
+within that suite execution. The registry contains only transactions that
+remain eligible for automatic execution. The execution index retains the
+in-process handles, private receipts, and current states required to execute
+those transactions; it is never shared between owners. Removing a transaction
+from the active registry therefore means only that teardown must not execute it
+again. Its already-published lifecycle events remain in the service journal.
 
 Registration assigns a stable transaction ID and registration ordinal before
 the transaction can protect or publish mutable state. The transaction ID is
 unique within the run, while the registration ordinal is local to the owning
-test attempt. Its safe event projection contains only bounded,
-serialization-safe data:
+suite execution or test attempt. Its safe event projection contains only
+bounded, serialization-safe data:
 
-- test and attempt identity;
+- owner scope and owner identity, repeat index, stable suite identity, and test
+  identity when the owner is a test attempt;
 - transaction ID, registration ordinal, label, and lifetime;
 - owning command invocation ID when one exists;
 - current state and the reason or trigger for execution;
@@ -706,12 +778,13 @@ richer in-process state, but result consumers receive only the safe projection.
 
 The automation service's physically run-scoped event journal is the sole
 authoritative cleanup history. Every transaction lifecycle event carries the
-owning test-attempt ID, repeat index, stable test identity, transaction ID, and
-attempt-local registration ordinal. Consumers partition the journal by that
-attempt identity; transactions from different tests or repeated attempts never
-share ownership or result sets. Service-owned run cleanup remains represented
-by separate run-level cleanup events and is never attributed to an arbitrary
-test attempt.
+owner-scope enum, owning suite-execution or test-attempt ID, repeat index,
+stable suite identity, stable test identity when applicable, transaction ID,
+and owner-local registration ordinal. Consumers partition the journal by the
+tagged owner identity; transactions from suite setup/teardown, different tests,
+or repeated suite/test executions never share ownership or result sets.
+Service-owned run cleanup remains represented by separate run-level cleanup
+events and is never attributed to an arbitrary suite or test.
 
 The service event journal gains transaction-level lifecycle events sufficient
 to reproduce the ledger without inspecting the active registry:
@@ -731,10 +804,11 @@ If interruption or a recoverable execution-host failure prevents a registered
 transaction from reaching one of those normal dispositions while the automation
 service remains alive, terminalization records it as `unconfirmed` rather than
 silently omitting it and publishes exactly one corresponding
-`cleanup.transaction_finished` event. A terminal test attempt retained by that
-service therefore reports every registered transaction with exactly one
-disposition: `complete`, `failed`, `abandoned`, or `unconfirmed`. Repeated manual
-execution does not add a second terminal event.
+`cleanup.transaction_finished` event. A terminal suite execution or test
+attempt retained by that service therefore reports every transaction registered
+to that owner with exactly one disposition: `complete`, `failed`, `abandoned`,
+or `unconfirmed`. Repeated manual execution does not add a second terminal
+event.
 
 Loss of the DFHack process or automation-service instance is outside this
 complete-ledger guarantee: its journal is intentionally process-local and cannot
@@ -742,15 +816,24 @@ publish new terminal events after destruction. An external persistence owner may
 report connection or interruption failure using evidence it already received,
 but it must not synthesize missing transaction registrations or dispositions.
 
-### Test-attempt ownership and finalization
+### Suite and test-attempt ownership and finalization
 
-A test-attempt identity becomes active before its attempt-local setup hooks and
-remains active through the test body and attempt-local teardown hooks. Every
-caller or command cleanup transaction created during that interval is
-attributed to that identity. Public cleanup registration requires an active
-test attempt and is rejected from suite-level or run-level hooks that do not
-have one. Service-owned run cleanup remains a separate run-level concern and
-does not appear in a test attempt's transaction array.
+One suite execution represents one selected spec file in one repeat. Its
+identity becomes active before suite-level setup and remains active through
+suite-level teardown and suite cleanup. A test-attempt identity is nested
+within that suite execution from before its attempt-local setup hooks through
+its body and attempt-local teardown hooks.
+
+All public commands and cleanup registrations are legal in suite-level setup
+and teardown. Ownership uses the most specific active scope: work performed
+during attempt-local setup, body, or teardown belongs to the test attempt;
+work performed in suite-level setup or teardown outside an attempt belongs to
+the suite execution. A suite-owned transaction can therefore protect state
+shared by all tests in that file and remains pending until manually expended or
+suite cleanup. Nested commands inherit the exact owner scope and identity of
+their parent. Public commands and cleanup remain invalid when neither a suite
+execution nor a test attempt is active. Service-owned run cleanup is a separate
+run-level concern and does not appear in either owner projection.
 
 After attempt-local teardown hooks return, registration closes and automatic
 cleanup executes every transaction that remains pending. DwarfSpec then
@@ -763,26 +846,51 @@ callback from finishing, run terminalization still synthesizes the attempt
 result and marks every unresolved transaction `unconfirmed` before
 `run.finished`.
 
+After suite-level teardown hooks return, suite registration closes and
+automatic cleanup executes every remaining suite-owned transaction in strict
+LIFO order. DwarfSpec terminalizes unresolved suite transactions, materializes
+the suite's cleanup result, and only afterward publishes `suite.finished`.
+Suite cleanup failure or an unconfirmed disposition affects the suite and run
+outcome and applies the normal executor-quarantine rules, but it is not
+retroactively assigned to an arbitrary test attempt. If interruption skips the
+ordinary suite finalizer, run terminalization synthesizes the same suite result
+before `run.finished`.
+
+Suite finalization is guaranteed even when suite-level setup fails, discovers
+no runnable tests, or interruption prevents suite-level teardown from running.
+Any suite transaction already registered is executed when possible or
+terminalized `unconfirmed`; it is never reassigned to the first or last test.
+
 Before publishing `test.finished`, the service's test-attempt finalizer folds
 only that attempt's authoritative transaction events into a
 `cleanup_transactions` array ordered by registration ordinal. The service
 stores that materialized projection at
 `host_report.test_attempts[].cleanup_transactions` in the owning attempt. The
-projection is a convenience for completed-result consumers, not a second source
-of truth.
+attempt record also carries its parent `suite_execution_id`, repeat index, and
+stable test identity. The projection is a convenience for completed-result
+consumers, not a second source of truth.
 
-The controller validates that projection against the complete journal and
-persists it unchanged; it does not independently interpret cleanup behavior.
+Before publishing `suite.finished`, the suite finalizer performs the same fold
+for the suite owner and stores the projection at
+`host_report.suite_executions[].cleanup_transactions`, ordered by the suite-local
+registration ordinal. Each suite-execution record carries its repeat index,
+stable spec-file identity, behavior summary, and cleanup outcome so UI and
+persistence consumers can present suite-level transactions without assigning
+them to a test.
+
+The controller validates both projections against the complete journal and
+persists them unchanged; it does not independently interpret cleanup behavior.
 Result-schema validation rejects duplicate IDs, missing terminal dispositions,
 inconsistent journal/result outcomes, or a transaction attributed to the wrong
-test attempt. The persisted run result retains the complete event journal and
-these per-attempt projections, allowing later result-file readers to inspect
-the same history.
+owner scope. The persisted run result retains the complete event journal and
+the suite-execution and test-attempt projections, allowing later result-file
+readers to inspect the same history.
 
 The service publishes these events through its existing append-only journal and
-cursor APIs. Live consumers can therefore observe registration and state changes
-by folding the selected attempt's events without polling private cleanup
-objects. Completed-result consumers use the service-materialized projection.
+cursor APIs. Live consumers can therefore observe registration and state
+changes by folding the selected suite or attempt owner's events without polling
+private cleanup objects. Completed-result consumers use the
+service-materialized projection.
 Retained-run inspection continues to expose the complete authoritative history
 for the lifetime of the service instance.
 Acknowledgement releases the outstanding-run admission gate but does not erase
@@ -790,18 +898,20 @@ the read-only session record.
 Result persistence derives from the same terminal service snapshot and journal;
 there is no separate UI-only cleanup channel or second source of truth.
 
-The new transaction events and per-attempt result projection require a coordinated
-protocol revision. The implementation bumps the service/event/result schema
-versions together, updates validators and controller interpretation, and rejects
-mixed clients and services through the existing protocol negotiation boundary.
+The new suite lifecycle events, transaction events, and owner-scoped result
+projections require a coordinated protocol revision. The implementation bumps
+the service/event/result schema versions together, updates validators and
+controller interpretation, and rejects mixed clients and services through the
+existing protocol negotiation boundary.
 It does not write transaction events into an older schema whose consumers cannot
 validate their lifecycle.
 
 Successful cleanup remains absent from high-level warning and status surfaces.
-That presentation rule does not hide the history: an on-demand cleanup trace or
-test-attempt inspector may enumerate successful, failed, abandoned, and
-unconfirmed transactions. Failures and unconfirmed transactions remain
-prominent without requiring the UI to calculate cleanup precedence itself.
+That presentation rule does not hide the history: an on-demand cleanup trace,
+suite-execution inspector, or test-attempt inspector may enumerate successful,
+failed, abandoned, and unconfirmed transactions. Failures and unconfirmed
+transactions remain prominent without requiring the UI to calculate cleanup
+precedence itself.
 
 ## Diagnostics and command events
 
@@ -811,7 +921,8 @@ able to represent:
 
 - command started;
 - preflight pending, passed, fatal, or timed out;
-- execution started, completed, failed, or exceeded its deadline;
+- execution attempt started, explicitly requested retry, completed, failed, or
+  exceeded its deadline, including operation-key and attempt correlation;
 - intrinsic verification pending, passed, failed, or timed out;
 - caller verification pending, passed, failed, or timed out;
 - command-lifetime cleanup attempted and verified;
@@ -819,18 +930,21 @@ able to represent:
 - command failed with any command-lifetime cleanup evidence.
 
 Every command and workflow-step event carries its run-unique `invocation_id`,
-optional `parent_invocation_id`, `root_invocation_id`, and owning test-attempt
-identity. Top-level commands have no parent and use their own invocation ID as
-the root ID. Child queries and workflow steps use distinct invocation IDs even
-when their command names and normalized arguments are identical.
+optional `parent_invocation_id`, `root_invocation_id`, owner-scope enum, owning
+suite-execution or test-attempt ID, repeat index, and stable suite/test identity
+as applicable. Top-level commands have no parent and use their own invocation ID
+as the root ID. Child queries and workflow steps use distinct invocation IDs
+even when their command names and normalized arguments are identical, and they
+inherit the parent's owner scope exactly.
 
-Example-lifetime cleanup occurs later and is reported by cleanup and terminal
+Owner-lifetime cleanup occurs later and is reported by cleanup and terminal
 run events. A command-finished event does not claim knowledge of cleanup
-transactions that are still pending for test teardown.
+transactions that are still pending for their test or suite teardown.
 
-Transaction lifecycle events are correlated with their owning test attempt and,
-when applicable, parent command invocation. They remain available after the
-transaction is manually expended or removed from the active teardown registry.
+Transaction lifecycle events are correlated with their tagged suite-execution
+or test-attempt owner and, when applicable, parent command invocation. They
+remain available after the transaction is manually expended or removed from
+the active teardown registry.
 
 Repeated observations are rate-limited or summarized so a 10-second wait does
 not flood the result stream. Terminal evidence includes attempt counts, elapsed
@@ -887,6 +1001,7 @@ return {
     commands={
         open_report={
             kind='action',
+            execution_retry_policy='once',
             intrinsic_verification='callback',
             default_timeout_ms=5000,
             normalize=function(arguments)
@@ -941,7 +1056,8 @@ src/dwarfspec/driver/command/
 - `context.lua` exposes bounded run capabilities.
 - `deadline.lua` owns monotonic deadline calculations.
 - `definition.lua` validates and freezes definitions.
-- `outcomes.lua` constructs ready, pending, fatal, and executed results.
+- `outcomes.lua` constructs ready, pending, fatal, executed, and explicit
+  execution-retry results.
 - `registry.lua` merges built-in and project definitions without conflicts.
 - `runner.lua` owns the public lifecycle and failure composition.
 - `workflow.lua` runs named internal steps under a parent invocation.
@@ -952,21 +1068,23 @@ definitions instead of binding functions directly to `ds`. Simulation, mount,
 input, render, and game modules remain capability providers and do not learn
 about public API registration.
 
-The host cleanup subsystem owns each test attempt's pending-only LIFO registry
-and mutable cleanup execution index. The automation service remains the sole
-publisher and owns the authoritative run-scoped event journal. Its test-attempt
-finalizer folds the selected attempt's transaction events into the terminal
-result projection. Protocol modules own cleanup transaction event types,
-disposition enums, and journal/result validation. The controller result
-interpreter validates and persists the supplied journal and per-attempt
-projections without interpreting pending registry state or cleanup semantics.
+The host cleanup subsystem owns separate pending-only LIFO registries and
+mutable cleanup execution indexes for suite executions and their nested test
+attempts. The automation service remains the sole publisher and owns the
+authoritative run-scoped event journal. Its suite and test-attempt finalizers
+fold the selected owner's transaction events into terminal result projections.
+Protocol modules own execution-owner scopes, transaction event types, disposition
+and lifetime enums, and journal/result validation. The controller result interpreter
+validates and persists the supplied journal and owner-scoped projections
+without interpreting pending registry state or cleanup semantics.
 
 The root `dwarfspec.ds` module builds the context and registry, then binds thin
 public functions that invoke the runner. It contains no duplicate pointer,
 input, game-state, or mount command implementation.
 
-The protocol namespace owns command-kind, intrinsic-verification-kind, and
-failure-stage enums, configuration validation, and cross-boundary event schemas.
+The protocol namespace owns command-kind, execution-retry-policy,
+intrinsic-verification-kind, execution-owner-scope, and failure-stage enums,
+configuration validation, and cross-boundary event schemas.
 The host owns scheduler and clock capabilities but not command policy. The
 controller renders the resulting events without interpreting driver behavior.
 
@@ -1020,7 +1138,13 @@ introduced. An injected fake monotonic clock and scheduler prove:
   and rejection of an implicit receipt-only definition;
 - one shared deadline across preflight and verification;
 - preflight pending, ready, fatal, thrown, cancelled, and timed-out outcomes;
-- exactly-once primary execution;
+- `ONCE` primary execution and rejection of every execution-retry outcome;
+- `EXPLICIT_RETRY_SAFE` definition validation, stable operation keys,
+  cooperative yielding, re-preflight and target revalidation between attempts,
+  private attempt-receipt retention, eventual success, fatality, cancellation,
+  and shared-deadline expiry;
+- proof that `false`, `nil`, and thrown execution errors never trigger implicit
+  execution retry;
 - no execution after preflight expiry;
 - intrinsic verification retry and timeout;
 - optional caller verification omitted, passed, pending, thrown, and timed out;
@@ -1032,15 +1156,19 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - one-shot restoration and retryable cleanup verification under an independent
   finite cleanup deadline, including restoration errors followed by attempted
   verification and cleanup timeout reporting;
-- test-attempt attribution across setup, body, and teardown hooks, rejection
-  outside an active attempt, and `test.finished` ordering after cleanup-result
-  materialization;
+- suite-execution attribution across suite setup and teardown, test-attempt
+  attribution across attempt setup, body, and teardown, most-specific-scope
+  selection, rejection outside both active scopes, and `test.finished` and
+  `suite.finished` ordering after their cleanup-result materialization;
+- manual execution of a suite-owned transaction from a nested test without
+  ownership transfer, plus suite terminalization after setup failure, skipped
+  teardown, or zero runnable tests;
 - retention of completed, failed, abandoned, and unconfirmed transactions after
   removal from the pending registry;
-- exactly-once transaction lifecycle events with stable test-attempt and command
-  attribution;
+- exactly-once transaction lifecycle events with stable suite/test owner and
+  command attribution;
 - isolation of transaction IDs, registration order, active registries, and
-  result projections across neighboring tests and repeated attempts;
+  result projections across suite executions, neighboring tests, and repeats;
 - cursor reads of transaction events during execution and retained-run reads
   after terminalization;
 - deterministic terminal result materialization from the authoritative journal
@@ -1060,9 +1188,11 @@ These tests are not duplicated in every command suite.
 ### Reusable conformance suites
 
 Table-driven conformance helpers validate common properties for each command
-kind. A command registers a small fixture describing expected gate, execution,
-verification, timeout, and cleanup observations. The common suite then proves
-the lifecycle without custom copies of runner tests.
+kind and execution-retry policy. A command registers a small fixture describing
+expected gate, execution, verification, timeout, retry-safety proof, and cleanup
+observations. The common suite then proves the lifecycle without custom copies
+of runner tests. A synthetic retry-safe definition exercises the complete
+policy even though no initial built-in command opts into it.
 
 Command-specific tests focus only on domain behavior: native argument
 normalization, target resolution, action receipt, state readback, and diagnostic
@@ -1109,13 +1239,17 @@ Final qualification proves:
 - every command has a finite effective timeout and explicit preflight;
 - every mutator documents its intrinsic verification boundary;
 - optional caller verification works for top-level and subject commands;
-- primary mutations execute exactly once while verification retries;
+- `ONCE` mutations execute exactly once, and retry-safe mutations retry only
+  after explicit outcomes under their stable operation key;
+- commands and cleanup registered in suite-level setup/teardown are attributed,
+  finalized, reported, and persisted under their suite execution;
 - project-defined definitions behave as documented and bare callbacks are rejected during loading;
 - command failures reach Busted as test errors with their stage preserved;
 - cleanup remains terminally verified after execution and verification
   failures; and
 - active and retained service reads plus persisted results expose the complete
-  per-test cleanup transaction set with consistent terminal outcomes;
+  per-suite and per-test cleanup transaction sets with consistent terminal
+  outcomes;
 - source, installed, and packaged behavior agree.
 
 Live qualification must finish terminally and include cleanup confirmation. A
@@ -1127,13 +1261,14 @@ evidence; a silent or externally interrupted run is not.
 ### Contract and kernel
 
 - Add protocol enums, settings, definition validation, outcome constructors,
-  deadline handling, the command context, and the runner.
-- Add the per-test cleanup execution index, stable transaction identities,
-  authoritative run-journal lifecycle events, and the service-materialized
-  per-attempt cleanup result projection.
+  execution-retry policy and outcomes, deadline handling, the command context,
+  and the runner.
+- Add suite-execution and test-attempt cleanup indexes, stable transaction
+  identities, authoritative run-journal lifecycle events, and the
+  service-materialized owner-scoped cleanup result projections.
 - Revise the service/event/result protocol together, including cursor reads,
-  retained-run inspection, controller interpretation, persistence, formatting,
-  and compatibility rejection.
+  suite lifecycle events, retained-run inspection, controller interpretation,
+  persistence, formatting, and compatibility rejection.
 - Add the fake-clock command-engine test harness.
 - Extend command events and result rendering.
 - Preserve existing built-in public calls while their implementations move to definitions.
@@ -1181,7 +1316,8 @@ language in that document. In particular:
 - `registerCleanup` returns the manually executable transaction defined here;
 - `timeout_ms` belongs to trailing `CommandOptions`, while a frame budget remains
   a logical wait option where applicable;
-- mutating primary execution is not retried;
+- initial managed fixture mutations use `ONCE`; any later retry-safe fixture
+  must satisfy the shared explicit policy rather than inventing local retry;
 - command definitions replace direct command facades and bare callbacks; and
 - the risk-based validation checkpoints here replace per-command package and
   live qualification as unconditional gates between fixture commands.
@@ -1209,8 +1345,8 @@ UI boundary.
 
 This proposal revises that design's exact service, event, and result schema
 versions, its initial event-type table, and its native test-result projection
-only as required for stage-aware command events and per-transaction cleanup
-reporting. The coordinated protocol revision must update the service design,
+only as required for stage-aware command events, suite-execution lifecycle, and
+owner-scoped per-transaction cleanup reporting. The coordinated protocol revision must update the service design,
 protocol enums and validators, snapshots and transports, retained-run reads,
 controller interpretation and formatting, and result persistence together.
 Older clients and services continue to fail through protocol negotiation rather
@@ -1229,7 +1365,8 @@ Every public command documents:
 - its command kind;
 - its effective timeout and override location;
 - its preflight requirements;
-- whether execution mutates and whether it is one-shot;
+- whether execution mutates, its execution-retry policy, and any retry-safety
+  proof and stable operation key;
 - its exact intrinsic verification guarantee;
 - what it deliberately cannot verify;
 - when caller verification is recommended;
@@ -1242,7 +1379,9 @@ verification callback, while also showing that the callback is optional.
 
 Project-command documentation includes a complete definition example, the
 cooperative execution limitation, safe diagnostic projection, receipt design,
-and the required conversion from callback-only modules.
+the required conversion from callback-only modules, and a complete
+`EXPLICIT_RETRY_SAFE` example showing its operation key, idempotency proof,
+explicit retry outcome, attempt receipt, and cleanup ownership.
 
 ## Acceptance criteria
 
@@ -1252,6 +1391,9 @@ The architecture is complete when:
 - every command resolves a finite wall-clock deadline;
 - every command has an explicit read-only preflight gate;
 - every mutating primary operation is exactly once by default;
+- `EXPLICIT_RETRY_SAFE` is fully implemented, retries only explicit outcomes
+  under one stable operation key and deadline, preserves attempt receipts and
+  cleanup ownership, and is rejected without its idempotency proof;
 - intrinsic verification exists wherever the declared framework effect is
   independently observable;
 - caller verification is optional, retryable, documented, and unable to weaken
@@ -1266,18 +1408,22 @@ The architecture is complete when:
 - caller cleanup registration requires an independent verification operation;
 - cleanup restoration is one-shot, cleanup verification is retryable, and every
   cleanup execution has a finite deadline independent of its owning command;
+- command-lifetime and owner-lifetime automatic cleanup execute in strict
+  reverse registration order within their respective scope;
 - test-attempt cleanup closes and its result is materialized before
-  `test.finished`, while service-owned run cleanup remains separately scoped;
+  `test.finished`; suite-execution cleanup closes and its result is materialized
+  before `suite.finished`; service-owned run cleanup remains separately scoped;
 - removing or expending a transaction never removes its lifecycle events from
   the authoritative service journal;
-- every registered transaction owned by a terminal test attempt retained by a
-  surviving service appears exactly once in that attempt result with
-  `complete`, `failed`, `abandoned`, or `unconfirmed` disposition;
+- every registered transaction owned by a terminal suite execution or test
+  attempt retained by a surviving service appears exactly once in that owner's
+  result with `complete`, `failed`, `abandoned`, or `unconfirmed` disposition;
 - the service event journal and persisted result expose consistent transaction
   identities, ordering, attribution, outcomes, and bounded evidence;
 - the journal remains the sole historical source of truth, while live consumers
-  fold attempt-tagged events and completed-result consumers may use the
-  service-materialized projection at
+  fold owner-tagged events and completed-result consumers may use the
+  service-materialized projections at
+  `host_report.suite_executions[].cleanup_transactions` and
   `host_report.test_attempts[].cleanup_transactions`;
 - cleanup verification remains independent of the expired command deadline;
 - built-in command signatures and return values remain compatible through
@@ -1298,5 +1444,6 @@ DwarfSpec commands will no longer equate non-throwing dispatch with verified
 success. Each command will expose the strongest truthful intrinsic guarantee it
 can own, and callers can optionally attach retryable product-specific
 verification without building their own timeout loop. Failures will identify
-readiness, execution, verification, or cleanup precisely, while one-shot
-mutation and verified cleanup preserve deterministic live-test behavior.
+readiness, execution, verification, or cleanup precisely. One-shot mutation by
+default, proof-gated safe retry, and verified cleanup preserve
+deterministic live-test behavior.

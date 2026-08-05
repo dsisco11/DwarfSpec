@@ -1230,6 +1230,59 @@ implementation and consume only the public service boundary.
   in-process client, not part of the service implementation.
 - The default result path is documented as generated and ignored.
 
+## Planned verified-command protocol revision
+
+`verified-command-execution-proposal.md` requires a coordinated successor to
+the implemented protocol described above. This is not part of the current
+`dwarfspec.event.v1` or `dwarfspec.result.v2` contract. The service, event,
+native-report, transport, and persisted-result schema identifiers advance
+together, and protocol negotiation rejects every mixed old/new combination.
+
+The successor protocol adds one suite-execution identity for each selected spec
+file in each repeat. `suite.started` is published before suite-level setup;
+`suite.finished` is published only after suite-level teardown, suite-owned
+cleanup, terminalization of unresolved transactions, and suite-result
+materialization. Test attempts remain nested under that suite execution.
+Every test event and `host_report.test_attempts[]` record in the successor
+schema therefore carries its parent `suite_execution_id` as well as its stable
+test identity and repeat index.
+
+Every stage-aware command event carries a tagged owner scope and either the
+active suite-execution ID or nested test-attempt ID. All public commands are
+legal in suite-level setup and teardown. Commands invoked during test-local
+setup, body, or teardown belong to the test attempt; commands invoked outside a
+test attempt but inside suite setup/teardown belong to the suite execution.
+Nested command and workflow-step events inherit that owner exactly.
+
+The same tagged ownership applies to transaction-level cleanup events:
+
+- `cleanup.transaction_registered`;
+- `cleanup.transaction_started`;
+- `cleanup.transaction_finished`; and
+- `cleanup.transaction_abandoned`.
+
+The physically run-scoped journal remains the sole authoritative history.
+Owner tags logically partition suite and test transactions without creating
+separate journals. Registration order is local to the tagged owner; transaction
+IDs remain unique within the run. Service-owned run cleanup retains its existing
+separate run-level events.
+
+Before publishing `test.finished`, the service folds the test attempt's events
+into `host_report.test_attempts[].cleanup_transactions`. Before publishing
+`suite.finished`, it folds the suite execution's events into
+`host_report.suite_executions[].cleanup_transactions`. Both projections are
+ordered by owner-local registration ordinal and contain exactly one terminal
+disposition for every transaction registered to a terminal owner retained by a
+surviving service. The journal remains authoritative; projections are
+completed-result conveniences.
+
+The controller validates owner identity, nesting, ordering, transaction
+uniqueness, and journal/projection equality, then persists the supplied journal
+and projections unchanged. It does not assign suite cleanup to a test attempt
+or infer cleanup semantics from the pending registry. Acknowledgement, discard,
+process-local retention, admission, leases, persistence ownership, and
+quarantine continue to follow this service design.
+
 ## Deferred decisions
 
 The following details require separate focused designs:

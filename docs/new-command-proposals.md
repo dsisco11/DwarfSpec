@@ -307,8 +307,8 @@ the foundational command for project-defined native fixtures.
 Contract:
 
 - `label` is nonempty and appears in cleanup diagnostics.
-- `restore` and `verify` execute in the same isolated test environment in which
-  they were registered.
+- `restore` and `verify` execute in the same isolated suite/test environment in
+  which they were registered.
 - Registration is legal in suite-level setup/teardown and attempt-local
   setup/body/teardown. It belongs to the most specific active suite or attempt
   owner and fails after that owner's cleanup begins.
@@ -326,7 +326,8 @@ Contract:
   owning suite or test lifecycle while it remains pending.
 - Manual execution unregisters and expends the transaction before calling
   `restore` and `verify`; repeated execution does not invoke them again.
-- A manual failure is recorded in cleanup evidence and propagates to the test.
+- A manual failure is recorded in cleanup evidence and propagates to the active
+  suite or test lifecycle.
 - One callback failure does not suppress later cleanup entries.
 - Registration itself performs no mutation. The caller cannot discard a
   transaction without executing it.
@@ -794,6 +795,9 @@ Each command requires unit tests for:
   execution;
 - stable suite/test owner and owning-command attribution;
 - isolation between suite executions, neighboring tests, and repeats;
+- suite-owned registration during setup and teardown, manual suite-transaction
+  expenditure from a nested test without ownership transfer, and automatic
+  suite cleanup after setup failure or zero executed tests;
 - one terminal transaction disposition in both the service journal and
   persisted result;
 - `unconfirmed` reporting when interruption prevents terminal verification;
