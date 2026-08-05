@@ -1248,10 +1248,11 @@ schema therefore carries its parent `suite_execution_id` as well as its stable
 test identity and repeat index.
 
 If interruption prevents ordinary test finalization, the surviving execution
-host first attempts remaining test-owned cleanup transactions in strict LIFO
-order. Only transactions that cannot reach a normal disposition are then
-terminalized as `unconfirmed` before the synthesized test result and
-`run.finished`.
+host first attempts remaining test-owned cleanup transactions in the successor
+protocol's dependency-safe reverse-topological order, using LIFO only for
+independent transactions. Only transactions that cannot reach a normal
+disposition are then terminalized as `unconfirmed` before the synthesized test
+result and `run.finished`.
 
 Every stage-aware command event carries a tagged owner scope and either the
 active suite-execution ID or nested test-attempt ID. All public commands are
@@ -1274,12 +1275,16 @@ IDs remain unique within the run. Service-owned run cleanup retains its existing
 separate run-level events.
 
 The successor runtime also owns one run-scoped resource ownership index across
-service-run, suite-execution, test-attempt, and command-invocation levels. It
-provides cross-level exclusive-claim checks and explicit sharing or dependency
-relationships while cleanup registries remain owner-local. The index is
-runtime enforcement state, not a second historical publisher; cleanup events
-and their bounded resource evidence remain authoritative for retained and
-persisted results.
+service-run, suite-execution, test-attempt, and command-invocation levels. One
+shared directed acyclic graph inside the index provides dependency edges,
+oriented from prerequisite to dependent, cycle and lifetime-direction
+validation, active-dependent queries, and
+deterministic reverse-topological cleanup planning. LIFO remains the tie-breaker
+only for independent transactions. Cross-level exclusive-claim checks and
+explicit compatible sharing remain in the same index while cleanup registries
+stay owner-local. The index and graph are runtime enforcement state, not a
+second historical publisher; cleanup events and their bounded resource evidence
+remain authoritative for retained and persisted results.
 
 Before publishing `test.finished`, the service folds the test attempt's events
 into `host_report.test_attempts[].cleanup_transactions`. Before publishing

@@ -32,6 +32,12 @@ effects. No initial built-in mutating command will opt into execution retry,
 but the runner, definition validator, outcomes, diagnostics, and conformance
 suite implement and prove the policy from the beginning.
 
+Cleanup registration is effect-driven rather than speculative: a command
+registers cleanup only after an execution outcome conclusively identifies an
+effect and supplies its receipt, but before any later fallible work, yield,
+verification, retry, or publication. A retry cannot begin until cleanup for
+every effect reported by the previous attempt completes and verifies.
+
 A caller is not required to supply a verification callback. DwarfSpec will
 encourage one for generic interaction commands, but omitting it remains valid.
 The command trace and documentation must distinguish intrinsic verification
@@ -134,7 +140,7 @@ scope and stable owner ID travel together in command events, cleanup events,
 result projections, and nested invocation context. Service-owned run cleanup is
 outside this enum and keeps its separate run-level protocol.
 
-### Resource ownership index
+### Resource ownership index and dependency graph
 
 The resource ownership index is one run-scoped runtime index of every active
 DwarfSpec resource claim. Claims are tagged at the level that owns them:
@@ -145,9 +151,11 @@ every claim lookup considers all active levels in the run.
 Each claim records a bounded resource kind and stable identity or logical
 region, its tagged owner and parent owner chain, its cleanup transaction when
 one exists, and any explicit dependency or compatible-sharing relationship.
-The index prevents two scopes from independently claiming an exclusive
-resource merely because they use different cleanup registries. It is an
-execution-safety index, not a second cleanup-history source of truth.
+One reusable directed acyclic graph inside the index represents dependency
+edges from a dependent claim to its prerequisite claim. The index prevents two
+scopes from independently claiming an exclusive resource merely because they
+use different cleanup registries. It is execution-safety state, not a second
+cleanup-history source of truth.
 
 ### Preflight gate
 
@@ -239,12 +247,20 @@ The command deadline does not suppress cleanup. Cleanup executes under the
 active suite/test owner and executor recovery contract with its own bounded lifecycle.
 An expired command can therefore fail and still restore or remove owned state.
 
-### Register ownership before mutation
+### Register cleanup after a confirmed effect
 
-Any command that creates or temporarily changes reversible state establishes
-both a resource claim and cleanup ownership before the state can escape. When
-allocation and publication cannot be separated, the command reserves pending
-resource and cleanup entries and later attaches the stable identity.
+A command reserves any resource claim needed for exclusivity before mutation,
+but it does not register executable cleanup until an execution outcome
+conclusively identifies an effect that exists and supplies its immutable cleanup
+receipt. The runner registers and links that cleanup synchronously before any
+later fallible operation, scheduler yield, verification, retry, or publication
+to test code. An execution outcome that produced no effect creates no cleanup
+transaction and releases any unused reservation.
+
+Native adapters must therefore report every cleanup-requiring partial effect as
+a structured execution, retry, or failure receipt. Throwing after an
+unreported mutation is an invalid adapter contract because no cleanup system
+can safely infer an identity that the adapter did not return.
 
 ### Re-resolve live targets
 
@@ -337,6 +353,12 @@ The following shape is illustrative; exact Lua names may change during
 implementation:
 
 ```lua
+---@class dwarfspec.CommandCleanupPolicy
+---@field lifetime dwarfspec.ECleanupLifetime
+---@field restore fun(context: dwarfspec.CleanupExecutionContext, request: any, receipt: any)
+---@field verify fun(context: dwarfspec.CleanupExecutionContext, request: any, receipt: any): dwarfspec.GateResult
+---@field resources? fun(request: any, receipt: any): dwarfspec.ResourceClaim[]
+
 ---@class dwarfspec.CommandDefinition
 ---@field name string
 ---@field kind dwarfspec.ECommandKind
@@ -347,6 +369,7 @@ implementation:
 ---@field operation_key? fun(request: any): string
 ---@field intrinsic_verification dwarfspec.EIntrinsicVerificationKind
 ---@field verify? fun(context: dwarfspec.CommandContext, request: any, receipt: any): dwarfspec.GateResult
+---@field cleanup? dwarfspec.CommandCleanupPolicy
 ---@field default_timeout_ms? integer
 ---@field diagnostics? fun(request: any, receipt: any): table
 ```
@@ -370,6 +393,13 @@ The registry validates definitions before run execution begins:
   introduced under a different field;
 - `EXECUTION_RECEIPT` definitions explicitly document the receipt guarantee
   validated by their command-specific conformance fixture;
+- a definition whose outcomes can report reversible effects supplies one
+  immutable cleanup policy with supported lifetime, restore, required verify,
+  and bounded resource projection; definitions that cannot produce a cleanup
+  effect omit it;
+- every executed, retry, or failed effect receipt is valid for the same cleanup
+  policy, so the runner can register behavior without asking execution code to
+  construct callbacks dynamically;
 - verify and diagnostics are callable when present;
 - timeout defaults are positive finite integers;
 - definitions cannot replace reserved built-in commands; and
@@ -407,6 +437,7 @@ Primary execution returns a private structured result:
 ```lua
 command.executed(public_result, receipt)
 command.retry(reason, attempt_receipt, evidence)
+command.failed(message, effect_receipt, evidence)
 ```
 
 The public result preserves the command's documented return value. The receipt
@@ -420,16 +451,33 @@ either a receipt or an execution failure.
 `command.retry(...)` is valid only for `EXPLICIT_RETRY_SAFE`. It means that the
 attempt completed without a terminal result and that executing again with the
 same operation key is safe. The runner stores the immutable attempt receipt in
-the private invocation and cleanup index before yielding, re-runs preflight and
-volatile-target validation, and then may attempt execution again under the same
-deadline. Retry is never inferred from `false`, `nil`, a thrown error, timeout,
-or cancellation. The retry loop yields cooperatively between attempts and
-retains bounded attempt counts and evidence for terminal diagnostics.
+the private invocation. If that receipt identifies a cleanup-requiring effect,
+the runner immediately registers a command-lifetime cleanup transaction for
+that execution attempt from the receipt. It then executes and verifies every
+transaction registered since that attempt's cleanup checkpoint in
+dependency-safe order and removes their resolved resource claims before any
+later attempt. A failed or unconfirmed attempt cleanup terminates the command;
+the runner never retries on top of an effect it could not prove removed. Only
+after successful attempt cleanup does it re-run preflight and volatile-target
+validation and possibly attempt execution again under the same absolute command
+deadline. Cleanup uses its independent finite deadline, but elapsed cleanup time
+still consumes the parent's wall-clock command deadline.
+
+`command.failed(...)` is the structured fatal outcome for an attempt that can
+conclusively report a cleanup-requiring partial effect. The runner registers and
+retains cleanup from `effect_receipt` before propagating the primary failure.
+An omitted effect receipt asserts that the failed attempt produced no effect.
+Retry or failure is never inferred from `false`, `nil`, a thrown error, timeout,
+or cancellation. A thrown adapter error is valid only when the adapter contract
+guarantees that no unreported effect occurred. The retry loop yields
+cooperatively between attempts and retains bounded attempt counts and evidence
+for terminal diagnostics.
 
 If primary execution throws or returns a declared failure, verification does
-not run. Prearmed cleanup transactions remain owned. Command-lifetime
-transactions are expended by the command's finally boundary, while
-owner-lifetime transactions remain pending for manual execution or teardown.
+not run. Cleanup registered from a structured effect receipt remains owned.
+Command-lifetime transactions are expended by the command's finally boundary,
+while owner-lifetime transactions remain pending for manual execution or
+teardown.
 
 ## Caller-supplied verification
 
@@ -602,27 +650,35 @@ For each invocation the runner performs the following operations:
    recoverable not-ready result returns to the preflight loop under the same
    deadline; removal, replacement, or another nonrecoverable identity change is
    fatal.
-8. Prearm required cleanup or pending ownership.
-9. For a query or assertion, poll its read-only primary observation until it
+8. Reserve any resource claim required to prevent conflicting mutation; do not
+   register executable cleanup before an effect exists.
+9. Before each mutating execution attempt, mark an attempt-local cleanup
+   checkpoint. For a query or assertion, poll its read-only primary observation until it
    returns ready, fatal, cancelled, or timed out. For a mutating `ONCE`
    definition, execute the primary operation exactly once. For an
    `EXPLICIT_RETRY_SAFE` definition, accept only explicit retry outcomes,
-   preserve each attempt receipt, re-run preflight and target validation, and
-   repeat under the same deadline until executed, fatal, cancelled, or timed
-   out.
-10. Establish intrinsic evidence according to the definition's explicit
+   register cleanup for every reported attempt effect, execute and verify that
+   transaction plus every other transaction created since the attempt
+   checkpoint before another attempt, re-run preflight and target validation,
+   and repeat under the same deadline until executed, fatal, cancelled, or
+   timed out.
+10. When an executed or failed outcome conclusively reports an effect, register
+    and link its cleanup transaction from the immutable receipt before any
+    later fallible operation, yield, verification, or publication. Release an
+    unused reservation when the outcome proves that no effect occurred.
+11. Establish intrinsic evidence according to the definition's explicit
     verification kind. Poll the intrinsic callback for `CALLBACK`; retain the
     validated primary observation for `PRIMARY_OBSERVATION`; or accept the
     immutable receipt for `EXECUTION_RECEIPT`.
-11. Poll caller verification when supplied.
-12. Execute and verify every still-pending command-lifetime cleanup transaction
+12. Poll caller verification when supplied.
+13. Execute and verify every still-pending command-lifetime cleanup transaction
     under the cleanup lifecycle, regardless of the primary outcome.
-13. Compose primary, verification, and command-lifetime cleanup failures without
+14. Compose primary, verification, and command-lifetime cleanup failures without
     replacing earlier failures.
-14. Refresh retained subjects only when the composed outcome remains successful.
-15. Publish exactly one terminal command event containing the complete
+15. Refresh retained subjects only when the composed outcome remains successful.
+16. Publish exactly one terminal command event containing the complete
     command-lifetime cleanup evidence.
-16. Return the original public result or propagate the composed failure.
+17. Return the original public result or propagate the composed failure.
 
 On any failure, the runner records the failing stage and latest evidence. It
 does not drain owner-lifetime transactions. Remaining owner transactions stay
@@ -686,19 +742,33 @@ or matching coordinates. Consuming or transferring a claim requires an
 explicit command contract; otherwise a command may consume only a claim owned
 by its exact owner. Cleanup registries and execution indexes remain private to
 their individual owners even when the resource index relates their claims.
-An owning cleanup transaction cannot release a claim while another active
-claim depends on it. The dependent resource must first be cleaned or safely
-abandoned; dependency does not implicitly transfer either claim or its cleanup
-transaction to the other owner.
 
-A resource claim is reserved before mutation or publication and linked to its
-cleanup transaction. It remains active while cleanup is pending or running.
-Successful verified cleanup releases it; safe abandonment releases a prearmed
-claim for which no mutation or publication occurred. Failed or unconfirmed
-cleanup leaves the claim unresolved and contributes to executor quarantine
-until the existing recovery contract proves the resource clean. Historical
-cleanup state remains authoritative in the service journal; the runtime index
-must not become a competing result ledger.
+The shared dependency abstraction is a directed acyclic graph whose nodes are
+active claims and whose edges point from prerequisite to dependent. One graph
+implementation owns node insertion/removal, edge insertion/removal, cycle and
+self-edge rejection, active-dependent lookup, lifetime validation, and
+deterministic reverse-topological cleanup planning. Commands declare domain
+relationships through this abstraction instead of implementing local
+dependency lists or cleanup ordering.
+
+A dependent claim must have a lifetime no longer than every prerequisite.
+Command lifetime is nested within its tagged execution owner, a test attempt is
+nested within its suite execution, and a suite execution is nested within the
+service run. Sibling or otherwise incomparable owners cannot form a dependency
+and are rejected by the graph. A separate explicit resource-transfer command
+may rehome a claim before a dependency is proposed, but dependency insertion
+itself never transfers either the claim or cleanup ownership. An owning cleanup
+transaction cannot release a prerequisite while an active dependent remains.
+
+A resource claim may be reserved before mutation for exclusivity, but it is
+linked to an executable cleanup transaction only after an effect receipt proves
+that cleanup is required. It remains active while cleanup is pending or
+running. Successful verified cleanup releases it; a reservation is released
+without a cleanup transaction when execution proves that no effect occurred.
+Failed or unconfirmed cleanup leaves the claim unresolved and contributes to
+executor quarantine until the existing recovery contract proves the resource
+clean. Historical cleanup state remains authoritative in the service journal;
+the runtime index and graph must not become competing result ledgers.
 
 ### Cleanup transaction lifecycle
 
@@ -707,22 +777,24 @@ callbacks. Registration returns a handle with an explicit lifecycle:
 
 ```lua
 ---@class dwarfspec.CleanupTransaction
----Binds bounded immutable restoration data exactly once before cleanup starts.
----@field bindReceipt fun(self: dwarfspec.CleanupTransaction, receipt: any)
 ---Manually expends pending cleanup; raises after recording a cleanup failure.
 ---The boolean is returned only on the normal success/already-expended path.
 ---@field execute fun(self: dwarfspec.CleanupTransaction, reason?: string): boolean
 ---@field isPending fun(self: dwarfspec.CleanupTransaction): boolean
 ```
 
-A transaction contains a label, restore operation, required verification
-operation, an immutable cleanup receipt, stable cleanup evidence, and one of
+A transaction is registered only after its effect exists. It contains a label,
+restore operation, required verification operation, immutable cleanup receipt,
+stable cleanup evidence, and one of
 `pending`, `running`, `complete`, `failed`, `abandoned`, or `unconfirmed`. The
 first two states are nonterminal; the remaining four are terminal dispositions.
-`abandoned` is restricted to an internal prearmed reservation for which no
-mutation or publication occurred. `unconfirmed` means interruption or
-recoverable execution-host failure prevented the still-running automation
-service from establishing a normal cleanup outcome.
+`abandoned` is restricted to an exceptional internal transaction whose effect
+receipt was registered but whose adapter subsequently proves that the native
+operation self-rolled back before publication and requires no restoration;
+ordinary command execution releases an unused resource reservation without
+registering a transaction.
+`unconfirmed` means interruption or recoverable execution-host failure prevented
+the still-running automation service from establishing a normal cleanup outcome.
 Caller registrations have owner lifetime: test-attempt lifetime when created
 inside an attempt, or suite-execution lifetime when created in suite-level
 setup/teardown. Internal registrations may instead have command lifetime for
@@ -731,7 +803,7 @@ transient input flags or similar state. The lifetime enum therefore contains
 the tagged owner identity supplies that distinction.
 
 Calling `transaction:execute()` manually removes the pending transaction from
-the active LIFO registry before invoking restore and verification. The handle
+the active registry before invoking restore and verification. The handle
 then records `complete` or `failed` and is expended. Repeated execution is
 idempotent: it reports that no pending work was executed and never invokes the
 callbacks again. A manual failure is recorded in authoritative cleanup evidence
@@ -746,46 +818,48 @@ the suite cleanup journal and result projection even though its raised error is
 observed by the active test lifecycle.
 
 At test or suite teardown, the cleanup system automatically executes every
-transaction that remains pending in its owning scope in strict LIFO order. A
-command's finally boundary likewise executes its command-lifetime transactions
-in reverse registration order. One failure does not prevent later transactions
-from being attempted. Teardown combines all transaction failures with lifecycle
-probes before setting `cleanup_confirmed`.
+transaction that remains pending in dependency-safe reverse-topological order.
+Among transactions whose claims are independent, later registration executes
+first as the deterministic LIFO tie-breaker. A command's finally boundary uses
+the same planner for command-lifetime transactions. One failure does not prevent
+later eligible transactions from being attempted. If a dependent remains
+active because its cleanup failed or became unconfirmed, the planner does not
+execute an unsafe prerequisite cleanup; it records the prerequisite transaction
+as `failed` with bounded `dependency_blocked` evidence naming the blocking claim
+IDs. Teardown combines all transaction failures with lifecycle probes before
+setting `cleanup_confirmed`.
 
-The public cleanup API does not expose cancellation without execution. An
-internal pending ownership reservation may be abandoned only when the command
-proves that no mutation or publication occurred. Once a resource or reversible
-state is published, its transaction must be executed manually or remain pending
-for teardown.
+The public cleanup API does not expose cancellation without execution because a
+public transaction is registered only with a receipt for an effect that already
+exists. Once registered, it must be executed manually or remain pending for
+automatic cleanup.
 
 Cleanup receipts are the only supported path for passing restoration inputs to
-cleanup callbacks. A prearmed transaction begins with either an immutable
-receipt supplied at registration or an unbound receipt slot. The command or
-caller binds an unbound slot exactly once with bounded plain data; the cleanup
-engine defensively copies and freezes that value. Rebinding, binding after the
-transaction starts, binding userdata or cyclic data, and executing an unbound
-caller transaction are contract errors. An unbound caller transaction that
-reaches teardown is `failed`, because the engine cannot prove that mutation did
-not occur. Only an internal command may safely abandon an unbound transaction,
-and only after proving that no mutation or publication occurred.
+cleanup callbacks. Registration requires bounded plain receipt data, which the
+cleanup engine defensively copies and freezes before adding the transaction to
+the registry and journal. Receipts contain stable identities and immutable
+scalar baselines needed by restoration and verification, never live native
+pointers, callbacks, or cyclic data. The runtime structurally validates the
+receipt but does not attempt to infer whether a callback also closes over Lua
+values; authoring guidance requires correctness-critical cleanup data to come
+from the receipt.
 
-When primary execution creates a stable identity, it binds the cleanup receipt
-at the first point that identity is available and before any later fallible
-operation, scheduler yield, intrinsic verification, or publication to test
-code. The receipt contains the stable identity and immutable scalar baseline
-needed by both restoration and verification, never a live native pointer. If a
-native operation can allocate and then fail before returning that identity, its
-adapter must return a structured partial receipt or provide an operation key
-that can safely rediscover the partial resource; such an operation cannot use
-an unobservable allocation path.
+When primary execution produces a stable identity or reversible state change,
+the runner registers cleanup from that effect receipt immediately, before any
+later fallible operation, scheduler yield, intrinsic verification, retry, or
+publication to test code. If a native operation can mutate and then fail, its
+adapter returns a structured failure receipt or an operation key that safely
+rediscovers the partial effect. An unobservable mutation followed by a thrown
+error violates the adapter contract.
 
-State setters capture their first inherited baseline and register an
-owner-lifetime transaction before mutation. Fixture commands reserve a pending transaction
-before native construction and attach stable identity evidence after
-publication. Command-lifetime transactions are automatically expended in the
-command's finally boundary. A command failure does not drain unrelated or
-owner-lifetime transactions because callers may catch the failure and
-continue the test.
+State setters capture their inherited baseline before mutation, then register
+an owner-lifetime transaction immediately after the effect is conclusively
+observed. Fixture commands may reserve an exclusive claim before native
+construction, then register cleanup from the returned stable identity before
+verification or publication. Command-lifetime transactions are automatically
+expended in the command's finally boundary. A command failure does not drain
+unrelated or owner-lifetime transactions because callers may catch the failure
+and continue the test.
 
 Every cleanup transaction that mutates external state has an independent
 verification operation. Cleanup verification is not optional because
@@ -841,7 +915,7 @@ test code.
 
 ### Cleanup history and result reporting
 
-The active LIFO registry and cleanup history have different responsibilities.
+The active pending registry and cleanup history have different responsibilities.
 Each cleanup owner scope owns its own active registry and mutable cleanup
 execution index. An owner is either a suite execution or a test attempt nested
 within that suite execution. The registry contains only transactions that
@@ -892,8 +966,8 @@ to reproduce the ledger without inspecting the active registry:
   `unconfirmed`, duration, restore outcome, verification outcome, and any
   failure reference; and
 - `cleanup.transaction_abandoned` records the exceptional internal-only case
-  where a prearmed reservation is safely discarded after proving that no
-  mutation or publication occurred.
+  where a registered effect is proven to have self-rolled back before
+  publication without requiring restoration.
 
 If interruption or a recoverable execution-host failure prevents a registered
 transaction from reaching one of those normal dispositions while the automation
@@ -938,13 +1012,15 @@ The event's behavior status remains distinct from cleanup disposition; failed
 or unconfirmed cleanup is reported separately and still contributes to the run
 failure and quarantine rules. If interruption prevents the ordinary test
 callback from finishing, the emergency finalizer first attempts remaining
-test-owned transactions in strict LIFO order whenever the execution host is
-still usable. Run terminalization then synthesizes the attempt result and marks
-only transactions that remain unresolved `unconfirmed` before `run.finished`.
+test-owned transactions in dependency-safe reverse-topological order with LIFO
+tie-breaking whenever the execution host is still usable. Run terminalization
+then synthesizes the attempt result and marks only transactions that remain
+unresolved `unconfirmed` before `run.finished`.
 
 After suite-level teardown hooks return, suite registration closes and
-automatic cleanup executes every remaining suite-owned transaction in strict
-LIFO order. DwarfSpec terminalizes unresolved suite transactions, materializes
+automatic cleanup executes every remaining suite-owned transaction in
+dependency-safe reverse-topological order with LIFO tie-breaking. DwarfSpec
+terminalizes unresolved suite transactions, materializes
 the suite's cleanup result, and only afterward publishes `suite.finished`.
 Suite cleanup failure or an unconfirmed disposition affects the suite and run
 outcome and applies the normal executor-quarantine rules, but it is not
@@ -1164,12 +1240,15 @@ definitions instead of binding functions directly to `ds`. Simulation, mount,
 input, render, and game modules remain capability providers and do not learn
 about public API registration.
 
-The host cleanup subsystem owns separate pending-only LIFO registries and
-mutable cleanup execution indexes for suite executions and their nested test
-attempts. A run-scoped resource ownership index relates active claims across
+The host cleanup subsystem owns separate pending-only owner registries with
+stable registration ordinals and mutable cleanup execution indexes for suite
+executions and their nested test attempts. A run-scoped resource ownership index relates active claims across
 service-run, suite-execution, test-attempt, and command-invocation levels while
-preserving those owner-local cleanup registries. The automation service remains
-the sole publisher and owns the authoritative run-scoped event journal. Its
+preserving those owner-local cleanup registries. One reusable directed acyclic
+graph module inside the index owns dependency validation and cleanup planning
+for every command family; individual adapters do not duplicate graph logic.
+The automation service remains the sole publisher and owns the authoritative
+run-scoped event journal. Its
 suite and test-attempt finalizers
 fold the selected owner's transaction events into terminal result projections.
 Protocol modules own execution-owner scopes, transaction event types, disposition
@@ -1240,8 +1319,9 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - `ONCE` primary execution and rejection of every execution-retry outcome;
 - `EXPLICIT_RETRY_SAFE` definition validation, stable operation keys,
   cooperative yielding, re-preflight and target revalidation between attempts,
-  private attempt-receipt retention, eventual success, fatality, cancellation,
-  and shared-deadline expiry;
+  private attempt-receipt retention, verified cleanup of every reported attempt
+  effect before another attempt, cleanup-failure termination, eventual success,
+  fatality, cancellation, and shared-deadline expiry;
 - proof that `false`, `nil`, and thrown execution errors never trigger implicit
   execution retry;
 - no execution after preflight expiry;
@@ -1249,16 +1329,19 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - optional caller verification omitted, passed, pending, thrown, and timed out;
 - caller verification cannot bypass intrinsic verification;
 - receipt preservation after execution and verification failure;
-- cleanup prearming, manual expenditure, command-lifetime cleanup, and teardown behavior;
-- cleanup receipt validation, defensive freezing, exactly-once binding,
-  callback delivery, rejection of closure-only cleanup identity, unbound
-  caller failure, and proven-safe internal abandonment;
+- cleanup registration immediately after a conclusive effect receipt, manual
+  expenditure, command-lifetime cleanup, and teardown behavior;
+- cleanup receipt validation, defensive freezing, identical callback delivery,
+  runtime enforcement of required receipt data without attempting to inspect
+  callback closure semantics, and exceptional self-rollback abandonment;
 - cleanup state transitions through every terminal disposition, including an
   exactly-once journal event for `unconfirmed`;
 - resource-claim reservation before mutation, cross-level exclusive-conflict
   detection, explicit compatible sharing and dependency relationships, and
-  rejection of prerequisite-claim release while a dependent claim remains
-  active, followed by verified release or quarantine retention;
+  reusable DAG cycle/lifetime validation, reverse-topological cleanup with LIFO
+  tie-breaking, rejection of prerequisite-claim release while a dependent claim
+  remains active, deterministic `dependency_blocked` failure materialization,
+  and verified release or quarantine retention;
 - one-shot restoration and retryable cleanup verification under an independent
   finite cleanup deadline, including restoration errors followed by attempted
   verification and cleanup timeout reporting;
@@ -1350,7 +1433,8 @@ Final qualification proves:
 - every mutator documents its intrinsic verification boundary;
 - optional caller verification works for top-level and subject commands;
 - `ONCE` mutations execute exactly once, and retry-safe mutations retry only
-  after explicit outcomes under their stable operation key;
+  after explicit outcomes under their stable operation key and verified cleanup
+  of every effect from the previous attempt;
 - commands and cleanup registered in suite-level setup/teardown are attributed,
   finalized, reported, and persisted under their suite execution;
 - project-defined definitions behave as documented and bare callbacks are rejected during loading;
@@ -1376,8 +1460,9 @@ evidence; a silent or externally interrupted run is not.
 - Add suite-execution and test-attempt cleanup indexes, stable transaction
   identities, authoritative run-journal lifecycle events, and the
   service-materialized owner-scoped cleanup result projections.
-- Add the run-scoped resource ownership index, cross-level conflict policy,
-  explicit sharing/dependency relationships, and verified claim release.
+- Add the run-scoped resource ownership index, its shared directed acyclic
+  dependency graph, cross-level conflict and lifetime policy,
+  reverse-topological cleanup planner, and verified claim release.
 - Revise the service/event/result protocol together, including cursor reads,
   suite lifecycle events, retained-run inspection, controller interpretation,
   persistence, formatting, and compatibility rejection.
@@ -1438,7 +1523,8 @@ This proposal becomes authoritative for how those commands execute:
 
 - their preconditions become command preflight gates;
 - construction and observation use the shared deadline;
-- pending ledger entries are prearmed ownership;
+- cleanup transactions are registered immediately from conclusive effect
+  receipts before verification or publication;
 - created IDs and scalar snapshots become receipts;
 - creation checks become intrinsic verification;
 - caller-supplied product verification remains optional;
@@ -1493,7 +1579,8 @@ Project-command documentation includes a complete definition example, the
 cooperative execution limitation, safe diagnostic projection, receipt design,
 the required conversion from callback-only modules, and a complete
 `EXPLICIT_RETRY_SAFE` example showing its operation key, idempotency proof,
-explicit retry outcome, attempt receipt, and cleanup ownership.
+explicit retry outcome, attempt receipt, verified prior-attempt cleanup, and
+cleanup ownership.
 
 ## Acceptance criteria
 
@@ -1504,8 +1591,9 @@ The architecture is complete when:
 - every command has an explicit read-only preflight gate;
 - every mutating primary operation is exactly once by default;
 - `EXPLICIT_RETRY_SAFE` is fully implemented, retries only explicit outcomes
-  under one stable operation key and deadline, preserves attempt receipts and
-  cleanup ownership, and is rejected without its idempotency proof;
+  under one stable operation key and deadline, preserves attempt receipts,
+  executes and verifies cleanup for every prior attempt effect before retrying,
+  and is rejected without its idempotency proof;
 - intrinsic verification exists wherever the declared framework effect is
   independently observable;
 - caller verification is optional, retryable, documented, and unable to weaken
@@ -1514,22 +1602,25 @@ The architecture is complete when:
   as child events with unique invocation and parent identities;
 - command timeout errors identify the exact lifecycle stage and last bounded
   observation;
-- command-owned mutations prearm cleanup before publication;
+- command-owned effects register cleanup synchronously from their receipts
+  before later fallible work, yielding, verification, retry, or publication;
 - resource claims are tracked across service-run, suite-execution,
   test-attempt, and command-invocation levels, with exclusive conflicts checked
   across the complete run rather than only within one cleanup registry;
-- an active dependent claim prevents release of its prerequisite claim, and a
-  dependency never transfers cleanup ownership implicitly;
+- one shared acyclic dependency graph rejects cycles and invalid lifetime
+  direction, plans dependent-before-prerequisite cleanup, uses LIFO only to
+  order independent transactions, and never transfers ownership implicitly;
 - caller cleanup registrations return manually executable transactions, and
   teardown executes every transaction that remains pending;
-- cleanup callbacks receive an immutable transaction receipt, required cleanup
-  identity is not carried only by closure capture, and an unbound caller
-  transaction fails rather than disappearing;
+- cleanup callbacks receive a required immutable transaction receipt, and the
+  runtime validates that receipt without claiming it can enforce callback
+  closure semantics;
 - caller cleanup registration requires an independent verification operation;
 - cleanup restoration is one-shot, cleanup verification is retryable, and every
   cleanup execution has a finite deadline independent of its owning command;
-- command-lifetime and owner-lifetime automatic cleanup execute in strict
-  reverse registration order within their respective scope;
+- command-lifetime and owner-lifetime automatic cleanup execute in
+  dependency-safe reverse-topological order, with reverse registration order
+  used only for independent transactions within their respective scope;
 - test-attempt cleanup closes and its result is materialized before
   `test.finished`; suite-execution cleanup closes and its result is materialized
   before `suite.finished`; service-owned run cleanup remains separately scoped;

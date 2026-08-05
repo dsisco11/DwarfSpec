@@ -30,10 +30,12 @@ ds.runUntil(description, query, options)
 
 - Every mutating fixture command is scoped to the most specific active cleanup
   owner: the current test attempt, or the suite execution when called from
-  suite-level setup/teardown. It registers cleanup before the created resource
-  can become visible to test code or native simulation.
-- Cleanup participates in DwarfSpec's existing LIFO cleanup, verification,
-  reporting, and executor-quarantine behavior.
+  suite-level setup/teardown. It registers cleanup immediately after an effect
+  is conclusively identified and before later fallible work, yielding,
+  verification, retry, or publication to test code.
+- Cleanup participates in DwarfSpec's shared dependency-aware cleanup,
+  verification, reporting, and executor-quarantine behavior; independent
+  transactions retain LIFO ordering.
 - Commands create and own their fixture resources. They do not borrow organic
   items, buildings, jobs, or units and later pretend those resources were
   created by DwarfSpec.
@@ -110,24 +112,32 @@ Each suite execution and nested test attempt receives an isolated cleanup
 ledger shared by these commands. One run-scoped resource ownership index tracks
 stable resource identities, logical tile reservations, spies, inactive-unit
 claims, and their tagged service-run, suite, test, or command owner across all
-active lifecycle levels. Cleanup remains owner-local and drains in strict LIFO
-order, while exclusivity checks consult the complete resource index.
+active lifecycle levels. Its shared directed acyclic dependency graph validates
+prerequisite-to-dependent edges and cross-level lifetime direction and plans
+dependent-before-prerequisite cleanup;
+LIFO orders only independent transactions. Cleanup remains owner-local, while
+exclusivity and dependency checks consult the complete resource index.
 
-### Register before publication
+### Register immediately after a confirmed effect
 
-A mutating command must establish a cleanup record before publishing a resource
-to the world or returning its identity. When the native API cannot separate
-allocation from publication, the command must use a guarded transaction:
+A mutating command does not register cleanup before an effect exists. It first
+validates the cleanup policy and reserves any exclusive resource claim, then
+registers cleanup synchronously as soon as execution conclusively returns an
+effect receipt and before any later fallible work, yield, verification, retry,
+or return to test code:
 
 1. validate and normalize the complete request;
-2. reserve cleanup capacity with a pending ownership record;
+2. reserve any exclusive resource claim required for safe mutation;
 3. perform native construction;
-4. attach the stable identity to the pending record;
-5. verify the constructed resource;
-6. return the identity.
+4. receive a stable effect or structured partial-effect receipt;
+5. register cleanup from that immutable receipt and link the resource claim;
+6. verify the constructed resource;
+7. return the identity.
 
-If construction fails after native allocation, the pending cleanup record owns
-the partial resource and teardown still runs.
+If construction fails after native allocation, the adapter must return a
+structured failure receipt or stable rediscovery key. The runner registers
+cleanup from that receipt before propagating the failure. An adapter may throw
+without a receipt only when it guarantees that no effect occurred.
 
 ### Cleanup and verification
 
@@ -139,7 +149,8 @@ owning suite or test result.
 `cleanup_confirmed=true` is emitted only after:
 
 - every cleanup-requiring entry was attempted, while any exceptional internal
-  reservation was safely abandoned before mutation or publication;
+  transaction abandoned only after its registered effect was proven to have
+  self-rolled back before publication;
 - every entry-specific verification passed;
 - every job spy and recurring observer was stopped;
 - every logical map reservation was released; and
@@ -151,7 +162,7 @@ existing recovery contract.
 Cleanup registration also publishes an append-only historical transition for
 the owning suite execution or test attempt into the authoritative run-scoped
 service journal. Manual execution or teardown removes the transaction from
-that owner's active LIFO registry before callbacks run, but it does not remove
+that owner's active pending registry before callbacks run, but it does not remove
 its journal history. The transaction reaches `complete`, `failed`, `abandoned`,
 or `unconfirmed` and remains available through owner-tagged journal events and
 the service-materialized result at
@@ -284,17 +295,13 @@ native userdata.
 
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
----@field receipt? dwarfspec.CleanupReceipt
+---@field receipt dwarfspec.CleanupReceipt
 ---@field restore fun(receipt: dwarfspec.CleanupReceipt)
 ---@field verify fun(receipt: dwarfspec.CleanupReceipt): boolean|dwarfspec.GateResult|nil
 ---@field timeout_ms? integer
 
 ---@class dwarfspec.CleanupTransaction
 local CleanupTransaction = {}
-
----Binds this transaction's immutable cleanup receipt exactly once.
----@param receipt dwarfspec.CleanupReceipt
-function CleanupTransaction:bindReceipt(receipt) end
 
 ---Executes and unregisters this transaction when it is still pending.
 ---Raises after recording a restore or verification failure.
@@ -324,9 +331,11 @@ Contract:
   owner and fails after that owner's cleanup begins.
 - `verify` is required so the transaction can contribute authoritative evidence
   to `cleanup_confirmed`.
-- `receipt`, when supplied at registration, is defensively copied and frozen.
-  Otherwise the returned transaction has one unbound receipt slot that must be
-  bound exactly once with `bindReceipt()` before cleanup can execute.
+- `receipt` is required at registration and is defensively copied and frozen
+  before the transaction enters the registry or journal.
+- The receipt identifies an effect that already exists. `registerCleanup()` is
+  not a speculative reservation API; callers create or change the resource,
+  then register its cleanup before yielding or publishing it to other test code.
 - Receipts are bounded plain data containing stable IDs and immutable scalar
   baselines. They cannot contain native userdata, callbacks, cycles, or mutable
   tables shared with test code.
@@ -345,9 +354,10 @@ Contract:
   assertions; they inherit the transaction's owner, cancellation state, and
   remaining cleanup deadline. Public mutations or cleanup registration from
   verification are contract errors.
-- `bindReceipt()` fails if the receipt is invalid, already bound, or cleanup has
-  started. An unbound caller transaction fails during manual execution or
-  teardown; callers cannot abandon it merely by omitting the receipt.
+- The runtime validates receipt shape and presence but does not attempt to
+  inspect callback upvalues or prove that a callback uses no closure values.
+  Correctness-critical stable identities, baselines, and operation keys are
+  supported only through the receipt.
 - A restore error does not suppress verification when time remains; both
   outcomes are retained and the transaction remains failed.
 - The returned transaction can be executed manually at any later point in its
@@ -365,13 +375,16 @@ Contract:
 - Registration itself performs no mutation. The caller cannot discard a
   transaction without executing it.
 - Test or suite teardown automatically executes every transaction that remains
-  pending in that owner in strict LIFO order.
+  pending in dependency-safe reverse-topological order, using LIFO only to
+  order independent transactions.
 
 Example:
 
 ```lua
+local registration_id = create_registration()
 local cleanup = ds.registerCleanup{
     label='remove temporary native registration',
+    receipt={registration_id=registration_id},
     restore=function(receipt)
         remove_registration(receipt.registration_id)
     end,
@@ -379,8 +392,6 @@ local cleanup = ds.registerCleanup{
         assert.is_false(registration_exists(receipt.registration_id))
     end,
 }
-local registration_id = create_registration()
-cleanup:bindReceipt{registration_id=registration_id}
 publish_registration(registration_id)
 
 -- Optional early cleanup; teardown would otherwise execute it automatically.
@@ -653,8 +664,11 @@ Contract:
 - A unit may be owned by at most one inactive-state transaction at a time.
   Overlap with another `disableUnitsAi()` call or `setUnitSpeed()` target
   ownership is rejected before mutation.
-- DwarfSpec registers verified cleanup for the complete target set before
-  setting the first inactive flag.
+- DwarfSpec snapshots the complete validated target set and baseline first. It
+  sets the first inactive flag, confirms that effect, and immediately registers
+  verified cleanup whose receipt covers the complete target set before changing
+  the next target. Restoration is idempotent for targets whose flag was never
+  changed if a later write fails.
 - The command sets only `unit.flags1.inactive`. It does not remove or reorder
   active-vector entries, cancel or replace jobs, clear actions, discard paths,
   change positions, or alter occupancy.
@@ -803,9 +817,12 @@ The implementation should preserve DwarfSpec's existing ownership boundaries:
   registries and cleanup execution indexes.
 - One run-scoped resource ownership index tracks owner-tagged resource claims,
   logical tile reservations, active job spies, inactive-unit flag transitions,
-  cleanup linkage, dependencies, compatible sharing, and exclusive conflicts
-  across service-run, suite-execution, test-attempt, and command-invocation
-  levels.
+  cleanup linkage, compatible sharing, and exclusive conflicts across
+  service-run, suite-execution, test-attempt, and command-invocation levels. One
+  reusable directed acyclic graph inside that index owns
+  prerequisite-to-dependent edges, cycle and lifetime validation,
+  active-dependent queries, and deterministic reverse-topological cleanup
+  planning for every command family.
 - Closed DwarfSpec discriminators live in protocol enum modules as immutable
   numeric tables.
 - Canonical DF discriminators such as `df.item_type`, `df.item_quality`, and
@@ -834,11 +851,18 @@ Each command requires unit tests for:
 - canonical enum acceptance and invalid-enum rejection;
 - callback and predicate error preservation;
 - rejection of cleanup registration without a verification callback;
-- cleanup receipt validation and freezing, receipt-at-registration and
-  exactly-once post-registration binding, identical receipt delivery to restore
-  and verification, and rejection of unbound caller cleanup;
-- cleanup registration before publication;
-- LIFO cleanup and continued cleanup after failure;
+- required cleanup receipt validation and freezing, identical receipt delivery
+  to restore and verification, and no claim that callback closure semantics can
+  be enforced;
+- cleanup registration immediately after a conclusive effect receipt and before
+  later fallible work, yielding, verification, retry, or publication;
+- structured partial-effect failure receipts and rejection of adapters that can
+  mutate before throwing without reporting a cleanup identity;
+- verified cleanup of every effect created by a retry attempt before another
+  attempt may execute;
+- reverse-topological cleanup, LIFO ordering of independent transactions, and
+  continued cleanup after failure, including `dependency_blocked` failure for
+  prerequisites that cannot safely execute after dependent cleanup fails;
 - idempotent cleanup transaction execution;
 - finite cleanup timeout precedence, one-shot restore, retryable verification,
   restore-error verification, and deadline expiry;
@@ -847,8 +871,10 @@ Each command requires unit tests for:
 - stable suite/test owner and owning-command attribution;
 - isolation between suite executions, neighboring tests, and repeats;
 - cross-level resource-claim conflict detection, explicit sharing and
-  dependency relationships, rejection of prerequisite release while dependent
-  claims remain active, and claim retention after failed or unconfirmed cleanup;
+  dependency relationships, reusable DAG cycle and lifetime-direction
+  validation, reverse-topological cleanup with LIFO tie-breaking, rejection of
+  prerequisite release while dependent claims remain active, and claim
+  retention after failed or unconfirmed cleanup;
 - suite-owned registration during setup and teardown, manual suite-transaction
   expenditure from a nested test without ownership transfer, and automatic
   suite cleanup after setup failure or zero executed tests;
@@ -868,9 +894,10 @@ classifications, exclusion IDs, predicate ordering, empty results, and stable
 sorting.
 
 `disableUnitsAi()` additionally requires dense and duplicate-ID validation,
-all-target preflight before mutation, active-vector uniqueness checks,
-registration before the first flag write, overlapping-ownership rejection,
-flag-only mutation, stable-ID cleanup, fail-closed terminal-state handling, and
+  all-target preflight before mutation, active-vector uniqueness checks,
+  registration immediately after the first confirmed flag write and before the
+  next write, overlapping-ownership rejection, flag-only mutation, stable-ID
+  cleanup, fail-closed terminal-state handling, and
 verification that cleanup restores active classification without duplicating or
 reordering active-vector entries.
 
@@ -907,9 +934,9 @@ Passing assertions without verified cleanup are insufficient.
 
 ## Delivery order
 
-1. Expose `registerCleanup()`, the run-scoped resource ownership index, and the
-   cleanup history/result-journal integration defined by the verified command
-   execution proposal.
+1. Expose `registerCleanup()`, the run-scoped resource ownership index and its
+   shared dependency DAG, and the cleanup history/result-journal integration
+   defined by the verified command execution proposal.
 2. Add `reserveMapTiles()` and `queryUnits()` as read-mostly discovery
    primitives.
 3. Add `disableUnitsAi()` with flag-only ownership and fail-closed verified
