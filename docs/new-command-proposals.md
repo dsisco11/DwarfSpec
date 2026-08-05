@@ -131,6 +131,20 @@ example result.
 An unverified or partially failed cleanup quarantines the executor under the
 existing recovery contract.
 
+Cleanup registration also creates an append-only historical record for the
+owning test attempt. Manual execution or teardown removes the transaction from
+the active LIFO registry before callbacks run, but it does not remove that
+record. The record reaches `complete`, `failed`, `abandoned`, or `unconfirmed`
+and remains available through the service event journal and persisted test
+result.
+
+The verified command execution proposal owns the detailed transaction-event
+schema, stable identity rules, safe evidence projection, and result/journal
+consistency requirements. Fixture commands must supply stable labels, ownership
+identity, and bounded cleanup evidence required by that contract. They must not
+introduce a fixture-specific cleanup history or infer completed transactions
+from the remaining pending registry.
+
 ## Public types
 
 ### `MapPosition`
@@ -615,7 +629,9 @@ acceleration commands retain their existing independent cleanup behavior.
 Fixture commands register private cleanup entries through the same registry
 exposed by `registerCleanup()`. Private entries may use stronger internal
 identity metadata, but they obey the same ordering, aggregation, verification,
-and reporting rules as public entries.
+and reporting rules as public entries. Every public or private registration is
+attributed to its owning test attempt and appears in that attempt's cleanup
+transaction result set even after it has been manually expended.
 
 ## Architecture
 
@@ -657,6 +673,13 @@ Each command requires unit tests for:
 - cleanup registration before publication;
 - LIFO cleanup and continued cleanup after failure;
 - idempotent cleanup transaction execution;
+- complete cleanup-ledger retention after manual and teardown execution;
+- stable test-attempt and owning-command attribution;
+- one terminal transaction disposition in both the service journal and
+  persisted result;
+- `unconfirmed` reporting when interruption prevents terminal verification;
+- rejection of duplicate, missing, or journal-inconsistent transaction result
+  records;
 - verification failure aggregation; and
 - declaration/runtime signature agreement.
 
@@ -690,7 +713,9 @@ Passing assertions without verified cleanup are insufficient.
 
 ## Delivery order
 
-1. Expose `registerCleanup()` and the example ownership ledger.
+1. Expose `registerCleanup()`, the example ownership ledger, and the cleanup
+   history/result-journal integration defined by the verified command execution
+   proposal.
 2. Add `reserveMapTiles()` and `queryUnits()` as read-mostly discovery
    primitives.
 3. Add `spawnItem()` with complete ownership and removal verification.
