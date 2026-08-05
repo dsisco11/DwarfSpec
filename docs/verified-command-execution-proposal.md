@@ -770,9 +770,10 @@ A dependent claim must have a lifetime no longer than every prerequisite.
 Command lifetime is nested within its tagged execution owner, a test attempt is
 nested within its suite execution, and a suite execution is nested within the
 service run. Sibling or otherwise incomparable owners cannot form a dependency
-and are rejected by the graph. A separate explicit resource-transfer command
-may rehome a claim before a dependency is proposed, but dependency insertion
-itself never transfers either the claim or cleanup ownership. An owning cleanup
+and are rejected by `ResourceDependencyIndex` before graph edge insertion. A
+separate explicit resource-transfer command may rehome a claim before a
+dependency is proposed, but dependency insertion itself never transfers either
+the claim or cleanup ownership. An owning cleanup
 transaction cannot release a prerequisite while an active dependent remains.
 
 A resource claim may be reserved before mutation for exclusivity, but it is

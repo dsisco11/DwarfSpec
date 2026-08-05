@@ -137,8 +137,10 @@ node removes all of its incoming and outgoing edges atomically.
 2. Repeatedly select the least ready node.
 3. Emit it and decrement its selected successors.
 
-The default ordering compares node IDs lexically. A caller may provide a strict
-`less(left, right)` comparator for domain-specific deterministic tie-breaking.
+The default ordering compares node IDs lexically. A caller may provide
+`less(left, right)` for domain-specific deterministic tie-breaking. A supplied
+comparator must define a deterministic strict weak order. When neither node
+compares before the other, lexical node-ID order is the mandatory fallback.
 The comparator is used only between simultaneously ready nodes; it cannot
 violate an edge.
 
@@ -171,8 +173,9 @@ The focused suite must cover:
   removal;
 - edge insertion, duplicate insertion, membership, removal, and duplicate
   removal;
-- rejection of empty IDs, unknown endpoints, self-edges, and direct or indirect
-  cycles;
+- rejection of nil, non-string, and empty IDs by every public method that
+  accepts node IDs;
+- rejection of unknown endpoints, self-edges, and direct or indirect cycles;
 - proof that rejected edges do not mutate the graph;
 - direct predecessor and successor queries with lexical ordering;
 - node removal clearing every incident edge;
@@ -180,6 +183,8 @@ The focused suite must cover:
   disconnected nodes;
 - lexical ordering of simultaneously ready nodes;
 - custom deterministic ordering of simultaneously ready nodes;
+- lexical fallback when the custom comparator treats ready nodes as equivalent;
+- rejection of a supplied comparator that is not a function;
 - induced-subset ordering, including edges that cross the subset boundary;
 - rejection of duplicate or unknown subset IDs; and
 - proof that mutating returned arrays does not mutate the graph.
@@ -201,5 +206,7 @@ This prerequisite is complete when:
 - the module and declarations implement exactly the API above;
 - every unit-test contract case passes;
 - Lua syntax, formatting, and declaration checks pass for the new files; and
-- `ResourceDependencyIndex` and `CleanupPlanner` can consume the utility without
-  adding graph algorithms or domain-specific methods to it.
+- design review confirms that the API exposes the generic operations required
+  by the documented `ResourceDependencyIndex` and `CleanupPlanner` contracts
+  without adding domain-specific methods. Actual consumer wiring and integration
+  tests belong to those later proposals and do not gate this prerequisite.
