@@ -122,7 +122,8 @@ example result.
 
 `cleanup_confirmed=true` is emitted only after:
 
-- every registered entry was attempted;
+- every cleanup-requiring entry was attempted, while any exceptional internal
+  reservation was safely abandoned before mutation or publication;
 - every entry-specific verification passed;
 - every job spy and recurring observer was stopped;
 - every logical map reservation was released; and
@@ -131,12 +132,14 @@ example result.
 An unverified or partially failed cleanup quarantines the executor under the
 existing recovery contract.
 
-Cleanup registration also creates an append-only historical record for the
-owning test attempt. Manual execution or teardown removes the transaction from
-the active LIFO registry before callbacks run, but it does not remove that
-record. The record reaches `complete`, `failed`, `abandoned`, or `unconfirmed`
-and remains available through the service event journal and persisted test
-result.
+Cleanup registration also publishes an append-only historical transition for
+the owning test attempt into the authoritative run-scoped service journal.
+Manual execution or teardown removes the transaction from that attempt's active
+LIFO registry before callbacks run, but it does not remove its journal history.
+The transaction reaches `complete`, `failed`, `abandoned`, or `unconfirmed` and
+remains available through attempt-tagged journal events and the service-
+materialized test result at
+`host_report.test_attempts[].cleanup_transactions`.
 
 The verified command execution proposal owns the detailed transaction-event
 schema, stable identity rules, safe evidence projection, and result/journal
@@ -263,7 +266,7 @@ native userdata.
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
 ---@field restore fun()
----@field verify? fun()
+---@field verify fun()
 
 ---@class dwarfspec.CleanupTransaction
 local CleanupTransaction = {}
@@ -291,7 +294,8 @@ Contract:
 - `restore` and `verify` execute in the same isolated test environment in which
   they were registered.
 - Registration fails after example cleanup begins.
-- `verify` defaults to a no-op when omitted.
+- `verify` is required so the transaction can contribute authoritative evidence
+  to `cleanup_confirmed`.
 - The returned transaction can be executed manually at any later point in the
   test while it remains pending.
 - Manual execution unregisters and expends the transaction before calling
@@ -670,11 +674,14 @@ Each command requires unit tests for:
 - deterministic normalization and ordering;
 - canonical enum acceptance and invalid-enum rejection;
 - callback and predicate error preservation;
+- rejection of cleanup registration without a verification callback;
 - cleanup registration before publication;
 - LIFO cleanup and continued cleanup after failure;
 - idempotent cleanup transaction execution;
-- complete cleanup-ledger retention after manual and teardown execution;
+- complete authoritative journal retention after manual and teardown
+  execution;
 - stable test-attempt and owning-command attribution;
+- isolation between neighboring tests and repeated attempts;
 - one terminal transaction disposition in both the service journal and
   persisted result;
 - `unconfirmed` reporting when interruption prevents terminal verification;

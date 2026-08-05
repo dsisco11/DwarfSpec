@@ -566,8 +566,13 @@ callbacks. Registration returns a handle with an explicit lifecycle:
 
 A transaction contains a label, restore operation, required verification
 operation, stable cleanup evidence, and one of `pending`, `running`, `complete`,
-or `failed`. Caller registrations have example lifetime. Internal registrations
-may instead have command lifetime for transient input flags or similar state.
+`failed`, `abandoned`, or `unconfirmed`. The first two states are nonterminal;
+the remaining four are terminal dispositions. `abandoned` is restricted to an
+internal prearmed reservation for which no mutation or publication occurred.
+`unconfirmed` means interruption or host loss prevented the framework from
+establishing a normal cleanup outcome. Caller registrations have example
+lifetime. Internal registrations may instead have command lifetime for
+transient input flags or similar state.
 
 Calling `transaction:execute()` manually removes the pending transaction from
 the active LIFO registry before invoking restore and verification. The handle
@@ -609,15 +614,19 @@ test code.
 ### Cleanup history and result reporting
 
 The active LIFO registry and cleanup history have different responsibilities.
-The active registry contains only transactions that remain eligible for
-automatic execution. Each test attempt also owns an append-only cleanup ledger
-containing every transaction registered during that attempt. Removing a
-transaction from the active registry therefore means only that teardown must
-not execute it again; it never erases the ledger record.
+Each test attempt owns its own active registry and mutable cleanup execution
+index. The registry contains only transactions that remain eligible for
+automatic execution. The execution index retains the in-process handles,
+private receipts, and current states required to execute those transactions;
+it is never shared between test attempts. Removing a transaction from the
+active registry therefore means only that teardown must not execute it again.
+Its already-published lifecycle events remain in the service journal.
 
 Registration assigns a stable transaction ID and registration ordinal before
-the transaction can protect or publish mutable state. Its ledger record contains
-only bounded, serialization-safe data:
+the transaction can protect or publish mutable state. The transaction ID is
+unique within the run, while the registration ordinal is local to the owning
+test attempt. Its safe event projection contains only bounded,
+serialization-safe data:
 
 - test and attempt identity;
 - transaction ID, registration ordinal, label, and lifetime;
@@ -629,8 +638,17 @@ only bounded, serialization-safe data:
 - terminal disposition.
 
 Callbacks, native userdata, mutable receipts, and unrestricted arguments never
-enter the ledger. The executable handle and private receipt may retain richer
-in-process state, but result consumers receive only the safe projection.
+enter the journal. The executable handle and mutable execution index may retain
+richer in-process state, but result consumers receive only the safe projection.
+
+The automation service's physically run-scoped event journal is the sole
+authoritative cleanup history. Every transaction lifecycle event carries the
+owning test-attempt ID, repeat index, stable test identity, transaction ID, and
+attempt-local registration ordinal. Consumers partition the journal by that
+attempt identity; transactions from different tests or repeated attempts never
+share ownership or result sets. Service-owned run cleanup remains represented
+by separate run-level cleanup events and is never attributed to an arbitrary
+test attempt.
 
 The service event journal gains transaction-level lifecycle events sufficient
 to reproduce the ledger without inspecting the active registry:
@@ -639,32 +657,66 @@ to reproduce the ledger without inspecting the active registry:
   and registration order;
 - `cleanup.transaction_started` records whether execution was manual,
   command-finally, or teardown initiated;
-- `cleanup.transaction_finished` records `complete` or `failed`, duration,
-  restore outcome, verification outcome, and any failure reference; and
+- `cleanup.transaction_finished` records `complete`, `failed`, or
+  `unconfirmed`, duration, restore outcome, verification outcome, and any
+  failure reference; and
 - `cleanup.transaction_abandoned` records the exceptional internal-only case
   where a prearmed reservation is safely discarded after proving that no
   mutation or publication occurred.
 
 If host loss or interruption prevents a registered transaction from reaching
 one of those normal dispositions, terminalization records it as `unconfirmed`
-rather than silently omitting it. A terminal test attempt therefore reports
+rather than silently omitting it and publishes exactly one corresponding
+`cleanup.transaction_finished` event. A terminal test attempt therefore reports
 every registered transaction with exactly one disposition: `complete`,
 `failed`, `abandoned`, or `unconfirmed`. Repeated manual execution does not add
 a second terminal event.
 
-The test-results model materializes a `cleanup_transactions` array for each test
-attempt from this authoritative ledger. The array is ordered by registration
-ordinal and contains the same stable identities and terminal outcomes as the
-journal. Result-schema validation rejects duplicate IDs, missing terminal
-dispositions, inconsistent journal/result outcomes, or a transaction attributed
-to the wrong test attempt. The persisted run result retains the complete event
-journal and these per-attempt summaries, allowing both the in-process service UI
-and later result-file readers to inspect the same history.
+### Test-attempt ownership and finalization
+
+A test-attempt identity becomes active before its attempt-local setup hooks and
+remains active through the test body and attempt-local teardown hooks. Every
+caller or command cleanup transaction created during that interval is
+attributed to that identity. Public cleanup registration requires an active
+test attempt and is rejected from suite-level or run-level hooks that do not
+have one. Service-owned run cleanup remains a separate run-level concern and
+does not appear in a test attempt's transaction array.
+
+After attempt-local teardown hooks return, registration closes and automatic
+cleanup executes every transaction that remains pending. DwarfSpec then
+terminalizes interrupted transactions, materializes the attempt's
+`cleanup_transactions` result, and only afterward publishes `test.finished`.
+The event's behavior status remains distinct from cleanup disposition; failed
+or unconfirmed cleanup is reported separately and still contributes to the run
+failure and quarantine rules. If interruption prevents the ordinary test
+callback from finishing, run terminalization still synthesizes the attempt
+result and marks every unresolved transaction `unconfirmed` before
+`run.finished`.
+
+Before publishing `test.finished`, the service's test-attempt finalizer folds
+only that attempt's authoritative transaction events into a
+`cleanup_transactions` array ordered by registration ordinal. The service
+stores that materialized projection at
+`host_report.test_attempts[].cleanup_transactions` in the owning attempt. The
+projection is a convenience for completed-result consumers, not a second source
+of truth.
+
+The controller validates that projection against the complete journal and
+persists it unchanged; it does not independently interpret cleanup behavior.
+Result-schema validation rejects duplicate IDs, missing terminal dispositions,
+inconsistent journal/result outcomes, or a transaction attributed to the wrong
+test attempt. The persisted run result retains the complete event journal and
+these per-attempt projections, allowing later result-file readers to inspect
+the same history.
 
 The service publishes these events through its existing append-only journal and
 cursor APIs. Live consumers can therefore observe registration and state changes
-without polling private cleanup objects, while retained-run inspection continues
-to expose the complete history until normal acknowledgement removes the run.
+by folding the selected attempt's events without polling private cleanup
+objects. Completed-result consumers use the service-materialized projection.
+Retained-run inspection continues to expose the complete authoritative history
+for the lifetime of the service instance.
+Acknowledgement releases the outstanding-run admission gate but does not erase
+the read-only session record.
 Result persistence derives from the same terminal service snapshot and journal;
 there is no separate UI-only cleanup channel or second source of truth.
 
@@ -823,12 +875,14 @@ definitions instead of binding functions directly to `ds`. Simulation, mount,
 input, render, and game modules remain capability providers and do not learn
 about public API registration.
 
-The host cleanup subsystem owns both the pending-only LIFO registry and the
-append-only per-test ledger. It publishes safe ledger transitions through the
-automation service's normal event-journal boundary. Protocol modules own cleanup
-transaction event types, disposition enums, and journal/result validation. The
-controller result interpreter and result store persist the journal and derived
-per-attempt summaries without reconstructing them from pending registry state.
+The host cleanup subsystem owns each test attempt's pending-only LIFO registry
+and mutable cleanup execution index. The automation service remains the sole
+publisher and owns the authoritative run-scoped event journal. Its test-attempt
+finalizer folds the selected attempt's transaction events into the terminal
+result projection. Protocol modules own cleanup transaction event types,
+disposition enums, and journal/result validation. The controller result
+interpreter validates and persists the supplied journal and per-attempt
+projections without interpreting pending registry state or cleanup semantics.
 
 The root `dwarfspec.ds` module builds the context and registry, then binds thin
 public functions that invoke the runner. It contains no duplicate pointer,
@@ -894,14 +948,21 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - caller verification cannot bypass intrinsic verification;
 - receipt preservation after execution and verification failure;
 - cleanup prearming, manual expenditure, command-lifetime cleanup, and teardown behavior;
+- cleanup state transitions through every terminal disposition, including an
+  exactly-once journal event for `unconfirmed`;
+- test-attempt attribution across setup, body, and teardown hooks, rejection
+  outside an active attempt, and `test.finished` ordering after cleanup-result
+  materialization;
 - retention of completed, failed, abandoned, and unconfirmed transactions after
   removal from the pending registry;
 - exactly-once transaction lifecycle events with stable test-attempt and command
   attribution;
+- isolation of transaction IDs, registration order, active registries, and
+  result projections across neighboring tests and repeated attempts;
 - cursor reads of transaction events during execution and retained-run reads
   after terminalization;
-- terminal result projection and bidirectional journal/result consistency
-  validation;
+- deterministic terminal result materialization from the authoritative journal
+  and equality validation of the persisted projection;
 - coordinated protocol-version rejection for incompatible service, event, or
   result schemas;
 - combined primary and cleanup failures;
@@ -984,8 +1045,9 @@ evidence; a silent or externally interrupted run is not.
 
 - Add protocol enums, settings, definition validation, outcome constructors,
   deadline handling, the command context, and the runner.
-- Add the per-test cleanup ledger, stable transaction identities, transaction
-  lifecycle events, and the per-attempt cleanup result projection.
+- Add the per-test cleanup execution index, stable transaction identities,
+  authoritative run-journal lifecycle events, and the service-materialized
+  per-attempt cleanup result projection.
 - Revise the service/event/result protocol together, including cursor reads,
   retained-run inspection, controller interpretation, persistence, formatting,
   and compatibility rejection.
@@ -1055,6 +1117,28 @@ This proposal becomes authoritative for how those commands execute:
 The fixture proposal should not implement a parallel runner, timeout, cleanup,
 retry, or validation-cadence model.
 
+## Relationship to the test-runner service design
+
+`test-runner-service-design.md` remains authoritative for project admission,
+queue and execution leases, executor quarantine, persistence ownership,
+acknowledgement, session retention, cursor reads, and the presentation-neutral
+UI boundary.
+
+This proposal revises that design's exact service, event, and result schema
+versions, its initial event-type table, and its native test-result projection
+only as required for stage-aware command events and per-transaction cleanup
+reporting. The coordinated protocol revision must update the service design,
+protocol enums and validators, snapshots and transports, retained-run reads,
+controller interpretation and formatting, and result persistence together.
+Older clients and services continue to fail through protocol negotiation rather
+than interpreting the new lifecycle partially.
+
+The service design's retention rule is unchanged: acknowledgement releases the
+project admission gate but does not delete the read-only run record, which
+remains process-local until the service instance ends. The new cleanup history
+uses the existing service journal and result-persistence ownership; it does not
+introduce a second publisher, UI-owned state, or per-run result files.
+
 ## Documentation requirements
 
 Every public command documents:
@@ -1096,13 +1180,20 @@ The architecture is complete when:
 - command-owned mutations prearm cleanup before publication;
 - caller cleanup registrations return manually executable transactions, and
   teardown executes every transaction that remains pending;
-- removing or expending a transaction never removes its append-only historical
-  record;
+- caller cleanup registration requires an independent verification operation;
+- test-attempt cleanup closes and its result is materialized before
+  `test.finished`, while service-owned run cleanup remains separately scoped;
+- removing or expending a transaction never removes its lifecycle events from
+  the authoritative service journal;
 - every registered transaction appears exactly once in its terminal test
   attempt result with `complete`, `failed`, `abandoned`, or `unconfirmed`
   disposition;
 - the service event journal and persisted result expose consistent transaction
   identities, ordering, attribution, outcomes, and bounded evidence;
+- the journal remains the sole historical source of truth, while live consumers
+  fold attempt-tagged events and completed-result consumers may use the
+  service-materialized projection at
+  `host_report.test_attempts[].cleanup_transactions`;
 - cleanup verification remains independent of the expired command deadline;
 - built-in command signatures and return values remain compatible through
   documented overloads;
