@@ -7,6 +7,12 @@ constructing, observing, advancing, and cleaning up native Dwarf Fortress test
 fixtures. It is an exploratory design proposal, not an implementation checklist
 and not a description of shipped behavior.
 
+`verified-command-execution-proposal.md` is authoritative for command
+definitions, deadlines, preflight, retry, receipts, caller verification,
+cleanup transactions, migration, and validation cadence. This document remains
+authoritative only for the fixture commands' domain behavior. Conflicting
+execution or delivery language here is superseded by that proposal.
+
 The proposed public entry points are:
 
 ```lua
@@ -245,7 +251,20 @@ native userdata.
 ---@field restore fun()
 ---@field verify? fun()
 
+---@class dwarfspec.CleanupTransaction
+local CleanupTransaction = {}
+
+---Executes and unregisters this transaction when it is still pending.
+---@param reason? string
+---@return boolean executed
+function CleanupTransaction:execute(reason) end
+
+---Returns whether this transaction remains registered for teardown.
+---@return boolean
+function CleanupTransaction:isPending() end
+
 ---@param options dwarfspec.CleanupRegistration
+---@return dwarfspec.CleanupTransaction
 function ds.registerCleanup(options) end
 ```
 
@@ -259,16 +278,21 @@ Contract:
   they were registered.
 - Registration fails after example cleanup begins.
 - `verify` defaults to a no-op when omitted.
-- Repeated cleanup attempts may invoke the callbacks again; callbacks therefore
-  must be idempotent.
+- The returned transaction can be executed manually at any later point in the
+  test while it remains pending.
+- Manual execution unregisters and expends the transaction before calling
+  `restore` and `verify`; repeated execution does not invoke them again.
+- A manual failure is recorded in cleanup evidence and propagates to the test.
 - One callback failure does not suppress later cleanup entries.
-- Registration itself performs no mutation and returns no cancellation handle.
-  Once registered, cleanup cannot be discarded by the example.
+- Registration itself performs no mutation. The caller cannot discard a
+  transaction without executing it.
+- Test teardown automatically executes every transaction that remains pending
+  in strict LIFO order.
 
 Example:
 
 ```lua
-ds.registerCleanup{
+local cleanup = ds.registerCleanup{
     label='remove temporary native registration',
     restore=function()
         remove_registration()
@@ -278,6 +302,9 @@ ds.registerCleanup{
     end,
 }
 publish_registration()
+
+-- Optional early cleanup; teardown would otherwise execute it automatically.
+cleanup:execute('fixture no longer needed')
 ```
 
 ### `ds.spawnItem(options)`
@@ -521,14 +548,18 @@ local pets = ds.queryUnits{
 }
 ```
 
-### `ds.runUntil(description, query, options)`
+### `ds.runUntil(description, query, options, command_options)`
 
 ```lua
+---@class dwarfspec.RunUntilOptions
+---@field frame_budget? integer
+
 ---@param description string
 ---@param query fun(): any
----@param options? dwarfspec.AwaitOptions
+---@param options? dwarfspec.RunUntilOptions
+---@param command_options? dwarfspec.CommandOptions
 ---@return any result
-function ds.runUntil(description, query, options) end
+function ds.runUntil(description, query, options, command_options) end
 ```
 
 This command is the simulation-running counterpart to `ds.await()`.
@@ -537,8 +568,9 @@ Contract:
 
 - Capture the current pause state before invoking the query.
 - Unpause the game when necessary.
-- Apply the same frame budget, wall-clock timeout, diagnostics, and query-result
-  semantics as `ds.await()`.
+- Apply the same frame-budget, diagnostics, and query-result semantics as
+  `ds.await()` while obtaining the wall-clock deadline from shared command
+  options.
 - Restore the captured pause state before returning or propagating an error.
 - If pause-state restoration fails, preserve both the primary failure and the
   restoration failure.
@@ -552,6 +584,7 @@ local completed = ds.runUntil('native work completes', function()
     return native_work_is_complete()
 end, {
     frame_budget=1200,
+}, {
     timeout_ms=30000,
 })
 ```
@@ -588,7 +621,8 @@ and reporting rules as public entries.
 
 The implementation should preserve DwarfSpec's existing ownership boundaries:
 
-- `dwarfspec.driver.commands` exposes thin command facades and validation.
+- `dwarfspec.driver.commands` exposes command definitions and domain-specific
+  validation through the shared command runner.
 - Native unit, item, building, map, and job behavior lives in focused driver
   adapters or controllers.
 - The run/example context owns the cleanup registry, ownership ledger, logical
@@ -607,6 +641,11 @@ tested without a live world.
 
 ## Validation strategy
 
+The command-engine and risk-based checkpoint strategy in
+`verified-command-execution-proposal.md` governs execution. The requirements
+below describe the eventual domain evidence, not an instruction to rerun full
+live and package qualification after every small implementation change.
+
 ### Unit coverage
 
 Each command requires unit tests for:
@@ -617,7 +656,7 @@ Each command requires unit tests for:
 - callback and predicate error preservation;
 - cleanup registration before publication;
 - LIFO cleanup and continued cleanup after failure;
-- idempotent retry;
+- idempotent cleanup transaction execution;
 - verification failure aggregation; and
 - declaration/runtime signature agreement.
 
@@ -659,9 +698,11 @@ Passing assertions without verified cleanup are insufficient.
 5. Add `spyJobs()` with Busted compatibility and reconciled native observation.
 6. Add `runUntil()` as a pause-safe composition over `await()`.
 
-Every command should ship with declarations, unit coverage, focused live
-qualification, documentation, and package verification before the next
-mutating command builds on it.
+Every command must have declarations, focused domain coverage, documentation,
+and the live evidence required by its native risk. Full package and family live
+qualification occur at the integration checkpoints defined by the verified
+command execution proposal rather than unconditionally before work begins on
+the next command.
 
 ## Deferred extensions
 

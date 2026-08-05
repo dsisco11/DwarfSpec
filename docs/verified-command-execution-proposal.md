@@ -155,9 +155,9 @@ snapshots, never mutable native pointers that may become invalid across frames.
 
 ### Deadline
 
-A deadline is an absolute monotonic timestamp calculated once for the command.
-Every cooperative wait receives the remaining duration. No command stage resets
-the timeout.
+A deadline is an absolute monotonic timestamp calculated once after synchronous
+argument normalization succeeds. Every cooperative wait receives the remaining
+duration. No timed command stage resets the timeout.
 
 ## Design principles
 
@@ -175,12 +175,16 @@ a later render completed. It cannot prove that a particular label is correct.
 input was dispatched through the intended ingress. It cannot know which
 product behavior the click was meant to trigger.
 
-### One deadline owns the complete command
+### One deadline owns the timed command lifecycle
 
-Argument normalization occurs before the deadline is consumed. Once execution
-starts, readiness, primary execution, render waits, intrinsic verification, and
-caller verification share one deadline. A slow preflight therefore leaves less
-time for verification instead of silently multiplying the configured timeout.
+Argument normalization is bounded, synchronous, non-yielding validation and
+defensive copying. It occurs before the timed command lifecycle and reports an
+immediate invocation error when it fails. Starting the deadline earlier would
+measure normalization after it returns but could not interrupt a defective
+synchronous normalizer. Once normalization succeeds, readiness, primary
+execution, render waits, intrinsic verification, and caller verification share
+one deadline. A slow preflight therefore leaves less time for verification
+instead of silently multiplying the configured timeout.
 
 ### Cleanup outlives an expired command
 
@@ -210,6 +214,15 @@ registration, and misleading success records. For example, `click()` may use
 the pointer-placement operation internally, but it does not invoke a second
 public `move_pointer()` command.
 
+### Nested read-only commands inherit their parent invocation
+
+A query or assertion invoked by caller verification inherits the parent's
+absolute deadline, cancellation state, and command identity. It appears as a
+child command event and cannot extend or reset the parent timeout. Mutating
+public commands are rejected from preflight and verification because those
+stages must remain read-only. Internal workflow steps use the same child-event
+model without becoming independent public invocations.
+
 ## Command categories
 
 All categories use the common runner, deadline, trace, and failure schema. The
@@ -218,19 +231,28 @@ meaningless callbacks into every command.
 
 | Kind | Primary behavior | Retry behavior | Verification expectation |
 | --- | --- | --- | --- |
-| Query | Observe current state | Preflight and query observation may retry | Validate and return a stable observation |
-| Assertion | Observe a condition | Retry the assertion until it passes | The assertion itself is the terminal condition |
+| Query | Observe current state | Its read-only primary observation may return pending and retry | Validate and return a stable observation, including a successful `nil` when declared |
+| Assertion | Observe a condition | Its read-only primary observation retries until ready | The assertion observation is the terminal condition |
 | Action | Perform input or another one-shot mutation | Retry preflight and verification only | Verify framework effects; caller verification is optional |
 | State setter | Change reversible state | Retry preflight and readback only | Exact state readback is intrinsic |
 | Workflow | Execute ordered internal steps | Each step gates once under the parent deadline | Verify every declared intermediate and terminal state |
 | Fixture | Create or reserve owned native state | Retry readiness and readback only | Verify identity/state after creation and absence/restoration during cleanup |
+
+`ECommandKind` contains exactly `QUERY`, `ASSERTION`, `ACTION`, `STATE_SETTER`,
+`WORKFLOW`, and `FIXTURE`. A definition selects exactly one kind. Recurrence,
+evidence capture, subject fluency, and cleanup lifetime are orthogonal traits,
+not hybrid command kinds.
 
 Every definition has an explicit preflight function. Commands with no dynamic
 readiness requirement use the shared always-ready predicate so the lifecycle
 and trace remain uniform.
 
 Every definition has a primary execution function. For queries and assertions,
-that function performs the observation rather than a mutation.
+that function performs the read-only observation and returns `ready`, `pending`,
+or `fatal`. A query uses `ready(nil, evidence)` when `nil` is a successful result,
+so ordinary misses are not confused with retryable pending state. For actions,
+state setters, workflows, and fixtures, primary execution returns `executed`
+and is never retried by the runner.
 
 Intrinsic verification is required when the public contract declares an
 independently observable effect. A definition may explicitly declare that its
@@ -248,7 +270,7 @@ implementation:
 ---@field kind dwarfspec.ECommandKind
 ---@field normalize fun(arguments: table): any
 ---@field preflight fun(context: dwarfspec.CommandContext, request: any): dwarfspec.GateResult
----@field execute fun(context: dwarfspec.CommandContext, request: any, ready: any): dwarfspec.ExecutionResult
+---@field execute fun(context: dwarfspec.CommandContext, request: any, ready: any): dwarfspec.ExecutionResult|dwarfspec.GateResult
 ---@field verify? fun(context: dwarfspec.CommandContext, request: any, receipt: any): dwarfspec.GateResult
 ---@field default_timeout_ms? integer
 ---@field diagnostics? fun(request: any, receipt: any): table
@@ -259,6 +281,7 @@ The registry validates definitions before a test begins:
 - names are nonempty and do not conflict;
 - kinds are supported immutable enum values;
 - normalize, preflight, and execute are callable;
+- normalize is bounded, synchronous, and non-yielding;
 - verify and diagnostics are callable when present;
 - timeout defaults are positive finite integers;
 - definitions cannot replace reserved built-in commands; and
@@ -304,8 +327,9 @@ as success; each definition must explicitly normalize its native acknowledgement
 into either a receipt or an execution failure.
 
 If primary execution throws or returns a declared failure, verification does
-not run. Prearmed cleanup remains owned and is drained by command-local rollback
-or example cleanup according to the definition's ownership policy.
+not run. Prearmed cleanup transactions remain owned. Command-lifetime
+transactions are expended by the command's finally boundary, while
+example-lifetime transactions remain pending for manual execution or teardown.
 
 ## Caller-supplied verification
 
@@ -375,6 +399,12 @@ Caller verification cannot disable or weaken intrinsic verification. It runs
 after intrinsic verification passes, under the same remaining deadline. Its
 return value does not replace the command's public result.
 
+Read-only public queries and assertions called by the callback automatically
+inherit the active verification invocation. Their events are children of the
+parent command, and their effective deadline is the parent's remaining time.
+Attempting a mutating public command from preflight or verification is a fatal
+contract error.
+
 ### No implicit semantic claim
 
 When caller verification is absent, command success means only that all
@@ -406,9 +436,14 @@ return {
 Timeout precedence is:
 
 1. invocation `CommandOptions.timeout_ms`;
-2. command-definition default;
-3. `settings.command.timeout_ms`;
+2. `settings.command.timeout_ms`;
+3. command-definition `default_timeout_ms`;
 4. the framework default of 10,000 milliseconds.
+
+The project-wide setting exists so a consumer can adapt the complete suite to a
+consistently slower or faster live environment without editing every command
+call. A command-definition default expresses a command's recommended baseline,
+but it never prevents a project or invocation from overriding that baseline.
 
 Every resolved timeout is a positive finite integer. The finalized command
 contract does not allow `false` or an unlimited timeout. Existing
@@ -418,6 +453,11 @@ a documented compatibility window. During that window,
 `settings.command.timeout_ms` is absent. Unlimited waits should emit a bounded
 deprecation diagnostic and remain protected by the enclosing run lease until
 their public removal.
+
+The compatibility window ends before old command execution paths are removed.
+Final configuration validation rejects `timeout_ms=false`, and
+`settings.wait.timeout_ms` no longer supplies command defaults after that
+removal checkpoint.
 
 Frame budgets remain optional secondary safeguards for commands defined in
 terms of frames. They do not replace the wall-clock deadline.
@@ -451,14 +491,19 @@ The command authoring documentation must make this limitation explicit.
 For each invocation the runner performs the following operations:
 
 1. Resolve the definition and validate invocation-level command options.
-2. Normalize and defensively copy logical arguments.
-3. Resolve the finite timeout and create the invocation deadline.
+2. Normalize and defensively copy logical arguments synchronously.
+3. Resolve the finite timeout and create the timed invocation deadline.
 4. Publish command-started evidence with sanitized arguments.
 5. Mark a cleanup checkpoint and construct the command context.
 6. Poll preflight until ready, fatal, cancelled, or timed out.
-7. Revalidate volatile target identity immediately before execution.
+7. Revalidate volatile target identity immediately before execution. A
+   recoverable not-ready result returns to the preflight loop under the same
+   deadline; removal, replacement, or another nonrecoverable identity change is
+   fatal.
 8. Prearm required cleanup or pending ownership.
-9. Execute the primary operation once and capture its receipt.
+9. For a query or assertion, poll its read-only primary observation until it
+   returns ready, fatal, cancelled, or timed out. For every mutating kind,
+   execute the primary operation exactly once and capture its receipt.
 10. Poll intrinsic verification when defined.
 11. Poll caller verification when supplied.
 12. Refresh retained subjects only after successful verification.
@@ -466,9 +511,10 @@ For each invocation the runner performs the following operations:
 14. Return the original public result.
 
 On any failure, the runner records the failing stage and latest evidence. It
-then applies the definition's rollback policy without preventing the example's
-normal cleanup drain. Cleanup failure is combined with, and never replaces, the
-original command failure.
+then expends any still-pending command-lifetime cleanup transactions without
+draining example-lifetime transactions. Cleanup failure is combined with, and
+never replaces, the original command failure. Remaining example transactions
+stay registered for manual execution or automatic test teardown.
 
 ## Command context
 
@@ -509,26 +555,56 @@ but do not create independent public command results or reset timeout budgets.
 
 ## Cleanup and transactional ownership
 
-Definitions declare one of three ownership policies:
+The cleanup registry owns executable cleanup transactions rather than bare
+callbacks. Registration returns a handle with an explicit lifecycle:
 
-- `none` for read-only and irreversible commands;
-- `example` for state intentionally retained until example cleanup; or
-- `command` for temporary state that must be rolled back before the command
-  returns or fails.
+```lua
+---@class dwarfspec.CleanupTransaction
+---@field execute fun(self: dwarfspec.CleanupTransaction, reason?: string): boolean
+---@field isPending fun(self: dwarfspec.CleanupTransaction): boolean
+```
 
-State setters capture their first inherited baseline and register example
-cleanup before mutation. Fixture commands reserve a pending ledger entry before
-native construction. Temporary input flags use command ownership and restore in
-a finally boundary.
+A transaction contains a label, restore operation, required verification
+operation, stable cleanup evidence, and one of `pending`, `running`, `complete`,
+or `failed`. Caller registrations have example lifetime. Internal registrations
+may instead have command lifetime for transient input flags or similar state.
 
-Every cleanup entry that mutates external state has an independent verification
-operation. Cleanup verification is not optional because `cleanup_confirmed`
-must remain authoritative. Cleanup uses stable identities and scalar snapshots,
-continues after individual failures, and aggregates all labeled failures.
+Calling `transaction:execute()` manually removes the pending transaction from
+the active LIFO registry before invoking restore and verification. The handle
+then records `complete` or `failed` and is expended. Repeated execution is
+idempotent: it reports that no pending work was executed and never invokes the
+callbacks again. A manual failure is recorded in authoritative cleanup evidence
+and propagates to the test; it is not silently retried during teardown.
+
+At test teardown, the cleanup system automatically executes every transaction
+that remains pending in strict LIFO order. One failure does not prevent later
+transactions from being attempted. Teardown combines all transaction failures
+with lifecycle probes before setting `cleanup_confirmed`.
+
+The public cleanup API does not expose cancellation without execution. An
+internal pending ownership reservation may be abandoned only when the command
+proves that no mutation or publication occurred. Once a resource or reversible
+state is published, its transaction must be executed manually or remain pending
+for teardown.
+
+State setters capture their first inherited baseline and register an example
+transaction before mutation. Fixture commands reserve a pending transaction
+before native construction and attach stable identity evidence after
+publication. Command-lifetime transactions are automatically expended in the
+command's finally boundary. A command failure does not drain unrelated or
+example-lifetime transactions because callers may catch the failure and
+continue the test.
+
+Every cleanup transaction that mutates external state has an independent
+verification operation. Cleanup verification is not optional because
+`cleanup_confirmed` must remain authoritative. Cleanup uses stable identities
+and scalar snapshots, continues after individual failures, and aggregates all
+labeled failures.
 
 An expired verification deadline does not discard the execution receipt. The
-receipt remains available to cleanup so partial or successful mutation can be
-reversed even when the command never returned to test code.
+receipt remains available to its registered transaction so partial or
+successful mutation can be reversed even when the command never returned to
+test code.
 
 ## Diagnostics and command events
 
@@ -541,9 +617,13 @@ able to represent:
 - execution started, completed, failed, or exceeded its deadline;
 - intrinsic verification pending, passed, failed, or timed out;
 - caller verification pending, passed, failed, or timed out;
-- rollback attempted and verified;
+- command-lifetime cleanup attempted and verified;
 - command completed; and
-- command failed with combined cleanup evidence.
+- command failed with any command-lifetime cleanup evidence.
+
+Example-lifetime cleanup occurs later and is reported by cleanup and terminal
+run events. A command-finished event does not claim knowledge of cleanup
+transactions that are still pending for test teardown.
 
 Repeated observations are rate-limited or summarized so a 10-second wait does
 not flood the result stream. Terminal evidence includes attempt counts, elapsed
@@ -567,22 +647,22 @@ signature specification.
 
 | Commands | Kind | Preflight | Intrinsic verification |
 | --- | --- | --- | --- |
-| `wait_frames`, `wait_ticks` | Assertion/wait | Scheduler and required game state available | Requested progress count observed |
-| `await`, `awaitEvent` | Assertion/wait | Query or event listener can be armed | Truthy query result or exact event receipt observed |
+| `wait_frames`, `wait_ticks` | Assertion | Scheduler and required game state available | Requested progress count observed |
+| `await`, `awaitEvent` | Assertion | Query or event listener can be armed | Truthy query result or exact event receipt observed |
 | `isGamePaused`, `getGameSpeed`, `getTick`, `getTime`, `getSaveDirectoryName`, `hasFocus` | Query | Required native state available | Returned observation satisfies its declared type and state contract |
 | `setGamePaused`, `setGameSpeed`, `setTurboSpeed` | State setter | Native state is available and valid | Exact requested values are read back |
 | `setViewPos` | State setter | Map view and dimensions are available | `getViewPos(origin)` equals the requested position |
 | `setUnitPos` | State setter | Unit and source/destination occupancy are safe | Re-resolved unit position and affected occupancy match the receipt |
-| `setUnitSpeed` | State setter/recurring | Targets and scheduling are available | Recurring ownership is scheduled for the immutable target/configuration snapshot; product progress can use caller verification |
+| `setUnitSpeed` | State setter | Targets and scheduling are available | Recurring ownership is scheduled for the immutable target/configuration snapshot; product progress can use caller verification |
 | `mount`, `mountNativeScreen` | Workflow | No current mount and source is valid | Ownership, target, subject source, and render capability are current |
 | `unmount` | Workflow | A current mount exists | No current mount, active owned screen, retained subject, or borrowed attachment remains |
 | `root`, `get`, `inspect`, `search` | Query | Current mount and selected source remain valid | Stable subject or observation satisfies its source contract |
-| `move_pointer`, `hover` | Action/state setter | Target and geometry are current and usable | Logical accessors and paired raw coordinates read back at the requested position |
+| `move_pointer`, `hover` | Action | Target and geometry are current and usable | Logical accessors and paired raw coordinates read back at the requested position |
 | `input`, `type` | Action | Current input target is valid | Dispatch receipt and required settling/render boundary; product effect uses optional caller verification |
 | `mouseInput`, `mouseWheel`, `click` | Action | Pointer, target, button state, and geometry are actionable | Input receipt, pointer consistency, transient-state restoration, and required render boundary; product effect uses optional caller verification |
 | `redraw` | Action | Current interaction target supports invalidation | A later completed render generation when waiting is enabled |
 | `viewport` | State setter | DwarfSpec owns a resizable host | Applied viewport/layout dimensions and later completed render |
-| `capture_view_tree`, `capture_screen` | Query/evidence | Requested source or screen is readable | Capture is bounded, plain, retained under the requested name, and structurally valid |
+| `capture_view_tree`, `capture_screen` | Query | Requested source or screen is readable | Capture is bounded, plain, retained under the requested name, and structurally valid |
 | `exitToMainMenu`, `mountSaveGame` | Workflow | Required native screens and save state are reachable | Exact intermediate and terminal native states |
 | `stage_overlay_registration` | Fixture | Source and destination are safe | Exact registration exists; cleanup later verifies registration and unchanged staged artifacts are absent |
 
@@ -600,7 +680,7 @@ return {
     commands={
         open_report={
             kind='action',
-            timeout_ms=5000,
+            default_timeout_ms=5000,
             normalize=function(arguments)
                 return arguments
             end,
@@ -621,19 +701,17 @@ return {
 Project commands receive the same bounded command context as built-ins. They do
 not receive unrestricted host internals.
 
-During migration, a legacy function callback is adapted as an opaque action
-with:
+Bare function callbacks are not adapted. They cannot satisfy the finite command
+contract because arbitrary synchronous Lua cannot be interrupted, and an
+adapter would preserve the least safe execution path while adding temporary
+code and tests. The command-definition format is therefore a deliberate
+breaking change for project command modules.
 
-- the always-ready preflight;
-- one-shot callback execution;
-- no intrinsic verification beyond a non-throwing execution receipt;
-- the configured command deadline measured around execution;
-- normal command tracing; and
-- an explicit legacy/unverified diagnostic marker.
-
-Legacy callbacks cannot opt into retrying execution. Documentation encourages
-conversion, and removal occurs only after consumer repositories have a clear
-migration window.
+All built-in, repository fixture, and known consumer command modules are
+converted as one coordinated migration. Configuration loading fails early with
+the source path and command name when it encounters a bare callback. Release
+notes and command-authoring documentation provide the mechanical conversion
+shape, but the runtime contains only the definition-based path.
 
 ## Proposed module ownership
 
@@ -704,9 +782,10 @@ other intrinsic checks.
 
 ### Existing custom commands
 
-Bare callback modules continue to load through the legacy adapter. Definition
-tables are the preferred form. Duplicate-name and reserved-name protections
-remain unchanged.
+Project command modules must be converted to definition tables before using the
+new runner. No legacy runtime adapter is provided. Duplicate-name and
+reserved-name protections remain unchanged, and invalid bare callbacks fail
+during configuration loading rather than during a test command.
 
 ## Validation strategy
 
@@ -728,13 +807,13 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - optional caller verification omitted, passed, pending, thrown, and timed out;
 - caller verification cannot bypass intrinsic verification;
 - receipt preservation after execution and verification failure;
-- cleanup prearming and rollback behavior;
+- cleanup prearming, manual expenditure, command-lifetime cleanup, and teardown behavior;
 - combined primary and cleanup failures;
 - nested workflow steps sharing the parent deadline;
 - target re-resolution across yields;
 - bounded and rate-limited diagnostics;
 - stable public return values; and
-- legacy callback adaptation.
+- rejection of bare project command callbacks with source diagnostics.
 
 These tests are not duplicated in every command suite.
 
@@ -758,7 +837,7 @@ projection.
 | Runner, deadline, outcome, cleanup, or workflow-engine change | Complete command-engine suite and all directly affected command suites |
 | Protocol/configuration schema change | Focused protocol, configuration, host-loading, and declaration checks |
 | Completion of a command-family migration | Full unit suite and representative live qualification for that family |
-| Final removal of legacy execution paths | Full unit, syntax, declaration, package, framework, and bounded live qualification |
+| Final removal of old execution paths and timeout compatibility | Full unit, syntax, declaration, package, framework, and bounded live qualification |
 
 A full live run is not required after a command merely changes registration
 shape while preserving tested domain operations. Native live evidence is
@@ -791,7 +870,7 @@ Final qualification proves:
 - every mutator documents its intrinsic verification boundary;
 - optional caller verification works for top-level and subject commands;
 - primary mutations execute exactly once while verification retries;
-- project-defined definitions and legacy callbacks behave as documented;
+- project-defined definitions behave as documented and bare callbacks are rejected during loading;
 - command failures reach Busted as test errors with their stage preserved;
 - cleanup remains terminally verified after execution and verification
   failures; and
@@ -809,7 +888,7 @@ evidence; a silent or externally interrupted run is not.
   deadline handling, the command context, and the runner.
 - Add the fake-clock command-engine test harness.
 - Extend command events and result rendering.
-- Preserve current public behavior through adapters.
+- Preserve existing built-in public calls while their implementations move to definitions.
 
 ### Representative commands
 
@@ -826,7 +905,7 @@ evidence; a silent or externally interrupted run is not.
 - Convert pointer and input actions.
 - Convert mount, redraw, viewport, and capture commands.
 - Convert save-game workflows and registration fixtures.
-- Convert project-defined command loading to definitions with a legacy adapter.
+- Convert project-defined command loading and repository fixtures to definitions in one coordinated change.
 
 Each family uses its shared conformance suite and one family integration
 checkpoint instead of an exhaustive qualification run after every command.
@@ -835,6 +914,8 @@ checkpoint instead of an exhaustive qualification run after every command.
 
 - Remove direct binding and duplicate implementations from the root facade.
 - Remove obsolete mounted-mutation wrappers after all callers use the runner.
+- End timeout compatibility: reject `timeout_ms=false` and stop treating
+  `settings.wait.timeout_ms` as a command default.
 - Update architecture, configuration, command-authoring, test-writing, and API
   documentation.
 - Reconcile the managed native-fixture proposal so all proposed fixture
@@ -843,9 +924,19 @@ checkpoint instead of an exhaustive qualification run after every command.
 
 ## Relationship to the managed native-fixture proposal
 
-The managed native-fixture proposal remains responsible for the semantics of
-`registerCleanup`, `spawnItem`, `createStockpile`, `reserveMapTiles`, `spyJobs`,
-`queryUnits`, and `runUntil`.
+The managed native-fixture proposal remains responsible for the domain semantics
+of `spawnItem`, `createStockpile`, `reserveMapTiles`, `spyJobs`, `queryUnits`,
+and `runUntil`. This proposal supersedes any conflicting command execution,
+timeout placement, cleanup-transaction, retry, migration, or validation-cadence
+language in that document. In particular:
+
+- `registerCleanup` returns the manually executable transaction defined here;
+- `timeout_ms` belongs to trailing `CommandOptions`, while a frame budget remains
+  a logical wait option where applicable;
+- mutating primary execution is not retried;
+- command definitions replace direct command facades and bare callbacks; and
+- the risk-based validation checkpoints here replace per-command package and
+  live qualification as unconditional gates between fixture commands.
 
 This proposal becomes authoritative for how those commands execute:
 
@@ -858,7 +949,8 @@ This proposal becomes authoritative for how those commands execute:
 - cleanup verification remains mandatory; and
 - command events use the shared stage-aware diagnostic schema.
 
-The fixture proposal should not implement a parallel runner or timeout model.
+The fixture proposal should not implement a parallel runner, timeout, cleanup,
+retry, or validation-cadence model.
 
 ## Documentation requirements
 
@@ -880,7 +972,7 @@ verification callback, while also showing that the callback is optional.
 
 Project-command documentation includes a complete definition example, the
 cooperative execution limitation, safe diagnostic projection, receipt design,
-and the legacy callback migration path.
+and the required conversion from callback-only modules.
 
 ## Acceptance criteria
 
@@ -894,16 +986,21 @@ The architecture is complete when:
   independently observable;
 - caller verification is optional, retryable, documented, and unable to weaken
   intrinsic verification;
+- nested read-only verification commands inherit the parent deadline and appear
+  as child events;
 - command timeout errors identify the exact lifecycle stage and last bounded
   observation;
 - command-owned mutations prearm cleanup before publication;
+- caller cleanup registrations return manually executable transactions, and
+  teardown executes every transaction that remains pending;
 - cleanup verification remains independent of the expired command deadline;
-- public signatures and return values remain compatible through documented
-  overloads;
-- bare custom callbacks have a bounded legacy adapter and definition-based
-  custom commands have the full lifecycle;
+- built-in command signatures and return values remain compatible through
+  documented overloads;
+- project command modules use definitions exclusively and bare callbacks fail
+  during configuration loading;
 - root-facade command implementations and obsolete parallel execution paths are
   removed;
+- unlimited command timeouts and the wait-setting fallback are removed;
 - the managed native-fixture proposal depends on this architecture instead of
   duplicating it; and
 - risk-based migration evidence plus final exhaustive qualification prove the
