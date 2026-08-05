@@ -22,13 +22,16 @@ ds.createStockpile(options)
 ds.reserveMapTiles(options)
 ds.spyJobs(options)
 ds.queryUnits(options)
+ds.disableUnitsAi(unit_ids)
 ds.runUntil(description, query, options)
 ```
 
 ## Accepted direction
 
-- Every mutating fixture command is example-scoped and registers cleanup before
-  the created resource can become visible to test code or native simulation.
+- Every mutating fixture command is scoped to the most specific active cleanup
+  owner: the current test attempt, or the suite execution when called from
+  suite-level setup/teardown. It registers cleanup before the created resource
+  can become visible to test code or native simulation.
 - Cleanup participates in DwarfSpec's existing LIFO cleanup, verification,
   reporting, and executor-quarantine behavior.
 - Commands create and own their fixture resources. They do not borrow organic
@@ -45,6 +48,12 @@ ds.runUntil(description, query, options)
   live unit instance.
 - Unit filters include independent `pets` and `animals` fields backed by the
   canonical DFHack classifications.
+- `ds.disableUnitsAi()` temporarily sets the native inactive flag for eligible
+  units without removing them from `world.units.active`, clearing their jobs,
+  or discarding their paths.
+- Inactive-unit ownership covers only DwarfSpec's flag transition. It does not
+  claim ownership of the organic unit or promise that unrelated world systems
+  cannot inspect or affect it.
 - `ds.spyJobs()` follows Busted spy conventions: it installs observation before
   the triggering mutation, buffers calls, and returns a callable spy compatible
   with `assert.spy(...)`.
@@ -66,6 +75,8 @@ ds.runUntil(description, query, options)
   product-specific eligibility policy in DwarfSpec.
 - Make short-lived native job transitions observable even when simulation and
   unit actions are accelerated.
+- Allow tests to suspend selected units' ordinary per-unit processing while
+  the rest of native simulation continues.
 - Prefer canonical DF and DFHack types over duplicated string discriminators.
 - Preserve enough diagnostic information to explain selection, observation,
   cleanup, and verification failures.
@@ -81,6 +92,9 @@ ds.runUntil(description, query, options)
   example. Organic simulation may legitimately change unrelated state.
 - Replacing `ds.setUnitPos()`, `ds.await()`, `ds.setGamePaused()`, or the
   existing game-speed commands.
+- Providing an isolated native AI scheduler switch or preventing every global
+  world subsystem from inspecting, targeting, colliding with, or otherwise
+  accounting for an inactive unit.
 - Generalizing the initial stockpile command into arbitrary building
   construction.
 
@@ -92,10 +106,10 @@ All commands in this proposal execute inside the in-process DwarfSpec test
 environment. World-dependent commands require a loaded fortress map and fail
 before mutation if their preconditions are not met.
 
-Each example receives an ownership ledger shared by these commands. The ledger
-records stable resource identities, logical tile reservations, spies, and
-project-registered cleanup entries. Example completion drains this ledger in
-strict LIFO order.
+Each suite execution and nested test attempt receives an isolated ownership
+ledger shared by these commands. The ledger records stable resource identities,
+logical tile reservations, spies, and project-registered cleanup entries. The
+owning test or suite completion drains its ledger in strict LIFO order.
 
 ### Register before publication
 
@@ -118,7 +132,7 @@ the partial resource and teardown still runs.
 Cleanup entries are idempotent and continue after individual failures. Each
 entry has a restore or removal action followed by an independent verification
 action. All failures retain their cleanup label and are aggregated into the
-example result.
+owning suite or test result.
 
 `cleanup_confirmed=true` is emitted only after:
 
@@ -133,12 +147,13 @@ An unverified or partially failed cleanup quarantines the executor under the
 existing recovery contract.
 
 Cleanup registration also publishes an append-only historical transition for
-the owning test attempt into the authoritative run-scoped service journal.
-Manual execution or teardown removes the transaction from that attempt's active
-LIFO registry before callbacks run, but it does not remove its journal history.
-The transaction reaches `complete`, `failed`, `abandoned`, or `unconfirmed` and
-remains available through attempt-tagged journal events and the service-
-materialized test result at
+the owning suite execution or test attempt into the authoritative run-scoped
+service journal. Manual execution or teardown removes the transaction from
+that owner's active LIFO registry before callbacks run, but it does not remove
+its journal history. The transaction reaches `complete`, `failed`, `abandoned`,
+or `unconfirmed` and remains available through owner-tagged journal events and
+the service-materialized result at
+`host_report.suite_executions[].cleanup_transactions` or
 `host_report.test_attempts[].cleanup_transactions`.
 
 The verified command execution proposal owns the detailed transaction-event
@@ -294,7 +309,9 @@ Contract:
 - `label` is nonempty and appears in cleanup diagnostics.
 - `restore` and `verify` execute in the same isolated test environment in which
   they were registered.
-- Registration fails after example cleanup begins.
+- Registration is legal in suite-level setup/teardown and attempt-local
+  setup/body/teardown. It belongs to the most specific active suite or attempt
+  owner and fails after that owner's cleanup begins.
 - `verify` is required so the transaction can contribute authoritative evidence
   to `cleanup_confirmed`.
 - `timeout_ms`, when present, is a positive finite cleanup deadline override;
@@ -305,16 +322,16 @@ Contract:
   throw.
 - A restore error does not suppress verification when time remains; both
   outcomes are retained and the transaction remains failed.
-- The returned transaction can be executed manually at any later point in the
-  test while it remains pending.
+- The returned transaction can be executed manually at any later point in its
+  owning suite or test lifecycle while it remains pending.
 - Manual execution unregisters and expends the transaction before calling
   `restore` and `verify`; repeated execution does not invoke them again.
 - A manual failure is recorded in cleanup evidence and propagates to the test.
 - One callback failure does not suppress later cleanup entries.
 - Registration itself performs no mutation. The caller cannot discard a
   transaction without executing it.
-- Test teardown automatically executes every transaction that remains pending
-  in strict LIFO order.
+- Test or suite teardown automatically executes every transaction that remains
+  pending in that owner in strict LIFO order.
 
 Example:
 
@@ -400,7 +417,7 @@ Contract:
 
 - `tiles` is nonempty, unique, same-z, in bounds, and representable by one
   native stockpile footprint.
-- Every tile must already be reserved by this example or must pass the same
+- Every tile must already be reserved by this cleanup owner or must pass the same
   safety validation used by `ds.reserveMapTiles()` and become reserved
   atomically during creation.
 - DwarfSpec creates the minimal native building footprint and exact room
@@ -575,6 +592,74 @@ local pets = ds.queryUnits{
 }
 ```
 
+### `ds.disableUnitsAi(unit_ids)`
+
+```lua
+---Temporarily suspends ordinary per-unit processing for selected units.
+---@param unit_ids integer[]
+function ds.disableUnitsAi(unit_ids) end
+```
+
+The command temporarily marks eligible units inactive through the native
+`unit.flags1.inactive` bit. This is the same bit evaluated by
+`dfhack.units.isActive(unit)`. It is a managed state transition, not a new
+DFHack AI hook.
+
+Contract:
+
+- `unit_ids` is a nonempty dense array of unique integers. DwarfSpec resolves
+  and validates every ID before registering ownership or changing any unit.
+- Every target must be alive, on-map, currently active, and present exactly
+  once in `df.global.world.units.active` in the loaded fortress world.
+- A unit may be owned by at most one inactive-state transaction at a time.
+  Overlap with another `disableUnitsAi()` call or `setUnitSpeed()` target
+  ownership is rejected before mutation.
+- DwarfSpec registers verified cleanup for the complete target set before
+  setting the first inactive flag.
+- The command sets only `unit.flags1.inactive`. It does not remove or reorder
+  active-vector entries, cancel or replace jobs, clear actions, discard paths,
+  change positions, or alter occupancy.
+- While the flag remains set, the target unit's ordinary per-unit update is
+  suspended. The qualified effect includes action-timer progress and the
+  associated AI, movement, and pathfinding work that would be initiated by that
+  update.
+- Other native systems may still retain, inspect, target, collide with, or
+  otherwise account for the unit. The command does not promise that global
+  pathfinding or world simulation excludes every reference to it.
+- `dfhack.units.isActive(unit)` returns `false` while ownership is active, so a
+  concurrent `queryUnits{filters={active=true}}` excludes the target and
+  `active=false` can include it.
+- Cleanup resolves each stable unit ID in the same loaded world, clears the
+  inactive bit, and verifies active classification plus exactly one unchanged
+  active-vector membership.
+- If a target disappears, changes world identity, leaves the map, dies, or
+  otherwise reaches a state where clearing the bit would corrupt native
+  lifecycle state, cleanup fails closed without forcing reactivation. The
+  unconfirmed cleanup quarantines the executor under the shared contract.
+
+Example:
+
+```lua
+local background_units = ds.queryUnits{
+    filters={active=true, alive=true},
+    exclude_ids={subject_unit_id},
+}
+ds.disableUnitsAi(background_units)
+
+ds.runUntil('the subject reaches its destination', function()
+    return subject_reached_destination()
+end)
+```
+
+Feasibility evidence on DF 53.15-r2 established the native mechanism before
+this command was proposed. With an organic unit action first shown to progress,
+setting `unit.flags1.inactive=true` held its action timer, position, path,
+current job, and action list unchanged across 60 unpaused game ticks while the
+unit remained uniquely present in `world.units.active`. Clearing the flag
+resumed action progress, and terminal DwarfSpec cleanup confirmed restoration.
+This evidence establishes practical per-unit processing suspension; it does not
+instrument or exclude unrelated global pathfinding consumers.
+
 ### `ds.runUntil(description, query, options, command_options)`
 
 ```lua
@@ -621,7 +706,8 @@ end, {
 ### Items, stockpiles, and tile reservations
 
 `spawnItem()` may consume a reserved tile but does not release that reservation;
-the reservation remains valid until example cleanup. `createStockpile()` may
+the reservation remains valid until its owning suite or test cleanup.
+`createStockpile()` may
 consume one or more reservations and records their relationship in the
 ownership ledger. Cleanup removes dependent owned jobs before removing items or
 stockpiles and releases logical reservations last.
@@ -637,14 +723,28 @@ may then use `setGameSpeed()`, `setUnitSpeed()`, or `runUntil()` without losing 
 short-lived creation or assignment boundary. The spy records observation only;
 acceleration commands retain their existing independent cleanup behavior.
 
+### Inactive units and continuing simulation
+
+`disableUnitsAi()` can be composed with `runUntil()` to keep selected background
+units suspended while other native work advances. The unit IDs are snapshotted
+at command preflight; units that later become eligible are not added
+automatically.
+
+Inactive-state ownership and targeted unit-speed ownership are mutually
+exclusive for the same unit. This avoids a recurring acceleration operation
+competing with inactive-state suspension. Job spies remain global observers and
+may still observe lifecycle changes caused by systems other than the inactive
+unit.
+
 ### Public and automatic cleanup
 
 Fixture commands register private cleanup entries through the same registry
 exposed by `registerCleanup()`. Private entries may use stronger internal
 identity metadata, but they obey the same ordering, aggregation, verification,
 and reporting rules as public entries. Every public or private registration is
-attributed to its owning test attempt and appears in that attempt's cleanup
-transaction result set even after it has been manually expended.
+attributed to its owning suite execution or test attempt and appears in that
+owner's cleanup transaction result set even after it has been manually
+expended.
 
 ## Architecture
 
@@ -654,8 +754,9 @@ The implementation should preserve DwarfSpec's existing ownership boundaries:
   validation through the shared command runner.
 - Native unit, item, building, map, and job behavior lives in focused driver
   adapters or controllers.
-- The run/example context owns the cleanup registry, ownership ledger, logical
-  tile reservations, and active job spies.
+- The run's suite-execution and test-attempt contexts own isolated cleanup
+  registries, ownership ledgers, logical tile reservations, active job spies,
+  and inactive-unit flag transitions.
 - Closed DwarfSpec discriminators live in protocol enum modules as immutable
   numeric tables.
 - Canonical DF discriminators such as `df.item_type`, `df.item_quality`, and
@@ -691,8 +792,8 @@ Each command requires unit tests for:
   restore-error verification, and deadline expiry;
 - complete authoritative journal retention after manual and teardown
   execution;
-- stable test-attempt and owning-command attribution;
-- isolation between neighboring tests and repeated attempts;
+- stable suite/test owner and owning-command attribution;
+- isolation between suite executions, neighboring tests, and repeats;
 - one terminal transaction disposition in both the service journal and
   persisted result;
 - `unconfirmed` reporting when interruption prevents terminal verification;
@@ -705,6 +806,13 @@ Each command requires unit tests for:
 `UnitQueryFilterFlags` field, including overlapping `pets` and `animals`
 classifications, exclusion IDs, predicate ordering, empty results, and stable
 sorting.
+
+`disableUnitsAi()` additionally requires dense and duplicate-ID validation,
+all-target preflight before mutation, active-vector uniqueness checks,
+registration before the first flag write, overlapping-ownership rejection,
+flag-only mutation, stable-ID cleanup, fail-closed terminal-state handling, and
+verification that cleanup restores active classification without duplicating or
+reordering active-vector entries.
 
 `spyJobs()` additionally requires event-before-scan, scan-before-event,
 removal-before-scan, repeated callback, job-ID reuse defense, filter
@@ -720,6 +828,9 @@ Focused live tests should prove:
   native job behind;
 - overlapping tile reservations are rejected deterministically;
 - unit queries return stable IDs and apply live predicates correctly;
+- an organic unit action progresses while active, remains unchanged with its
+  position, path, job, action list, and active-vector membership across a
+  bounded inactive window, and resumes after verified reactivation;
 - a job spy observes a short-lived job while game and unit speed are elevated;
 - `runUntil()` restores both initially paused and initially unpaused states;
 - deliberate body failure still drains and verifies all owned resources; and
@@ -736,10 +847,12 @@ Passing assertions without verified cleanup are insufficient.
    proposal.
 2. Add `reserveMapTiles()` and `queryUnits()` as read-mostly discovery
    primitives.
-3. Add `spawnItem()` with complete ownership and removal verification.
-4. Add `createStockpile()` on top of tile reservations and the ownership ledger.
-5. Add `spyJobs()` with Busted compatibility and reconciled native observation.
-6. Add `runUntil()` as a pause-safe composition over `await()`.
+3. Add `disableUnitsAi()` with flag-only ownership and fail-closed verified
+   restoration.
+4. Add `spawnItem()` with complete ownership and removal verification.
+5. Add `createStockpile()` on top of tile reservations and the ownership ledger.
+6. Add `spyJobs()` with Busted compatibility and reconciled native observation.
+7. Add `runUntil()` as a pause-safe composition over `await()`.
 
 Every command must have declarations, focused domain coverage, documentation,
 and the live evidence required by its native risk. Full package and family live
