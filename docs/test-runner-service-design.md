@@ -192,10 +192,11 @@ normal mutations require both. An in-process client keeps its capability in
 the service process. An external command keeps it only for the lifetime of that
 command.
 
-An authorized operator client may force abort or explicitly discard a retained
-result for recovery. Operator recovery is recorded as an event and does not
-silently impersonate the original persistence owner. How an in-game UI exposes
-that authority belongs to its separate design.
+An authorized operator client may force abort or explicitly discard the
+outstanding ownership of a retained result for recovery. The read-only session
+record remains available. Operator recovery is recorded as an event and does
+not silently impersonate the original persistence owner. How an in-game UI
+exposes that authority belongs to its separate design.
 
 ### Closed contract enums
 
@@ -294,7 +295,7 @@ and run state. Its operations are conceptually:
 | `cancel(run_id, owner_capability, reason)` | Cancel an owned queued run without native cleanup. |
 | `abort(run_id, owner_capability, reason)` | Abort an owned active run and perform emergency cleanup. |
 | `acknowledge(run_id, generation, owner_capability)` | Confirm successful handling of an owned terminal result. |
-| `discard(run_id, generation, authority, reason)` | Explicitly release a retained terminal result. |
+| `discard(run_id, generation, authority, reason)` | Explicitly release terminal-result admission ownership while retaining read-only history. |
 | `latest_result(project_id)` | Return one project's most recent terminal result. |
 | `scheduler_snapshot()` | Return queue, executor, and quarantine state. |
 | `recover_executor(request)` | Clear quarantine only after an explicit clean-state proof. |
@@ -446,10 +447,13 @@ the outer result document.
 
 ## Structured event journal
 
-Each admitted run owns an append-only event journal until it is acknowledged
-or explicitly discarded. The service is the only event publisher. Event
-payloads are copied into the journal so later mutation of a request, Busted
-element, diagnostic table, or counter cannot rewrite previous observations.
+Each admitted run owns an append-only event journal while it is active and a
+read-only retained journal after it becomes terminal. Acknowledgement or
+explicit discard releases outstanding-run admission ownership but does not
+remove that journal; retention lasts until the service instance ends. The
+service is the only event publisher. Event payloads are copied into the journal
+so later mutation of a request, Busted element, diagnostic table, or counter
+cannot rewrite previous observations.
 
 ### Event envelope
 
@@ -895,9 +899,10 @@ its project from submitting a replacement. It does not occupy the executor and
 does not prevent other project runs from activating when cleanup was
 confirmed.
 
-An explicit discard records a bounded reason, releases the exact retained
-project/run/generation tuple, and is never performed as automatic recovery
-from a write failure.
+An explicit discard records a bounded reason, releases admission ownership for
+the exact retained project/run/generation tuple, and leaves its read-only
+session record intact. It is never performed as automatic recovery from a write
+failure.
 
 ## Cleanup and executor release
 

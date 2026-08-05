@@ -183,14 +183,14 @@ Every field is an optional three-state constraint:
 
 The canonical evaluations are:
 
-| Field | Evaluation |
-| --- | --- |
-| `active` | `dfhack.units.isActive(unit)` |
-| `alive` | `not dfhack.units.isDead(unit)` |
-| `citizens` | `dfhack.units.isCitizen(unit)` |
+| Field             | Evaluation                            |
+| ----------------- | ------------------------------------- |
+| `active`          | `dfhack.units.isActive(unit)`         |
+| `alive`           | `not dfhack.units.isDead(unit)`       |
+| `citizens`        | `dfhack.units.isCitizen(unit)`        |
 | `fort_controlled` | `dfhack.units.isFortControlled(unit)` |
-| `pets` | `dfhack.units.isPet(unit)` |
-| `animals` | `dfhack.units.isAnimal(unit)` |
+| `pets`            | `dfhack.units.isPet(unit)`            |
+| `animals`         | `dfhack.units.isAnimal(unit)`         |
 
 `pets` and `animals` remain separate constraints even when the underlying DFHack
 classifications overlap. DwarfSpec evaluates both when both are supplied; it
@@ -266,7 +266,8 @@ native userdata.
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
 ---@field restore fun()
----@field verify fun()
+---@field verify fun(): boolean|dwarfspec.GateResult|nil
+---@field timeout_ms? integer
 
 ---@class dwarfspec.CleanupTransaction
 local CleanupTransaction = {}
@@ -296,6 +297,14 @@ Contract:
 - Registration fails after example cleanup begins.
 - `verify` is required so the transaction can contribute authoritative evidence
   to `cleanup_confirmed`.
+- `timeout_ms`, when present, is a positive finite cleanup deadline override;
+  otherwise the project cleanup setting and then the framework default apply.
+- `restore` executes once. `verify` is read-only and retries under the cleanup
+  deadline when it throws, returns `false`, or explicitly returns
+  `cleanup.pending(...)`; a no-return assertion callback passes when it does not
+  throw.
+- A restore error does not suppress verification when time remains; both
+  outcomes are retained and the transaction remains failed.
 - The returned transaction can be executed manually at any later point in the
   test while it remains pending.
 - Manual execution unregisters and expends the transaction before calling
@@ -678,6 +687,8 @@ Each command requires unit tests for:
 - cleanup registration before publication;
 - LIFO cleanup and continued cleanup after failure;
 - idempotent cleanup transaction execution;
+- finite cleanup timeout precedence, one-shot restore, retryable verification,
+  restore-error verification, and deadline expiry;
 - complete authoritative journal retention after manual and teardown
   execution;
 - stable test-attempt and owning-command attribution;

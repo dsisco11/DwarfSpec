@@ -140,6 +140,18 @@ contract. Examples include exact state readback, pointer-coordinate readback,
 confirmed render completion, current mount ownership, or exact loaded save
 identity.
 
+Every definition explicitly selects how its intrinsic evidence is established:
+
+- `PRIMARY_OBSERVATION` for a query or assertion whose validated primary
+  observation is the terminal condition;
+- `CALLBACK` when an independently observable effect requires a retryable
+  intrinsic verification callback; or
+- `EXECUTION_RECEIPT` when no stronger generic effect exists and the immutable
+  execution receipt is the complete framework-owned evidence.
+
+Omitting a verification callback is therefore never an implicit claim that a
+receipt is sufficient.
+
 ### Caller verification
 
 Caller verification is an optional callback supplied with a command invocation.
@@ -217,11 +229,14 @@ public `move_pointer()` command.
 ### Nested read-only commands inherit their parent invocation
 
 A query or assertion invoked by caller verification inherits the parent's
-absolute deadline, cancellation state, and command identity. It appears as a
-child command event and cannot extend or reset the parent timeout. Mutating
-public commands are rejected from preflight and verification because those
-stages must remain read-only. Internal workflow steps use the same child-event
-model without becoming independent public invocations.
+absolute deadline, cancellation state, root command identity, and test-attempt
+identity. Each nested command or internal workflow step receives its own
+run-unique invocation ID and records the immediate `parent_invocation_id`, so
+repeated same-named children remain distinguishable in the trace. It cannot
+extend or reset the parent timeout. Mutating public commands are rejected from
+preflight and verification because those stages must remain read-only. Internal
+workflow steps use the same child-event model without becoming independent
+public results.
 
 ## Command categories
 
@@ -242,6 +257,12 @@ meaningless callbacks into every command.
 `WORKFLOW`, and `FIXTURE`. A definition selects exactly one kind. Recurrence,
 evidence capture, subject fluency, and cleanup lifetime are orthogonal traits,
 not hybrid command kinds.
+
+`EIntrinsicVerificationKind` contains exactly `PRIMARY_OBSERVATION`, `CALLBACK`,
+and `EXECUTION_RECEIPT`. Queries and assertions use `PRIMARY_OBSERVATION`;
+mutating definitions use `CALLBACK` whenever their declared framework effect is
+independently observable and may use `EXECUTION_RECEIPT` only when the receipt
+is the strongest truthful generic evidence.
 
 Every definition has an explicit preflight function. Commands with no dynamic
 readiness requirement use the shared always-ready predicate so the lifecycle
@@ -271,6 +292,7 @@ implementation:
 ---@field normalize fun(arguments: table): any
 ---@field preflight fun(context: dwarfspec.CommandContext, request: any): dwarfspec.GateResult
 ---@field execute fun(context: dwarfspec.CommandContext, request: any, ready: any): dwarfspec.ExecutionResult|dwarfspec.GateResult
+---@field intrinsic_verification dwarfspec.EIntrinsicVerificationKind
 ---@field verify? fun(context: dwarfspec.CommandContext, request: any, receipt: any): dwarfspec.GateResult
 ---@field default_timeout_ms? integer
 ---@field diagnostics? fun(request: any, receipt: any): table
@@ -282,6 +304,13 @@ The registry validates definitions before a test begins:
 - kinds are supported immutable enum values;
 - normalize, preflight, and execute are callable;
 - normalize is bounded, synchronous, and non-yielding;
+- `intrinsic_verification` is a supported immutable enum value compatible with
+  the command kind;
+- `verify` is required for `CALLBACK`, forbidden for `PRIMARY_OBSERVATION`, and
+  absent for `EXECUTION_RECEIPT` unless a separate diagnostic-only callback is
+  introduced under a different field;
+- `EXECUTION_RECEIPT` definitions explicitly document the receipt guarantee
+  validated by their command-specific conformance fixture;
 - verify and diagnostics are callable when present;
 - timeout defaults are positive finite integers;
 - definitions cannot replace reserved built-in commands; and
@@ -504,17 +533,25 @@ For each invocation the runner performs the following operations:
 9. For a query or assertion, poll its read-only primary observation until it
    returns ready, fatal, cancelled, or timed out. For every mutating kind,
    execute the primary operation exactly once and capture its receipt.
-10. Poll intrinsic verification when defined.
+10. Establish intrinsic evidence according to the definition's explicit
+    verification kind. Poll the intrinsic callback for `CALLBACK`; retain the
+    validated primary observation for `PRIMARY_OBSERVATION`; or accept the
+    immutable receipt for `EXECUTION_RECEIPT`.
 11. Poll caller verification when supplied.
-12. Refresh retained subjects only after successful verification.
-13. Publish terminal command evidence.
-14. Return the original public result.
+12. Execute and verify every still-pending command-lifetime cleanup transaction
+    under the cleanup lifecycle, regardless of the primary outcome.
+13. Compose primary, verification, and command-lifetime cleanup failures without
+    replacing earlier failures.
+14. Refresh retained subjects only when the composed outcome remains successful.
+15. Publish exactly one terminal command event containing the complete
+    command-lifetime cleanup evidence.
+16. Return the original public result or propagate the composed failure.
 
 On any failure, the runner records the failing stage and latest evidence. It
-then expends any still-pending command-lifetime cleanup transactions without
-draining example-lifetime transactions. Cleanup failure is combined with, and
-never replaces, the original command failure. Remaining example transactions
-stay registered for manual execution or automatic test teardown.
+does not drain example-lifetime transactions. Remaining example transactions
+stay registered for manual execution or automatic test teardown. Terminal
+command evidence is never published before command-lifetime cleanup can affect
+the command's final outcome.
 
 ## Command context
 
@@ -569,10 +606,10 @@ operation, stable cleanup evidence, and one of `pending`, `running`, `complete`,
 `failed`, `abandoned`, or `unconfirmed`. The first two states are nonterminal;
 the remaining four are terminal dispositions. `abandoned` is restricted to an
 internal prearmed reservation for which no mutation or publication occurred.
-`unconfirmed` means interruption or host loss prevented the framework from
-establishing a normal cleanup outcome. Caller registrations have example
-lifetime. Internal registrations may instead have command lifetime for
-transient input flags or similar state.
+`unconfirmed` means interruption or recoverable execution-host failure prevented
+the still-running automation service from establishing a normal cleanup outcome.
+Caller registrations have example lifetime. Internal registrations may instead
+have command lifetime for transient input flags or similar state.
 
 Calling `transaction:execute()` manually removes the pending transaction from
 the active LIFO registry before invoking restore and verification. The handle
@@ -605,6 +642,32 @@ verification operation. Cleanup verification is not optional because
 `cleanup_confirmed` must remain authoritative. Cleanup uses stable identities
 and scalar snapshots, continues after individual failures, and aggregates all
 labeled failures.
+
+Each call that expends a transaction receives a new finite cleanup deadline,
+independent of the command deadline that caused or preceded cleanup. Timeout
+precedence is the registration's `timeout_ms`, then
+`settings.cleanup.timeout_ms`, then the framework default of 10,000
+milliseconds. Values must be positive finite integers; cleanup cannot be made
+unlimited. Manual execution, command-finally execution, and automatic teardown
+use the same policy.
+
+Restoration is one-shot and must be nonblocking and bounded. Verification is
+read-only and retryable under the remaining cleanup deadline. A truthy return or
+no return value after successful assertions passes verification. `false` or
+`cleanup.pending(reason, evidence)` yields and retries;
+`cleanup.fatal(message, evidence)` fails immediately. A thrown assertion or
+error is retained as the latest failed observation and retried until the
+deadline, so asynchronously settling native state can still be confirmed.
+
+If restoration throws, verification is still attempted when time remains
+because the restore operation may have partially or completely taken effect.
+The transaction remains `failed` even if that verification later observes a
+clean terminal state, and both outcomes are recorded. Observed restore failure,
+verification fatality, or cleanup-deadline expiry produces `failed`;
+`unconfirmed` is reserved for interruption that prevents the surviving service
+from establishing an outcome. Cleanup callbacks have the same cooperative
+limitation as command callbacks and cannot safely be interrupted while executing
+synchronous native or Lua code.
 
 An expired verification deadline does not discard the execution receipt. The
 receipt remains available to its registered transaction so partial or
@@ -664,13 +727,20 @@ to reproduce the ledger without inspecting the active registry:
   where a prearmed reservation is safely discarded after proving that no
   mutation or publication occurred.
 
-If host loss or interruption prevents a registered transaction from reaching
-one of those normal dispositions, terminalization records it as `unconfirmed`
-rather than silently omitting it and publishes exactly one corresponding
-`cleanup.transaction_finished` event. A terminal test attempt therefore reports
-every registered transaction with exactly one disposition: `complete`,
-`failed`, `abandoned`, or `unconfirmed`. Repeated manual execution does not add
-a second terminal event.
+If interruption or a recoverable execution-host failure prevents a registered
+transaction from reaching one of those normal dispositions while the automation
+service remains alive, terminalization records it as `unconfirmed` rather than
+silently omitting it and publishes exactly one corresponding
+`cleanup.transaction_finished` event. A terminal test attempt retained by that
+service therefore reports every registered transaction with exactly one
+disposition: `complete`, `failed`, `abandoned`, or `unconfirmed`. Repeated manual
+execution does not add a second terminal event.
+
+Loss of the DFHack process or automation-service instance is outside this
+complete-ledger guarantee: its journal is intentionally process-local and cannot
+publish new terminal events after destruction. An external persistence owner may
+report connection or interruption failure using evidence it already received,
+but it must not synthesize missing transaction registrations or dispositions.
 
 ### Test-attempt ownership and finalization
 
@@ -748,6 +818,12 @@ able to represent:
 - command completed; and
 - command failed with any command-lifetime cleanup evidence.
 
+Every command and workflow-step event carries its run-unique `invocation_id`,
+optional `parent_invocation_id`, `root_invocation_id`, and owning test-attempt
+identity. Top-level commands have no parent and use their own invocation ID as
+the root ID. Child queries and workflow steps use distinct invocation IDs even
+when their command names and normalized arguments are identical.
+
 Example-lifetime cleanup occurs later and is reported by cleanup and terminal
 run events. A command-finished event does not claim knowledge of cleanup
 transactions that are still pending for test teardown.
@@ -811,6 +887,7 @@ return {
     commands={
         open_report={
             kind='action',
+            intrinsic_verification='callback',
             default_timeout_ms=5000,
             normalize=function(arguments)
                 return arguments
@@ -822,7 +899,7 @@ return {
                 -- execute once and return command.executed(...)
             end,
             verify=function(context, request, receipt)
-                -- optional intrinsic project-command verification
+                -- required by the CALLBACK intrinsic-verification policy
             end,
         },
     },
@@ -888,10 +965,10 @@ The root `dwarfspec.ds` module builds the context and registry, then binds thin
 public functions that invoke the runner. It contains no duplicate pointer,
 input, game-state, or mount command implementation.
 
-The protocol namespace owns command-kind and failure-stage enums, configuration
-validation, and cross-boundary event schemas. The host owns scheduler and clock
-capabilities but not command policy. The controller renders the resulting
-events without interpreting driver behavior.
+The protocol namespace owns command-kind, intrinsic-verification-kind, and
+failure-stage enums, configuration validation, and cross-boundary event schemas.
+The host owns scheduler and clock capabilities but not command policy. The
+controller renders the resulting events without interpreting driver behavior.
 
 ## Compatibility strategy
 
@@ -939,6 +1016,8 @@ The runner receives exhaustive deterministic unit coverage once its contract is
 introduced. An injected fake monotonic clock and scheduler prove:
 
 - timeout precedence and finite validation;
+- required intrinsic-verification policy selection, callback/policy agreement,
+  and rejection of an implicit receipt-only definition;
 - one shared deadline across preflight and verification;
 - preflight pending, ready, fatal, thrown, cancelled, and timed-out outcomes;
 - exactly-once primary execution;
@@ -950,6 +1029,9 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - cleanup prearming, manual expenditure, command-lifetime cleanup, and teardown behavior;
 - cleanup state transitions through every terminal disposition, including an
   exactly-once journal event for `unconfirmed`;
+- one-shot restoration and retryable cleanup verification under an independent
+  finite cleanup deadline, including restoration errors followed by attempted
+  verification and cleanup timeout reporting;
 - test-attempt attribution across setup, body, and teardown hooks, rejection
   outside an active attempt, and `test.finished` ordering after cleanup-result
   materialization;
@@ -967,6 +1049,7 @@ introduced. An injected fake monotonic clock and scheduler prove:
   result schemas;
 - combined primary and cleanup failures;
 - nested workflow steps sharing the parent deadline;
+- unique nested invocation identities and exact parent-child event correlation;
 - target re-resolution across yields;
 - bounded and rate-limited diagnostics;
 - stable public return values; and
@@ -1174,20 +1257,22 @@ The architecture is complete when:
 - caller verification is optional, retryable, documented, and unable to weaken
   intrinsic verification;
 - nested read-only verification commands inherit the parent deadline and appear
-  as child events;
+  as child events with unique invocation and parent identities;
 - command timeout errors identify the exact lifecycle stage and last bounded
   observation;
 - command-owned mutations prearm cleanup before publication;
 - caller cleanup registrations return manually executable transactions, and
   teardown executes every transaction that remains pending;
 - caller cleanup registration requires an independent verification operation;
+- cleanup restoration is one-shot, cleanup verification is retryable, and every
+  cleanup execution has a finite deadline independent of its owning command;
 - test-attempt cleanup closes and its result is materialized before
   `test.finished`, while service-owned run cleanup remains separately scoped;
 - removing or expending a transaction never removes its lifecycle events from
   the authoritative service journal;
-- every registered transaction appears exactly once in its terminal test
-  attempt result with `complete`, `failed`, `abandoned`, or `unconfirmed`
-  disposition;
+- every registered transaction owned by a terminal test attempt retained by a
+  surviving service appears exactly once in that attempt result with
+  `complete`, `failed`, `abandoned`, or `unconfirmed` disposition;
 - the service event journal and persisted result expose consistent transaction
   identities, ordering, attribution, outcomes, and bounded evidence;
 - the journal remains the sole historical source of truth, while live consumers
