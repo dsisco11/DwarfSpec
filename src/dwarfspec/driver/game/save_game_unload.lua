@@ -98,10 +98,10 @@ end
 ---@param dependencies table
 ---@param operation string
 ---@param expected_directory string
----@param requested_directory string
+---@param destination string
 ---@return string
 local function wait_description(dependencies, operation, expected_directory,
-        requested_directory)
+        destination)
     local focus = dependencies.get_focus and dependencies.get_focus() or nil
     local viewscreen = dependencies.get_viewscreen and
         dependencies.get_viewscreen() or nil
@@ -112,10 +112,10 @@ local function wait_description(dependencies, operation, expected_directory,
     else
         observed_directory = '<unloaded>'
     end
-    return ('%s expected=%s requested=%s observed=%s focus=%s viewscreen=%s')
+    return ('%s expected=%s destination=%s observed=%s focus=%s viewscreen=%s')
         :format(
         operation, bounded_field(expected_directory),
-        bounded_field(requested_directory), bounded_field(observed_directory),
+        bounded_field(destination), bounded_field(observed_directory),
         bounded_field(focus), bounded_field(viewscreen))
 end
 
@@ -143,18 +143,19 @@ function M.new(dependencies)
         'DwarfSpec save-game unload requires native left-click input')
     assert(type(dependencies.wait_frames) == 'function',
         'DwarfSpec save-game unload requires raw-frame settling')
+    assert(type(dependencies.get_title_state) == 'function',
+        'DwarfSpec save-game unload requires title-menu inspection')
     local adapter = {}
 
     ---Discards the expected currently loaded save without saving it.
     ---@param expected_directory string
-    ---@param requested_directory string
+    ---@param destination string
     ---@return true
-    function adapter:unload(expected_directory, requested_directory)
+    function adapter:unload(expected_directory, destination)
         assert(type(expected_directory) == 'string' and expected_directory ~= '',
             'DwarfSpec save-game unload requires an expected save directory')
-        assert(type(requested_directory) == 'string' and
-                requested_directory ~= '',
-            'DwarfSpec save-game unload requires a requested save directory')
+        assert(type(destination) == 'string' and destination ~= '',
+            'DwarfSpec save-game unload requires a transition destination')
         assert(dependencies.is_world_loaded(),
             'DwarfSpec save-game unload requires a loaded save game')
         assert(dependencies.read_world_folder() == expected_directory,
@@ -176,7 +177,7 @@ function M.new(dependencies)
                 dependencies.open_options(screen)
                 options = wait_for(dependencies, wait_description(dependencies,
                     'open save-game options', expected_directory,
-                    requested_directory),
+                    destination),
                     function()
                         local observed = dependencies.get_options()
                         return observed.open and observed or nil
@@ -193,7 +194,7 @@ function M.new(dependencies)
             dependencies.click_left(screen, options, option_index)
             wait_for(dependencies, wait_description(dependencies,
                 'request discard without saving', expected_directory,
-                requested_directory), function()
+                destination), function()
                 local observed = dependencies.get_options()
                 return observed.fort_quit_without_saving_confirm or
                     observed.adv_quit_without_saving_confirm
@@ -206,8 +207,14 @@ function M.new(dependencies)
             dependencies.click_left(screen, dependencies.get_options())
             wait_for(dependencies, wait_description(dependencies,
                 'wait for save game unload', expected_directory,
-                requested_directory), function()
+                destination), function()
                 return not dependencies.is_world_loaded()
+            end)
+            wait_for(dependencies, wait_description(dependencies,
+                'wait for title main menu', expected_directory,
+                destination), function()
+                local state = dependencies.get_title_state()
+                return state and state.mode == 'main' and state or nil
             end)
             dependencies.wait_frames(2)
             return true
@@ -217,6 +224,25 @@ function M.new(dependencies)
         if not restored then error(restore_error, 0) end
         if not ok then error(result, 0) end
         return result
+    end
+
+    ---Discards the loaded save and confirms arrival at the title main menu.
+    ---An already-visible title main menu is an idempotent no-op.
+    ---@return string|nil
+    function adapter:exit_to_main_menu()
+        if not dependencies.is_world_loaded() then
+            local state = dependencies.get_title_state()
+            assert(state and state.mode == 'main',
+                'DwarfSpec exitToMainMenu requires a loaded save game or ' ..
+                    'the title main menu')
+            return nil
+        end
+        local expected_directory = dependencies.read_world_folder()
+        assert(type(expected_directory) == 'string' and
+                expected_directory ~= '',
+            'DFHack ReadWorldFolder did not return a valid save directory name')
+        adapter:unload(expected_directory, 'main-menu')
+        return expected_directory
     end
 
     return adapter

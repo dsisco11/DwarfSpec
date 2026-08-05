@@ -70,7 +70,12 @@ describe('save-game unload command binding', function()
             end,
         }
         local options = {option={'discard'}}
-        local screen = {_type='native-screen-type'}
+        local modes = {
+            MAIN_MENU=10,
+            CONTINUE_ACTIVE_WORLD=20,
+            CONTINUE_ACTIVE=30,
+        }
+        local screen = {_type='native-screen-type', mode=modes.MAIN_MENU}
         local simulated = {}
         local gui = {
             simulateInput=function(actual_screen, key)
@@ -85,6 +90,12 @@ describe('save-game unload command binding', function()
         local df_api = {
             global={game={main_interface={options=options}}},
             main_menu_option_type={QUIT_WITHOUT_SAVING=42},
+            viewscreen_titlest={
+                is_instance=function(_, candidate)
+                    return candidate == screen
+                end,
+            },
+            title_mode_type=modes,
         }
 
         local result = command.new({
@@ -102,6 +113,8 @@ describe('save-game unload command binding', function()
                     return df_api.global.game.main_interface.options
                 end,
                 main_menu_option_type=df_api.main_menu_option_type,
+                title_screen_type=df_api.viewscreen_titlest,
+                title_mode_type=df_api.title_mode_type,
             },
             pointer_adapter=pointer_adapter,
             pointer=pointer,
@@ -116,6 +129,7 @@ describe('save-game unload command binding', function()
             captured.main_menu_option_type)
         assert.equals('dwarfmode/Default', captured.get_focus())
         assert.equals('native-screen-type', captured.get_viewscreen())
+        assert.equals('main', captured.get_title_state().mode)
 
         captured.open_options(screen)
         captured.click_left(screen)

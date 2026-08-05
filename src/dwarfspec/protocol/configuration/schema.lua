@@ -16,6 +16,7 @@ local RESERVED_COMMANDS = {
     capture_view_tree=true,
     click=true,
     current_run=true,
+    exitToMainMenu=true,
     get=true,
     getGameSpeed=true,
     getViewPos=true,

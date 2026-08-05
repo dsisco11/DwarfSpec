@@ -14,6 +14,7 @@ describe('save-game unload adapter', function()
     local selection_error
     local selection_confirms
     local screen_available
+    local title_state
     local unload_adapter
 
     ---Builds one injected native discard adapter fixture.
@@ -29,6 +30,7 @@ describe('save-game unload adapter', function()
             main_menu_option_type={QUIT_WITHOUT_SAVING='discard'},
             get_focus=function() return 'dwarfmode/Default' end,
             get_viewscreen=function() return 'df.viewscreen_dwarfmodest' end,
+            get_title_state=function() return title_state end,
             capture_input_state=function()
                 return function() restored_input_state = true end
             end,
@@ -50,6 +52,7 @@ describe('save-game unload adapter', function()
                 else
                     table.insert(inputs, 'CLICK_LEFT:CONFIRM')
                     world_loaded = false
+                    title_state = {mode='main'}
                 end
             end,
             wait_until=function(description, query)
@@ -87,6 +90,7 @@ describe('save-game unload adapter', function()
         selection_error = nil
         selection_confirms = true
         screen_available = true
+        title_state = nil
         unload_adapter = save_game_unload.new(make_dependencies())
     end)
 
@@ -101,16 +105,48 @@ describe('save-game unload adapter', function()
             'MOVE_POINTER:24,24',
             'CLICK_LEFT:CONFIRM',
         }, inputs)
-        assert.matches('open save-game options expected=region1 requested=region2',
+        assert.matches('open save-game options expected=region1 destination=region2',
             waits[1], 1, true)
         assert.matches('observed=region1', waits[1], 1, true)
-        assert.matches('request discard without saving expected=region1 requested=region2',
+        assert.matches('request discard without saving expected=region1 destination=region2',
             waits[2], 1, true)
-        assert.matches('wait for save game unload expected=region1 requested=region2',
+        assert.matches('wait for save game unload expected=region1 destination=region2',
             waits[3], 1, true)
+        assert.matches('wait for title main menu expected=region1 destination=region2',
+            waits[4], 1, true)
         assert.is_false(world_loaded)
         assert.equals(2, settled_frames)
         assert.is_true(restored_input_state)
+    end)
+
+    it('exits to the title main menu and returns the discarded directory',
+            function()
+        assert.equals('region1', unload_adapter:exit_to_main_menu())
+
+        assert.is_false(world_loaded)
+        assert.equals('main', title_state.mode)
+        assert.matches('destination=main-menu', waits[#waits], 1, true)
+    end)
+
+    it('is an idempotent no-op at the title main menu', function()
+        world_loaded = false
+        title_state = {mode='main'}
+
+        assert.is_nil(unload_adapter:exit_to_main_menu())
+        assert.same({}, inputs)
+        assert.same({}, waits)
+    end)
+
+    it('rejects an unloaded non-main-menu state without native input',
+            function()
+        world_loaded = false
+        title_state = {mode='save-list'}
+
+        assert.has_error(function()
+            unload_adapter:exit_to_main_menu()
+        end, 'DwarfSpec exitToMainMenu requires a loaded save game or ' ..
+            'the title main menu')
+        assert.same({}, inputs)
     end)
 
     it('uses an already-open options interface without reopening it', function()

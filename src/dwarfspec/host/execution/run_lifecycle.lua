@@ -85,6 +85,7 @@ function M.new(dependencies)
                     result.button_state_active ~= true and
                     result.game_pause_state_active ~= true and
                     result.game_speed_active ~= true and
+                    result.turbo_speed_active ~= true and
                     result.render_observer_active ~= true
             else
                 mount_ok = false

@@ -283,9 +283,11 @@ are outside the `ds.awaitEvent()` contract.
 | `ds.setGamePaused(paused)` | Set the simulation pause state; DwarfSpec automatically restores the inherited state during example cleanup. |
 | `ds.getGameSpeed()` | Return the current game-speed target in ticks per second. |
 | `ds.setGameSpeed(tps)` | Set the target game speed in ticks per second; DwarfSpec automatically restores the inherited state during example cleanup. |
+| `ds.setTurboSpeed(enabled)` | Set DF's process-global native turbo-speed switch; cleanup restores the inherited switch but cannot rewind gameplay. |
 | `ds.getTick()` | Return the current in-year simulation tick for the loaded world. |
 | `ds.getTime()` | Return DFHack's current millisecond clock value. |
 | `ds.getSaveDirectoryName()` | Return the directory name of the currently loaded save game. |
+| `ds.exitToMainMenu()` | Discard the loaded save without saving and wait for the native title main menu; an already-visible main menu is a no-op. The resulting state is not restored during example cleanup. |
 | `ds.mountSaveGame(directory_name)` | Ensure the exact save directory is loaded and the native loading viewscreen has disappeared. A matching loaded save is left untouched; a different loaded world is discarded without saving first. The requested save remains loaded for subsequent examples and is not restored or unloaded during example cleanup. |
 | `ds.hasFocus(path)` | Return whether the current DFHack focus matches a focus path. |
 | `ds.getViewPos(origin)` | Return the map tile aligned with an `EScreenOrigin`; defaults to `CENTER`. |

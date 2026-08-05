@@ -356,6 +356,7 @@ local command_observer_module = load_automation_module(package_root,
         map_view_cleanup_entry=nil,
         game_pause_cleanup_entry=nil,
         game_speed_cleanup_entry=nil,
+        turbo_speed_cleanup_entry=nil,
     }
     ---Returns recurring-operation ownership for terminal cleanup verification.
     ---@return table
@@ -758,6 +759,8 @@ local command_observer_module = load_automation_module(package_root,
             context.game_pause_cleanup_entry ~= nil
         state.game_speed_active =
             context.game_speed_cleanup_entry ~= nil
+        state.turbo_speed_active =
+            context.turbo_speed_cleanup_entry ~= nil
         state.render_observer_active =
             context.mount_context.current ~= nil and
             context.mount_context.current.render_observer ~= nil
@@ -1297,6 +1300,17 @@ local command_observer_module = load_automation_module(package_root,
         assert(type(name) == 'string' and name ~= '',
             'DFHack ReadWorldFolder did not return a valid save directory name')
         return name
+    end
+
+    ---Discards the loaded save and waits for the native title main menu.
+    ---An already-visible title main menu is an idempotent no-op. The resulting
+    ---state is not cleanup-owned and remains in effect for later examples.
+    ---@param ... any
+    ---@return string|nil
+    function ds.exitToMainMenu(...)
+        assert(select('#', ...) == 0,
+            'DwarfSpec exitToMainMenu does not accept arguments')
+        return save_game_unloader:exit_to_main_menu()
     end
 
     ---Ensures that one exact save directory is loaded.

@@ -391,6 +391,14 @@ function DS.getGameSpeed() end
 ---@return integer
 function DS.setGameSpeed(tps) end
 
+---Sets DF's process-global native turbo-speed switch for the current example.
+---This affects the whole simulation, not selected units. DwarfSpec restores the
+---inherited switch value during cleanup, but cannot rewind gameplay that advances
+---while turbo speed is enabled.
+---@param enabled boolean
+---@return boolean
+function DS.setTurboSpeed(enabled) end
+
 ---Selects unit-speed behavior for one example.
 ---Both behaviors default to false, and at least one must be true. When
 ---`unit_ids` is omitted, DwarfSpec snapshots the currently eligible active,
@@ -434,6 +442,12 @@ function DS.getTime() end
 ---Returns the directory name of the currently loaded save game.
 ---@return string
 function DS.getSaveDirectoryName() end
+
+---Discards the loaded save and waits for the native title main menu.
+---An already-visible title main menu is an idempotent no-op. The resulting
+---state is not restored during example cleanup.
+---@return string|nil exited_directory
+function DS.exitToMainMenu() end
 
 ---Ensures that one exact save directory is loaded.
 ---If another world is loaded, it is discarded without saving first. The
