@@ -2,6 +2,11 @@
 
 Status: implemented for the 0.2.0 release candidate
 
+The domain-neutral `DirectedAcyclicGraph` referenced by the planned successor
+runtime is specified by the prerequisite
+[directed acyclic graph utility proposal](directed-acyclic-graph-proposal.md).
+This document specifies service integration, not graph mechanics.
+
 ## Summary
 
 DwarfSpec will expose its live test runner through one multi-project automation
@@ -1276,9 +1281,8 @@ separate run-level events.
 
 The successor runtime also owns one run-scoped `ResourceDependencyIndex` across
 service-run, suite-execution, test-attempt, and command-invocation levels. One
-domain-neutral `DirectedAcyclicGraph` inside the index provides dependency edges
-oriented from prerequisite to dependent, cycle validation, active-dependent
-queries, and deterministic topological ordering. `ResourceDependencyIndex`
+prerequisite `DirectedAcyclicGraph` instance inside the index stores
+prerequisite-to-dependent claim edges. `ResourceDependencyIndex`
 provides resource policy and lifetime-direction validation. `CleanupPlanner`
 produces deterministic reverse-topological cleanup plans. LIFO remains the
 tie-breaker

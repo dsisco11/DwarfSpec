@@ -13,6 +13,11 @@ cleanup transactions, migration, and validation cadence. This document remains
 authoritative only for the fixture commands' domain behavior. Conflicting
 execution or delivery language here is superseded by that proposal.
 
+The domain-neutral `DirectedAcyclicGraph` used here is specified by the
+prerequisite
+[directed acyclic graph utility proposal](directed-acyclic-graph-proposal.md).
+This document specifies only fixture-domain resource and cleanup policy.
+
 The proposed public entry points are:
 
 ```lua
@@ -112,8 +117,8 @@ Each suite execution and nested test attempt receives an isolated cleanup
 ledger shared by these commands. One run-scoped `ResourceDependencyIndex` tracks
 stable resource identities, logical tile reservations, spies, inactive-unit
 claims, and their tagged service-run, suite, test, or command owner across all
-active lifecycle levels. Its domain-neutral `DirectedAcyclicGraph` validates
-prerequisite-to-dependent structure and cycles, while
+active lifecycle levels. Its prerequisite `DirectedAcyclicGraph` supplies
+validated prerequisite-to-dependent structure, while
 `ResourceDependencyIndex` validates cross-level lifetime direction and
 `CleanupPlanner` plans dependent-before-prerequisite cleanup;
 LIFO orders only independent transactions. Cleanup remains owner-local, while
@@ -820,9 +825,8 @@ The implementation should preserve DwarfSpec's existing ownership boundaries:
   logical tile reservations, active job spies, inactive-unit flag transitions,
   cleanup linkage, compatible sharing, and exclusive conflicts across
   service-run, suite-execution, test-attempt, and command-invocation levels. Its
-  domain-neutral `DirectedAcyclicGraph` owns prerequisite-to-dependent edges,
-  cycle validation, active-dependent queries, and deterministic topological
-  ordering. `ResourceDependencyIndex` owns lifetime validation and resource
+  prerequisite `DirectedAcyclicGraph` supplies generic graph behavior.
+  `ResourceDependencyIndex` owns lifetime validation and resource
   policy. `CleanupPlanner` produces deterministic reverse-topological cleanup
   plans for every command family.
 - Closed DwarfSpec discriminators live in protocol enum modules as immutable
@@ -936,19 +940,21 @@ Passing assertions without verified cleanup are insufficient.
 
 ## Delivery order
 
-1. Expose `registerCleanup()`, the run-scoped `ResourceDependencyIndex`, its
-   `DirectedAcyclicGraph` and `CleanupPlanner`, and the cleanup
+1. Implement and qualify the
+   [directed acyclic graph utility proposal](directed-acyclic-graph-proposal.md).
+2. Expose `registerCleanup()`, the run-scoped `ResourceDependencyIndex`, its
+   graph instance and `CleanupPlanner`, and the cleanup
    history/result-journal integration
    defined by the verified command execution proposal.
-2. Add `reserveMapTiles()` and `queryUnits()` as read-mostly discovery
+3. Add `reserveMapTiles()` and `queryUnits()` as read-mostly discovery
    primitives.
-3. Add `disableUnitsAi()` with flag-only ownership and fail-closed verified
+4. Add `disableUnitsAi()` with flag-only ownership and fail-closed verified
    restoration.
-4. Add `spawnItem()` with complete ownership and removal verification.
-5. Add `createStockpile()` on top of tile reservations and the resource
-   ownership index.
-6. Add `spyJobs()` with Busted compatibility and reconciled native observation.
-7. Add `runUntil()` as a pause-safe composition over `await()`.
+5. Add `spawnItem()` with complete ownership and removal verification.
+6. Add `createStockpile()` on top of tile reservations and
+   `ResourceDependencyIndex`.
+7. Add `spyJobs()` with Busted compatibility and reconciled native observation.
+8. Add `runUntil()` as a pause-safe composition over `await()`.
 
 Every command must have declarations, focused domain coverage, documentation,
 and the live evidence required by its native risk. Full package and family live

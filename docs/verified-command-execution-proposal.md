@@ -6,6 +6,10 @@ This document proposes a foundational execution model for all public DwarfSpec
 commands. It is an architecture proposal, not an implementation checklist and
 not a description of shipped behavior.
 
+The domain-neutral `DirectedAcyclicGraph` is specified by the prerequisite
+[directed acyclic graph utility proposal](directed-acyclic-graph-proposal.md).
+This proposal owns only its resource-policy and cleanup-planning consumers.
+
 The proposal adopts Cypress-like command actionability, finite command
 deadlines, one-shot mutation by default, proof-gated safe execution retry, and
 retryable verification without adopting
@@ -142,10 +146,9 @@ outside this enum and keeps its separate run-level protocol.
 
 ### Explicit resource-dependency components
 
-`DirectedAcyclicGraph` is the domain-neutral graph mechanism. It owns node and
-edge mutation, cycle and self-edge rejection, dependent lookup, and
-deterministic topological ordering, but it knows nothing about DwarfSpec owners,
-resource claims, cleanup transactions, or lifetimes.
+`DirectedAcyclicGraph` is the domain-neutral graph mechanism defined by the
+prerequisite proposal. This proposal does not extend its API with DwarfSpec
+policy.
 
 `ResourceDependencyIndex` is the run-scoped DwarfSpec policy layer over one
 `DirectedAcyclicGraph` instance and every active DwarfSpec resource claim.
@@ -754,10 +757,9 @@ explicit command contract; otherwise a command may consume only a claim owned
 by its exact owner. Cleanup registries and execution indexes remain private to
 their individual owners even when the resource index relates their claims.
 
-The shared dependency mechanism is `DirectedAcyclicGraph`, whose nodes are
-active claims and whose edges point from prerequisite to dependent. It owns
-node insertion/removal, edge insertion/removal, cycle and self-edge rejection,
-active-dependent lookup, and deterministic topological ordering.
+The shared dependency mechanism is `DirectedAcyclicGraph`, instantiated with
+active claim IDs and prerequisite-to-dependent edges according to its
+prerequisite proposal.
 `ResourceDependencyIndex` owns DwarfSpec-specific lifetime-direction validation
 and claim policy. `CleanupPlanner` owns deterministic reverse-topological cleanup
 planning. Commands declare domain relationships through
@@ -1476,9 +1478,10 @@ evidence; a silent or externally interrupted run is not.
 - Add suite-execution and test-attempt cleanup indexes, stable transaction
   identities, authoritative run-journal lifecycle events, and the
   service-materialized owner-scoped cleanup result projections.
-- Add the run-scoped `ResourceDependencyIndex`, its
-  `DirectedAcyclicGraph`, cross-level conflict and lifetime policy,
-  `CleanupPlanner`, and verified claim release.
+- First implement and qualify the prerequisite
+  [directed acyclic graph utility proposal](directed-acyclic-graph-proposal.md).
+- Add the run-scoped `ResourceDependencyIndex`, its graph instance, cross-level
+  conflict and lifetime policy, `CleanupPlanner`, and verified claim release.
 - Revise the service/event/result protocol together, including cursor reads,
   suite lifecycle events, retained-run inspection, controller interpretation,
   persistence, formatting, and compatibility rejection.
