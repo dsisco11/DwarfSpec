@@ -221,6 +221,9 @@ all lifecycle outcomes and finite timing calculations have one implementation.
 - [ ] Add `src/dwarfspec/driver/command/definition.lua`.
   - [ ] Validate names, kinds, normalize/preflight callbacks, execution policy,
         intrinsic policy, timeouts, diagnostics, claims, and cleanup shape.
+  - [ ] Enforce the proposal's required callable `preflight` field on every
+        command definition and workflow step; only fields marked optional in
+        the authoritative definition shapes may be omitted.
   - [ ] Require `execute` for every non-workflow definition and require one
         `workflow` while forbidding `execute` for `WORKFLOW`.
   - [ ] Require `operation_key` only for `EXPLICIT_RETRY_SAFE`.
@@ -509,6 +512,11 @@ Completion criteria:
 Outcome: commands and cleanup are legal at every approved lifecycle level, and
 each owner closes, finalizes, reports, and quarantines independently.
 
+This phase establishes the owner identities, registration windows, and cleanup
+finalization infrastructure. Phase 10 makes public commands consume that
+infrastructure through the common runner and supplies the command-path legality
+proof; command routing is not a completion requirement of this phase.
+
 - [ ] Introduce stable suite-execution identity for each selected spec file in
       each repeat.
 - [ ] Activate suite ownership before suite setup and keep it active through
@@ -625,8 +633,10 @@ failure handling.
   - [ ] Re-resolve stable subjects and mounts across yields.
   - [ ] Revalidate volatile target identity immediately before execution and
         return recoverable changes to the same preflight loop.
-- [ ] Invoke `claims(context, request, ready)` after successful final target
-      validation; validate and freeze the inert plan without changing ownership.
+- [ ] After successful final target validation, invoke the proposal's optional
+      `claims(context, request, ready)` hook when present; otherwise use a frozen
+      empty plan. Validate and freeze any returned inert plan without changing
+      ownership.
 - [ ] Implement primary behavior by command kind.
   - [ ] Poll query/assertion primary observations and preserve successful nil
         distinctly from pending.
