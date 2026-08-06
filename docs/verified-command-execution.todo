@@ -79,16 +79,24 @@ parallel command engine after migration.
 Outcome: the generic graph implementation is independently qualified before
 resource-claim and cleanup-planning consumers depend on it.
 
-- [ ] Complete every item in `docs/directed-acyclic-graph.todo`.
-- [ ] Confirm `src/dwarfspec/graphs/directed_acyclic_graph.lua` exports exactly
+- [x] Complete every item in `docs/directed-acyclic-graph.todo`.
+- [x] Confirm `src/dwarfspec/graphs/directed_acyclic_graph.lua` exports exactly
       the approved domain-neutral API.
-- [ ] Confirm its focused suite and applicable syntax, formatting, and
+- [x] Confirm its focused suite and applicable syntax, formatting, and
       declaration checks pass.
-- [ ] Record the prerequisite review evidence in this implementation effort.
+- [x] Record the prerequisite review evidence in this implementation effort.
+
+Prerequisite evidence (2026-08-06): the completed standalone DAG checklist
+records 13 focused successes in 0.015 seconds, Lua syntax/formatting success
+for 376 files, passing valid and invalid declaration checks, and a passing
+`git diff --check`. Independent final-acceptance review confirmed the exact
+domain-neutral API, private detached storage, no consumer policy leakage, and
+all generic operations needed by `ResourceDependencyIndex` and
+`CleanupPlanner`.
 
 Completion criteria:
 
-- [ ] The DAG prerequisite is complete and no graph implementation task is
+- [x] The DAG prerequisite is complete and no graph implementation task is
       duplicated in this checklist.
 
 ## Phase 1: Inventory the migration and freeze shared vocabulary

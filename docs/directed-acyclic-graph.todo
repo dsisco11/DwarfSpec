@@ -11,14 +11,14 @@ policy so the prerequisite can be implemented and reviewed quickly.
 
 ## Scope guard
 
-- [ ] Treat `docs/directed-acyclic-graph-proposal.md` as the authoritative API
+- [x] Treat `docs/directed-acyclic-graph-proposal.md` as the authoritative API
       and behavior contract.
-- [ ] Do not add node payloads, implicit node creation, persistence,
+- [x] Do not add node payloads, implicit node creation, persistence,
       serialization, concurrency, transitive reduction, visualization, resource
       semantics, cleanup semantics, or other consumer-specific behavior.
-- [ ] Keep node IDs as validated nonempty strings and keep the graph's internal
+- [x] Keep node IDs as validated nonempty strings and keep the graph's internal
       representation private.
-- [ ] Add language-standard documentation comments for the class and every
+- [x] Add language-standard documentation comments for the class and every
       public method.
 
 ## Phase 1: Implement the graph contract
@@ -153,9 +153,9 @@ Completion criteria:
 
 ## Final acceptance
 
-- [ ] Every requirement in `docs/directed-acyclic-graph-proposal.md` is
+- [x] Every requirement in `docs/directed-acyclic-graph-proposal.md` is
       implemented and verified.
-- [ ] `DirectedAcyclicGraph` remains small, deterministic, domain-neutral, and
+- [x] `DirectedAcyclicGraph` remains small, deterministic, domain-neutral, and
       safe for both active-claim and temporary transaction graphs.
-- [ ] The verified-command plan may treat this checklist as a completed
+- [x] The verified-command plan may treat this checklist as a completed
       prerequisite rather than duplicating graph implementation work.
