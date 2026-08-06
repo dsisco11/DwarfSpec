@@ -408,6 +408,8 @@ end
 ---@return table validated_plan
 function ResourceDependencyIndex:validate_plan(owner, invocation_id, lifetime,
         entries, operation_key, consumption_authorization)
+    assert(next(self._conflicted_records) == nil,
+        'resource ownership is quarantined pending cleanup recovery')
     owner = Internals.owner(owner, self._service_run_id)
     invocation_id = Internals.string(invocation_id, 'invocation_id')
     assert(lifetime == CleanupLifetime.COMMAND or lifetime == CleanupLifetime.OWNER,
@@ -632,8 +634,9 @@ end
 ---@param transaction_id string
 function ResourceDependencyIndex:retain_unresolved(transaction_id)
     transaction_id = Internals.string(transaction_id, 'transaction_id')
-    assert(self._transaction_claim_ids[transaction_id] ~= nil,
-        'transaction has no active claims to retain')
+    assert(self._transaction_claim_ids[transaction_id] ~= nil or
+        self._conflicted_records[transaction_id] ~= nil,
+        'transaction has no active claims or conflicted ownership to retain')
 end
 
 ---Explicitly rehomes one active claim to a transaction with a new owner.
@@ -689,7 +692,17 @@ end
 function ResourceDependencyIndex:release_verified(transaction_id, proof)
     transaction_id = Internals.string(transaction_id, 'transaction_id')
     local claim_ids = self._transaction_claim_ids[transaction_id]
-    assert(claim_ids ~= nil, 'transaction has no active claims to release')
+    if claim_ids == nil then
+        assert(self._conflicted_records[transaction_id] ~= nil,
+            'transaction has no active claims to release')
+        assert(self._release_authorizer ~= nil,
+            'verified claim release requires transaction authorization')
+        local disposition = self._release_authorizer(transaction_id, proof)
+        assert(disposition == 'complete' or disposition == 'abandoned',
+            'transaction did not authorize a releasable disposition')
+        self._conflicted_records[transaction_id] = nil
+        return
+    end
     for claim_id in pairs(claim_ids) do
         assert(#self._graph:successors(claim_id) == 0,
             'cannot release a prerequisite while an active dependent remains')

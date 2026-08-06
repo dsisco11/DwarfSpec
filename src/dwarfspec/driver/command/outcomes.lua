@@ -5,6 +5,7 @@ local diagnostics = Diagnostics.new()
 
 ---@class dwarfspec.CommandOutcomes
 local Outcomes = {}
+local EFFECT_ABSENT_OUTCOMES = setmetatable({}, {__mode='k'})
 
 ---@class dwarfspec.driver.command.OutcomeInternals
 local Internals = {}
@@ -109,10 +110,19 @@ end
 function Outcomes.effect_absent(message, evidence)
     assert(type(message) == 'string' and message ~= '',
         'effect_absent outcome requires a nonempty message')
-    return Internals.outcome({
+    local outcome = Internals.outcome({
         kind='effect_absent', message=message,
         evidence=Internals.required_evidence(evidence, 'effect_absent outcome'),
     })
+    EFFECT_ABSENT_OUTCOMES[outcome] = true
+    return outcome
+end
+
+---Returns whether a value was created by effect_absent.
+---@param outcome any
+---@return boolean
+function Outcomes.is_effect_absent(outcome)
+    return EFFECT_ABSENT_OUTCOMES[outcome] == true
 end
 
 ---Creates a successful primary-execution result.

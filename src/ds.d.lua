@@ -235,6 +235,18 @@
 ---@field isPending fun(self: dwarfspec.CleanupTransaction): boolean
 ---@field claimReferences fun(self: dwarfspec.CleanupTransaction): dwarfspec.ResourceClaimReference[]
 
+---Run-scoped authority for atomic cleanup transaction registration and history.
+---@class dwarfspec.CleanupRegistrationService
+---@field new fun(options: table): dwarfspec.CleanupRegistrationService
+---@field register fun(self: dwarfspec.CleanupRegistrationService, registration: table): dwarfspec.CleanupTransaction
+---@field abandonSelfRolledBack fun(self: dwarfspec.CleanupRegistrationService, transaction_id: string, mutation_lease: dwarfspec.CleanupMutationLease, proof: table)
+---@field journal fun(self: dwarfspec.CleanupRegistrationService): table[]
+---@field pending_ids_for fun(self: dwarfspec.CleanupRegistrationService, owner: dwarfspec.ExecutionOwnerIdentity): table<string, true>
+
+---Runner-owned lease that serializes one mutating command attempt.
+---@class dwarfspec.CleanupMutationLease
+---@field release fun(self: dwarfspec.CleanupMutationLease)
+
 ---@class dwarfspec.CleanupExecutionContext
 ---@field remaining_ms fun(self: dwarfspec.CleanupExecutionContext): integer
 ---@field cancellation fun(self: dwarfspec.CleanupExecutionContext): boolean, string|nil

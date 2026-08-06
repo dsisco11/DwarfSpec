@@ -143,6 +143,9 @@ function CleanupTransaction.new(options)
         claim_references=options.claim_references or function() return {} end,
         assert_executable=options.assert_executable or function() end,
         blocking_dependents=options.blocking_dependents or function() return {} end,
+        on_started=options.on_started or function() end,
+        on_finished=options.on_finished or function() end,
+        on_abandoned=options.on_abandoned or function() end,
     }
     Deadline.new(dependencies.now_ms, dependencies.timeout_ms)
     return setmetatable({_transaction_id=Internals.identifier(options.transaction_id,
@@ -196,6 +199,8 @@ function CleanupTransaction._mark_unconfirmed(transaction, evidence)
     transaction._evidence = Internals.diagnostics:sanitize(evidence,
         'unconfirmed cleanup evidence')
     transaction._dependencies.retain_unresolved(transaction._transaction_id)
+    transaction._dependencies.on_finished(transaction, transaction._state,
+        transaction._evidence)
 end
 
 ---Records a terminal prerequisite block without invoking cleanup callbacks.
@@ -214,6 +219,8 @@ function CleanupTransaction._dependency_blocked(transaction, dependent_ids)
         reason='dependency_blocked', dependent_transaction_ids=dependent_ids,
     }, 'dependency-blocked cleanup evidence')
     transaction._dependencies.retain_unresolved(transaction._transaction_id)
+    transaction._dependencies.on_finished(transaction, transaction._state,
+        transaction._evidence)
 end
 
 ---Records the runner-only proof that an effect self-rolled back before publication.
@@ -224,13 +231,17 @@ function CleanupTransaction._abandon_verified(transaction, proof)
         'abandoned cleanup requires a cleanup transaction')
     assert(transaction._state == CleanupState.PENDING,
         'only pending cleanup can be abandoned')
-    assert(type(proof) == 'table' and next(proof) ~= nil,
+    assert(type(proof) == 'table',
+        'abandoned cleanup requires nonempty absence proof')
+    local iterator, state, key = pairs(proof)
+    assert(iterator(state, key) ~= nil,
         'abandoned cleanup requires nonempty absence proof')
     proof = Internals.diagnostics:sanitize(proof, 'cleanup absence proof')
     transaction._dependencies.remove_pending(transaction)
     transaction._dependencies.release_verified(transaction._transaction_id, proof)
     transaction._state = CleanupState.ABANDONED
     transaction._evidence = proof
+    transaction._dependencies.on_abandoned(transaction, proof)
 end
 
 ---Executes restore once and polls required verification under a fresh deadline.
@@ -246,6 +257,7 @@ function CleanupTransaction:execute(reason)
     end
     self._dependencies.remove_pending(self)
     self._state = CleanupState.RUNNING
+    self._dependencies.on_started(self, reason)
     local deadline = Deadline.new(self._dependencies.now_ms,
         self._dependencies.timeout_ms)
     local cancellation = self._dependencies.new_cancellation()
@@ -318,12 +330,15 @@ function CleanupTransaction:execute(reason)
         end, debug.traceback)
         if released then
             self._state = CleanupState.COMPLETE
+            self._dependencies.on_finished(self, self._state, self._evidence)
             return true
         end
-        failures[#failures + 1] = 'claim release: ' .. tostring(release_error)
+        failures[#failures + 1] = 'claim release: ' ..
+            Internals.bounded_error(release_error)
     end
     self._state = CleanupState.FAILED
     self._dependencies.retain_unresolved(self._transaction_id)
+    self._dependencies.on_finished(self, self._state, self._evidence)
     error(Internals.failure(failures), 2)
 end
 

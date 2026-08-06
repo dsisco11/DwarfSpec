@@ -566,58 +566,69 @@ Outcome: one service atomically creates effect-backed transactions and claims,
 and the append-only service journal retains every lifecycle disposition after
 pending work is expended.
 
-- [ ] Add one run-scoped internal `CleanupRegistrationService` as the only
+- [x] Add one run-scoped internal `CleanupRegistrationService` as the only
       mutation boundary for transaction IDs, owner registries, execution
       indexes, receipt freezing, claim linking/release, and lifecycle events.
-- [ ] Allocate run-unique transaction IDs and owner-local registration ordinals
+- [x] Allocate run-unique transaction IDs and owner-local registration ordinals
       before protected state is published.
-- [ ] Atomically create a transaction and all active claims from a confirmed
+- [x] Atomically create a transaction and all active claims from a confirmed
       effect receipt and frozen claim bindings.
-- [ ] Preserve the tagged suite/test owner and owning-command correlation on
+- [x] Preserve the tagged suite/test owner and owning-command correlation on
       command-lifetime transactions; use lifetime to control finalization, not
       to replace execution-owner identity.
-- [ ] Revalidate the bound subset against the current resource index at the
+- [x] Revalidate the bound subset against the current resource index at the
       post-effect registration boundary.
-- [ ] Serialize each DwarfSpec mutating attempt from final plan validation
+- [x] Serialize each DwarfSpec mutating attempt from final plan validation
       through atomic effect registration, including across cooperative yields,
       while allowing nested read-only commands.
-- [ ] On unexpected post-effect conflict or adapter-contract violation:
-  - [ ] Preserve the cleanup transaction and receipt.
-  - [ ] Record fail-closed conflicted ownership evidence.
-  - [ ] Fail the command at cleanup registration.
-  - [ ] Block incompatible work and apply executor quarantine until recovery
+- [x] On unexpected post-effect conflict or adapter-contract violation:
+  - [x] Preserve the cleanup transaction and receipt.
+  - [x] Record fail-closed conflicted ownership evidence.
+  - [x] Fail the command at cleanup registration.
+  - [x] Block incompatible work and apply executor quarantine until recovery
         establishes actual resource state.
-- [ ] Add runner-only `abandonSelfRolledBack(transaction_id, proof)`.
-  - [ ] Accept only a pending internal transaction owned by the current
+- [x] Add runner-only `abandonSelfRolledBack(transaction_id, proof)`.
+  - [x] Accept only a pending internal transaction owned by the current
         invocation.
-  - [ ] Require bounded typed stable-identity absence proof from
+  - [x] Require bounded typed stable-identity absence proof from
         `command.effect_absent`.
-  - [ ] Atomically remove pending work, release claims, record `abandoned`, and
+  - [x] Atomically remove pending work, release claims, record `abandoned`, and
         publish exactly one abandonment event.
-  - [ ] Leave the transaction pending for ordinary cleanup when validation or
+  - [x] Leave the transaction pending for ordinary cleanup when validation or
         atomic transition fails.
-- [ ] Extend the service's append-only journal with registered, started,
+- [x] Extend the service's append-only journal with registered, started,
       finished, and abandoned cleanup transaction events.
-- [ ] Include bounded owner, transaction, ordinal, label, lifetime, command,
+- [x] Include bounded owner, transaction, ordinal, label, lifetime, command,
       trigger, timing, restore, verification, evidence/failure, and disposition
       fields; exclude executable callbacks and private receipts.
-- [ ] Guarantee exactly one terminal event per registered transaction retained
+- [x] Guarantee exactly one terminal event per registered transaction retained
       by a surviving service.
-- [ ] Terminalize unresolved work as `unconfirmed` only when interruption or a
+- [x] Terminalize unresolved work as `unconfirmed` only when interruption or a
       recoverable host failure prevents a conclusive normal outcome.
-- [ ] Keep pending registries and mutable execution indexes owner-local while
+- [x] Keep pending registries and mutable execution indexes owner-local while
       keeping the physical journal run-scoped and authoritative.
-- [ ] Add service tests for atomic registration, post-effect conflicts,
+- [x] Add service tests for atomic registration, post-effect conflicts,
       transaction/claim identity, verified complete release, failed/unconfirmed
       claim retention, release failure quarantine, abandonment fallback, event
       completeness, terminal uniqueness, and retention after registry removal.
-- [ ] Perform a follow-up service/journal review before lifecycle integration.
+- [x] Perform a follow-up service/journal review before lifecycle integration.
 
 Completion criteria:
 
-- [ ] Every active claim and transaction is created as one service mutation.
-- [ ] Removing pending work never removes its historical events.
-- [ ] The journal alone can reproduce every retained transaction ledger.
+- [x] Every active claim and transaction is created as one service mutation.
+- [x] Removing pending work never removes its historical events.
+- [x] The journal alone can reproduce every retained transaction ledger.
+
+Evidence: `CleanupRegistrationService` tests cover atomic transaction/claim
+registration, owner-local ordinals, conflicted post-effect registration,
+abandonment, complete/failed/unconfirmed retention, release-failure quarantine,
+and terminal-event uniqueness. The focused cleanup suite completed with 28
+successes; Lua syntax/formatting passed for 414 files; source declaration
+fixtures and `git diff --check` passed. The completion audit subsequently
+identified serialization, plan-correlation, and absence-proof gaps; the
+resulting corrections and follow-up abandonment authorization fixes have
+focused regression coverage. The runner consumes the mutation lease when
+command routing is introduced.
 
 ## Phase 8: Integrate suite, test, and service cleanup ownership
 
