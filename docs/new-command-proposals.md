@@ -305,6 +305,15 @@ it does not define a fixture-specific reservation mechanism. A caller releases
 the reservation when no effect is produced or atomically consumes it into the
 cleanup transaction after an effect exists.
 
+Relationships among requests in the same reservation use local claim keys.
+Relationships to existing active claims use the opaque immutable
+`ResourceClaimReference` contract defined by the verified-command proposal.
+Those references become caller-visible only from a cleanup transaction or a
+resource-producing command whose documented result explicitly exposes them.
+The reservation command retains its claims only after successful intrinsic
+verification and publication of the returned handle; every earlier failure
+releases them.
+
 ### `ds.registerCleanup(registration, command_options)`
 
 ```lua
@@ -331,6 +340,10 @@ function CleanupTransaction:execute(reason) end
 ---Returns whether this transaction remains registered for teardown.
 ---@return boolean
 function CleanupTransaction:isPending() end
+
+---Returns immutable references for dependency-capable claims owned by this transaction.
+---@return dwarfspec.ResourceClaimReference[]
+function CleanupTransaction:claimReferences() end
 
 ---@param registration dwarfspec.CleanupRegistration
 ---@param command_options? dwarfspec.CommandOptions
@@ -363,6 +376,13 @@ Contract:
   foreign, released, consumed, duplicate, missing, or incompatible claims fail
   without partially registering the transaction and leave the reservation
   pending for correction or explicit release.
+- Initial reservation validates the complete request batch as one prospective
+  transaction in the planner's derived transaction dependency graph and rejects
+  any cycle before caller mutation, even when the underlying claim graph is
+  acyclic. Registration defensively revalidates the same projection while
+  binding the complete reservation; an unexpected invariant failure leaves the
+  reservation and claims unresolved and triggers the verified-command
+  quarantine contract rather than publishing an unprotected effect.
 - Omitting both resource fields declares a resource-independent cleanup
   transaction. Such transactions participate in teardown but use LIFO ordering
   because they introduce no dependency-graph edges.
@@ -897,7 +917,8 @@ Each command requires unit tests for:
 - caller resource-claim reservation before mutation, owner-bound reservation
   handles, exact/provisional binding, atomic all-claim consumption into
   `registerCleanup`, explicit no-effect release, and automatic release of unused
-  reservations before owner cleanup;
+  reservations before owner cleanup, plus failure-path release before a handle
+  is published;
 - structured partial-effect failure receipts and rejection of adapters that can
   mutate before throwing without reporting a cleanup identity;
 - verified cleanup of every effect created by a retry attempt before another
@@ -913,8 +934,10 @@ Each command requires unit tests for:
 - stable suite/test owner and owning-command attribution;
 - isolation between suite executions, neighboring tests, and repeats;
 - cross-level resource-claim conflict detection, explicit sharing and
-  dependency relationships, reusable DAG cycle and lifetime-direction
-  validation, reverse-topological cleanup with LIFO tie-breaking, rejection of
+  dependency relationships, distinct local keys and opaque active-claim
+  references, reusable DAG cycle and lifetime-direction validation,
+  pre-mutation prospective transaction-graph cycle rejection,
+  transaction-level reverse-topological cleanup with LIFO tie-breaking, rejection of
   prerequisite release while dependent claims remain active, and claim
   retention after failed or unconfirmed cleanup;
 - suite-owned registration during setup and teardown, manual suite-transaction
