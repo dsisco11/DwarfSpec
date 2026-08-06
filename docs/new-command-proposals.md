@@ -21,7 +21,6 @@ This document specifies only fixture-domain resource and cleanup policy.
 The proposed public entry points are:
 
 ```lua
-ds.reserveResourceClaims(claims, command_options)
 ds.registerCleanup(registration, command_options)
 ds.spawnItem(options)
 ds.createStockpile(options)
@@ -128,16 +127,18 @@ exclusivity and dependency checks consult the complete resource index.
 ### Register immediately after a confirmed effect
 
 A mutating command does not register cleanup before an effect exists. It first
-validates the cleanup policy and reserves any exclusive resource claim, then
+validates the cleanup policy and an inert resource-claim plan, then
 registers cleanup synchronously as soon as execution conclusively returns an
 effect receipt and before any later fallible work, yield, verification, retry,
 or return to test code:
 
 1. validate and normalize the complete request;
-2. reserve any exclusive resource claim required for safe mutation;
+2. validate the inert resource-claim plan required for safe mutation without
+   creating index state;
 3. perform native construction;
 4. receive a stable effect or structured partial-effect receipt;
-5. register cleanup from that immutable receipt and link the resource claim;
+5. atomically register cleanup from that immutable receipt and activate the
+   bound resource claims under the new transaction ID;
 6. verify the constructed resource;
 7. return the identity.
 
@@ -295,25 +296,6 @@ native userdata.
 
 ## Command contracts
 
-### `ds.reserveResourceClaims(claims, command_options)`
-
-The verified command execution proposal owns this general lifecycle command.
-It atomically reserves `ResourceClaimRequest[]` before downstream native
-mutation and returns an owner-bound `ResourceClaimReservation`. This proposal
-uses that handle only as the resource-ownership input to `registerCleanup()`;
-it does not define a fixture-specific reservation mechanism. A caller releases
-the reservation when no effect is produced or atomically consumes it into the
-cleanup transaction after an effect exists.
-
-Relationships among requests in the same reservation use local claim keys.
-Relationships to existing active claims use the opaque immutable
-`ResourceClaimReference` contract defined by the verified-command proposal.
-Those references become caller-visible only from a cleanup transaction or a
-resource-producing command whose documented result explicitly exposes them.
-The reservation command retains its claims only after successful intrinsic
-verification and publication of the returned handle; every earlier failure
-releases them.
-
 ### `ds.registerCleanup(registration, command_options)`
 
 ```lua
@@ -322,8 +304,7 @@ releases them.
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
 ---@field receipt dwarfspec.CleanupReceipt
----@field claim_reservation? dwarfspec.ResourceClaimReservation
----@field resource_bindings? dwarfspec.ResourceClaimBinding[]
+---@field resource_claims? dwarfspec.ResourceClaimRegistration[]
 ---@field restore fun(context: dwarfspec.CleanupExecutionContext, receipt: dwarfspec.CleanupReceipt)
 ---@field verify fun(context: dwarfspec.CleanupExecutionContext, receipt: dwarfspec.CleanupReceipt): boolean|dwarfspec.GateResult|nil
 ---@field cleanup_timeout_ms? integer
@@ -369,21 +350,26 @@ Contract:
   to `cleanup_confirmed`.
 - `receipt` is required at registration and is defensively copied and frozen
   before the transaction enters the registry or journal.
-- `claim_reservation` and `resource_bindings` are either both omitted or both
-  supplied. When supplied, the reservation must be pending under the exact
-  active owner and the bindings must account for every reserved claim exactly
-  once. Registration atomically consumes those claims into the transaction;
-  foreign, released, consumed, duplicate, missing, or incompatible claims fail
-  without partially registering the transaction and leave the reservation
-  pending for correction or explicit release.
-- Initial reservation validates the complete request batch as one prospective
-  transaction in the planner's derived transaction dependency graph and rejects
-  any cycle before caller mutation, even when the underlying claim graph is
-  acyclic. Registration defensively revalidates the same projection while
-  binding the complete reservation; an unexpected invariant failure leaves the
-  reservation and claims unresolved and triggers the verified-command
-  quarantine contract rather than publishing an unprotected effect.
-- Omitting both resource fields declares a resource-independent cleanup
+- `resource_claims`, when present, contains exact post-effect
+  `ResourceClaimRegistration` descriptors. Each has a caller-local nonempty
+  `claim_key`, exact stable resource identity or logical region, resource kind,
+  exclusivity/sharing policy, and explicit relationships. Local relationships
+  name another key in this array; relationships to existing active claims use
+  immutable `ResourceClaimReference` values. Provisional identities are not
+  accepted because the effect already exists.
+- The service validates the complete descriptor set and atomically creates one
+  cleanup transaction plus every active claim. Every created claim carries the
+  new transaction ID; active caller claims can never exist independently of a
+  transaction.
+- If semantic validation discovers a conflict, invalid relationship, lifetime
+  violation, or dependency cycle after the effect exists, the cleanup receipt
+  is retained in a fail-closed transaction, conflicted ownership evidence is
+  journaled, the command fails, and executor quarantine applies. The transaction
+  remains eligible for teardown even though no handle is returned. Structural
+  invocation errors that prevent safe receipt or callback capture remain caller
+  contract violations; callers needing that failure window closed must define a
+  verified project command.
+- Omitting `resource_claims` declares a resource-independent cleanup
   transaction. Such transactions participate in teardown but use LIFO ordering
   because they introduce no dependency-graph edges.
 - The receipt identifies an effect that already exists. `registerCleanup()` is
@@ -914,11 +900,9 @@ Each command requires unit tests for:
   be enforced;
 - cleanup registration immediately after a conclusive effect receipt and before
   later fallible work, yielding, verification, retry, or publication;
-- caller resource-claim reservation before mutation, owner-bound reservation
-  handles, exact/provisional binding, atomic all-claim consumption into
-  `registerCleanup`, explicit no-effect release, and automatic release of unused
-  reservations before owner cleanup, plus failure-path release before a handle
-  is published;
+- caller post-effect exact resource registration, atomic transaction-and-claim
+  creation, a transaction ID on every active claim, and fail-closed retention of
+  cleanup and conflict evidence when semantic validation fails;
 - structured partial-effect failure receipts and rejection of adapters that can
   mutate before throwing without reporting a cleanup identity;
 - verified cleanup of every effect created by a retry attempt before another
@@ -936,7 +920,8 @@ Each command requires unit tests for:
 - cross-level resource-claim conflict detection, explicit sharing and
   dependency relationships, distinct local keys and opaque active-claim
   references, reusable DAG cycle and lifetime-direction validation,
-  pre-mutation prospective transaction-graph cycle rejection,
+  pre-mutation simulated transaction-graph cycle rejection for command claim
+  plans and post-effect defensive cycle validation for caller registration,
   transaction-level reverse-topological cleanup with LIFO tie-breaking, rejection of
   prerequisite release while dependent claims remain active, and claim
   retention after failed or unconfirmed cleanup;
@@ -1001,7 +986,7 @@ Passing assertions without verified cleanup are insufficient.
 
 1. Implement and qualify the
    [directed acyclic graph utility proposal](directed-acyclic-graph-proposal.md).
-2. Expose `reserveResourceClaims()`, `registerCleanup()`, the run-scoped
+2. Expose `registerCleanup()`, the run-scoped
    `ResourceDependencyIndex`, its graph instance and `CleanupPlanner`, and the
    cleanup history/result-journal integration
    defined by the verified command execution proposal.
