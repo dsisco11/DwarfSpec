@@ -105,41 +105,61 @@ Outcome: all existing execution, cleanup, configuration, declaration, and
 result surfaces are mapped to the approved contracts before structural changes
 begin.
 
-- [ ] Inventory every public command binding in `src/dwarfspec/ds.lua`, every
+- [x] Inventory every public command binding in `src/dwarfspec/ds.lua`, every
       subject fluent command, and every definition source under
       `src/dwarfspec/driver/commands/`.
-  - [ ] Record each command's current signature, return value, mutation status,
+  - [x] Record each command's current signature, return value, mutation status,
         waits, render behavior, cleanup behavior, and direct implementation
         dependencies.
-  - [ ] Assign each command exactly one approved `ECommandKind`.
-  - [ ] Assign each non-workflow definition an intrinsic-verification policy.
-  - [ ] Assign every initial built-in mutator `ONCE`; reserve
+  - [x] Assign each command exactly one approved `ECommandKind`.
+  - [x] Assign each non-workflow definition an intrinsic-verification policy.
+  - [x] Assign every initial built-in mutator `ONCE`; reserve
         `EXPLICIT_RETRY_SAFE` for the synthetic qualification definition and
         later definitions that separately satisfy the complete proof contract.
-  - [ ] Identify commands with existing public `{wait=false}` behavior that
+  - [x] Identify commands with existing public `{wait=false}` behavior that
         must retain explicit asynchronous invalidation semantics.
-- [ ] Inventory project command loaders and every repository fixture command
+- [x] Inventory project command loaders and every repository fixture command
       module that currently exports bare callbacks.
-- [ ] Inventory existing cleanup registries, cleanup callbacks, lifecycle
+- [x] Inventory existing cleanup registries, cleanup callbacks, lifecycle
       hooks, result fields, quarantine decisions, and `cleanup_confirmed`
       production and consumption sites.
-- [ ] Inventory current command-observer events, protocol schemas, controller
+- [x] Inventory current command-observer events, protocol schemas, controller
       formatting, result persistence, retained-run reads, cursor reads, and
       transport fixtures affected by the coordinated revision.
-- [ ] Inventory `settings.wait.timeout_ms`, per-command timeouts, unlimited
+- [x] Inventory `settings.wait.timeout_ms`, per-command timeouts, unlimited
       timeout support, and all configuration/declaration examples.
-- [ ] Establish a requirement-to-task traceability table or review notes that
+- [x] Establish a requirement-to-task traceability table or review notes that
       cover every proposal acceptance criterion and every inventoried public
       command.
-- [ ] Confirm no compatibility question requires changing an undocumented or
+- [x] Confirm no compatibility question requires changing an undocumented or
       inconsistent return value; record any such exception as a separate
       decision before editing behavior.
 
+Evidence recorded 2026-08-06:
+
+- `docs/verified-command-execution-inventory.md` accounts for all 39 public
+  `ds` bindings/bound declarations, all 12 `Subject` methods, all 14 current
+  `driver/commands` sources, and all four repository bare-callback command
+  fixtures.
+- The ledger assigns exact command kinds, intrinsic-verification kinds,
+  `ONCE` policy, migration destinations, validation boundaries, direct
+  dependencies, cleanup/result/protocol/configuration touchpoints, and the sole
+  existing public `{wait=false}` path (`redraw`).
+- A field-level result/event appendix maps active, terminal, retained, cursor,
+  persisted, journal, scheduler, and quarantine contracts and concretely names
+  their producers and consumers.
+- The required second review corrected intrinsic enum vocabulary and expanded
+  direct dependency and production-site signposting.
+- The independent completion audit initially found the undocumented
+  `current_run()` return and insufficient result-field traceability. Both were
+  corrected; the repeated audit found no confirmed issue, partial item, or
+  evidence gap. `git diff --check` passed.
+
 Completion criteria:
 
-- [ ] Every public command and cleanup/result/configuration touchpoint has an
+- [x] Every public command and cleanup/result/configuration touchpoint has an
       assigned migration destination and validation boundary.
-- [ ] No command family or project fixture can silently remain on an old path.
+- [x] No command family or project fixture can silently remain on an old path.
 
 ## Phase 2: Add protocol enums, settings, and public declaration contracts
 
