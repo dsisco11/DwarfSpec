@@ -190,6 +190,8 @@
 ---@field provisional? boolean
 ---@field depends_on_claim_keys? string[]
 ---@field depends_on_references? dwarfspec.ResourceClaimReference[]
+---@field shares_with_references? dwarfspec.ResourceClaimReference[]
+---@field consumes_references? dwarfspec.ResourceClaimReference[]
 
 ---@class dwarfspec.ResourceClaimBinding
 ---@field claim_key string
@@ -202,6 +204,22 @@
 ---@field exclusive boolean
 ---@field depends_on_claim_keys? string[]
 ---@field depends_on_references? dwarfspec.ResourceClaimReference[]
+---@field shares_with_references? dwarfspec.ResourceClaimReference[]
+---@field consumes_references? dwarfspec.ResourceClaimReference[]
+
+---Run-scoped policy state for active cleanup-backed resource claims.
+---@class dwarfspec.ResourceDependencyIndex
+---@field new fun(service_run_id: string, release_authorizer?: fun(transaction_id: string, proof: any): string): dwarfspec.ResourceDependencyIndex
+---@field validate_plan fun(self: dwarfspec.ResourceDependencyIndex, owner: dwarfspec.ExecutionOwnerIdentity, invocation_id: string, lifetime: dwarfspec.ECleanupLifetime, entries: dwarfspec.ResourceClaimPlanEntry[], operation_key?: string, consumption_authorization?: table): table
+---@field consumption_authorization fun(self: dwarfspec.ResourceDependencyIndex, definition: dwarfspec.CommandDefinition): table
+---@field activate fun(self: dwarfspec.ResourceDependencyIndex, plan: table, transaction_id: string, bindings: dwarfspec.ResourceClaimBinding[]): dwarfspec.ResourceClaimReference[]
+---@field register fun(self: dwarfspec.ResourceDependencyIndex, owner: dwarfspec.ExecutionOwnerIdentity, transaction_id: string, lifetime: dwarfspec.ECleanupLifetime, registrations: dwarfspec.ResourceClaimRegistration[]): dwarfspec.ResourceClaimReference[]
+---@field lookup fun(self: dwarfspec.ResourceDependencyIndex, reference: dwarfspec.ResourceClaimReference): table
+---@field references_for_transaction fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string): dwarfspec.ResourceClaimReference[]
+---@field record_conflicted_registration fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string, owner: dwarfspec.ExecutionOwnerIdentity, evidence: table): table
+---@field retain_unresolved fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string)
+---@field transfer fun(self: dwarfspec.ResourceDependencyIndex, reference: dwarfspec.ResourceClaimReference, owner: dwarfspec.ExecutionOwnerIdentity, transaction_id: string): dwarfspec.ResourceClaimReference
+---@field release_verified fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string, proof: any)
 
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
@@ -293,6 +311,7 @@
 ---@field restore fun(context: dwarfspec.CleanupExecutionContext, receipt: any)
 ---@field verify fun(context: dwarfspec.CleanupExecutionContext, receipt: any): boolean|dwarfspec.GateResult|nil
 ---@field resources? fun(receipt: any): dwarfspec.ResourceClaimBinding[]
+---@field allow_cross_owner_consumption? boolean
 
 ---@class dwarfspec.WorkflowOutput
 ---@field has_value boolean

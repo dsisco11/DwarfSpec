@@ -390,82 +390,91 @@ Completion criteria:
 Outcome: one `ResourceDependencyIndex` validates inert plans and tracks every
 active effect-backed claim across all execution-owner levels.
 
-- [ ] Add the run-scoped `ResourceDependencyIndex` over one qualified
+- [x] Add the run-scoped `ResourceDependencyIndex` over one qualified
       `DirectedAcyclicGraph` instance.
-- [ ] Implement stable run-unique active claim IDs and immutable
+- [x] Implement stable run-unique active claim IDs and immutable
       `ResourceClaimReference` values with minimum owner/resource correlation.
-- [ ] Expose claim references only through an owning transaction or a stable
+- [x] Expose claim references only through an owning transaction or a stable
       resource-producing command result whose documented domain contract
       explicitly permits downstream dependency or compatible sharing.
-- [ ] Reject forged, stale, foreign-run, or policy-incompatible references.
-- [ ] Implement inert `ResourceClaimPlanEntry` validation.
-  - [ ] Require a nonempty invocation-local unique `claim_key`.
-  - [ ] Support exact existing-resource and provisional creation identities.
-  - [ ] Derive provisional creation identity from invocation ID and additionally
+- [x] Reject forged, stale, foreign-run, or policy-incompatible references.
+- [x] Implement inert `ResourceClaimPlanEntry` validation.
+  - [x] Require a nonempty invocation-local unique `claim_key`.
+  - [x] Support exact existing-resource and provisional creation identities.
+  - [x] Derive provisional creation identity from invocation ID and additionally
         the stable operation key for `EXPLICIT_RETRY_SAFE`.
-  - [ ] Keep local relationship keys distinct from references to active claims.
-  - [ ] Validate complete plans without allocating claim IDs, creating a
+  - [x] Keep local relationship keys distinct from references to active claims.
+  - [x] Validate complete plans without allocating claim IDs, creating a
         cleanup transaction, publishing events, or changing index state.
-- [ ] Implement `ResourceClaimBinding` validation against a previously frozen
+- [x] Implement `ResourceClaimBinding` validation against a previously frozen
       plan.
-  - [ ] Permit activation of an explicit subset by `claim_key`.
-  - [ ] Bind provisional entries to concrete stable identities from the effect
+  - [x] Permit activation of an explicit subset by `claim_key`.
+  - [x] Bind provisional entries to concrete stable identities from the effect
         receipt.
-  - [ ] Reject duplicate/unknown keys, incompatible identities, new
+  - [x] Reject duplicate/unknown keys, incompatible identities, new
         relationships, and unplanned pre-existing exclusive resources.
-- [ ] Implement exact post-effect `ResourceClaimRegistration` validation for
+- [x] Implement exact post-effect `ResourceClaimRegistration` validation for
       downstream cleanup registration without provisional identities.
-- [ ] Enforce run-wide exclusive conflicts across service, suite, test, and
+- [x] Enforce run-wide exclusive conflicts across service, suite, test, and
       command lifetimes rather than registry-local conflicts.
-- [ ] Support only explicitly declared compatible sharing, dependency,
+- [x] Support only explicitly declared compatible sharing, dependency,
       consumption, and transfer contracts.
-- [ ] Default consumption to the claim's exact owner unless an explicit command
+- [x] Default consumption to the claim's exact owner unless an explicit command
       contract authorizes sharing, dependency, consumption, or transfer.
-- [ ] Enforce parent owner chains and lifetime direction.
-  - [ ] Treat command lifetime as nested within its suite/test owner.
-  - [ ] Treat test-attempt lifetime as nested within suite execution.
-  - [ ] Treat suite-execution lifetime as nested within service run.
-  - [ ] Reject sibling or incomparable dependencies unless an explicit transfer
+- [x] Enforce parent owner chains and lifetime direction.
+  - [x] Treat command lifetime as nested within its suite/test owner.
+  - [x] Treat test-attempt lifetime as nested within suite execution.
+  - [x] Treat suite-execution lifetime as nested within service run.
+  - [x] Reject sibling or incomparable dependencies unless an explicit transfer
         command has already rehomed ownership.
-- [ ] Insert prerequisite-to-dependent claim edges only after all DwarfSpec
+- [x] Insert prerequisite-to-dependent claim edges only after all DwarfSpec
       policy checks pass.
-- [ ] Prevent releasing a prerequisite while any active dependent remains.
-- [ ] Implement terminal claim-disposition policy through transaction-owned
+- [x] Prevent releasing a prerequisite while any active dependent remains.
+- [x] Implement terminal claim-disposition policy through transaction-owned
       atomic index operations.
-  - [ ] Release every claim only after the transaction's restoration and
+  - [x] Release every claim only after the transaction's restoration and
         required verification succeed.
-  - [ ] Release `abandoned` transaction claims only through Phase 7's
+  - [x] Release `abandoned` transaction claims only through Phase 7's
         runner-only `abandonSelfRolledBack` transition after its typed absence
         proof succeeds.
-  - [ ] Make every released `ResourceClaimReference` stale immediately.
-  - [ ] Retain claims after `failed` or `unconfirmed` cleanup as fail-closed
+  - [x] Make every released `ResourceClaimReference` stale immediately.
+  - [x] Retain claims after `failed` or `unconfirmed` cleanup as fail-closed
         ownership and quarantine evidence, including `dependency_blocked`
         failures that did not execute restoration.
-  - [ ] Reject a `complete` disposition if atomic claim release fails; preserve
+  - [x] Reject a `complete` disposition if atomic claim release fails; preserve
         the transaction and claims under a composed failed/quarantined outcome.
-- [ ] Keep fail-closed conflicted claim records as quarantine evidence without
+- [x] Keep fail-closed conflicted claim records as quarantine evidence without
       treating them as normal active graph claims.
-- [ ] Keep runtime claim/index state separate from authoritative cleanup
+- [x] Keep runtime claim/index state separate from authoritative cleanup
       history and result projection.
-- [ ] Add exhaustive focused tests for plan purity, reference validation,
+- [x] Add exhaustive focused tests for plan purity, reference validation,
       binding, conflicts, compatible sharing, lifetime direction, cross-level
       lookup, dependency edges, verified complete release, release blocking,
       stale references, failed/unconfirmed retention, and fail-closed conflict
       evidence.
-- [ ] Treat every attempt plan as the conservative possible claim set of one
+- [x] Treat every attempt plan as the conservative possible claim set of one
       prospective transaction even when the effect may bind only a subset; use
       separate workflow steps when this conservative simulation would reject
       otherwise independent effects.
-- [ ] Perform a follow-up review against the proposal's complete claim contract.
+- [x] Perform a follow-up review against the proposal's complete claim contract.
 
 Completion criteria:
 
-- [ ] No active claim can exist without exactly one registered cleanup
+- [x] No active claim can exist without exactly one registered cleanup
       transaction ID.
-- [ ] No inert or no-effect plan appears as active ownership, cleanup history,
+- [x] No inert or no-effect plan appears as active ownership, cleanup history,
       or result data.
-- [ ] Conflicts and invalid dependency directions are rejected across the
+- [x] Conflicts and invalid dependency directions are rejected across the
       complete run.
+
+Evidence recorded 2026-08-06: focused `ResourceDependencyIndex` coverage
+completed with 21 successes, command-definition coverage with 6 successes,
+the complete unit suite with 1061 successes, and no failures, errors, or
+pending examples. Lua syntax/formatting passed for 407 files, valid source
+declaration fixtures passed, and `git diff --check` passed (only non-failing
+line-ending warnings). Independent completion audit found no remaining
+implementation issue after the final definition-derived cross-owner
+consumption authorization review.
 
 ## Phase 6: Implement cleanup planning and transaction execution
 

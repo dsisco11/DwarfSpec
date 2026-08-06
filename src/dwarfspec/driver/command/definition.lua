@@ -9,6 +9,7 @@ local RetryPolicy = require(
 
 ---@class dwarfspec.CommandDefinitionValidator
 local Definition = {}
+local VALIDATED = setmetatable({}, {__mode='k'})
 
 ---@class dwarfspec.driver.command.DefinitionInternals
 local Internals = {}
@@ -147,6 +148,9 @@ function Internals.cleanup(value, label)
     assert(value.cleanup.resources == nil or
         type(value.cleanup.resources) == 'function',
         label .. ' cleanup resources must be callable')
+    assert(value.cleanup.allow_cross_owner_consumption == nil or
+        type(value.cleanup.allow_cross_owner_consumption) == 'boolean',
+        label .. ' cleanup allow_cross_owner_consumption must be boolean')
 end
 
 ---Validates one non-workflow definition or workflow step.
@@ -233,7 +237,16 @@ function Definition.validate(value)
     else
         Internals.executable(value, label, false)
     end
-    return Internals.freeze(value)
+    local definition = Internals.freeze(value)
+    VALIDATED[definition] = true
+    return definition
+end
+
+---Returns whether a definition was validated by this module.
+---@param definition any
+---@return boolean
+function Definition.is_validated(definition)
+    return VALIDATED[definition] == true
 end
 
 return Definition
