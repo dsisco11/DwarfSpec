@@ -1,0 +1,1274 @@
+# Verified command execution implementation plan
+
+Source proposal: `docs/verified-command-execution-proposal.md`
+
+Prerequisite plan: `docs/directed-acyclic-graph.todo`
+
+Related contracts:
+
+- `docs/test-runner-service-design.md`
+- `docs/new-command-proposals.md`
+
+## Goal
+
+Replace every built-in and project-defined public command path with one
+run-scoped, Cypress-like verified-command runner. Every invocation must have a
+finite wall-clock deadline, an explicit read-only preflight gate, one declared
+primary-execution policy, truthful intrinsic verification, optional caller
+verification, stage-aware evidence, and effect-driven verified cleanup. The
+same architecture must support suite-, test-, and service-owned cleanup,
+run-wide resource claims, explicit dependency ordering, retained transaction
+history, workflows, and proof-gated execution retry.
+
+Preserve existing public call shapes and return values where the proposal
+requires compatibility, but perform a complete definition-based conversion:
+do not add a runtime adapter for callback-only project commands or retain a
+parallel command engine after migration.
+
+## Plan-wide execution rules
+
+- [ ] Treat `docs/verified-command-execution-proposal.md` as authoritative for
+      command execution, timeout placement, retry, cleanup transactions,
+      resource ownership, protocol evidence, migration, and validation cadence.
+- [ ] Treat `docs/directed-acyclic-graph-proposal.md` and its separate `.todo`
+      as the complete prerequisite graph contract; do not duplicate or extend
+      that utility in this plan.
+- [ ] Treat `docs/new-command-proposals.md` as authoritative only for managed
+      fixture domain semantics; resolve execution-model conflicts in favor of
+      the verified-command proposal.
+- [ ] Treat `docs/test-runner-service-design.md` as authoritative for admission,
+      leases, quarantine, retention, acknowledgement, cursor reads, persistence
+      ownership, and the presentation-neutral UI boundary.
+- [ ] Keep every new task unchecked until its implementation, proportionate
+      evidence, and required follow-up review are complete.
+- [ ] Preserve unrelated worktree and index changes; do not stash or commit
+      user work.
+- [ ] Add language-standard documentation comments for every introduced or
+      changed class and method.
+- [ ] Keep driver modules independent of `dwarfspec.host`; inject narrow
+      capabilities through run assembly.
+- [ ] Preserve Busted ownership of test structure, assertions, and behavior
+      result classification.
+- [ ] Preserve the proposal's non-goal boundaries.
+  - [ ] Do not introduce a JavaScript-style command queue, Promise model, DOM
+        semantics, fluent-chain retry engine, or a replacement assertion
+        framework.
+  - [ ] Do not infer product-specific intent from generic input or treat a
+        completed render as proof of correct rendered content.
+  - [ ] Do not claim arbitrary synchronous Lua/native code can be interrupted;
+        require bounded cooperative command and cleanup callbacks.
+  - [ ] Do not redesign controller discovery, transport, result persistence,
+        TestBed, or the host service beyond the evidence and lifecycle changes
+        required by the proposal.
+- [ ] Apply the proposal's risk-based validation cadence.
+  - [ ] Use syntax/static checks, the relevant conformance case, and a focused
+        command suite for a mechanical definition conversion.
+  - [ ] Add the smallest relevant live case only for command-specific native
+        semantic changes.
+  - [ ] Run the complete command-engine suite after runner, deadline, outcome,
+        cleanup, or workflow-engine changes.
+  - [ ] Run focused protocol, journal, persistence, configuration, host-loading,
+        declaration, and formatting checks after schema changes.
+  - [ ] Run the full unit suite and representative live qualification at each
+        completed command-family boundary, not after each mechanical command.
+  - [ ] Reserve full source/package/framework/live qualification for final
+        consolidation and other explicitly identified integration gates.
+
+## Phase 0: Complete the standalone DAG prerequisite
+
+Outcome: the generic graph implementation is independently qualified before
+resource-claim and cleanup-planning consumers depend on it.
+
+- [ ] Complete every item in `docs/directed-acyclic-graph.todo`.
+- [ ] Confirm `src/dwarfspec/graphs/directed_acyclic_graph.lua` exports exactly
+      the approved domain-neutral API.
+- [ ] Confirm its focused suite and applicable syntax, formatting, and
+      declaration checks pass.
+- [ ] Record the prerequisite review evidence in this implementation effort.
+
+Completion criteria:
+
+- [ ] The DAG prerequisite is complete and no graph implementation task is
+      duplicated in this checklist.
+
+## Phase 1: Inventory the migration and freeze shared vocabulary
+
+Outcome: all existing execution, cleanup, configuration, declaration, and
+result surfaces are mapped to the approved contracts before structural changes
+begin.
+
+- [ ] Inventory every public command binding in `src/dwarfspec/ds.lua`, every
+      subject fluent command, and every definition source under
+      `src/dwarfspec/driver/commands/`.
+  - [ ] Record each command's current signature, return value, mutation status,
+        waits, render behavior, cleanup behavior, and direct implementation
+        dependencies.
+  - [ ] Assign each command exactly one approved `ECommandKind`.
+  - [ ] Assign each non-workflow definition an intrinsic-verification policy.
+  - [ ] Assign every initial built-in mutator `ONCE`; reserve
+        `EXPLICIT_RETRY_SAFE` for the synthetic qualification definition and
+        later definitions that separately satisfy the complete proof contract.
+  - [ ] Identify commands with existing public `{wait=false}` behavior that
+        must retain explicit asynchronous invalidation semantics.
+- [ ] Inventory project command loaders and every repository fixture command
+      module that currently exports bare callbacks.
+- [ ] Inventory existing cleanup registries, cleanup callbacks, lifecycle
+      hooks, result fields, quarantine decisions, and `cleanup_confirmed`
+      production and consumption sites.
+- [ ] Inventory current command-observer events, protocol schemas, controller
+      formatting, result persistence, retained-run reads, cursor reads, and
+      transport fixtures affected by the coordinated revision.
+- [ ] Inventory `settings.wait.timeout_ms`, per-command timeouts, unlimited
+      timeout support, and all configuration/declaration examples.
+- [ ] Establish a requirement-to-task traceability table or review notes that
+      cover every proposal acceptance criterion and every inventoried public
+      command.
+- [ ] Confirm no compatibility question requires changing an undocumented or
+      inconsistent return value; record any such exception as a separate
+      decision before editing behavior.
+
+Completion criteria:
+
+- [ ] Every public command and cleanup/result/configuration touchpoint has an
+      assigned migration destination and validation boundary.
+- [ ] No command family or project fixture can silently remain on an old path.
+
+## Phase 2: Add protocol enums, settings, and public declaration contracts
+
+Outcome: closed vocabulary, finite timeout configuration, public option types,
+and versioned schema shapes exist before runtime components emit them.
+
+- [ ] Add immutable protocol enums for:
+  - [ ] `ECommandKind`: `QUERY`, `ASSERTION`, `ACTION`, `STATE_SETTER`,
+        `WORKFLOW`, and `FIXTURE`.
+  - [ ] `EIntrinsicVerificationKind`: `PRIMARY_OBSERVATION`, `CALLBACK`, and
+        `EXECUTION_RECEIPT`.
+  - [ ] `EExecutionRetryPolicy`: `ONCE` and `EXPLICIT_RETRY_SAFE`.
+  - [ ] `EExecutionOwnerScope`: `SERVICE_RUN`, `SUITE_EXECUTION`, and
+        `TEST_ATTEMPT`.
+  - [ ] `ECleanupOwnerScope`: `SERVICE_RUN`, `SUITE_EXECUTION`, and
+        `TEST_ATTEMPT`.
+  - [ ] `ECleanupLifetime`: `OWNER` and `COMMAND`.
+  - [ ] Cleanup state, terminal disposition, execution trigger, and command
+        failure-stage values required by the proposal.
+- [ ] Add `settings.command.timeout_ms` and `settings.cleanup.timeout_ms` with
+      positive finite integer validation and 10,000 ms framework defaults.
+- [ ] Implement timeout precedence for invocation, project, definition, and
+      framework command defaults.
+- [ ] Implement cleanup timeout precedence for registration, project, and
+      framework cleanup defaults.
+- [ ] Introduce the temporary `settings.wait.timeout_ms` fallback only when the
+      command setting is absent, with a bounded deprecation diagnostic.
+- [ ] Retain legacy `timeout_ms=false` behavior only for the documented
+      compatibility window and keep it bounded by the enclosing run lease.
+- [ ] Make `settings.command.timeout_ms` win deterministically when both new and
+      legacy wait settings are present, emit the legacy-setting deprecation,
+      and reject only conflicts whose precedence cannot be applied.
+- [ ] Preserve optional frame budgets as secondary safeguards for frame-based
+      commands without allowing them to replace the wall-clock deadline.
+- [ ] Add declaration types for `CommandOptions`, command observations,
+      definitions, workflow definitions and outputs, cleanup registrations and
+      transactions, cleanup contexts, claim plans/bindings/registrations/
+      references, and all typed outcomes.
+- [ ] Add trailing `CommandOptions` overloads without changing logical option
+      records or existing positional calls.
+- [ ] Define the successor service/event/result schema versions as one
+      coordinated protocol revision; do not emit new events under the old
+      version.
+- [ ] Add structural schema shapes for command ancestry, owner identities,
+      cleanup lifecycle events, suite execution records, and all three cleanup
+      result projections.
+- [ ] Update protocol negotiation to reject every mixed old/new client-service
+      combination.
+- [ ] Add focused enum, configuration, declaration, protocol-version, and
+      schema tests, including invalid finite timeout values and mixed-version
+      rejection.
+- [ ] Perform a follow-up review of the introduced vocabulary against the
+      proposal before consumers depend on it.
+
+Completion criteria:
+
+- [ ] All shared enums and public types are immutable, declared, versioned, and
+      consistently named.
+- [ ] Configuration accepts the compatibility window but cannot create a new
+      unbounded command or cleanup contract.
+- [ ] Focused protocol/configuration/declaration evidence passes.
+
+## Phase 3: Implement command outcomes, deadlines, definitions, and registry
+
+Outcome: immutable command definitions can be validated and registered, and
+all lifecycle outcomes and finite timing calculations have one implementation.
+
+- [ ] Add `src/dwarfspec/driver/command/outcomes.lua`.
+  - [ ] Implement explicit `ready`, `pending`, `fatal`, and intrinsic-only
+        `effect_absent` outcomes.
+  - [ ] Implement `executed`, explicit `retry`, and structured `failed`
+        execution outcomes.
+  - [ ] Keep public results, private verification receipts, effect receipts,
+        attempt receipts, and bounded evidence distinct.
+  - [ ] Make omitted `effect_receipt` explicitly mean no cleanup-requiring
+        effect for every execution outcome.
+  - [ ] Reject implicit retry inference from `false`, `nil`, thrown errors,
+        timeout, or cancellation.
+- [ ] Add `src/dwarfspec/driver/command/deadline.lua`.
+  - [ ] Use an injected monotonic clock.
+  - [ ] Calculate one absolute deadline after successful synchronous
+        normalization.
+  - [ ] Centralize remaining-time calculation and one documented rounding
+        direction.
+  - [ ] Preserve evidence and report execution timeout when bounded synchronous
+        execution returns after its deadline.
+- [ ] Add `src/dwarfspec/driver/command/definition.lua`.
+  - [ ] Validate names, kinds, normalize/preflight callbacks, execution policy,
+        intrinsic policy, timeouts, diagnostics, claims, and cleanup shape.
+  - [ ] Require `execute` for every non-workflow definition and require one
+        `workflow` while forbidding `execute` for `WORKFLOW`.
+  - [ ] Require `operation_key` only for `EXPLICIT_RETRY_SAFE`.
+  - [ ] Require `verify` for `CALLBACK`, forbid it for
+        `PRIMARY_OBSERVATION`, and omit it for `EXECUTION_RECEIPT`.
+  - [ ] Require immutable cleanup policy, callable restore, required cleanup
+        verification, supported lifetime, and optional resource projection for
+        any definition that can report an effect.
+  - [ ] Reject effect-producing shapes without cleanup policy and cleanup
+        policies for definitions that cannot produce effects.
+  - [ ] Copy or freeze accepted definitions.
+- [ ] Add `src/dwarfspec/driver/command/registry.lua`.
+  - [ ] Merge built-in and project definitions deterministically.
+  - [ ] Reject duplicate names and replacement of reserved built-in names.
+  - [ ] Preserve source-path and command-name diagnostics for invalid project
+        definitions.
+- [ ] Add structural unit tests separately from behavioral conformance tests.
+  - [ ] Prove all valid kind/intrinsic/retry combinations.
+  - [ ] Prove invalid workflow, cleanup, verify, retry, timeout, and reserved
+        name combinations fail early.
+  - [ ] Prove definitions cannot be mutated after registration.
+- [ ] Reserve behavioral qualification for conformance fixtures.
+  - [ ] Prove every normalizer and claims projector is bounded, synchronous,
+        and non-yielding.
+  - [ ] Prove preflight, claims, and verification callbacks remain read-only.
+  - [ ] Require each `EXECUTION_RECEIPT` definition to document and test why its
+        immutable receipt is the strongest truthful framework evidence.
+  - [ ] Prove cleanup resource projection accepts only the effect receipt and
+        emits bindings to the previously validated plan.
+  - [ ] Prove diagnostic projection is bounded plain data.
+- [ ] Perform a follow-up review before building the runner on these contracts.
+
+Completion criteria:
+
+- [ ] The registry can accept only structurally coherent immutable definitions.
+- [ ] Outcome constructors cannot erase the distinction between command
+      evidence and a confirmed cleanup-requiring effect.
+- [ ] Deadline behavior is deterministic under a fake clock.
+
+## Phase 4: Implement stage-restricted contexts and diagnostics
+
+Outcome: callbacks receive only the capabilities legal for their lifecycle
+stage, and all retained evidence is bounded and serialization-safe.
+
+- [ ] Add `src/dwarfspec/driver/command/context.lua`.
+  - [ ] Expose monotonic time, remaining deadline, cancellation, stable target
+        and mount resolution, read-only claim lookup, render observation,
+        bounded diagnostics, and immutable identities through
+        `CommandReadContext`.
+  - [ ] Add cooperative frame, tick, event, predicate waits, and internal step
+        execution only to `CommandExecutionContext`.
+  - [ ] Keep cleanup registration, claim mutation, registry mutation, host
+        service, controller transport, and result publication inaccessible.
+  - [ ] Define a narrow privileged `CleanupRegistrationCapability` used only by
+        the runner and the `registerCleanup` definition.
+  - [ ] Enforce stage guards for mutable cleanup handles and public command
+        invocation.
+- [ ] Add `src/dwarfspec/driver/command/diagnostics.lua`.
+  - [ ] Validate and freeze bounded plain evidence.
+  - [ ] Rate-limit or summarize repeated pending observations.
+  - [ ] Support command-kind diagnostic providers without serializing
+        callbacks, userdata, mutable receipts, or unrestricted arguments.
+  - [ ] Record artifact-capture failures without masking the originating
+        command failure.
+- [ ] Define immutable command identity data: invocation, root, direct parent,
+      execution owner, target, cleanup checkpoint, and current stage.
+- [ ] Add unit tests proving each context permits its intended capabilities and
+      rejects mutations, cleanup registration, or handle execution in forbidden
+      stages.
+- [ ] Add conformance cases for direct native/global mutation that capability
+      objects cannot technically prevent, keeping this behavioral proof
+      separate from structural context tests.
+- [ ] Add tests for bounded evidence, sanitization, pending aggregation, and
+      diagnostic-provider failure.
+- [ ] Perform a follow-up capability-boundary review, including driver-to-host
+      dependency checks.
+
+Completion criteria:
+
+- [ ] No ordinary definition callback can directly mutate cleanup or resource
+      ownership through a supplied context.
+- [ ] Diagnostic output is bounded, plain, and safe for journal publication.
+
+## Phase 5: Implement run-wide resource claim policy
+
+Outcome: one `ResourceDependencyIndex` validates inert plans and tracks every
+active effect-backed claim across all execution-owner levels.
+
+- [ ] Add the run-scoped `ResourceDependencyIndex` over one qualified
+      `DirectedAcyclicGraph` instance.
+- [ ] Implement stable run-unique active claim IDs and immutable
+      `ResourceClaimReference` values with minimum owner/resource correlation.
+- [ ] Expose claim references only through an owning transaction or a stable
+      resource-producing command result whose documented domain contract
+      explicitly permits downstream dependency or compatible sharing.
+- [ ] Reject forged, stale, foreign-run, or policy-incompatible references.
+- [ ] Implement inert `ResourceClaimPlanEntry` validation.
+  - [ ] Require a nonempty invocation-local unique `claim_key`.
+  - [ ] Support exact existing-resource and provisional creation identities.
+  - [ ] Derive provisional creation identity from invocation ID and additionally
+        the stable operation key for `EXPLICIT_RETRY_SAFE`.
+  - [ ] Keep local relationship keys distinct from references to active claims.
+  - [ ] Validate complete plans without allocating claim IDs, creating a
+        cleanup transaction, publishing events, or changing index state.
+- [ ] Implement `ResourceClaimBinding` validation against a previously frozen
+      plan.
+  - [ ] Permit activation of an explicit subset by `claim_key`.
+  - [ ] Bind provisional entries to concrete stable identities from the effect
+        receipt.
+  - [ ] Reject duplicate/unknown keys, incompatible identities, new
+        relationships, and unplanned pre-existing exclusive resources.
+- [ ] Implement exact post-effect `ResourceClaimRegistration` validation for
+      downstream cleanup registration without provisional identities.
+- [ ] Enforce run-wide exclusive conflicts across service, suite, test, and
+      command lifetimes rather than registry-local conflicts.
+- [ ] Support only explicitly declared compatible sharing, dependency,
+      consumption, and transfer contracts.
+- [ ] Default consumption to the claim's exact owner unless an explicit command
+      contract authorizes sharing, dependency, consumption, or transfer.
+- [ ] Enforce parent owner chains and lifetime direction.
+  - [ ] Treat command lifetime as nested within its suite/test owner.
+  - [ ] Treat test-attempt lifetime as nested within suite execution.
+  - [ ] Treat suite-execution lifetime as nested within service run.
+  - [ ] Reject sibling or incomparable dependencies unless an explicit transfer
+        command has already rehomed ownership.
+- [ ] Insert prerequisite-to-dependent claim edges only after all DwarfSpec
+      policy checks pass.
+- [ ] Prevent releasing a prerequisite while any active dependent remains.
+- [ ] Keep fail-closed conflicted claim records as quarantine evidence without
+      treating them as normal active graph claims.
+- [ ] Keep runtime claim/index state separate from authoritative cleanup
+      history and result projection.
+- [ ] Add exhaustive focused tests for plan purity, reference validation,
+      binding, conflicts, compatible sharing, lifetime direction, cross-level
+      lookup, dependency edges, release blocking, stale references, and
+      fail-closed conflict evidence.
+- [ ] Treat every attempt plan as the conservative possible claim set of one
+      prospective transaction even when the effect may bind only a subset; use
+      separate workflow steps when this conservative simulation would reject
+      otherwise independent effects.
+- [ ] Perform a follow-up review against the proposal's complete claim contract.
+
+Completion criteria:
+
+- [ ] No active claim can exist without exactly one registered cleanup
+      transaction ID.
+- [ ] No inert or no-effect plan appears as active ownership, cleanup history,
+      or result data.
+- [ ] Conflicts and invalid dependency directions are rejected across the
+      complete run.
+
+## Phase 6: Implement cleanup planning and transaction execution
+
+Outcome: executable cleanup transactions have one state machine, deterministic
+dependency-safe planning, required verification, and finite execution.
+
+- [ ] Add `CleanupPlanner` using temporary
+      `CleanupTransactionDependencyGraph` instances backed by the generic DAG.
+  - [ ] Project active claim edges between their owning transactions.
+  - [ ] Collapse claim edges within one transaction.
+  - [ ] Simulate an inert plan as one graph-local prospective transaction node
+        before mutation, without allocating or publishing a transaction.
+  - [ ] Reject claim- or transaction-level cycles during simulation.
+  - [ ] Revalidate the committed bound subset before linking and before cleanup
+        planning.
+  - [ ] Return dependent-before-prerequisite reverse-topological order.
+  - [ ] Use reverse owner-local registration order only as the tie-breaker for
+        independent transactions.
+- [ ] Replace bare cleanup callbacks with `CleanupTransaction` handles.
+  - [ ] Support `pending`, `running`, `complete`, `failed`, `abandoned`, and
+        `unconfirmed` state.
+  - [ ] Make `complete`, `failed`, `abandoned`, and `unconfirmed` the exhaustive
+        terminal dispositions.
+  - [ ] Implement `execute(reason?)`, `isPending()`, and frozen
+        `claimReferences()`.
+  - [ ] Make repeated execution an idempotent no-op returning `false` after an
+        already-expended transaction.
+  - [ ] Remove an eligible transaction from the pending registry before its
+        restore callback runs.
+  - [ ] Keep a dependency-blocked manual transaction pending, publish no start
+        event, and allow a later retry after dependents are expended.
+  - [ ] Expose no public cancellation/discard operation for an effect-backed
+        transaction; require manual expenditure or automatic finalization.
+- [ ] Validate, defensively copy, and freeze cleanup receipts as bounded plain
+      data; reject callbacks, userdata, cycles, and live pointers.
+- [ ] Deliver the same immutable receipt to restore and verification callbacks;
+      do not expose mutable transaction state.
+- [ ] Implement finite cleanup deadlines and fresh cleanup cancellation scopes.
+- [ ] Make restore one-shot, bounded, and nonblocking.
+- [ ] Make required cleanup verification read-only and retryable.
+  - [ ] Accept truthy results and assertion callbacks that return normally.
+  - [ ] Retry `false`, `cleanup.pending`, and thrown assertion/error observations
+        under the remaining cleanup deadline.
+  - [ ] Fail immediately on `cleanup.fatal`.
+  - [ ] Attempt verification after restore throws when time remains, while
+        preserving the failed transaction outcome.
+- [ ] Restrict cleanup callbacks.
+  - [ ] Restore cannot invoke public commands or register cleanup.
+  - [ ] Verification may invoke only read-only queries and assertions.
+  - [ ] Mutating commands and cleanup registration are fatal contract errors.
+- [ ] Implement automatic command, test, suite, and service cleanup through the
+      same planner and transaction executor.
+- [ ] Continue attempting later eligible transactions after an individual
+      failure.
+- [ ] Materialize a prerequisite as `failed/dependency_blocked` when a failed
+      or unconfirmed dependent makes safe execution impossible.
+- [ ] Compose restore, verification, dependency, timeout, and earlier lifecycle
+      failures without masking evidence.
+- [ ] On manual restore/verification failure, record terminal `failed`, remove
+      the transaction from pending work so teardown cannot retry it, then raise
+      the composed failure into the currently active Busted lifecycle without
+      changing the transaction's tagged owner.
+- [ ] Add focused transaction/planner tests for every state transition,
+      deadline, cancellation, retry, error-composition, LIFO tie-break,
+      dependency-blocked, and callback restriction.
+- [ ] Perform a follow-up cleanup-engine review before integrating it with the
+      command runner.
+
+Completion criteria:
+
+- [ ] Every cleanup operation has an independent finite deadline and required
+      terminal verification or typed abandonment proof.
+- [ ] The planner never releases a prerequisite ahead of an active dependent.
+- [ ] Manual and automatic execution use the same state machine and evidence.
+
+## Phase 7: Implement atomic cleanup registration and lifecycle journaling
+
+Outcome: one service atomically creates effect-backed transactions and claims,
+and the append-only service journal retains every lifecycle disposition after
+pending work is expended.
+
+- [ ] Add one run-scoped internal `CleanupRegistrationService` as the only
+      mutation boundary for transaction IDs, owner registries, execution
+      indexes, receipt freezing, claim linking, and registration events.
+- [ ] Allocate run-unique transaction IDs and owner-local registration ordinals
+      before protected state is published.
+- [ ] Atomically create a transaction and all active claims from a confirmed
+      effect receipt and frozen claim bindings.
+- [ ] Preserve the tagged suite/test owner and owning-command correlation on
+      command-lifetime transactions; use lifetime to control finalization, not
+      to replace execution-owner identity.
+- [ ] Revalidate the bound subset against the current resource index at the
+      post-effect registration boundary.
+- [ ] Serialize each DwarfSpec mutating attempt from final plan validation
+      through atomic effect registration, including across cooperative yields,
+      while allowing nested read-only commands.
+- [ ] On unexpected post-effect conflict or adapter-contract violation:
+  - [ ] Preserve the cleanup transaction and receipt.
+  - [ ] Record fail-closed conflicted ownership evidence.
+  - [ ] Fail the command at cleanup registration.
+  - [ ] Block incompatible work and apply executor quarantine until recovery
+        establishes actual resource state.
+- [ ] Add runner-only `abandonSelfRolledBack(transaction_id, proof)`.
+  - [ ] Accept only a pending internal transaction owned by the current
+        invocation.
+  - [ ] Require bounded typed stable-identity absence proof from
+        `command.effect_absent`.
+  - [ ] Atomically remove pending work, release claims, record `abandoned`, and
+        publish exactly one abandonment event.
+  - [ ] Leave the transaction pending for ordinary cleanup when validation or
+        atomic transition fails.
+- [ ] Extend the service's append-only journal with registered, started,
+      finished, and abandoned cleanup transaction events.
+- [ ] Include bounded owner, transaction, ordinal, label, lifetime, command,
+      trigger, timing, restore, verification, evidence/failure, and disposition
+      fields; exclude executable callbacks and private receipts.
+- [ ] Guarantee exactly one terminal event per registered transaction retained
+      by a surviving service.
+- [ ] Terminalize unresolved work as `unconfirmed` only when interruption or a
+      recoverable host failure prevents a conclusive normal outcome.
+- [ ] Keep pending registries and mutable execution indexes owner-local while
+      keeping the physical journal run-scoped and authoritative.
+- [ ] Add service tests for atomic registration, post-effect conflicts,
+      transaction/claim identity, abandonment fallback, event completeness,
+      terminal uniqueness, and retention after registry removal.
+- [ ] Perform a follow-up service/journal review before lifecycle integration.
+
+Completion criteria:
+
+- [ ] Every active claim and transaction is created as one service mutation.
+- [ ] Removing pending work never removes its historical events.
+- [ ] The journal alone can reproduce every retained transaction ledger.
+
+## Phase 8: Integrate suite, test, and service cleanup ownership
+
+Outcome: commands and cleanup are legal at every approved lifecycle level, and
+each owner closes, finalizes, reports, and quarantines independently.
+
+- [ ] Introduce stable suite-execution identity for each selected spec file in
+      each repeat.
+- [ ] Activate suite ownership before suite setup and keep it active through
+      suite teardown and suite cleanup.
+- [ ] Activate a nested test-attempt identity before attempt setup and keep it
+      active through body, teardown, and attempt cleanup.
+- [ ] Select the most specific active public owner.
+  - [ ] Attribute attempt setup/body/teardown work to the test attempt.
+  - [ ] Attribute suite setup/teardown work outside an attempt to the suite.
+  - [ ] Reject caller-initiated commands and cleanup registration when neither
+        suite nor test ownership is active.
+  - [ ] Reserve `SERVICE_RUN` commands exclusively for read-only query/assertion
+        children of service-owned cleanup verification.
+- [ ] Support internal service effects through the same transaction abstraction
+      and `SERVICE_RUN` cleanup owner.
+- [ ] Close test registration after attempt teardown, execute remaining pending
+      work, terminalize unresolved transactions, and materialize results before
+      `test.finished`.
+- [ ] Close suite registration after suite teardown, execute and terminalize
+      remaining suite work, and materialize results before `suite.finished`.
+- [ ] Guarantee suite finalization after suite setup failure, skipped teardown,
+      zero runnable tests, or interruption.
+- [ ] Run service cleanup after all suite and test owners close and materialize
+      it before `run.finished`.
+- [ ] Apply dependency-safe ordering across owner scopes and retain blocked
+      prerequisite evidence when failed/unconfirmed dependents remain.
+- [ ] Keep manual execution attributed to the transaction's original owner even
+      when a suite transaction is executed from a nested test.
+- [ ] Keep behavior status distinct from cleanup outcome while making failed or
+      unconfirmed cleanup affect run failure and quarantine.
+- [ ] Combine all transaction failures with the existing lifecycle probes before
+      setting authoritative `cleanup_confirmed`.
+- [ ] Ensure emergency finalizers attempt safe pending work and mark only work
+      that remains unresolved as `unconfirmed`.
+- [ ] Add lifecycle tests for ownership selection, setup/teardown legality,
+      finalization ordering, setup failure, zero tests, skipped teardown,
+      interruption, manual cross-context execution, and service cleanup.
+- [ ] Perform a follow-up lifecycle review before exposing result projections.
+
+Completion criteria:
+
+- [ ] Suite-, test-, and service-owned transactions never leak into another
+      owner's registry or result set.
+- [ ] `test.finished`, `suite.finished`, and `run.finished` are each published
+      only after the relevant cleanup projection is terminal.
+
+## Phase 9: Materialize and validate cleanup results end to end
+
+Outcome: live, retained, controller, persisted, and future UI consumers can
+inspect complete owner-specific cleanup ledgers derived from the authoritative
+journal.
+
+- [ ] Fold test-attempt transaction events by owner and registration ordinal
+      into `host_report.test_attempts[].cleanup_transactions`.
+- [ ] Fold suite-execution events into
+      `host_report.suite_executions[].cleanup_transactions`.
+- [ ] Fold service-run events into `host_report.service_cleanup_transactions`.
+- [ ] Include exactly one terminal disposition per registered transaction:
+      `complete`, `failed`, `abandoned`, or `unconfirmed`.
+- [ ] Preserve parent suite, repeat, stable suite/test identity, behavior
+      summary, cleanup outcome, and bounded failure references where applicable.
+- [ ] Update cursor reads and retained-run inspection so transaction state can
+      be observed during execution and after terminalization.
+- [ ] Update controller result interpretation to validate and persist the
+      supplied journal and projections without deriving cleanup semantics from
+      private runtime state.
+- [ ] Update result storage and formatting for all owner scopes.
+- [ ] Validate duplicate IDs, owner-local ordinal rules, owner attribution,
+      missing terminal dispositions, journal/result outcome consistency, and
+      exact projection equality.
+- [ ] Preserve acknowledgement semantics: release admission without erasing the
+      read-only retained run record.
+- [ ] Keep process/service destruction outside the complete-ledger guarantee;
+      do not synthesize registrations or dispositions that the service could
+      not publish.
+- [ ] Keep successful cleanup absent from high-level warning/status surfaces
+      while retaining it for explicit cleanup inspectors.
+- [ ] Update protocol snapshots, transport fixtures, retained-run fixtures,
+      controller tests, persistence tests, and reporting tests together.
+- [ ] Run the focused protocol/event-journal/result/controller/configuration/
+      host-loading/declaration validation gate.
+- [ ] Perform a follow-up cross-boundary review for schema and projection
+      equality.
+
+Completion criteria:
+
+- [ ] The service journal is the sole history source of truth.
+- [ ] All three terminal projections are complete, owner-correct, and equal to
+      their authoritative journal folds.
+- [ ] Old clients/services reject the successor protocol instead of partially
+      interpreting it.
+
+## Phase 10: Implement the common command runner
+
+Outcome: every supported command lifecycle can execute through one runner with
+stage attribution, a shared deadline, effect-driven cleanup, and composed
+failure handling.
+
+- [ ] Add `src/dwarfspec/driver/command/runner.lua` and construct it once per
+      run through `run_assembly` and `dwarfspec.ds`.
+- [ ] Implement invocation setup.
+  - [ ] Resolve and validate invocation-level options.
+  - [ ] Normalize and defensively copy logical arguments synchronously before
+        starting the timed lifecycle.
+  - [ ] Derive and freeze the stable operation key during normalization for
+        `EXPLICIT_RETRY_SAFE` only.
+  - [ ] Resolve the effective finite timeout and create one deadline.
+  - [ ] Allocate invocation/root/owner identities and publish sanitized start
+        evidence.
+  - [ ] Mark command and attempt-local cleanup checkpoints.
+- [ ] Implement retryable read-only preflight.
+  - [ ] Handle ready, pending, fatal, thrown, cancellation, and timeout.
+  - [ ] Retain the latest bounded pending reason/evidence.
+  - [ ] Re-resolve stable subjects and mounts across yields.
+  - [ ] Revalidate volatile target identity immediately before execution and
+        return recoverable changes to the same preflight loop.
+- [ ] Invoke `claims(context, request, ready)` after successful final target
+      validation; validate and freeze the inert plan without changing ownership.
+- [ ] Implement primary behavior by command kind.
+  - [ ] Poll query/assertion primary observations and preserve successful nil
+        distinctly from pending.
+  - [ ] Execute `ONCE` mutators no more than once.
+  - [ ] Reject every retry result returned by an `ONCE` definition.
+  - [ ] Validate every runtime outcome against its frozen definition.
+  - [ ] Fail without executing when no deadline time remains before primary
+        execution.
+- [ ] Register cleanup immediately when an executed, retry, or failed outcome
+      conclusively returns an effect receipt.
+  - [ ] Perform registration before later fallible work, yield, verification,
+        retry, or publication.
+  - [ ] Bind only planned claims through the immutable cleanup policy.
+  - [ ] Discard the inert plan on every proven no-effect exit without index
+        unwind.
+  - [ ] Retain available effect evidence and quarantine if effect absence cannot
+        be established after an adapter-contract failure.
+- [ ] Establish intrinsic evidence exactly by selected policy.
+  - [ ] Retain validated primary observation for `PRIMARY_OBSERVATION`.
+  - [ ] Poll the read-only intrinsic callback for `CALLBACK`.
+  - [ ] Accept only the immutable execution receipt for
+        `EXECUTION_RECEIPT`.
+  - [ ] Route valid `effect_absent` through runner-only abandonment and fail the
+        intended command effect.
+- [ ] Implement optional caller verification after intrinsic verification.
+  - [ ] Provide a bounded read-only observation containing command name/kind,
+        stable target identity, public result, copied receipt, attempt count,
+        elapsed/remaining time, and latest intrinsic evidence.
+  - [ ] Retry false/nil and thrown observations under the shared remaining
+        deadline.
+  - [ ] Preserve the last bounded error/traceback on timeout.
+  - [ ] Never replace the command's public return or weaken intrinsic checks.
+- [ ] Always expend still-pending command-lifetime cleanup at the finally
+      boundary, regardless of primary or verification outcome.
+- [ ] Compose primary, intrinsic, caller, timeout, cancellation, and
+      command-lifetime cleanup failures without replacing earlier failures.
+- [ ] Refresh retained subjects only after the complete composed outcome
+      remains successful.
+- [ ] Publish exactly one terminal command event after command-lifetime cleanup,
+      then return the original public result or raise the composed lifecycle
+      error into the active Busted owner.
+- [ ] Do not drain unrelated owner-lifetime transactions on command failure.
+- [ ] Add fake-clock/fake-scheduler runner tests for every lifecycle stage,
+      timeout boundary, receipt path, cleanup checkpoint, composed failure, and
+      stable return guarantee.
+- [ ] Perform a follow-up runner review against the proposal's ordered
+      lifecycle before adding workflows and public bindings.
+
+Completion criteria:
+
+- [ ] No command can report success before its selected intrinsic evidence and
+      optional caller verification pass.
+- [ ] One deadline covers preflight through caller verification without reset.
+- [ ] Cleanup remains independently bounded and survives command failure or
+      expiry.
+
+## Phase 11: Implement explicit retry-safe execution
+
+Outcome: the uncommon mutation-retry policy is fully available and proven even
+though initial built-ins remain `ONCE`.
+
+- [ ] Validate documented stable operation key, idempotency guarantee,
+      attempt-receipt policy, effect-receipt policy, and a command-specific
+      conformance fixture for every `EXPLICIT_RETRY_SAFE` definition.
+- [ ] Accept another attempt only after an explicit `command.retry` result.
+- [ ] Retain bounded immutable attempt receipts and correlate every attempt in
+      events and diagnostics.
+- [ ] Register every reported retry-attempt effect immediately with forced
+      command lifetime.
+- [ ] Execute and verify every transaction created since the attempt checkpoint
+      before another attempt.
+- [ ] Terminate retry when prior-attempt cleanup is failed or unconfirmed.
+- [ ] Re-run preflight, volatile target validation, and claim projection/
+      validation before each later attempt.
+- [ ] Reuse the frozen operation key and original absolute command deadline for
+      all attempts.
+- [ ] Let cleanup use its independent deadline while counting elapsed cleanup
+      wall time against the parent command deadline.
+- [ ] Add a synthetic retry-safe definition that proves eventual success,
+      fatality, cancellation, timeout, yielding, no-effect retry, effect cleanup,
+      cleanup failure, and no retry inferred from false/nil/throw.
+- [ ] Add operation-key conformance proving stable bounded scalar derivation
+      from the same normalized request.
+- [ ] Perform a follow-up retry-policy review and confirm no initial built-in
+      mutator opts in without its own proof fixture.
+
+Completion criteria:
+
+- [ ] A later attempt can never execute on top of an unverified prior-attempt
+      effect.
+- [ ] The runner implements both retry policies from the first production
+      release of the new architecture.
+
+## Phase 12: Implement workflows and nested read-only commands
+
+Outcome: composite commands and verification queries share parent ownership,
+deadline, cancellation, and trace ancestry without creating parallel public
+results.
+
+- [ ] Add `src/dwarfspec/driver/command/workflow.lua`.
+- [ ] Validate workflow definitions.
+  - [ ] Require unique named steps and one bounded synchronous result projector.
+  - [ ] Allow `QUERY`, `ASSERTION`, `ACTION`, `STATE_SETTER`, and `FIXTURE`
+        steps; reject nested `WORKFLOW` steps.
+  - [ ] Apply the same gate, claims, execution result, retry, effect cleanup,
+        intrinsic, diagnostics, and context validation as equivalent public
+        command kinds.
+  - [ ] Require the containing workflow to use `ONCE` plus
+        `EXECUTION_RECEIPT` and omit containing-level execute, claims,
+        operation-key, verify, and cleanup callbacks.
+- [ ] Implement immutable `WorkflowState` and named `WorkflowOutput` values.
+  - [ ] Freeze the normalized request and every bounded successful output.
+  - [ ] Represent successful nil as `has_value=false` while retaining the step
+        key.
+  - [ ] Commit no output for retry, fatal, thrown, cancelled, or timed-out
+        outcomes.
+  - [ ] Require later steps to re-resolve live objects from stable descriptors.
+  - [ ] Derive the stable public result through the pure result projector after
+        all steps pass.
+- [ ] Give workflow steps unique invocation IDs and parent/root/owner/stage
+      correlation without independent public command results or deadlines.
+- [ ] Permit read-only public queries/assertions from command preflight and
+      intrinsic/caller verification.
+  - [ ] Inherit the exact parent deadline, cancellation, owner, root, and
+        read-only stage.
+  - [ ] Allocate a distinct invocation ID and immediate
+        `parent_invocation_id`.
+  - [ ] Reject mutating public commands from read-only stages.
+- [ ] Permit read-only public queries/assertions from cleanup verification.
+  - [ ] Inherit the cleanup owner, fresh cleanup cancellation scope, and
+        remaining cleanup deadline.
+  - [ ] Use `SERVICE_RUN` execution ownership only for service cleanup.
+  - [ ] Set only `parent_cleanup_transaction_id` for the direct child and use
+        its own invocation ID as root.
+  - [ ] Use normal parent-invocation ancestry and preserve that root for deeper
+        descendants.
+  - [ ] Reject cleanup registration or public mutation.
+- [ ] Add ancestry/schema validation rejecting both parent fields, missing or
+      foreign cleanup parents, invalid cleanup stages, and inconsistent
+      parent/root/owner identity.
+- [ ] Add unit tests for workflow state/output/result behavior, nested command
+      deadlines and cancellation, duplicate same-named children, cleanup-rooted
+      ancestry, service-run verification, and mutation rejection.
+- [ ] Perform a follow-up workflow/nesting review.
+
+Completion criteria:
+
+- [ ] Composite behavior uses internal steps rather than calling public
+      mutators from primary execution.
+- [ ] Every nested event belongs to one valid command tree and exact execution
+      owner without extending a deadline.
+
+## Phase 13: Route public cleanup registration and project commands
+
+Outcome: downstream users and project command modules use the same verified
+runner and cleanup service without a legacy adapter or recursive cleanup.
+
+- [ ] Implement `ds.registerCleanup(registration, command_options)` as a
+      privileged public `ACTION` definition.
+  - [ ] Preflight the most-specific active suite/test owner and reject closed or
+        absent registration scope.
+  - [ ] Validate and freeze label, receipt, restore, required verification,
+        optional cleanup timeout, and exact post-effect resource registrations.
+  - [ ] Use empty pre-execution claim projection because the caller's effect
+        already exists.
+  - [ ] Execute `ONCE` through `CleanupRegistrationService`.
+  - [ ] Verify the returned transaction is pending under the expected owner,
+        owns every activated claim, and has a registration event.
+  - [ ] Return the caller-visible transaction handle.
+  - [ ] Use transaction identity as the command verification receipt and omit
+        `effect_receipt` so registration never recursively creates cleanup.
+  - [ ] Retain a fail-closed transaction and conflict evidence if semantic
+        registration validation fails after receipt acceptance, even when no
+        handle reaches the caller.
+- [ ] Enforce the stage guard on transaction handles captured by user code.
+- [ ] Document receipts as the supported correctness path for cleanup identity
+      and scalar baseline data; acknowledge that closure use cannot be
+      structurally prohibited without promoting it.
+- [ ] Replace project callback modules with immutable command definition tables.
+- [ ] Fail configuration loading early with source path and command name for
+      every bare callback or invalid definition.
+- [ ] Do not implement a legacy callback adapter.
+- [ ] Convert all repository-fixture and known consumer project-command modules
+      in the same coordinated change as loader enforcement; built-in command
+      definitions remain in the dependency-ordered representative and family
+      conversion phases below.
+- [ ] Document that direct caller mutation followed by `registerCleanup()` is
+      not failure-atomic; require a project-defined verified command with a
+      structured partial-effect receipt when that mutation-registration window
+      matters.
+- [ ] Add focused tests for manual registration, exact claims, returned
+      references, early expenditure, teardown expenditure, already-expended
+      behavior, owner attribution, cleanup failure propagation, recursive
+      registration prevention, and invalid/bare project commands.
+- [ ] Perform a follow-up public-cleanup/project-command review.
+
+Completion criteria:
+
+- [ ] Runner-managed effects and downstream post-effect registrations create
+      the same transaction type through the same service.
+- [ ] The runtime contains only definition-based project command execution.
+
+## Phase 14: Add command events and reusable conformance suites
+
+Outcome: the engine has exhaustive reusable proof and publishes structured,
+stage-aware command traces suitable for controller and planned UI consumers.
+
+- [ ] Expand command observation from start/finish to stage-aware events for
+      preflight, attempts, intrinsic verification, caller verification,
+      command-lifetime cleanup, completion, and failure.
+- [ ] Ensure the event family can distinguish pending, passed, fatal/failed, and
+      timed-out preflight/verification observations; attempt start, explicit
+      retry, completion, failure, and deadline overrun; and attempted/verified
+      command-lifetime cleanup.
+- [ ] Include run-unique invocation, optional mutually exclusive parents, root,
+      owner scope/ID, repeat, suite/test identity, operation key, attempt,
+      duration, configured timeout, stage, last observation, subject identity,
+      focus/viewscreen, receipt summary, and cleanup evidence as applicable.
+- [ ] Record one of `intrinsic_and_caller`, `intrinsic_only`, or
+      `execution_receipt_only` in terminal evidence.
+- [ ] Keep owner-lifetime cleanup in transaction/terminal events rather than
+      claiming it in earlier command-finished events.
+- [ ] Extend controller formatting and result rendering without interpreting
+      driver semantics or cleanup precedence.
+- [ ] Add a fake-clock/fake-scheduler command-engine harness.
+- [ ] Add table-driven conformance helpers for every command kind,
+      intrinsic-verification policy, and execution-retry policy.
+- [ ] Cover the complete command-engine qualification list from the proposal.
+  - [ ] Timeout precedence, shared deadline, and every gate outcome.
+  - [ ] `ONCE`, explicit retry-safe execution, receipts, effects, and attempt
+        cleanup.
+  - [ ] Intrinsic and optional caller verification.
+  - [ ] Workflow steps, immutable outputs, and result projection.
+  - [ ] Context restrictions and nested invocation ancestry.
+  - [ ] Cleanup registration, abandonment, transaction states, claims,
+        dependencies, planning, owner scopes, journal retention, projections,
+        persistence, and quarantine.
+  - [ ] `effect_absent` acceptance only during intrinsic verification for the
+        current registered internal effect, with rejection from preflight,
+        caller verification, and cleanup verification.
+  - [ ] Diagnostics, stable returns, and rejection of bare callbacks.
+- [ ] Require each command fixture to declare its gate, execution, intrinsic,
+      timeout, retry-safety, cleanup, and expected evidence observations.
+- [ ] Keep domain command suites focused on normalization, target resolution,
+      native action receipt, readback, cleanup receipt, and diagnostic
+      projection rather than duplicating runner mechanics.
+- [ ] Run the complete command-engine and directly affected service/protocol
+      suites.
+- [ ] Perform a follow-up qualification review against every bullet in the
+      proposal's command-engine qualification section.
+
+Completion criteria:
+
+- [ ] Reusable suites prove common lifecycle behavior once and can qualify each
+      migrated definition with a small fixture.
+- [ ] Structured command and cleanup evidence is complete, bounded, and
+      ancestry-valid.
+
+## Phase 15: Migrate the five representative commands
+
+Outcome: query, action, state-setter, workflow, and fixture shapes fit the
+architecture without command-specific runner exceptions before broad
+conversion.
+
+- [ ] Migrate `search` as a read-only query.
+  - [ ] Preserve successful nil/miss semantics distinctly from pending.
+  - [ ] Validate stable plain observations and nested verification use.
+- [ ] Migrate `click` as a generic action.
+  - [ ] Re-resolve target/actionability in preflight.
+  - [ ] Keep primary input dispatch `ONCE`.
+  - [ ] Verify only reliable ingress, pointer, transient-state restoration, and
+        settling/render guarantees.
+  - [ ] Prove optional caller verification for product behavior.
+- [ ] Migrate `setViewPos` as a reversible state setter.
+  - [ ] Capture the exact baseline before mutation.
+  - [ ] Register cleanup immediately from confirmed effect receipt.
+  - [ ] Verify exact requested position through `getViewPos(origin)`.
+  - [ ] Verify cleanup restores the baseline independently.
+- [ ] Migrate `mountSaveGame` as a workflow.
+  - [ ] Preserve exact menu/world/save/map sequence as named steps.
+  - [ ] Verify every intermediate and terminal state under one deadline.
+  - [ ] Preserve stable nil-capable step output representation.
+- [ ] Migrate `stage_overlay_registration` or the first implemented managed
+      fixture as the representative resource transaction.
+  - [ ] Validate inert claims before creation.
+  - [ ] Register transaction and active claims from the created stable identity
+        before verification/publication.
+  - [ ] Verify creation and later absence/restoration.
+- [ ] Add trailing command option declarations for all five representatives.
+- [ ] Add their conformance fixtures and focused domain suites.
+- [ ] Run the complete command-engine suite after representative integration.
+- [ ] Run the smallest relevant native live cases for behavior/scheduler/
+      cleanup boundaries changed by the representatives.
+- [ ] Review receipt boundaries, command categories, nested workflow behavior,
+      diagnostics, return compatibility, and absence of runner exceptions.
+- [ ] Resolve any architectural defect in shared components before broad
+      migration; do not encode representative-only escape hatches.
+
+Completion criteria:
+
+- [ ] All five representative shapes pass their focused/conformance evidence
+      and applicable live proof without shared-runner exceptions.
+- [ ] Broad conversion is explicitly unblocked by follow-up design review.
+
+## Phase 16: Convert read-only queries, assertions, and waits
+
+Outcome: all nonmutating public commands use explicit readiness, validated
+observations, and finite shared deadlines.
+
+- [ ] Convert `wait_frames`, `wait_ticks`, `await`, and `awaitEvent` as
+      assertions with explicit pending/ready/fatal observation outcomes.
+- [ ] Convert `isGamePaused`, `getGameSpeed`, `getTick`, `getTime`,
+      `getSaveDirectoryName`, and `hasFocus` as queries with declared type/state
+      guarantees.
+- [ ] Convert `root`, `get`, `inspect`, and remaining `search` paths as queries
+      over current stable mount/source identity.
+- [ ] Convert any other inventoried read-only public command and subject method.
+- [ ] Convert `capture_view_tree` and `capture_screen` as read-only query-kind
+      commands whose bounded invocation-owned artifacts replace/deduplicate by
+      key and never register cleanup.
+- [ ] Preserve query public return values and subject fluency.
+- [ ] Add each definition to the shared conformance matrix and keep focused
+      suites limited to domain behavior.
+- [ ] Update declarations and examples for trailing command options.
+- [ ] Run focused suites during mechanical conversion.
+- [ ] At family completion, run the full unit suite and representative live
+      qualification for queries, waits, captures, and nested verification.
+- [ ] Perform a follow-up family review against the migration inventory.
+
+Completion criteria:
+
+- [ ] Every inventoried read-only public command routes through the runner.
+- [ ] Successful nil observations, pending state, capture artifacts, and
+      assertion failures are unambiguous.
+
+## Phase 17: Convert game and simulation state setters
+
+Outcome: reversible game/simulation mutations execute once, verify exact
+framework-owned state, and retain independently verified restoration.
+
+- [ ] Convert `setGamePaused`, `setGameSpeed`, and `setTurboSpeed` with native
+      readiness and exact requested readback.
+- [ ] Complete `setViewPos` conversion and all origin/viewport edge cases.
+- [ ] Convert `setUnitPos` with unit/source/destination occupancy preflight and
+      receipt-based unit/occupancy verification.
+- [ ] Convert `setUnitSpeed` with immutable target/configuration snapshots,
+      recurring-operation ownership verification, and optional caller
+      verification for product progress.
+- [ ] Convert any other inventoried state-setter command.
+- [ ] Capture inherited baselines before mutation and register owner-lifetime
+      cleanup immediately after each confirmed effect.
+- [ ] Keep all initial mutators `ONCE`.
+- [ ] Add cleanup receipts containing stable identities/scalar baselines and
+      independent retryable cleanup verification.
+- [ ] Add conformance fixtures and focused domain tests for no-effect,
+      structured partial effect, verification failure, command expiry, manual
+      cleanup, automatic cleanup, and composed failure.
+- [ ] Run the smallest relevant native live case for each changed semantic
+      boundary.
+- [ ] At family completion, run the full unit suite and representative live
+      qualification with terminal cleanup confirmation.
+- [ ] Perform a follow-up family review against the migration inventory.
+
+Completion criteria:
+
+- [ ] Every state setter proves its exact declared state or raises a staged test
+      error while retaining cleanup ownership.
+- [ ] Cleanup verifies restoration independently of the command deadline.
+
+## Phase 18: Convert pointer, keyboard, text, mouse, and click actions
+
+Outcome: generic interactions stop equating non-throwing dispatch/render with
+product success and instead expose the strongest truthful framework guarantee.
+
+- [ ] Complete `move_pointer` and `hover` conversion with current geometry,
+      actionability, logical accessor, and paired raw-coordinate verification.
+- [ ] Convert `input` and `type` with current ingress preflight, explicit
+      dispatch acknowledgement, and required settling/render verification.
+- [ ] Convert `mouseInput`, `mouseWheel`, and remaining `click` paths with
+      target, pointer, button, geometry, transient-state restoration, and render
+      guarantees.
+- [ ] Keep all interaction mutations `ONCE`.
+- [ ] Do not claim input consumption unless the selected ingress provides a
+      reliable consumption signal.
+- [ ] Preserve existing public wait-by-default behavior and retain `{wait=false}`
+      only for signatures that explicitly promise asynchronous invalidation.
+- [ ] Use internal operations for composite pointer placement and dispatch;
+      never invoke a second public mutating command from primary execution.
+- [ ] Recommend optional caller verification for intended product behavior in
+      declarations, examples, and conformance cases.
+- [ ] Add focused cases where input is ignored/unhandled or reaches an
+      unexpected screen so intrinsic success is not mislabeled as product
+      success.
+- [ ] Run focused suites during mechanical conversion and the smallest live
+      case for changed native ingress/geometry/render behavior.
+- [ ] At family completion, run the full unit suite and representative live
+      action qualification with terminal cleanup confirmation.
+- [ ] Perform a follow-up family review against the migration inventory.
+
+Completion criteria:
+
+- [ ] Every interaction command has explicit actionability and intrinsic
+      evidence boundaries.
+- [ ] Generic action success never implies an unobservable product outcome.
+
+## Phase 19: Convert mount, redraw, viewport, and capture ownership paths
+
+Outcome: screen/mount/render commands use the common workflow, state,
+verification, deadline, and cleanup contracts without legacy mutation wrappers.
+
+- [ ] Convert `mount` and `mountNativeScreen` as workflows with source,
+      no-current-mount, ownership, target, subject-source, and render-capability
+      checks.
+- [ ] Convert `unmount` as a workflow verifying no current mount, owned active
+      screen, retained subject, or borrowed attachment remains.
+- [ ] Convert `redraw` with actionability and later completed render generation
+      when waiting is enabled.
+- [ ] Convert `viewport` as a state setter restricted to a DwarfSpec-owned
+      resizable host, with applied dimensions/layout and completed render
+      verification.
+- [ ] Complete capture command integration and artifact-result formatting.
+- [ ] Reuse existing mount adapters and ownership services as domain capability
+      providers without allowing them to publish command success directly.
+- [ ] Replace mounted-mutation wrapper cleanup/readback with receipts and common
+      runner lifecycle where applicable.
+- [ ] Preserve borrowed/native-screen ownership and cleanup semantics.
+- [ ] Add conformance fixtures and focused mount/render/capture tests.
+- [ ] Run focused native live cases where target resolution, rendering, mount
+      ownership, cleanup, or scheduler boundaries changed.
+- [ ] At family completion, run the full unit suite and representative live
+      qualification with terminal cleanup confirmation.
+- [ ] Perform a follow-up family review before removing obsolete wrappers.
+
+Completion criteria:
+
+- [ ] Mount/render/capture commands have no parallel success or cleanup path.
+- [ ] Existing supported public returns, subject behavior, and asynchronous
+      redraw option semantics remain compatible.
+
+## Phase 20: Convert save workflows and resource-producing fixtures
+
+Outcome: long workflows and fixture commands use named verified steps,
+effect-driven claims, mandatory cleanup verification, and shared reporting.
+
+- [ ] Convert `exitToMainMenu` and complete `mountSaveGame`/related save-load
+      workflow conversion with exact intermediate and terminal native states.
+- [ ] Convert overlay registration fixtures through the common fixture
+      definition, claims, effect receipt, and cleanup transaction model.
+- [ ] Reconcile every implemented managed native-fixture command with
+      `docs/new-command-proposals.md`.
+  - [ ] Keep `reserveMapTiles` as a real effect-producing domain command rather
+        than a generic pre-effect reservation handle.
+  - [ ] Apply shared `registerCleanup`, timeout, retry, receipt, claims,
+        dependency, journal, and validation contracts.
+  - [ ] Do not implement a fixture-specific runner, cleanup registry, graph,
+        ledger, or validation cadence.
+- [ ] Ensure each fixture validates an inert conservative claim plan before
+      mutation and atomically activates only effect-bound claims afterward.
+- [ ] Ensure adapters return structured partial-effect receipts for any native
+      operation that can mutate before failure.
+- [ ] Keep initial fixture mutations `ONCE`.
+- [ ] Add focused workflow/fixture/domain tests and shared conformance fixtures.
+- [ ] Add live proof for exact creation/transition, stable identity, ownership,
+      dependency ordering, and verified absence/restoration.
+- [ ] At family completion, run the full unit suite and representative live
+      qualification with terminal cleanup confirmation.
+- [ ] Perform a follow-up reconciliation review across both proposals.
+
+Completion criteria:
+
+- [ ] Every save/fixture effect is registered before verification or
+      publication and can be recovered from its immutable receipt.
+- [ ] Managed fixtures consume the shared architecture without duplicating it.
+
+## Phase 21: Complete conversion and remove compatibility scaffolding
+
+Outcome: one definition-based runner owns the entire command surface and all
+temporary execution/configuration paths are removed at an explicit verified
+checkpoint.
+
+- [ ] Reconcile the migration inventory and convert every remaining built-in,
+      subject, project, repository-fixture, and internal public command path.
+- [ ] Make `src/dwarfspec/ds.lua` a thin composition/binding facade with no
+      duplicate pointer, input, game, mount, workflow, timeout, verification, or
+      cleanup implementation.
+- [ ] Remove old direct command binding and execution paths after all callers
+      route through the registry and runner.
+- [ ] Remove obsolete mounted-mutation wrappers only after their consumers and
+      ownership tests have migrated.
+- [ ] Remove any temporary migration-only adapters, switches, duplicated event
+      translation, or compatibility fixtures.
+- [ ] End timeout compatibility.
+  - [ ] Reject `timeout_ms=false` in finalized configuration.
+  - [ ] Stop using `settings.wait.timeout_ms` as a command default.
+  - [ ] Remove bounded deprecation diagnostics and compatibility-only tests.
+- [ ] Confirm project definitions are the exclusive custom-command format and
+      bare callbacks fail during loading.
+- [ ] Confirm every public command resolves a finite timeout, has explicit
+      preflight, selects intrinsic evidence, declares mutation/retry behavior,
+      and preserves its approved public return.
+- [ ] Run dependency/source-organization checks proving driver modules do not
+      import host internals and no duplicate facade implementation remains.
+- [ ] Run the full unit suite and representative live qualification at this
+      destructive removal checkpoint.
+- [ ] Perform a follow-up removal review using searches for every old API,
+      wrapper, setting fallback, callback shape, and direct-binding pattern.
+
+Completion criteria:
+
+- [ ] Every public command reaches exactly one run-scoped runner.
+- [ ] No legacy adapter, parallel command implementation, or unlimited command
+      timeout remains.
+
+## Phase 22: Update documentation, package contracts, and release guidance
+
+Outcome: public documentation accurately describes verified guarantees,
+optional caller semantics, project command conversion, cleanup receipts, and
+the breaking protocol/configuration changes.
+
+- [ ] Update architecture documentation for module ownership, command stages,
+      deadlines, workflows, cleanup service, resource index, planner, journal,
+      and result projections.
+- [ ] Update configuration documentation for command and cleanup timeout
+      precedence and removal of legacy/unlimited behavior.
+- [ ] Update command-authoring documentation with:
+  - [ ] The complete immutable definition shape and every command kind.
+  - [ ] Read-only preflight and verification contracts.
+  - [ ] Distinct public result, verification receipt, effect receipt, and
+        cleanup receipt responsibilities.
+  - [ ] Cooperative timeout limitations and bounded/nonblocking callback rules.
+  - [ ] Safe bounded diagnostics.
+  - [ ] Required conversion from callback-only modules.
+  - [ ] A complete synthetic `EXPLICIT_RETRY_SAFE` example with stable operation
+        key, idempotency proof, attempt/effect receipts, and verified cleanup
+        before retry.
+- [ ] Update public command/API documentation so every command states kind,
+      timeout, preflight, mutation/retry, intrinsic guarantee, deliberate
+      non-guarantees, caller-verification guidance, ownership/cleanup, and
+      stable return value.
+- [ ] Update test-writing documentation for trailing command options, optional
+      caller verification, manual cleanup execution, suite/test ownership,
+      receipt-based cleanup data, claim references, and cleanup result
+      inspection.
+- [ ] Ensure examples do not imply that render completion proves content
+      correctness and normally pair generic actions with a product assertion or
+      optional verification callback.
+- [ ] Add release notes for the coordinated protocol revision, project command
+      definition migration, timeout setting changes, and absence of a legacy
+      adapter.
+- [ ] Update package manifests/declarations so all command-engine, cleanup,
+      resource, graph, protocol, and documentation files ship.
+- [ ] Reconcile `docs/new-command-proposals.md` and
+      `docs/test-runner-service-design.md` cross-references with implemented
+      names and schema versions.
+- [ ] Run documentation links/examples, declaration, source/package manifest,
+      and formatting checks.
+- [ ] Perform a follow-up documentation/package review against the proposal's
+      documentation requirements.
+
+Completion criteria:
+
+- [ ] Users can distinguish intrinsic proof from optional product-specific
+      verification and can convert project commands without reading internals.
+- [ ] Source, installed declarations, package contents, and documentation agree.
+
+## Phase 23: Final exhaustive qualification and acceptance audit
+
+Outcome: source, installed, packaged, framework, service, and live evidence
+collectively prove the complete proposal after all old paths are gone.
+
+- [ ] Run the complete command-engine qualification suite.
+- [ ] Run every reusable conformance fixture and command-specific focused suite.
+- [ ] Run the full repository unit suite.
+- [ ] Run Lua syntax, formatting, source declaration, dependency, and package
+      declaration checks.
+- [ ] Run focused protocol negotiation, event schema, journal, cursor,
+      retained-run, result persistence, controller interpretation, and
+      configuration suites.
+- [ ] Build/install the local package and verify the exact packaged file set.
+- [ ] Run the framework/integration suite against source and installed package
+      paths as applicable.
+- [ ] Run bounded representative live qualification for every command family.
+  - [ ] Include top-level and nested query/assertion behavior.
+  - [ ] Include optional caller verification pass and timeout.
+  - [ ] Include `ONCE` proof and the synthetic explicit retry-safe path.
+  - [ ] Include suite-level setup/teardown commands and cleanup.
+  - [ ] Include test-attempt cleanup and manual transaction execution.
+  - [ ] Include service-owned cleanup verification using reserved
+        `SERVICE_RUN` child commands.
+  - [ ] Include resource conflicts, dependencies, cleanup ordering, and
+        quarantine on unverified cleanup.
+  - [ ] Include a bounded command failure followed by independently confirmed
+        cleanup as negative evidence.
+- [ ] Require every live run used as acceptance evidence to reach a terminal
+      report and include cleanup confirmation; treat silent timeout or external
+      interruption as inconclusive.
+- [ ] Compare source, installed, and packaged behavior and declarations.
+- [ ] Validate active and retained service reads plus persisted results expose
+      complete, equal service-run, suite-execution, and test-attempt cleanup
+      transaction sets.
+- [ ] Audit every public command against the phase-1 migration inventory.
+- [ ] Audit every acceptance criterion in
+      `docs/verified-command-execution-proposal.md` against implementation and
+      concrete evidence.
+- [ ] Audit proposal-to-plan coverage in both directions and record any explicit
+      deferral with rationale rather than silently accepting a gap.
+- [ ] Perform the required follow-up implementation review after final fixes and
+      before marking the plan complete.
+- [ ] Run `git diff --check` and inspect the final worktree for unintended or
+      unrelated changes.
+
+Completion criteria:
+
+- [ ] Every declared public command routes through the common runner and every
+      proposal acceptance criterion has implementation plus proportionate
+      evidence.
+- [ ] Command failures reach Busted with exact stage attribution; command
+      success reflects the strongest truthful intrinsic guarantee and optional
+      caller postcondition.
+- [ ] `ONCE`, explicit retry-safe execution, workflows, effect-driven claims,
+      verified cleanup, owner-scoped journals/results, and quarantine behavior
+      pass their final qualification.
+- [ ] The complete source, installed, packaged, framework, service, and bounded
+      live contracts agree.
+
+## Final acceptance
+
+- [ ] Every requirement in `docs/verified-command-execution-proposal.md` is
+      implemented or explicitly deferred with an approved rationale.
+- [ ] The standalone DAG prerequisite is complete under its own `.todo`.
+- [ ] Every built-in and project command uses the one verified-command runner.
+- [ ] Every command has a finite effective deadline, explicit preflight,
+      declared primary policy, and truthful intrinsic evidence.
+- [ ] Caller verification remains optional and cannot weaken intrinsic proof.
+- [ ] Every active resource claim belongs to one confirmed effect and one
+      cleanup transaction.
+- [ ] Every retained transaction has exactly one terminal disposition in its
+      authoritative journal and owner-specific result projection.
+- [ ] Cleanup restoration, verification, retry, dependency planning, reporting,
+      and executor quarantine satisfy the approved contracts at service, suite,
+      test, and command lifetimes.
+- [ ] No legacy adapter, duplicate facade implementation, unlimited timeout, or
+      parallel cleanup/resource/result ledger remains.
+- [ ] Required tests, declarations, documentation, packaging, persistence, and
+      terminal live evidence are complete.

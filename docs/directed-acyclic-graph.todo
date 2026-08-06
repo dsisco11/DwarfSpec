@@ -1,0 +1,154 @@
+# Directed acyclic graph utility implementation plan
+
+Source proposal: `docs/directed-acyclic-graph-proposal.md`
+
+## Goal
+
+Implement and qualify the small domain-neutral `DirectedAcyclicGraph` utility
+required by the verified-command resource index and cleanup planner. Keep this
+work independent of DwarfSpec command, cleanup, ownership, journal, and service
+policy so the prerequisite can be implemented and reviewed quickly.
+
+## Scope guard
+
+- [ ] Treat `docs/directed-acyclic-graph-proposal.md` as the authoritative API
+      and behavior contract.
+- [ ] Do not add node payloads, implicit node creation, persistence,
+      serialization, concurrency, transitive reduction, visualization, resource
+      semantics, cleanup semantics, or other consumer-specific behavior.
+- [ ] Keep node IDs as validated nonempty strings and keep the graph's internal
+      representation private.
+- [ ] Add language-standard documentation comments for the class and every
+      public method.
+
+## Phase 1: Implement the graph contract
+
+Outcome: `dwarfspec.graphs.directed_acyclic_graph` exposes the complete,
+minimal, deterministic graph API without domain policy.
+
+- [ ] Add `src/dwarfspec/graphs/directed_acyclic_graph.lua` exporting one
+      `DirectedAcyclicGraph` class-like table.
+  - [ ] Implement `new()` with private node, incoming-edge, and outgoing-edge
+        storage suitable for straightforward adjacency-map operations.
+  - [ ] Implement shared nonempty-string node-ID validation used by every
+        public method that accepts a node ID.
+  - [ ] Implement `add_node(node_id)`, returning `true` only for a new node.
+  - [ ] Implement `remove_node(node_id)`, atomically removing all incident
+        edges and returning `true` only when the node existed.
+  - [ ] Implement `has_node(node_id)`.
+  - [ ] Implement `add_edge(predecessor_id, successor_id)` with validation for
+        known endpoints, self-edges, duplicates, and direct or indirect cycles.
+  - [ ] Ensure a rejected edge insertion leaves all graph state unchanged.
+  - [ ] Implement `remove_edge(predecessor_id, successor_id)`, returning
+        `false` for an absent edge only after validating both endpoints.
+  - [ ] Implement `has_edge(predecessor_id, successor_id)`.
+  - [ ] Implement `predecessors(node_id)` and `successors(node_id)` as fresh,
+        lexically sorted arrays.
+  - [ ] Implement `topological_order(node_ids, less)` with Kahn's algorithm
+        over the full graph or the selected induced subgraph.
+  - [ ] Validate the optional subset for duplicate and unknown node IDs.
+  - [ ] Validate that the optional comparator is callable.
+  - [ ] Document that a supplied comparator is caller-owned policy and must
+        define a deterministic strict weak order.
+  - [ ] Select only among simultaneously ready nodes, use the supplied strict
+        ordering when decisive, and use lexical node-ID ordering as the
+        mandatory equivalence fallback.
+  - [ ] Return fresh arrays so callers cannot mutate graph state through query
+        results.
+- [ ] Keep implementation complexity aligned with the proposal.
+  - [ ] Use expected O(1) node and edge membership.
+  - [ ] Accept O(V + E) node removal and cycle detection.
+  - [ ] Accept O(degree log degree) sorted-neighbor queries.
+  - [ ] Accept O(V^2 + E) topological ordering with a simple sorted ready list.
+  - [ ] Do not add caches whose invalidation would complicate the small graph.
+
+Completion criteria:
+
+- [ ] The module implements exactly the proposal's public API and contains no
+      DwarfSpec domain policy.
+- [ ] Duplicate additions and absent removals follow the specified idempotent
+      boolean contract.
+- [ ] Invalid IDs, endpoints, subsets, comparators, self-edges, and cycles raise
+      descriptive programming errors.
+- [ ] All returned collections are detached from internal state.
+
+## Phase 2: Add exhaustive focused unit coverage
+
+Outcome: one pure-Lua suite proves every API, validation, ordering, and
+non-mutation guarantee without requiring DFHack or filesystem fixtures.
+
+- [ ] Add `tests/unit/graphs/directed_acyclic_graph_spec.lua`.
+- [ ] Cover construction and node behavior.
+  - [ ] Empty construction and empty full-graph ordering.
+  - [ ] Node insertion, duplicate insertion, membership, removal, and duplicate
+        removal.
+  - [ ] Node removal clears every incoming and outgoing edge.
+- [ ] Cover edge behavior.
+  - [ ] Edge insertion, duplicate insertion, membership, removal, and duplicate
+        removal.
+  - [ ] Unknown endpoints and self-edges are rejected.
+  - [ ] Direct and indirect cycles are rejected.
+  - [ ] Rejected edge insertions do not mutate nodes, edges, neighbors, or
+        topological order.
+- [ ] Cover input validation.
+  - [ ] Every public node-ID parameter rejects nil, non-string, and empty IDs.
+  - [ ] Neighbor queries and edge operations reject unknown IDs.
+  - [ ] A supplied non-function comparator is rejected.
+  - [ ] Duplicate and unknown induced-subset IDs are rejected.
+- [ ] Cover neighbor results.
+  - [ ] Direct predecessor and successor queries are lexically sorted.
+  - [ ] Mutating returned neighbor arrays does not mutate graph state.
+- [ ] Cover deterministic topological ordering.
+  - [ ] Chains, forks, diamonds, and disconnected nodes preserve every edge.
+  - [ ] Simultaneously ready nodes use lexical order by default.
+  - [ ] A custom comparator controls simultaneously ready nodes.
+  - [ ] A deterministic strict-weak-order comparator produces stable repeated
+        results for the same ready-node set.
+  - [ ] Lexical fallback resolves comparator equivalence deterministically.
+  - [ ] A comparator cannot violate predecessor-before-successor edges.
+  - [ ] Induced subsets ignore edges crossing the subset boundary while
+        preserving edges internal to the subset.
+  - [ ] Mutating a returned order does not mutate graph state.
+
+Completion criteria:
+
+- [ ] The focused suite covers every case listed by the source proposal.
+- [ ] The suite uses only in-memory Lua values and runs without a DFHack
+      process, scheduler, service, cleanup registry, or filesystem fixture.
+- [ ] The focused suite completes in well under one second under the ordinary
+      unit-test harness.
+
+## Phase 3: Qualify and review the prerequisite
+
+Outcome: the standalone utility has sufficient focused evidence to unblock the
+verified-command implementation without running unrelated exhaustive suites.
+
+- [ ] Run the focused directed-acyclic-graph unit suite.
+- [ ] Run the repository's ordinary Lua syntax and formatting checks for the
+      new module and suite.
+- [ ] Run the relevant source declaration checks for the new public class and
+      methods.
+- [ ] Run `git diff --check` for the planning and implementation diff.
+- [ ] Perform a follow-up implementation review against every API, boundary,
+      ordering, complexity, and unit-test requirement in the source proposal.
+- [ ] Confirm the API exposes the generic operations required by the planned
+      `ResourceDependencyIndex` and `CleanupPlanner` without exposing domain
+      methods.
+- [ ] Record focused command output and review findings before marking this
+      prerequisite complete.
+
+Completion criteria:
+
+- [ ] The focused unit suite and applicable static/declaration checks pass.
+- [ ] Follow-up review finds no missing proposal behavior or unsupported scope.
+- [ ] No full unit suite, live automation, service validation, or consumer
+      integration proof is required for this standalone prerequisite.
+
+## Final acceptance
+
+- [ ] Every requirement in `docs/directed-acyclic-graph-proposal.md` is
+      implemented and verified.
+- [ ] `DirectedAcyclicGraph` remains small, deterministic, domain-neutral, and
+      safe for both active-claim and temporary transaction graphs.
+- [ ] The verified-command plan may treat this checklist as a completed
+      prerequisite rather than duplicating graph implementation work.
