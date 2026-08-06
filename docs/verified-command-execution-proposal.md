@@ -140,7 +140,9 @@ default, and diagnostic policy.
 
 A command invocation is one run-owned execution of a definition with normalized
 arguments, a fixed deadline, command identity, tagged execution-owner identity,
-target identity, cleanup checkpoint, and trace.
+target identity, optional tagged direct-parent identity, cleanup checkpoint, and
+trace. A direct parent is either another command invocation or the cleanup
+transaction whose verification invoked the command, never both.
 
 ### Execution owner
 
@@ -364,15 +366,20 @@ public `move_pointer()` command. Read-only public queries and assertions are the
 only exception, and only from preflight or verification where their nested
 lifecycle is explicitly defined below; primary execution never invokes them.
 
-### Nested read-only commands inherit their parent invocation
+### Nested read-only commands inherit their parent execution context
 
 A query or assertion invoked by preflight or verification inherits the parent's
-absolute deadline, cancellation state, root command identity, tagged suite or
-test owner identity, and current read-only stage. Each nested command or
-internal workflow step receives its own
-run-unique invocation ID and records the immediate `parent_invocation_id`, so
-repeated same-named children remain distinguishable in the trace. It cannot
-extend or reset the parent timeout. Mutating public commands are rejected from
+absolute deadline, cancellation state, root command identity, tagged
+execution-owner scope and identity, and current read-only stage. For a command
+already running under reserved `SERVICE_RUN` cleanup-verification ownership,
+nested preflight or verification queries inherit that same scope and run
+identity. Each nested command or internal workflow step receives its own
+run-unique invocation ID. Command-to-command children record the immediate
+`parent_invocation_id`, so repeated same-named children remain distinguishable
+in the trace. A direct query or assertion invoked by cleanup verification instead
+records `parent_cleanup_transaction_id` under the cleanup-specific rules below.
+The two parent fields are mutually exclusive. Nested execution cannot extend or
+reset the inherited timeout. Mutating public commands are rejected from
 preflight and verification because those stages must remain read-only. Internal
 workflow steps use the same child-event model without becoming independent
 public results.
@@ -1321,8 +1328,14 @@ transaction therefore uses the reserved `SERVICE_RUN` execution-owner scope and
 run identity. It remains a child of the cleanup verification operation and does
 not make caller-initiated service-run commands legal. Mutating commands and
 cleanup registration are fatal contract errors from cleanup verification.
-Nested verification commands retain normal child command events while the
-transaction remains the owner of the cleanup outcome.
+The directly invoked verification command sets
+`parent_cleanup_transaction_id` to the owning transaction ID, leaves
+`parent_invocation_id` absent, and uses its own invocation ID as
+`root_invocation_id`. Commands nested beneath it use normal
+`parent_invocation_id` ancestry and retain that root invocation ID. This creates
+one command-invocation tree rooted beneath the cleanup transaction without
+pretending that the transaction is itself a command invocation. The transaction
+remains the owner of the cleanup outcome.
 
 Cleanup receives a fresh cancellation scope when transaction execution starts.
 Cancellation or deadline expiry of the originating command, test body, or suite
@@ -1543,21 +1556,27 @@ able to represent:
 - command failed with any command-lifetime cleanup evidence.
 
 Every command and workflow-step event carries its run-unique `invocation_id`,
-optional `parent_invocation_id`, `root_invocation_id`, owner-scope enum, owning
-service-run, suite-execution, or test-attempt ID, repeat index, and stable
-suite/test identity as applicable. Top-level commands have no parent and use
-their own invocation ID as the root ID. Child queries and workflow steps use
-distinct invocation IDs even when their command names and normalized arguments
-are identical, and they inherit the parent's owner scope exactly.
+optional `parent_invocation_id`, optional `parent_cleanup_transaction_id`,
+`root_invocation_id`, owner-scope enum, owning service-run, suite-execution, or
+test-attempt ID, repeat index, and stable suite/test identity as applicable.
+Ordinary top-level commands have neither parent field and use their own
+invocation ID as the root ID. A direct cleanup-verification command has only
+`parent_cleanup_transaction_id` and also uses its own invocation ID as the root
+ID. Command-to-command children and workflow steps have only
+`parent_invocation_id`, use distinct invocation IDs even when their command
+names and normalized arguments are identical, and inherit the parent's root and
+owner scope exactly. Protocol validation rejects an event with both parent
+fields, a cleanup parent outside cleanup verification, a missing or foreign
+transaction, or a parent/root/owner relationship inconsistent with the journal.
 
 Owner-lifetime cleanup occurs later and is reported by cleanup and terminal
 run events. A command-finished event does not claim knowledge of cleanup
 transactions that are still pending for their test or suite teardown.
 
-Transaction lifecycle events are correlated with their tagged suite-execution
-or test-attempt owner and, when applicable, parent command invocation. They
-remain available after the transaction is manually expended or removed from
-the active teardown registry.
+Transaction lifecycle events are correlated with their tagged service-run,
+suite-execution, or test-attempt cleanup owner and, when applicable, parent
+command invocation. They remain available after the transaction is manually
+expended or removed from the active teardown registry.
 
 Repeated observations are rate-limited or summarized so a 10-second wait does
 not flood the result stream. Terminal evidence includes attempt counts, elapsed
@@ -1839,8 +1858,9 @@ introduced. An injected fake monotonic clock and scheduler prove:
   interruption terminalization;
 - retention of completed, failed, abandoned, and unconfirmed transactions after
   removal from the pending registry;
-- exactly-once transaction lifecycle events with stable suite/test owner and
-  command attribution;
+- exactly-once transaction lifecycle events with stable service-run,
+  suite-execution, or test-attempt cleanup-owner attribution and owning-command
+  attribution when one exists;
 - isolation of transaction IDs, registration order, active registries, and
   result projections across suite executions, neighboring tests, and repeats;
 - cursor reads of transaction events during execution and retained-run reads
@@ -1852,12 +1872,16 @@ introduced. An injected fake monotonic clock and scheduler prove:
 - combined primary and cleanup failures;
 - rejection of public mutations and cleanup registration from cleanup
   callbacks, plus read-only cleanup-verification commands inheriting the
-  transaction deadline and owner;
+  transaction deadline and owner, direct
+  `parent_cleanup_transaction_id` correlation, self-rooted command ancestry,
+  and normal invocation-parent ancestry for deeper descendants;
 - nested workflow steps sharing the parent deadline;
 - read-only public queries and assertions nested from preflight or verification
   inheriting the exact parent deadline, cancellation, owner, stage, and event
   identity, with nested mutations rejected;
 - unique nested invocation identities and exact parent-child event correlation;
+- rejection of simultaneous command-invocation and cleanup-transaction parents,
+  foreign cleanup parents, and inconsistent parent/root/owner event identity;
 - target re-resolution across yields;
 - bounded and rate-limited diagnostics;
 - stable public return values; and
@@ -1930,8 +1954,8 @@ Final qualification proves:
 - cleanup remains terminally verified after execution and verification
   failures; and
 - active and retained service reads plus persisted results expose the complete
-  per-suite and per-test cleanup transaction sets with consistent terminal
-  outcomes;
+  service-run, per-suite, and per-test cleanup transaction sets with consistent
+  terminal outcomes;
 - source, installed, and packaged behavior agree.
 
 Live qualification must finish terminally and include cleanup confirmation. A
@@ -2201,7 +2225,9 @@ The architecture is complete when:
 - cleanup restore callbacks cannot recursively invoke public commands, while
   read-only commands used by cleanup verification inherit the transaction's
   owner and remaining cleanup deadline, including reserved `SERVICE_RUN`
-  command ownership for service-cleanup verification children;
+  command ownership for service-cleanup verification children; direct
+  cleanup-verification children identify their transaction parent and self-root
+  their command tree, while deeper descendants use normal invocation ancestry;
 - built-in command signatures and return values remain compatible through
   documented overloads;
 - project command modules use definitions exclusively and bare callbacks fail

@@ -1269,6 +1269,15 @@ or teardown belong to the test attempt; commands invoked outside a test attempt
 but inside suite setup/teardown belong to the suite execution. Nested command
 and workflow-step events inherit that owner exactly.
 
+The successor command-event schema distinguishes two mutually exclusive direct
+parent fields. `parent_invocation_id` links command-to-command children and
+workflow steps. `parent_cleanup_transaction_id` links a read-only command
+invoked directly by cleanup verification to its owning transaction. Such a
+cleanup child uses its own invocation ID as `root_invocation_id`; deeper command
+descendants use ordinary invocation-parent links and retain that root. Protocol
+validation rejects both parent fields appearing together and rejects missing,
+foreign, or owner-inconsistent cleanup-transaction parents.
+
 The same tagged ownership applies to transaction-level cleanup events:
 
 - `cleanup.transaction_registered`;
