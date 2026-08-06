@@ -237,69 +237,91 @@ Evidence:
 Outcome: immutable command definitions can be validated and registered, and
 all lifecycle outcomes and finite timing calculations have one implementation.
 
-- [ ] Add `src/dwarfspec/driver/command/outcomes.lua`.
-  - [ ] Implement explicit `ready`, `pending`, `fatal`, and intrinsic-only
+- [x] Add `src/dwarfspec/driver/command/outcomes.lua`.
+  - [x] Implement explicit `ready`, `pending`, `fatal`, and intrinsic-only
         `effect_absent` outcomes.
-  - [ ] Implement `executed`, explicit `retry`, and structured `failed`
+  - [x] Implement `executed`, explicit `retry`, and structured `failed`
         execution outcomes.
-  - [ ] Keep public results, private verification receipts, effect receipts,
+  - [x] Keep public results, private verification receipts, effect receipts,
         attempt receipts, and bounded evidence distinct.
-  - [ ] Make omitted `effect_receipt` explicitly mean no cleanup-requiring
+  - [x] Make omitted `effect_receipt` explicitly mean no cleanup-requiring
         effect for every execution outcome.
-  - [ ] Reject implicit retry inference from `false`, `nil`, thrown errors,
+  - [x] Reject implicit retry inference from `false`, `nil`, thrown errors,
         timeout, or cancellation.
-- [ ] Add `src/dwarfspec/driver/command/deadline.lua`.
-  - [ ] Use an injected monotonic clock.
-  - [ ] Calculate one absolute deadline after successful synchronous
+- [x] Add `src/dwarfspec/driver/command/deadline.lua`.
+  - [x] Use an injected monotonic clock.
+  - [x] Calculate one absolute deadline after successful synchronous
         normalization.
-  - [ ] Centralize remaining-time calculation and one documented rounding
+  - [x] Centralize remaining-time calculation and one documented rounding
         direction.
-  - [ ] Preserve evidence and report execution timeout when bounded synchronous
+  - [x] Preserve evidence and report execution timeout when bounded synchronous
         execution returns after its deadline.
-- [ ] Add `src/dwarfspec/driver/command/definition.lua`.
-  - [ ] Validate names, kinds, normalize/preflight callbacks, execution policy,
+- [x] Add `src/dwarfspec/driver/command/definition.lua`.
+  - [x] Validate names, kinds, normalize/preflight callbacks, execution policy,
         intrinsic policy, timeouts, diagnostics, claims, and cleanup shape.
-  - [ ] Enforce the proposal's required callable `preflight` field on every
+  - [x] Enforce the proposal's required callable `preflight` field on every
         command definition and workflow step; only fields marked optional in
         the authoritative definition shapes may be omitted.
-  - [ ] Require `execute` for every non-workflow definition and require one
+  - [x] Require `execute` for every non-workflow definition and require one
         `workflow` while forbidding `execute` for `WORKFLOW`.
-  - [ ] Require `operation_key` only for `EXPLICIT_RETRY_SAFE`.
-  - [ ] Require `verify` for `CALLBACK`, forbid it for
+  - [x] Require `operation_key` only for `EXPLICIT_RETRY_SAFE`.
+  - [x] Require `verify` for `CALLBACK`, forbid it for
         `PRIMARY_OBSERVATION`, and omit it for `EXECUTION_RECEIPT`.
-  - [ ] Require immutable cleanup policy, callable restore, required cleanup
+  - [x] Require immutable cleanup policy, callable restore, required cleanup
         verification, supported lifetime, and optional resource projection for
         any definition that can report an effect.
-  - [ ] Reject effect-producing shapes without cleanup policy and cleanup
+  - [x] Reject effect-producing shapes without cleanup policy and cleanup
         policies for definitions that cannot produce effects.
-  - [ ] Copy or freeze accepted definitions.
-- [ ] Add `src/dwarfspec/driver/command/registry.lua`.
-  - [ ] Merge built-in and project definitions deterministically.
-  - [ ] Reject duplicate names and replacement of reserved built-in names.
-  - [ ] Preserve source-path and command-name diagnostics for invalid project
+  - [x] Copy or freeze accepted definitions.
+- [x] Add `src/dwarfspec/driver/command/registry.lua`.
+  - [x] Merge built-in and project definitions deterministically.
+  - [x] Reject duplicate names and replacement of reserved built-in names.
+  - [x] Preserve source-path and command-name diagnostics for invalid project
         definitions.
-- [ ] Add structural unit tests separately from behavioral conformance tests.
-  - [ ] Prove all valid kind/intrinsic/retry combinations.
-  - [ ] Prove invalid workflow, cleanup, verify, retry, timeout, and reserved
+- [x] Add structural unit tests separately from behavioral conformance tests.
+  - [x] Prove all valid kind/intrinsic/retry combinations.
+  - [x] Prove invalid workflow, cleanup, verify, retry, timeout, and reserved
         name combinations fail early.
-  - [ ] Prove definitions cannot be mutated after registration.
-- [ ] Reserve behavioral qualification for conformance fixtures.
-  - [ ] Prove every normalizer and claims projector is bounded, synchronous,
-        and non-yielding.
-  - [ ] Prove preflight, claims, and verification callbacks remain read-only.
-  - [ ] Require each `EXECUTION_RECEIPT` definition to document and test why its
-        immutable receipt is the strongest truthful framework evidence.
-  - [ ] Prove cleanup resource projection accepts only the effect receipt and
-        emits bindings to the previously validated plan.
-  - [ ] Prove diagnostic projection is bounded plain data.
-- [ ] Perform a follow-up review before building the runner on these contracts.
+  - [x] Prove definitions cannot be mutated after registration.
+- [x] Reserve behavioral qualification for conformance fixtures.
+  - [x] Reserve proof that every normalizer and claims projector is bounded,
+        synchronous, and non-yielding.
+  - [x] Reserve proof that preflight, claims, and verification callbacks remain
+        read-only.
+  - [x] Reserve the requirement for each `EXECUTION_RECEIPT` definition to
+        document and test why its immutable receipt is the strongest truthful
+        framework evidence.
+  - [x] Reserve proof that cleanup resource projection accepts only the effect
+        receipt and emits bindings to the previously validated plan.
+  - [x] Reserve proof that diagnostic projection is bounded plain data.
+- [x] Perform a follow-up review before building the runner on these contracts.
+
+Evidence recorded 2026-08-06:
+
+- Focused command-contract suites passed with 18 successes, 0 failures,
+  0 errors, and 0 pending after the final outcome-contract correction.
+- The full unit suite passed with 1,027 successes, 0 failures, 0 errors, and
+  0 pending.
+- Lua 5.4 syntax and formatting checks passed for 400 files, valid source
+  declaration fixtures passed, and `git diff --check` reported no issue.
+- The required second review hardened workflow-array validation and explicit
+  execution-timeout attribution. The independent completion audit then caught
+  and verified correction of the required `effect_absent` abandonment proof
+  and its declaration annotation; the final re-audit found no confirmed issue,
+  partial requirement, or evidence gap.
+- This section establishes the structural selection boundary for later
+  behavioral conformance: bounded/non-yielding normalizers and claim
+  projectors, read-only callbacks, execution-receipt justification,
+  effect-receipt-only resource projection, and bounded diagnostic projection
+  remain mandatory per-definition qualification in the reusable conformance
+  work and are intentionally not inferred by the registry.
 
 Completion criteria:
 
-- [ ] The registry can accept only structurally coherent immutable definitions.
-- [ ] Outcome constructors cannot erase the distinction between command
+- [x] The registry can accept only structurally coherent immutable definitions.
+- [x] Outcome constructors cannot erase the distinction between command
       evidence and a confirmed cleanup-requiring effect.
-- [ ] Deadline behavior is deterministic under a fake clock.
+- [x] Deadline behavior is deterministic under a fake clock.
 
 ## Phase 4: Implement stage-restricted contexts and diagnostics
 
