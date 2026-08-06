@@ -48,8 +48,8 @@ its own tie-breaking and eligibility rules.
 Implement the utility as:
 
 ```text
-src/dwarfspec/support/directed_acyclic_graph.lua
-tests/unit/support/directed_acyclic_graph_spec.lua
+src/dwarfspec/graphs/directed_acyclic_graph.lua
+tests/unit/graphs/directed_acyclic_graph_spec.lua
 ```
 
 The module exports one `DirectedAcyclicGraph` class. Its internal representation
