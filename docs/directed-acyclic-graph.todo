@@ -77,45 +77,45 @@ Completion criteria:
 Outcome: one pure-Lua suite proves every API, validation, ordering, and
 non-mutation guarantee without requiring DFHack or filesystem fixtures.
 
-- [ ] Add `tests/unit/graphs/directed_acyclic_graph_spec.lua`.
-- [ ] Cover construction and node behavior.
-  - [ ] Empty construction and empty full-graph ordering.
-  - [ ] Node insertion, duplicate insertion, membership, removal, and duplicate
+- [x] Add `tests/unit/graphs/directed_acyclic_graph_spec.lua`.
+- [x] Cover construction and node behavior.
+  - [x] Empty construction and empty full-graph ordering.
+  - [x] Node insertion, duplicate insertion, membership, removal, and duplicate
         removal.
-  - [ ] Node removal clears every incoming and outgoing edge.
-- [ ] Cover edge behavior.
-  - [ ] Edge insertion, duplicate insertion, membership, removal, and duplicate
+  - [x] Node removal clears every incoming and outgoing edge.
+- [x] Cover edge behavior.
+  - [x] Edge insertion, duplicate insertion, membership, removal, and duplicate
         removal.
-  - [ ] Unknown endpoints and self-edges are rejected.
-  - [ ] Direct and indirect cycles are rejected.
-  - [ ] Rejected edge insertions do not mutate nodes, edges, neighbors, or
+  - [x] Unknown endpoints and self-edges are rejected.
+  - [x] Direct and indirect cycles are rejected.
+  - [x] Rejected edge insertions do not mutate nodes, edges, neighbors, or
         topological order.
-- [ ] Cover input validation.
-  - [ ] Every public node-ID parameter rejects nil, non-string, and empty IDs.
-  - [ ] Neighbor queries and edge operations reject unknown IDs.
-  - [ ] A supplied non-function comparator is rejected.
-  - [ ] Duplicate and unknown induced-subset IDs are rejected.
-- [ ] Cover neighbor results.
-  - [ ] Direct predecessor and successor queries are lexically sorted.
-  - [ ] Mutating returned neighbor arrays does not mutate graph state.
-- [ ] Cover deterministic topological ordering.
-  - [ ] Chains, forks, diamonds, and disconnected nodes preserve every edge.
-  - [ ] Simultaneously ready nodes use lexical order by default.
-  - [ ] A custom comparator controls simultaneously ready nodes.
-  - [ ] A deterministic strict-weak-order comparator produces stable repeated
+  - [x] Cover input validation.
+  - [x] Every public node-ID parameter rejects nil, non-string, and empty IDs.
+  - [x] Neighbor queries and edge operations reject unknown IDs.
+  - [x] A supplied non-function comparator is rejected.
+  - [x] Duplicate and unknown induced-subset IDs are rejected.
+- [x] Cover neighbor results.
+  - [x] Direct predecessor and successor queries are lexically sorted.
+  - [x] Mutating returned neighbor arrays does not mutate graph state.
+- [x] Cover deterministic topological ordering.
+  - [x] Chains, forks, diamonds, and disconnected nodes preserve every edge.
+  - [x] Simultaneously ready nodes use lexical order by default.
+  - [x] A custom comparator controls simultaneously ready nodes.
+  - [x] A deterministic strict-weak-order comparator produces stable repeated
         results for the same ready-node set.
-  - [ ] Lexical fallback resolves comparator equivalence deterministically.
-  - [ ] A comparator cannot violate predecessor-before-successor edges.
-  - [ ] Induced subsets ignore edges crossing the subset boundary while
+  - [x] Lexical fallback resolves comparator equivalence deterministically.
+  - [x] A comparator cannot violate predecessor-before-successor edges.
+  - [x] Induced subsets ignore edges crossing the subset boundary while
         preserving edges internal to the subset.
-  - [ ] Mutating a returned order does not mutate graph state.
+  - [x] Mutating a returned order does not mutate graph state.
 
 Completion criteria:
 
-- [ ] The focused suite covers every case listed by the source proposal.
-- [ ] The suite uses only in-memory Lua values and runs without a DFHack
+- [x] The focused suite covers every case listed by the source proposal.
+- [x] The suite uses only in-memory Lua values and runs without a DFHack
       process, scheduler, service, cleanup registry, or filesystem fixture.
-- [ ] The focused suite completes in well under one second under the ordinary
+- [x] The focused suite completes in well under one second under the ordinary
       unit-test harness.
 
 ## Phase 3: Qualify and review the prerequisite
