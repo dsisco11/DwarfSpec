@@ -352,14 +352,28 @@ active effect-backed claim across all execution-owner levels.
 - [ ] Insert prerequisite-to-dependent claim edges only after all DwarfSpec
       policy checks pass.
 - [ ] Prevent releasing a prerequisite while any active dependent remains.
+- [ ] Implement terminal claim-disposition policy through transaction-owned
+      atomic index operations.
+  - [ ] Release every claim only after the transaction's restoration and
+        required verification succeed.
+  - [ ] Release `abandoned` transaction claims only through Phase 7's
+        runner-only `abandonSelfRolledBack` transition after its typed absence
+        proof succeeds.
+  - [ ] Make every released `ResourceClaimReference` stale immediately.
+  - [ ] Retain claims after `failed` or `unconfirmed` cleanup as fail-closed
+        ownership and quarantine evidence, including `dependency_blocked`
+        failures that did not execute restoration.
+  - [ ] Reject a `complete` disposition if atomic claim release fails; preserve
+        the transaction and claims under a composed failed/quarantined outcome.
 - [ ] Keep fail-closed conflicted claim records as quarantine evidence without
       treating them as normal active graph claims.
 - [ ] Keep runtime claim/index state separate from authoritative cleanup
       history and result projection.
 - [ ] Add exhaustive focused tests for plan purity, reference validation,
       binding, conflicts, compatible sharing, lifetime direction, cross-level
-      lookup, dependency edges, release blocking, stale references, and
-      fail-closed conflict evidence.
+      lookup, dependency edges, verified complete release, release blocking,
+      stale references, failed/unconfirmed retention, and fail-closed conflict
+      evidence.
 - [ ] Treat every attempt plan as the conservative possible claim set of one
       prospective transaction even when the effect may bind only a subset; use
       separate workflow steps when this conservative simulation would reject
@@ -432,13 +446,17 @@ dependency-safe planning, required verification, and finite execution.
       or unconfirmed dependent makes safe execution impossible.
 - [ ] Compose restore, verification, dependency, timeout, and earlier lifecycle
       failures without masking evidence.
+- [ ] Terminalize cleanup through the claim-disposition policy from Phase 5:
+      `complete` only after verified atomic release, and `failed` or
+      `unconfirmed` with claims retained for quarantine.
 - [ ] On manual restore/verification failure, record terminal `failed`, remove
       the transaction from pending work so teardown cannot retry it, then raise
       the composed failure into the currently active Busted lifecycle without
       changing the transaction's tagged owner.
 - [ ] Add focused transaction/planner tests for every state transition,
       deadline, cancellation, retry, error-composition, LIFO tie-break,
-      dependency-blocked, and callback restriction.
+      dependency-blocked, claim release/retention disposition, and callback
+      restriction.
 - [ ] Perform a follow-up cleanup-engine review before integrating it with the
       command runner.
 
@@ -457,7 +475,7 @@ pending work is expended.
 
 - [ ] Add one run-scoped internal `CleanupRegistrationService` as the only
       mutation boundary for transaction IDs, owner registries, execution
-      indexes, receipt freezing, claim linking, and registration events.
+      indexes, receipt freezing, claim linking/release, and lifecycle events.
 - [ ] Allocate run-unique transaction IDs and owner-local registration ordinals
       before protected state is published.
 - [ ] Atomically create a transaction and all active claims from a confirmed
@@ -497,8 +515,9 @@ pending work is expended.
 - [ ] Keep pending registries and mutable execution indexes owner-local while
       keeping the physical journal run-scoped and authoritative.
 - [ ] Add service tests for atomic registration, post-effect conflicts,
-      transaction/claim identity, abandonment fallback, event completeness,
-      terminal uniqueness, and retention after registry removal.
+      transaction/claim identity, verified complete release, failed/unconfirmed
+      claim retention, release failure quarantine, abandonment fallback, event
+      completeness, terminal uniqueness, and retention after registry removal.
 - [ ] Perform a follow-up service/journal review before lifecycle integration.
 
 Completion criteria:
@@ -509,8 +528,9 @@ Completion criteria:
 
 ## Phase 8: Integrate suite, test, and service cleanup ownership
 
-Outcome: commands and cleanup are legal at every approved lifecycle level, and
-each owner closes, finalizes, reports, and quarantines independently.
+Outcome: owner identities and cleanup registration are active at every approved
+lifecycle level, and each owner closes, finalizes, reports, and quarantines
+independently.
 
 This phase establishes the owner identities, registration windows, and cleanup
 finalization infrastructure. Phase 10 makes public commands consume that
@@ -1241,8 +1261,9 @@ collectively prove the complete proposal after all old paths are gone.
 - [ ] Audit every acceptance criterion in
       `docs/verified-command-execution-proposal.md` against implementation and
       concrete evidence.
-- [ ] Audit proposal-to-plan coverage in both directions and record any explicit
-      deferral with rationale rather than silently accepting a gap.
+- [ ] Audit proposal-to-plan coverage in both directions; treat any uncovered
+      requirement as incomplete work that must return to implementation rather
+      than as an acceptable final deferral.
 - [ ] Perform the required follow-up implementation review after final fixes and
       before marking the plan complete.
 - [ ] Run `git diff --check` and inspect the final worktree for unintended or
@@ -1265,7 +1286,7 @@ Completion criteria:
 ## Final acceptance
 
 - [ ] Every requirement in `docs/verified-command-execution-proposal.md` is
-      implemented or explicitly deferred with an approved rationale.
+      implemented and supported by proportionate evidence.
 - [ ] The standalone DAG prerequisite is complete under its own `.todo`.
 - [ ] Every built-in and project command uses the one verified-command runner.
 - [ ] Every command has a finite effective deadline, explicit preflight,
