@@ -5,6 +5,8 @@ local glob = require('dwarfspec.support.glob')
 
 local M = {
     default_error_format=ErrorFormat.MSBUILD,
+    default_command_timeout_ms=10000,
+    default_cleanup_timeout_ms=10000,
 }
 
 ---Returns whether a value is a supported immutable error format.
@@ -22,7 +24,8 @@ end
 ---@param label string
 local function optional_positive_integer(value, label)
     if value == nil then return end
-    assert(type(value) == 'number' and value >= 1 and value % 1 == 0,
+    assert(type(value) == 'number' and value >= 1 and value % 1 == 0 and
+        value < math.huge,
         label .. ' must be a positive integer')
 end
 
@@ -34,9 +37,30 @@ function M.validate(value, source)
     if value == nil then value = {} end
     assert(type(value) == 'table', source .. ': settings must be a table')
     for key in pairs(value) do
-        assert(key == 'wait' or key == 'discovery' or key == 'error_format',
+        assert(key == 'wait' or key == 'command' or key == 'cleanup' or
+            key == 'discovery' or key == 'error_format',
             source .. ': unknown setting: ' .. tostring(key))
     end
+
+    local command = value.command or {}
+    assert(type(command) == 'table',
+        source .. ': settings.command must be a table')
+    for key in pairs(command) do
+        assert(key == 'timeout_ms',
+            source .. ': unknown settings.command field: ' .. tostring(key))
+    end
+    optional_positive_integer(command.timeout_ms,
+        source .. ': settings.command.timeout_ms')
+
+    local cleanup = value.cleanup or {}
+    assert(type(cleanup) == 'table',
+        source .. ': settings.cleanup must be a table')
+    for key in pairs(cleanup) do
+        assert(key == 'timeout_ms',
+            source .. ': unknown settings.cleanup field: ' .. tostring(key))
+    end
+    optional_positive_integer(cleanup.timeout_ms,
+        source .. ': settings.cleanup.timeout_ms')
 
     local wait = value.wait or {}
     assert(type(wait) == 'table', source .. ': settings.wait must be a table')
@@ -72,6 +96,12 @@ function M.validate(value, source)
         ': settings.error_format must be one of: msbuild, gcc, eslint')
 
     return {
+        command={
+            timeout_ms=command.timeout_ms,
+        },
+        cleanup={
+            timeout_ms=cleanup.timeout_ms,
+        },
         wait={
             frame_budget=wait.frame_budget,
             timeout_ms=wait.timeout_ms,

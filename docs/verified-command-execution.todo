@@ -166,61 +166,71 @@ Completion criteria:
 Outcome: closed vocabulary, finite timeout configuration, public option types,
 and versioned schema shapes exist before runtime components emit them.
 
-- [ ] Add immutable protocol enums for:
-  - [ ] `ECommandKind`: `QUERY`, `ASSERTION`, `ACTION`, `STATE_SETTER`,
+- [x] Add immutable protocol enums for:
+  - [x] `ECommandKind`: `QUERY`, `ASSERTION`, `ACTION`, `STATE_SETTER`,
         `WORKFLOW`, and `FIXTURE`.
-  - [ ] `EIntrinsicVerificationKind`: `PRIMARY_OBSERVATION`, `CALLBACK`, and
+  - [x] `EIntrinsicVerificationKind`: `PRIMARY_OBSERVATION`, `CALLBACK`, and
         `EXECUTION_RECEIPT`.
-  - [ ] `EExecutionRetryPolicy`: `ONCE` and `EXPLICIT_RETRY_SAFE`.
-  - [ ] `EExecutionOwnerScope`: `SERVICE_RUN`, `SUITE_EXECUTION`, and
+  - [x] `EExecutionRetryPolicy`: `ONCE` and `EXPLICIT_RETRY_SAFE`.
+  - [x] `EExecutionOwnerScope`: `SERVICE_RUN`, `SUITE_EXECUTION`, and
         `TEST_ATTEMPT`.
-  - [ ] `ECleanupOwnerScope`: `SERVICE_RUN`, `SUITE_EXECUTION`, and
+  - [x] `ECleanupOwnerScope`: `SERVICE_RUN`, `SUITE_EXECUTION`, and
         `TEST_ATTEMPT`.
-  - [ ] `ECleanupLifetime`: `OWNER` and `COMMAND`.
-  - [ ] Cleanup state, terminal disposition, execution trigger, and command
+  - [x] `ECleanupLifetime`: `OWNER` and `COMMAND`.
+  - [x] Cleanup state, terminal disposition, execution trigger, and command
         failure-stage values required by the proposal.
-- [ ] Add `settings.command.timeout_ms` and `settings.cleanup.timeout_ms` with
+- [x] Add `settings.command.timeout_ms` and `settings.cleanup.timeout_ms` with
       positive finite integer validation and 10,000 ms framework defaults.
-- [ ] Implement timeout precedence for invocation, project, definition, and
+- [x] Implement timeout precedence for invocation, project, definition, and
       framework command defaults.
-- [ ] Implement cleanup timeout precedence for registration, project, and
+- [x] Implement cleanup timeout precedence for registration, project, and
       framework cleanup defaults.
-- [ ] Introduce the temporary `settings.wait.timeout_ms` fallback only when the
+- [x] Introduce the temporary `settings.wait.timeout_ms` fallback only when the
       command setting is absent, with a bounded deprecation diagnostic.
-- [ ] Retain legacy `timeout_ms=false` behavior only for the documented
+- [x] Retain legacy `timeout_ms=false` behavior only for the documented
       compatibility window and keep it bounded by the enclosing run lease.
-- [ ] Make `settings.command.timeout_ms` win deterministically when both new and
+- [x] Make `settings.command.timeout_ms` win deterministically when both new and
       legacy wait settings are present, emit the legacy-setting deprecation,
       and reject only conflicts whose precedence cannot be applied.
-- [ ] Preserve optional frame budgets as secondary safeguards for frame-based
+- [x] Preserve optional frame budgets as secondary safeguards for frame-based
       commands without allowing them to replace the wall-clock deadline.
-- [ ] Add declaration types for `CommandOptions`, command observations,
+- [x] Add declaration types for `CommandOptions`, command observations,
       definitions, workflow definitions and outputs, cleanup registrations and
       transactions, cleanup contexts, claim plans/bindings/registrations/
       references, and all typed outcomes.
-- [ ] Add trailing `CommandOptions` overloads without changing logical option
+- [x] Add trailing `CommandOptions` overloads without changing logical option
       records or existing positional calls.
-- [ ] Define the successor service/event/result schema versions as one
+- [x] Define the successor service/event/result schema versions as one
       coordinated protocol revision; do not emit new events under the old
       version.
-- [ ] Add structural schema shapes for command ancestry, owner identities,
+- [x] Add structural schema shapes for command ancestry, owner identities,
       cleanup lifecycle events, suite execution records, and all three cleanup
       result projections.
-- [ ] Update protocol negotiation to reject every mixed old/new client-service
+- [x] Update protocol negotiation to reject every mixed old/new client-service
       combination.
-- [ ] Add focused enum, configuration, declaration, protocol-version, and
+- [x] Add focused enum, configuration, declaration, protocol-version, and
       schema tests, including invalid finite timeout values and mixed-version
       rejection.
-- [ ] Perform a follow-up review of the introduced vocabulary against the
+- [x] Perform a follow-up review of the introduced vocabulary against the
       proposal before consumers depend on it.
 
 Completion criteria:
 
-- [ ] All shared enums and public types are immutable, declared, versioned, and
+- [x] All shared enums and public types are immutable, declared, versioned, and
       consistently named.
-- [ ] Configuration accepts the compatibility window but cannot create a new
+- [x] Configuration accepts the compatibility window but cannot create a new
       unbounded command or cleanup contract.
-- [ ] Focused protocol/configuration/declaration evidence passes.
+- [x] Focused protocol/configuration/declaration evidence passes.
+
+Evidence:
+
+- Focused timeout-policy and verified-execution contract suites: 8 successes,
+  0 failures, 0 errors, 0 pending.
+- Full unit suite: 1009 successes, 0 failures, 0 errors, 0 pending.
+- Lua 5.4 syntax and formatting checks passed for 392 files.
+- Valid source declaration fixtures passed.
+- Follow-up proposal reconciliation and independent completion audit found no
+  remaining Phase 2 defect after remediation.
 
 ## Phase 3: Implement command outcomes, deadlines, definitions, and registry
 
