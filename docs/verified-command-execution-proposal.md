@@ -146,11 +146,13 @@ target identity, cleanup checkpoint, and trace.
 
 Every public command and caller-visible cleanup transaction belongs to exactly
 one active execution owner. `EExecutionOwnerScope` contains exactly
-`SUITE_EXECUTION` and `TEST_ATTEMPT`. A suite execution is one selected spec file
-in one repeat; a test attempt is nested within that suite execution. The tagged
-scope and stable owner ID travel together in command events, cleanup events,
-result projections, and nested invocation context. Service-owned run cleanup is
-outside this execution enum and keeps its run-level attribution.
+`SERVICE_RUN`, `SUITE_EXECUTION`, and `TEST_ATTEMPT`. A suite execution is one
+selected spec file in one repeat; a test attempt is nested within that suite
+execution. `SERVICE_RUN` command ownership is reserved for read-only query or
+assertion children invoked by service-owned cleanup verification; it cannot be
+selected by an ordinary top-level public invocation or cleanup registration.
+The tagged scope and stable owner ID travel together in command events, cleanup
+events, result projections, and nested invocation context.
 
 All effect-backed cleanup uses one transaction abstraction.
 `ECleanupOwnerScope` contains `SERVICE_RUN`, `SUITE_EXECUTION`, and
@@ -1033,8 +1035,10 @@ pre-execution boundary for the inert plan. It runs after successful preflight
 and volatile-target validation, so it may use the freshly resolved ready value,
 but it is read-only and cannot mutate ownership. A plan entry may name an exact
 existing resource or a provisional creation identity derived from the command
-invocation and stable operation key when the native ID cannot exist before
-execution. Relationships within the plan use local claim keys; relationships to
+invocation ID when the native ID cannot exist before execution. For an
+`EXPLICIT_RETRY_SAFE` definition, that derivation also includes the frozen
+stable operation key; an `ONCE` definition neither has nor requires one.
+Relationships within the plan use local claim keys; relationships to
 active claims use validated `ResourceClaimReference` values obtained from an
 owning transaction or a command result whose contract explicitly publishes
 them.
@@ -1312,8 +1316,11 @@ A restore callback does not invoke public commands or register more cleanup.
 Verification remains read-only: it may invoke public queries or assertions, but
 those nested invocations inherit the cleanup transaction's owner identity,
 cleanup cancellation scope, and remaining cleanup deadline rather than starting
-a fresh command timeout. Mutating commands and cleanup registration are fatal
-contract errors from cleanup verification.
+a fresh command timeout. A query or assertion nested under a `SERVICE_RUN`
+transaction therefore uses the reserved `SERVICE_RUN` execution-owner scope and
+run identity. It remains a child of the cleanup verification operation and does
+not make caller-initiated service-run commands legal. Mutating commands and
+cleanup registration are fatal contract errors from cleanup verification.
 Nested verification commands retain normal child command events while the
 transaction remains the owner of the cleanup outcome.
 
@@ -1419,8 +1426,10 @@ work performed in suite-level setup or teardown outside an attempt belongs to
 the suite execution. A suite-owned transaction can therefore protect state
 shared by all tests in that file and remains pending until manually expended or
 suite cleanup. Nested commands inherit the exact owner scope and identity of
-their parent. Public commands and cleanup remain invalid when neither a suite
-execution nor a test attempt is active. Service-owned run cleanup is a separate
+their parent. Caller-initiated public commands and cleanup registrations remain
+invalid when neither a suite execution nor a test attempt is active. The sole
+command exception is a read-only query or assertion invoked as a child of
+`SERVICE_RUN` cleanup verification. Service-owned run cleanup is a separate
 owner scope and does not appear in either suite/test projection.
 
 After attempt-local teardown hooks return, registration closes and automatic
@@ -1535,11 +1544,11 @@ able to represent:
 
 Every command and workflow-step event carries its run-unique `invocation_id`,
 optional `parent_invocation_id`, `root_invocation_id`, owner-scope enum, owning
-suite-execution or test-attempt ID, repeat index, and stable suite/test identity
-as applicable. Top-level commands have no parent and use their own invocation ID
-as the root ID. Child queries and workflow steps use distinct invocation IDs
-even when their command names and normalized arguments are identical, and they
-inherit the parent's owner scope exactly.
+service-run, suite-execution, or test-attempt ID, repeat index, and stable
+suite/test identity as applicable. Top-level commands have no parent and use
+their own invocation ID as the root ID. Child queries and workflow steps use
+distinct invocation IDs even when their command names and normalized arguments
+are identical, and they inherit the parent's owner scope exactly.
 
 Owner-lifetime cleanup occurs later and is reported by cleanup and terminal
 run events. A command-finished event does not claim knowledge of cleanup
@@ -1817,8 +1826,10 @@ introduced. An injected fake monotonic clock and scheduler prove:
   scope after parent command or lifecycle cancellation;
 - suite-execution attribution across suite setup and teardown, test-attempt
   attribution across attempt setup, body, and teardown, most-specific-scope
-  selection, rejection outside both active scopes, and `test.finished` and
-  `suite.finished` ordering after their cleanup-result materialization;
+  selection, rejection of caller-initiated commands outside both active scopes,
+  reserved `SERVICE_RUN` attribution for read-only cleanup-verification children,
+  and `test.finished` and `suite.finished` ordering after their cleanup-result
+  materialization;
 - service-run ownership, transaction IDs, dependency-safe finalization after
   suite/test owners close, run-level result materialization before
   `run.finished`, and quarantine when failed dependents block a prerequisite;
@@ -2189,7 +2200,8 @@ The architecture is complete when:
   an already-cancelled command, test-body, or suite-hook token;
 - cleanup restore callbacks cannot recursively invoke public commands, while
   read-only commands used by cleanup verification inherit the transaction's
-  owner and remaining cleanup deadline;
+  owner and remaining cleanup deadline, including reserved `SERVICE_RUN`
+  command ownership for service-cleanup verification children;
 - built-in command signatures and return values remain compatible through
   documented overloads;
 - project command modules use definitions exclusively and bare callbacks fail

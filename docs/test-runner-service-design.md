@@ -1259,12 +1259,15 @@ independent transactions. Only transactions that cannot reach a normal
 disposition are then terminalized as `unconfirmed` before the synthesized test
 result and `run.finished`.
 
-Every stage-aware command event carries a tagged owner scope and either the
-active suite-execution ID or nested test-attempt ID. All public commands are
-legal in suite-level setup and teardown. Commands invoked during test-local
-setup, body, or teardown belong to the test attempt; commands invoked outside a
-test attempt but inside suite setup/teardown belong to the suite execution.
-Nested command and workflow-step events inherit that owner exactly.
+Every stage-aware command event carries a tagged owner scope and the applicable
+service-run, suite-execution, or nested test-attempt identity. `SERVICE_RUN`
+command ownership is reserved for read-only query or assertion children invoked
+by service-owned cleanup verification; it does not admit ordinary top-level
+public commands or cleanup registrations. All public commands are legal in
+suite-level setup and teardown. Commands invoked during test-local setup, body,
+or teardown belong to the test attempt; commands invoked outside a test attempt
+but inside suite setup/teardown belong to the suite execution. Nested command
+and workflow-step events inherit that owner exactly.
 
 The same tagged ownership applies to transaction-level cleanup events:
 
@@ -1274,10 +1277,11 @@ The same tagged ownership applies to transaction-level cleanup events:
 - `cleanup.transaction_abandoned`.
 
 The physically run-scoped journal remains the sole authoritative history.
-Owner tags logically partition suite and test transactions without creating
-separate journals. Registration order is local to the tagged owner; transaction
-IDs remain unique within the run. Service-owned run cleanup retains its existing
-separate run-level events.
+Owner tags logically partition service-run, suite, and test transactions without
+creating separate journals. Registration order is local to the tagged owner;
+transaction IDs remain unique within the run. Service-owned cleanup uses the
+same transaction event family tagged `SERVICE_RUN` and is never attributed to
+an arbitrary suite or test.
 
 The successor runtime also owns one run-scoped `ResourceDependencyIndex` across
 service-run, suite-execution, test-attempt, and command-invocation levels. One
@@ -1300,6 +1304,12 @@ ordered by owner-local registration ordinal and contain exactly one terminal
 disposition for every transaction registered to a terminal owner retained by a
 surviving service. The journal remains authoritative; projections are
 completed-result conveniences.
+
+After suite and test owners close, the service finalizer executes and
+terminalizes service-owned transactions, then folds their events into
+`host_report.service_cleanup_transactions` before `run.finished`. This run-level
+projection uses the same transaction identity and terminal-disposition contract
+without assigning service cleanup to a suite or test.
 
 The controller validates owner identity, nesting, ordering, transaction
 uniqueness, and journal/projection equality, then persists the supplied journal
