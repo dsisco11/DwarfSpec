@@ -529,8 +529,8 @@ Completion criteria:
 ## Phase 8: Integrate suite, test, and service cleanup ownership
 
 Outcome: owner identities and cleanup registration are active at every approved
-lifecycle level, and each owner closes, finalizes, reports, and quarantines
-independently.
+lifecycle level, and each owner closes, finalizes, and reports independently;
+failed or unconfirmed cleanup contributes to shared executor quarantine.
 
 This phase establishes the owner identities, registration windows, and cleanup
 finalization infrastructure. Phase 10 makes public commands consume that
