@@ -585,6 +585,27 @@ function ResourceDependencyIndex:references_for_transaction(transaction_id)
     return Internals.freeze(references)
 end
 
+---Returns active transaction IDs that depend on claims owned by a transaction.
+---@param transaction_id string
+---@return string[]
+function ResourceDependencyIndex:dependent_transaction_ids(transaction_id)
+    transaction_id = Internals.string(transaction_id, 'transaction_id')
+    local dependent_ids = {}
+    for claim_id in pairs(self._transaction_claim_ids[transaction_id] or {}) do
+        for _, dependent_claim_id in ipairs(self._graph:successors(claim_id)) do
+            local dependent_transaction_id =
+                self._claims[dependent_claim_id].transaction_id
+            if dependent_transaction_id ~= transaction_id then
+                dependent_ids[dependent_transaction_id] = true
+            end
+        end
+    end
+    local ordered = {}
+    for dependent_id in pairs(dependent_ids) do ordered[#ordered + 1] = dependent_id end
+    table.sort(ordered)
+    return Internals.freeze(ordered)
+end
+
 ---Records fail-closed registration evidence without creating normal claims.
 ---@param transaction_id string
 ---@param owner dwarfspec.ExecutionOwnerIdentity

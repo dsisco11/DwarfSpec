@@ -216,6 +216,7 @@
 ---@field register fun(self: dwarfspec.ResourceDependencyIndex, owner: dwarfspec.ExecutionOwnerIdentity, transaction_id: string, lifetime: dwarfspec.ECleanupLifetime, registrations: dwarfspec.ResourceClaimRegistration[]): dwarfspec.ResourceClaimReference[]
 ---@field lookup fun(self: dwarfspec.ResourceDependencyIndex, reference: dwarfspec.ResourceClaimReference): table
 ---@field references_for_transaction fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string): dwarfspec.ResourceClaimReference[]
+---@field dependent_transaction_ids fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string): string[]
 ---@field record_conflicted_registration fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string, owner: dwarfspec.ExecutionOwnerIdentity, evidence: table): table
 ---@field retain_unresolved fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string)
 ---@field transfer fun(self: dwarfspec.ResourceDependencyIndex, reference: dwarfspec.ResourceClaimReference, owner: dwarfspec.ExecutionOwnerIdentity, transaction_id: string): dwarfspec.ResourceClaimReference
@@ -233,6 +234,12 @@
 ---@field execute fun(self: dwarfspec.CleanupTransaction, reason?: string): boolean
 ---@field isPending fun(self: dwarfspec.CleanupTransaction): boolean
 ---@field claimReferences fun(self: dwarfspec.CleanupTransaction): dwarfspec.ResourceClaimReference[]
+
+---@class dwarfspec.CleanupExecutionContext
+---@field remaining_ms fun(self: dwarfspec.CleanupExecutionContext): integer
+---@field cancellation fun(self: dwarfspec.CleanupExecutionContext): boolean, string|nil
+---@field record_diagnostic fun(self: dwarfspec.CleanupExecutionContext, kind: string, evidence: table): table
+---@field invoke_readonly fun(self: dwarfspec.CleanupExecutionContext, kind: dwarfspec.ECommandKind, name: string, ...: any): any
 
 ---@class dwarfspec.ExecutionOwnerIdentity
 ---@field owner_scope dwarfspec.EExecutionOwnerScope

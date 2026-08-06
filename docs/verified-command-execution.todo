@@ -481,78 +481,84 @@ consumption authorization review.
 Outcome: executable cleanup transactions have one state machine, deterministic
 dependency-safe planning, required verification, and finite execution.
 
-- [ ] Add `CleanupPlanner` using temporary
+- [x] Add `CleanupPlanner` using temporary
       `CleanupTransactionDependencyGraph` instances backed by the generic DAG.
-  - [ ] Project active claim edges between their owning transactions.
-  - [ ] Collapse claim edges within one transaction.
-  - [ ] Simulate an inert plan as one graph-local prospective transaction node
+  - [x] Project active claim edges between their owning transactions.
+  - [x] Collapse claim edges within one transaction.
+  - [x] Simulate an inert plan as one graph-local prospective transaction node
         before mutation, without allocating or publishing a transaction.
-  - [ ] Reject claim- or transaction-level cycles during simulation.
-  - [ ] Revalidate the committed bound subset before linking and before cleanup
+  - [x] Reject claim- or transaction-level cycles during simulation.
+  - [x] Revalidate the committed bound subset before linking and before cleanup
         planning.
-  - [ ] Return dependent-before-prerequisite reverse-topological order.
-  - [ ] Use reverse owner-local registration order only as the tie-breaker for
+  - [x] Return dependent-before-prerequisite reverse-topological order.
+  - [x] Use reverse owner-local registration order only as the tie-breaker for
         independent transactions.
-- [ ] Replace bare cleanup callbacks with `CleanupTransaction` handles.
-  - [ ] Support `pending`, `running`, `complete`, `failed`, `abandoned`, and
+- [x] Replace bare cleanup callbacks with `CleanupTransaction` handles.
+  - [x] Support `pending`, `running`, `complete`, `failed`, `abandoned`, and
         `unconfirmed` state.
-  - [ ] Make `complete`, `failed`, `abandoned`, and `unconfirmed` the exhaustive
+  - [x] Make `complete`, `failed`, `abandoned`, and `unconfirmed` the exhaustive
         terminal dispositions.
-  - [ ] Implement `execute(reason?)`, `isPending()`, and frozen
+  - [x] Implement `execute(reason?)`, `isPending()`, and frozen
         `claimReferences()`.
-  - [ ] Make repeated execution an idempotent no-op returning `false` after an
+  - [x] Make repeated execution an idempotent no-op returning `false` after an
         already-expended transaction.
-  - [ ] Remove an eligible transaction from the pending registry before its
+  - [x] Remove an eligible transaction from the pending registry before its
         restore callback runs.
-  - [ ] Keep a dependency-blocked manual transaction pending, publish no start
+  - [x] Keep a dependency-blocked manual transaction pending, publish no start
         event, and allow a later retry after dependents are expended.
-  - [ ] Expose no public cancellation/discard operation for an effect-backed
+  - [x] Expose no public cancellation/discard operation for an effect-backed
         transaction; require manual expenditure or automatic finalization.
-- [ ] Validate, defensively copy, and freeze cleanup receipts as bounded plain
+- [x] Validate, defensively copy, and freeze cleanup receipts as bounded plain
       data; reject callbacks, userdata, cycles, and live pointers.
-- [ ] Deliver the same immutable receipt to restore and verification callbacks;
+- [x] Deliver the same immutable receipt to restore and verification callbacks;
       do not expose mutable transaction state.
-- [ ] Implement finite cleanup deadlines and fresh cleanup cancellation scopes.
-- [ ] Make restore one-shot, bounded, and nonblocking.
-- [ ] Make required cleanup verification read-only and retryable.
-  - [ ] Accept truthy results and assertion callbacks that return normally.
-  - [ ] Retry `false`, `cleanup.pending`, and thrown assertion/error observations
+- [x] Implement finite cleanup deadlines and fresh cleanup cancellation scopes.
+- [x] Make restore one-shot, bounded, and nonblocking.
+- [x] Make required cleanup verification read-only and retryable.
+  - [x] Accept truthy results and assertion callbacks that return normally.
+  - [x] Retry `false`, `cleanup.pending`, and thrown assertion/error observations
         under the remaining cleanup deadline.
-  - [ ] Fail immediately on `cleanup.fatal`.
-  - [ ] Attempt verification after restore throws when time remains, while
+  - [x] Fail immediately on `cleanup.fatal`.
+  - [x] Attempt verification after restore throws when time remains, while
         preserving the failed transaction outcome.
-- [ ] Restrict cleanup callbacks.
-  - [ ] Restore cannot invoke public commands or register cleanup.
-  - [ ] Verification may invoke only read-only queries and assertions.
-  - [ ] Mutating commands and cleanup registration are fatal contract errors.
-- [ ] Implement automatic command, test, suite, and service cleanup through the
+- [x] Restrict cleanup callbacks.
+  - [x] Restore cannot invoke public commands or register cleanup.
+  - [x] Verification may invoke only read-only queries and assertions.
+  - [x] Mutating commands and cleanup registration are fatal contract errors.
+- [x] Implement automatic command, test, suite, and service cleanup through the
       same planner and transaction executor.
-- [ ] Continue attempting later eligible transactions after an individual
+- [x] Continue attempting later eligible transactions after an individual
       failure.
-- [ ] Materialize a prerequisite as `failed/dependency_blocked` when a failed
+- [x] Materialize a prerequisite as `failed/dependency_blocked` when a failed
       or unconfirmed dependent makes safe execution impossible.
-- [ ] Compose restore, verification, dependency, timeout, and earlier lifecycle
+- [x] Compose restore, verification, dependency, timeout, and earlier lifecycle
       failures without masking evidence.
-- [ ] Terminalize cleanup through the claim-disposition policy from Phase 5:
+- [x] Terminalize cleanup through the claim-disposition policy from Phase 5:
       `complete` only after verified atomic release, and `failed` or
       `unconfirmed` with claims retained for quarantine.
-- [ ] On manual restore/verification failure, record terminal `failed`, remove
+- [x] On manual restore/verification failure, record terminal `failed`, remove
       the transaction from pending work so teardown cannot retry it, then raise
       the composed failure into the currently active Busted lifecycle without
       changing the transaction's tagged owner.
-- [ ] Add focused transaction/planner tests for every state transition,
+- [x] Add focused transaction/planner tests for every state transition,
       deadline, cancellation, retry, error-composition, LIFO tie-break,
       dependency-blocked, claim release/retention disposition, and callback
       restriction.
-- [ ] Perform a follow-up cleanup-engine review before integrating it with the
+- [x] Perform a follow-up cleanup-engine review before integrating it with the
       command runner.
 
 Completion criteria:
 
-- [ ] Every cleanup operation has an independent finite deadline and required
+- [x] Every cleanup operation has an independent finite deadline and required
       terminal verification or typed abandonment proof.
-- [ ] The planner never releases a prerequisite ahead of an active dependent.
-- [ ] Manual and automatic execution use the same state machine and evidence.
+- [x] The planner never releases a prerequisite ahead of an active dependent.
+- [x] Manual and automatic execution use the same state machine and evidence.
+
+Evidence: `Run-UnitTests.ps1 '--filter=Cleanup'` completed with 16 successes;
+`Run-UnitTests.ps1 '--filter=ResourceDependencyIndex'` completed with 21
+successes; `Check-Lua.ps1`, `Check-SourceDeclarations.ps1`, and `git diff
+--check` passed. The required follow-up implementation review and independent
+completion audit found no unresolved stage-6 requirement.
 
 ## Phase 7: Implement atomic cleanup registration and lifecycle journaling
 
