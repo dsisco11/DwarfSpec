@@ -111,12 +111,46 @@
 ---@field verify? fun(observation: dwarfspec.CommandObservation): any
 
 ---@class dwarfspec.CommandReadContext
+---@field now_ms fun(self: dwarfspec.CommandReadContext): number
 ---@field remaining_ms fun(self: dwarfspec.CommandReadContext): integer
----@field observe fun(self: dwarfspec.CommandReadContext, name: string, ...: any): any
+---@field cancellation fun(self: dwarfspec.CommandReadContext): boolean, string|nil
+---@field resolve_mount fun(self: dwarfspec.CommandReadContext, ...: any): any
+---@field resolve_target fun(self: dwarfspec.CommandReadContext, ...: any): any
+---@field lookup_claim fun(self: dwarfspec.CommandReadContext, reference: any): table|nil
+---@field capture_render fun(self: dwarfspec.CommandReadContext): any
+---@field observe_render fun(self: dwarfspec.CommandReadContext, generation: any): any
+---@field record_diagnostic fun(self: dwarfspec.CommandReadContext, kind: string, evidence: table): any
+---@field identity fun(self: dwarfspec.CommandReadContext): dwarfspec.CommandIdentity
+---@field invoke_readonly fun(self: dwarfspec.CommandReadContext, kind: dwarfspec.ECommandKind, name: string, ...: any): any
 
 ---@class dwarfspec.CommandExecutionContext
+---@field now_ms fun(self: dwarfspec.CommandExecutionContext): number
 ---@field remaining_ms fun(self: dwarfspec.CommandExecutionContext): integer
----@field yield fun(self: dwarfspec.CommandExecutionContext): nil
+---@field cancellation fun(self: dwarfspec.CommandExecutionContext): boolean, string|nil
+---@field wait_frames fun(self: dwarfspec.CommandExecutionContext, count: integer): any
+---@field wait_ticks fun(self: dwarfspec.CommandExecutionContext, count: integer): any
+---@field wait_event fun(self: dwarfspec.CommandExecutionContext, event: string, options?: table): any
+---@field wait_until fun(self: dwarfspec.CommandExecutionContext, description: string, predicate: fun(): any): any
+---@field execute_step fun(self: dwarfspec.CommandExecutionContext, step: dwarfspec.WorkflowStepDefinition, state: dwarfspec.WorkflowState): any
+
+---@class dwarfspec.CommandIdentity
+---@field invocation_id string
+---@field root_invocation_id string
+---@field parent_invocation_id? string
+---@field parent_cleanup_transaction_id? string
+---@field owner_scope dwarfspec.EExecutionOwnerScope
+---@field service_run_id string
+---@field suite_execution_id? string
+---@field test_attempt_id? string
+---@field target_identity? string
+---@field cleanup_checkpoint integer
+---@field current_stage string
+
+---@class dwarfspec.CleanupRegistrationCapability
+---@field register fun(self: dwarfspec.CleanupRegistrationCapability, registration: dwarfspec.CleanupRegistration): dwarfspec.CleanupTransaction
+
+---@class dwarfspec.PrivilegedCommandExecutionContext: dwarfspec.CommandExecutionContext
+---@field cleanup_registration fun(self: dwarfspec.PrivilegedCommandExecutionContext): dwarfspec.CleanupRegistrationCapability
 
 ---@class dwarfspec.CleanupExecutionContext
 ---@field remaining_ms fun(self: dwarfspec.CleanupExecutionContext): integer

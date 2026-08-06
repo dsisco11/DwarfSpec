@@ -328,44 +328,62 @@ Completion criteria:
 Outcome: callbacks receive only the capabilities legal for their lifecycle
 stage, and all retained evidence is bounded and serialization-safe.
 
-- [ ] Add `src/dwarfspec/driver/command/context.lua`.
-  - [ ] Expose monotonic time, remaining deadline, cancellation, stable target
+- [x] Add `src/dwarfspec/driver/command/context.lua`.
+  - [x] Expose monotonic time, remaining deadline, cancellation, stable target
         and mount resolution, read-only claim lookup, render observation,
         bounded diagnostics, and immutable identities through
         `CommandReadContext`.
-  - [ ] Add cooperative frame, tick, event, predicate waits, and internal step
+  - [x] Add cooperative frame, tick, event, predicate waits, and internal step
         execution only to `CommandExecutionContext`.
-  - [ ] Keep cleanup registration, claim mutation, registry mutation, host
+  - [x] Keep cleanup registration, claim mutation, registry mutation, host
         service, controller transport, and result publication inaccessible.
-  - [ ] Define a narrow privileged `CleanupRegistrationCapability` used only by
+  - [x] Define a narrow privileged `CleanupRegistrationCapability` used only by
         the runner and the `registerCleanup` definition.
-  - [ ] Enforce stage guards for mutable cleanup handles and public command
+  - [x] Enforce stage guards for mutable cleanup handles and public command
         invocation.
-- [ ] Add `src/dwarfspec/driver/command/diagnostics.lua`.
-  - [ ] Validate and freeze bounded plain evidence.
-  - [ ] Rate-limit or summarize repeated pending observations.
-  - [ ] Support command-kind diagnostic providers without serializing
+- [x] Add `src/dwarfspec/driver/command/diagnostics.lua`.
+  - [x] Validate and freeze bounded plain evidence.
+  - [x] Rate-limit or summarize repeated pending observations.
+  - [x] Support command-kind diagnostic providers without serializing
         callbacks, userdata, mutable receipts, or unrestricted arguments.
-  - [ ] Record artifact-capture failures without masking the originating
+  - [x] Record artifact-capture failures without masking the originating
         command failure.
-- [ ] Define immutable command identity data: invocation, root, direct parent,
+- [x] Define immutable command identity data: invocation, root, direct parent,
       execution owner, target, cleanup checkpoint, and current stage.
-- [ ] Add unit tests proving each context permits its intended capabilities and
+- [x] Add unit tests proving each context permits its intended capabilities and
       rejects mutations, cleanup registration, or handle execution in forbidden
       stages.
-- [ ] Add conformance cases for direct native/global mutation that capability
+- [x] Add conformance cases for direct native/global mutation that capability
       objects cannot technically prevent, keeping this behavioral proof
       separate from structural context tests.
-- [ ] Add tests for bounded evidence, sanitization, pending aggregation, and
+- [x] Add tests for bounded evidence, sanitization, pending aggregation, and
       diagnostic-provider failure.
-- [ ] Perform a follow-up capability-boundary review, including driver-to-host
+- [x] Perform a follow-up capability-boundary review, including driver-to-host
       dependency checks.
+
+Evidence recorded 2026-08-06:
+
+- Focused context, behavioral-signpost, diagnostics, and outcome suites passed
+  with 18 successes, 0 failures, 0 errors, and 0 pending.
+- The full unit suite passed with 1,041 successes, 0 failures, 0 errors, and
+  0 pending.
+- Lua 5.4 syntax and formatting checks passed for 405 files, valid source
+  declaration fixtures passed, and the dependency scan found no
+  `dwarfspec.host` reference under `src/dwarfspec/driver/command`.
+- The required second review tightened nested-command stage legality,
+  supported-kind validation, dynamic guard/stage agreement, hostile diagnostic
+  error handling, and bounds valid for every supported configuration.
+- The independent completion audit mapped every capability, identity,
+  diagnostic, structural-test, and behavioral-signpost requirement and found
+  no confirmed issue, partial requirement, or evidence gap. Direct native or
+  global mutation remains a separately tested conformance responsibility
+  because a Lua capability object cannot technically sandbox it.
 
 Completion criteria:
 
-- [ ] No ordinary definition callback can directly mutate cleanup or resource
+- [x] No ordinary definition callback can directly mutate cleanup or resource
       ownership through a supplied context.
-- [ ] Diagnostic output is bounded, plain, and safe for journal publication.
+- [x] Diagnostic output is bounded, plain, and safe for journal publication.
 
 ## Phase 5: Implement run-wide resource claim policy
 

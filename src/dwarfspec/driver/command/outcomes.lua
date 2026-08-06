@@ -1,5 +1,8 @@
 -- Explicit immutable outcomes shared by command gates and primary execution.
 
+local Diagnostics = require('dwarfspec.driver.command.diagnostics')
+local diagnostics = Diagnostics.new()
+
 ---@class dwarfspec.CommandOutcomes
 local Outcomes = {}
 
@@ -22,40 +25,12 @@ function Internals.read_only(source, label)
     })
 end
 
----Copies plain bounded diagnostic or receipt data into immutable proxies.
+---Copies plain bounded diagnostic or receipt data through the shared sanitizer.
 ---@param value any
 ---@param label string
----@param depth? integer
----@param budget? table
 ---@return any
-function Internals.copy_plain(value, label, depth, budget)
-    depth = depth or 0
-    budget = budget or {entries=0}
-    local value_type = type(value)
-    if value_type ~= 'table' then
-        assert(value_type == 'nil' or value_type == 'boolean' or
-            value_type == 'number' or value_type == 'string',
-            label .. ' must contain only plain data')
-        if value_type == 'number' then
-            assert(value == value and value > -math.huge and value < math.huge,
-                label .. ' numbers must be finite')
-        elseif value_type == 'string' then
-            assert(#value <= 4096, label .. ' strings must be bounded')
-        end
-        return value
-    end
-    assert(depth < 8, label .. ' nesting must be bounded')
-    local copy = {}
-    for key, entry in pairs(value) do
-        local key_type = type(key)
-        assert(key_type == 'string' or
-            (key_type == 'number' and key >= 1 and key % 1 == 0),
-            label .. ' keys must be strings or positive integers')
-        budget.entries = budget.entries + 1
-        assert(budget.entries <= 128, label .. ' entries must be bounded')
-        copy[key] = Internals.copy_plain(entry, label, depth + 1, budget)
-    end
-    return Internals.read_only(copy, label)
+function Internals.copy_plain(value, label)
+    return diagnostics:sanitize(value, label)
 end
 
 ---Creates one immutable outcome while preserving public result identity.
