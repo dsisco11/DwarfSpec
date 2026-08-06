@@ -14,9 +14,28 @@ Frontend:
     ☐ test-runner UI should have the ability to filter tests by tags or categories.
     ☐ test-runner UI should have the ability to click through command log items and see the snapshots of the component tree at that point in time.
 
-Testing Features:
+Public API:
+    ☐ Remove `ds.wait_frames` as it is bad practice (users should use `ds.await(...)` instead).
+    ☐ Remove `ds.wait_ticks` as it is bad practice (users should use `ds.await(...)` instead).
     ☐ Refactor `ds.get()` so it is more like a Cypress get assertion, returning a `DSQuery` object that can be chained with `.should(...)` and `.find(...)` methods.
-        - get method will become more of an async query with a timeout.
+        - get method will become more of an "async query" with a timeout (will likely use coroutines internally).
         - get method acts as an implicit assertion.
         - allows for more complex queries and assertions on the component tree.
-    ☐ Update `ds.get(...)` to accept and parse simple CSS-like selector queries.
+    ☐ Extend `ds.get(...)` methods returned Subject-class to include some simple fluent-query methods.
+        ☐ Add `.get(selector)` method to find child nodes of the current subject.
+        ☐ Add `.find(predicate)` method to find child nodes of the current subject which match the predicate.
+        ☐ Add `.nth(index)` method to find the nth child node of the current subject.
+        ☐ Add `.parent()` method to find the parent node of the current subject.
+        ☐ Add `.children()` method to find the child nodes of the current subject.
+        ☐ Add `.siblings()` method to find the sibling nodes of the current subject.
+        ☐ Add `.closest(predicate)` method to find the closest ancestor node of the current subject that matches the predicate.
+        ☐ Add `.next()` method to find the next sibling node of the current subject.
+        ☐ Add `.prev()` method to find the previous sibling node of the current subject.
+        ☐ Add `.filter(predicate)` method to filter the current subject's nodes based on the predicate.
+        ☐ Add `.not(predicate)` method to filter the current subject's nodes based on the negation of the predicate.
+        ☐ Add `.is(predicate)` method to check if the current subject's nodes match the predicate.
+        ☐ Add `.has(predicate)` method to check if the current subject's nodes have any child nodes that match the predicate.
+        ☐ Add `.contains(predicate)` method to check if the current subject's nodes contain any child nodes that match the predicate.
+        ☐ Add `.length()` method to get the number of nodes in the current subject.
+        ☐ Add `.each(callback)` method to iterate over the current subject's nodes and execute a callback for each node.
+        ☐ Add `.map(callback)` method to iterate over the current subject's nodes and return a new array of results from the callback.
