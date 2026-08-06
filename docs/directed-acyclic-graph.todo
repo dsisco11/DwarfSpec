@@ -123,25 +123,32 @@ Completion criteria:
 Outcome: the standalone utility has sufficient focused evidence to unblock the
 verified-command implementation without running unrelated exhaustive suites.
 
-- [ ] Run the focused directed-acyclic-graph unit suite.
-- [ ] Run the repository's ordinary Lua syntax and formatting checks for the
+- [x] Run the focused directed-acyclic-graph unit suite.
+- [x] Run the repository's ordinary Lua syntax and formatting checks for the
       new module and suite.
-- [ ] Run the relevant source declaration checks for the new public class and
+- [x] Run the relevant source declaration checks for the new public class and
       methods.
-- [ ] Run `git diff --check` for the planning and implementation diff.
-- [ ] Perform a follow-up implementation review against every API, boundary,
+- [x] Run `git diff --check` for the planning and implementation diff.
+- [x] Perform a follow-up implementation review against every API, boundary,
       ordering, complexity, and unit-test requirement in the source proposal.
-- [ ] Confirm the API exposes the generic operations required by the planned
+- [x] Confirm the API exposes the generic operations required by the planned
       `ResourceDependencyIndex` and `CleanupPlanner` without exposing domain
       methods.
-- [ ] Record focused command output and review findings before marking this
+- [x] Record focused command output and review findings before marking this
       prerequisite complete.
+
+Validation record (2026-08-06): `Run-UnitTests.ps1` selected the graph suite
+with 13 successes, 0 failures, 0 errors, and 0 pending in 0.015 seconds.
+`Check-Lua.ps1` passed for 376 files; valid and invalid source-declaration
+checks passed; and `git diff --check` passed. Independent review found the
+exact generic API, required active-claim and temporary transaction-graph
+operations, no domain-policy leakage, and no missing proposal behavior.
 
 Completion criteria:
 
-- [ ] The focused unit suite and applicable static/declaration checks pass.
-- [ ] Follow-up review finds no missing proposal behavior or unsupported scope.
-- [ ] No full unit suite, live automation, service validation, or consumer
+- [x] The focused unit suite and applicable static/declaration checks pass.
+- [x] Follow-up review finds no missing proposal behavior or unsupported scope.
+- [x] No full unit suite, live automation, service validation, or consumer
       integration proof is required for this standalone prerequisite.
 
 ## Final acceptance
