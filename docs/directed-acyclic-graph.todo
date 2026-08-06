@@ -26,51 +26,51 @@ policy so the prerequisite can be implemented and reviewed quickly.
 Outcome: `dwarfspec.graphs.directed_acyclic_graph` exposes the complete,
 minimal, deterministic graph API without domain policy.
 
-- [ ] Add `src/dwarfspec/graphs/directed_acyclic_graph.lua` exporting one
+- [x] Add `src/dwarfspec/graphs/directed_acyclic_graph.lua` exporting one
       `DirectedAcyclicGraph` class-like table.
-  - [ ] Implement `new()` with private node, incoming-edge, and outgoing-edge
+  - [x] Implement `new()` with private node, incoming-edge, and outgoing-edge
         storage suitable for straightforward adjacency-map operations.
-  - [ ] Implement shared nonempty-string node-ID validation used by every
+  - [x] Implement shared nonempty-string node-ID validation used by every
         public method that accepts a node ID.
-  - [ ] Implement `add_node(node_id)`, returning `true` only for a new node.
-  - [ ] Implement `remove_node(node_id)`, atomically removing all incident
+  - [x] Implement `add_node(node_id)`, returning `true` only for a new node.
+  - [x] Implement `remove_node(node_id)`, atomically removing all incident
         edges and returning `true` only when the node existed.
-  - [ ] Implement `has_node(node_id)`.
-  - [ ] Implement `add_edge(predecessor_id, successor_id)` with validation for
+  - [x] Implement `has_node(node_id)`.
+  - [x] Implement `add_edge(predecessor_id, successor_id)` with validation for
         known endpoints, self-edges, duplicates, and direct or indirect cycles.
-  - [ ] Ensure a rejected edge insertion leaves all graph state unchanged.
-  - [ ] Implement `remove_edge(predecessor_id, successor_id)`, returning
+  - [x] Ensure a rejected edge insertion leaves all graph state unchanged.
+  - [x] Implement `remove_edge(predecessor_id, successor_id)`, returning
         `false` for an absent edge only after validating both endpoints.
-  - [ ] Implement `has_edge(predecessor_id, successor_id)`.
-  - [ ] Implement `predecessors(node_id)` and `successors(node_id)` as fresh,
+  - [x] Implement `has_edge(predecessor_id, successor_id)`.
+  - [x] Implement `predecessors(node_id)` and `successors(node_id)` as fresh,
         lexically sorted arrays.
-  - [ ] Implement `topological_order(node_ids, less)` with Kahn's algorithm
+  - [x] Implement `topological_order(node_ids, less)` with Kahn's algorithm
         over the full graph or the selected induced subgraph.
-  - [ ] Validate the optional subset for duplicate and unknown node IDs.
-  - [ ] Validate that the optional comparator is callable.
-  - [ ] Document that a supplied comparator is caller-owned policy and must
+  - [x] Validate the optional subset for duplicate and unknown node IDs.
+  - [x] Validate that the optional comparator is callable.
+  - [x] Document that a supplied comparator is caller-owned policy and must
         define a deterministic strict weak order.
-  - [ ] Select only among simultaneously ready nodes, use the supplied strict
+  - [x] Select only among simultaneously ready nodes, use the supplied strict
         ordering when decisive, and use lexical node-ID ordering as the
         mandatory equivalence fallback.
-  - [ ] Return fresh arrays so callers cannot mutate graph state through query
+  - [x] Return fresh arrays so callers cannot mutate graph state through query
         results.
-- [ ] Keep implementation complexity aligned with the proposal.
-  - [ ] Use expected O(1) node and edge membership.
-  - [ ] Accept O(V + E) node removal and cycle detection.
-  - [ ] Accept O(degree log degree) sorted-neighbor queries.
-  - [ ] Accept O(V^2 + E) topological ordering with a simple sorted ready list.
-  - [ ] Do not add caches whose invalidation would complicate the small graph.
+- [x] Keep implementation complexity aligned with the proposal.
+  - [x] Use expected O(1) node and edge membership.
+  - [x] Accept O(V + E) node removal and cycle detection.
+  - [x] Accept O(degree log degree) sorted-neighbor queries.
+  - [x] Accept O(V^2 + E) topological ordering with a simple sorted ready list.
+  - [x] Do not add caches whose invalidation would complicate the small graph.
 
 Completion criteria:
 
-- [ ] The module implements exactly the proposal's public API and contains no
+- [x] The module implements exactly the proposal's public API and contains no
       DwarfSpec domain policy.
-- [ ] Duplicate additions and absent removals follow the specified idempotent
+- [x] Duplicate additions and absent removals follow the specified idempotent
       boolean contract.
-- [ ] Invalid IDs, endpoints, subsets, comparators, self-edges, and cycles raise
+- [x] Invalid IDs, endpoints, subsets, comparators, self-edges, and cycles raise
       descriptive programming errors.
-- [ ] All returned collections are detached from internal state.
+- [x] All returned collections are detached from internal state.
 
 ## Phase 2: Add exhaustive focused unit coverage
 
