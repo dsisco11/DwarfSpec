@@ -5,6 +5,39 @@ local IntrinsicKind = require(
     'dwarfspec.protocol.enums.intrinsic_verification_kinds')
 local Registry = require('dwarfspec.driver.command.registry')
 local Runner = require('dwarfspec.driver.command.runner')
+local CleanupRegistrationService = require(
+    'dwarfspec.driver.cleanup.cleanup_registration_service')
+local CleanupLifetime = require('dwarfspec.protocol.enums.cleanup_lifetimes')
+local ResourceDependencyIndex = require(
+    'dwarfspec.driver.command.resource_dependency_index')
+local Outcomes = require('dwarfspec.driver.command.outcomes')
+
+---Asserts that one invocation reports a stage and bounded evidence fragment.
+---@param callback fun()
+---@param stage string
+---@param evidence_fragment string
+---@return string
+local function assert_stage_failure(callback, stage, evidence_fragment)
+    local succeeded, message = pcall(callback)
+    assert.is_false(succeeded)
+    message = tostring(message)
+    assert.is_truthy(message:find(stage .. ':', 1, true), message)
+    assert.is_truthy(message:find('latest evidence: ' .. evidence_fragment,
+        1, true), message)
+    return message
+end
+
+---Asserts one complete start/finish event pair and its terminal outcome.
+---@param events table[]
+---@param status string
+---@param stage? string
+local function assert_terminal_events(events, status, stage)
+    assert.equals(2, #events)
+    assert.same({'command.started', 'command.finished'}, {
+        events[1].event_type, events[2].event_type})
+    assert.equals(status, events[2].payload.status)
+    if stage ~= nil then assert.equals(stage, events[2].payload.stage) end
+end
 
 ---Creates complete inert context dependencies around a controlled fake clock.
 ---@return table, table
@@ -54,7 +87,89 @@ local function runner(registry, injected, cleanup_service, resource_index)
         end, quarantineAmbiguousEffect=function() end}})
 end
 
+---Invokes one command while proving no timed lifecycle dependency is touched.
+---@param registry dwarfspec.CommandRegistry
+---@param name string
+---@param expected_failure string
+---@return string
+local function assert_normalization_failure(registry, name, expected_failure)
+    local injected = dependencies()
+    local calls = {clock=0, owner=0, checkpoint=0, publish=0}
+    injected.now_ms=function()
+        calls.clock = calls.clock + 1
+        return 0
+    end
+    injected.owner=function()
+        calls.owner = calls.owner + 1
+        error('owner must not be resolved')
+    end
+    injected.cleanup_checkpoint=function()
+        calls.checkpoint = calls.checkpoint + 1
+        error('checkpoint must not be marked')
+    end
+    injected.publish=function()
+        calls.publish = calls.publish + 1
+        error('event must not be published')
+    end
+    local message = assert_stage_failure(function()
+        runner(registry, injected):invoke(name, {})
+    end, 'normalization', '<none>')
+    assert.is_truthy(message:find(expected_failure, 1, true), message)
+    assert.same({clock=0, owner=0, checkpoint=0, publish=0}, calls)
+    return message
+end
+
 describe('common command runner', function()
+    it('attributes a thrown normalizer before the timed lifecycle', function()
+        local registry, preflights = Registry.new(), 0
+        registry:register_builtin({name='normalizer-failure',
+            kind=CommandKind.QUERY,
+            normalize=function() error('normalizer failed') end,
+            preflight=function()
+                preflights = preflights + 1
+                return Outcomes.ready(true)
+            end,
+            execute=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        assert_normalization_failure(registry, 'normalizer-failure',
+            'normalizer failed')
+        assert.equals(0, preflights)
+    end)
+
+    it('attributes normalized-request sanitizer rejection', function()
+        local registry = Registry.new()
+        registry:register_builtin({name='normalization-sanitizer-failure',
+            kind=CommandKind.QUERY,
+            normalize=function() return {callback=function() end} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        assert_normalization_failure(registry,
+            'normalization-sanitizer-failure', 'normalized command request')
+    end)
+
+    it('attributes thrown and invalid retry-safe operation keys', function()
+        for _, fixture in ipairs({
+            {name='operation-key-failure', operation_key=function()
+                error('operation key failed')
+            end, expected='operation key failed'},
+            {name='invalid-operation-key', operation_key=function() return '' end,
+                expected='command operation key must be a bounded nonempty string'},
+        }) do
+            local registry = Registry.new()
+            registry:register_builtin({name=fixture.name, kind=CommandKind.ACTION,
+                normalize=function() return {} end,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function() return Outcomes.executed(true, {receipt=true}) end,
+                execution_retry_policy='explicit_retry_safe',
+                operation_key=fixture.operation_key,
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+            assert_normalization_failure(registry, fixture.name, fixture.expected)
+        end
+    end)
+
     it('normalizes synchronously and returns an execution receipt result unchanged',
             function()
         local registry = Registry.new()
@@ -255,15 +370,17 @@ describe('common command runner', function()
                 .executed('done', {receipt='value'}) end,
             execution_retry_policy='once',
             intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
-        local injected = dependencies()
+        local injected, state = dependencies()
         injected.publish=function(event_type, payload)
+            if event_type == 'command.started' then
+                assert.equals(0, state.checkpoints)
+            end
             events[#events + 1] = {event_type=event_type, payload=payload}
         end
         assert.equals('done', runner(registry, injected):invoke('evented',
             {option='value'}))
-        assert.same({'command.started', 'command.finished'}, {
-            events[1].event_type, events[2].event_type})
-        assert.equals('success', events[2].payload.status)
+        assert_terminal_events(events, 'success', 'completed')
+        assert.equals(2, state.checkpoints)
     end)
 
     it('publishes one failed terminal event after an execution failure',
@@ -281,9 +398,221 @@ describe('common command runner', function()
             events[#events + 1] = {event_type=event_type, payload=payload}
         end
         assert.has_error(function() runner(registry, injected):invoke('broken', {}) end)
-        assert.same({'command.started', 'command.finished'}, {
-            events[1].event_type, events[2].event_type})
-        assert.equals('failure', events[2].payload.status)
+        assert_terminal_events(events, 'failure', 'execution')
+    end)
+
+    it('attributes a thrown start-event publisher before command callbacks',
+            function()
+        local registry, preflights, publications = Registry.new(), 0, 0
+        registry:register_builtin({name='start-publication-failure',
+            kind=CommandKind.QUERY, normalize=function() return {} end,
+            preflight=function()
+                preflights = preflights + 1
+                return Outcomes.ready(true)
+            end,
+            execute=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        local injected, state = dependencies()
+        injected.publish=function()
+            publications = publications + 1
+            assert.equals(0, state.checkpoints)
+            error('start publisher failed')
+        end
+        assert_stage_failure(function()
+            runner(registry, injected):invoke('start-publication-failure', {})
+        end, 'result_projection', '<none>')
+        assert.equals(1, publications)
+        assert.equals(0, preflights)
+        assert.equals(0, state.checkpoints)
+    end)
+
+    it('finalizes a command-checkpoint failure after start publication',
+            function()
+        local registry, events, preflights, cleanups = Registry.new(), {}, 0, 0
+        registry:register_builtin({name='checkpoint-failure',
+            kind=CommandKind.QUERY, normalize=function() return {} end,
+            preflight=function()
+                preflights = preflights + 1
+                return Outcomes.ready(true)
+            end,
+            execute=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        local injected = dependencies()
+        injected.cleanup_checkpoint=function()
+            error('checkpoint failed')
+        end
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local cleanup_service = {begin_mutation=function() end,
+            pendingCommandTransactions=function()
+                return {}
+            end}
+        local message = assert_stage_failure(function()
+            runner(registry, injected, cleanup_service)
+                :invoke('checkpoint-failure', {})
+        end, 'preflight', '<none>')
+        assert.is_truthy(message:find('checkpoint failed', 1, true))
+        assert.equals(0, preflights)
+        assert.equals(0, cleanups)
+        assert_terminal_events(events, 'failure', 'preflight')
+    end)
+
+    it('attributes a malformed cleanup discovery result before terminal output',
+            function()
+        local registry, events = Registry.new(), {}
+        registry:register_builtin({name='malformed-cleanup-discovery',
+            kind=CommandKind.QUERY, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function() return Outcomes.ready('done') end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        local injected = dependencies()
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local cleanup_service = {begin_mutation=function() end,
+            pendingCommandTransactions=function() return nil end}
+        local message = assert_stage_failure(function()
+            runner(registry, injected, cleanup_service)
+                :invoke('malformed-cleanup-discovery', {})
+        end, 'command_cleanup_discovery', '{kind="primary_observation"}')
+        assert.is_truthy(message:find(
+            'command cleanup discovery must return a table', 1, true))
+        assert_terminal_events(events, 'failure', 'command_cleanup_discovery')
+    end)
+
+    it('attributes throwing pending-state inspection during finalization',
+            function()
+        local registry, events = Registry.new(), {}
+        registry:register_builtin({name='pending-inspection-failure',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                return Outcomes.executed('done', {receipt=true}, {effect=true})
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT,
+            cleanup={lifetime=CleanupLifetime.COMMAND,
+                restore=function() end, verify=function() return true end}})
+        local injected = dependencies()
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local cleanup_service = {begin_mutation=function()
+            return {release=function() end}
+        end, register=function()
+            return {isPending=function() error('pending inspection failed') end,
+                execute=function() error('cleanup must not execute') end}
+        end}
+        local message = assert_stage_failure(function()
+            runner(registry, injected, cleanup_service)
+                :invoke('pending-inspection-failure', {})
+        end, 'command_cleanup', '{receipt=true}')
+        assert.is_truthy(message:find('pending inspection failed', 1, true))
+        assert_terminal_events(events, 'failure', 'command_cleanup')
+    end)
+
+    it('appends pending-state failure after an earlier execution failure',
+            function()
+        local registry, events = Registry.new(), {}
+        registry:register_builtin({name='composed-pending-inspection-failure',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                return Outcomes.failed('primary failed', {effect=true},
+                    {marker='execution'})
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT,
+            cleanup={lifetime=CleanupLifetime.COMMAND,
+                restore=function() end, verify=function() return true end}})
+        local injected = dependencies()
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local cleanup_service = {begin_mutation=function()
+            return {release=function() end}
+        end, register=function()
+            return {isPending=function() error('pending inspection failed') end,
+                execute=function() error('cleanup must not execute') end}
+        end}
+        local succeeded, message = pcall(function()
+            runner(registry, injected, cleanup_service)
+                :invoke('composed-pending-inspection-failure', {})
+        end)
+        assert.is_false(succeeded)
+        message = tostring(message)
+        local primary_at = assert(message:find('execution:', 1, true))
+        local cleanup_at = assert(message:find('command_cleanup:', 1, true))
+        assert.is_true(primary_at < cleanup_at)
+        assert.is_truthy(message:find('primary failed', 1, true))
+        assert.is_truthy(message:find('pending inspection failed', 1, true))
+        assert.is_truthy(message:find(
+            'latest evidence: {marker="execution"}', 1, true))
+        assert_terminal_events(events, 'failure', 'execution')
+    end)
+
+    it('attributes terminal publication failure after lifecycle success',
+            function()
+        local registry, executions, terminal_attempts = Registry.new(), 0, 0
+        registry:register_builtin({name='terminal-publication-failure',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                executions = executions + 1
+                return Outcomes.executed('public', {marker='intrinsic'})
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected = dependencies()
+        injected.publish=function(event_type)
+            if event_type == 'command.finished' then
+                terminal_attempts = terminal_attempts + 1
+                error('terminal publisher failed')
+            end
+        end
+        assert_stage_failure(function()
+            runner(registry, injected):invoke('terminal-publication-failure', {})
+        end, 'result_projection', '{marker="intrinsic"}')
+        assert.equals(1, executions)
+        assert.equals(1, terminal_attempts)
+    end)
+
+    it('appends terminal publication failure after an earlier command failure',
+            function()
+        local registry, terminal_attempts = Registry.new(), 0
+        registry:register_builtin({name='composed-publication-failure',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                return Outcomes.failed('primary failed', nil,
+                    {marker='execution'})
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected = dependencies()
+        injected.publish=function(event_type)
+            if event_type == 'command.finished' then
+                terminal_attempts = terminal_attempts + 1
+                error('terminal publisher failed')
+            end
+        end
+        local succeeded, message = pcall(function()
+            runner(registry, injected):invoke('composed-publication-failure', {})
+        end)
+        assert.is_false(succeeded)
+        message = tostring(message)
+        local primary_at = assert(message:find('execution:', 1, true))
+        local publication_at = assert(message:find('result_projection:', 1, true))
+        assert.is_true(primary_at < publication_at)
+        assert.is_truthy(message:find('primary failed', 1, true))
+        assert.is_truthy(message:find('terminal publisher failed', 1, true))
+        assert.is_truthy(message:find(
+            'latest evidence: {marker="execution"}', 1, true))
+        assert.equals(1, terminal_attempts)
     end)
 
     it('expires preflight without executing primary behavior', function()
@@ -341,35 +670,58 @@ describe('common command runner', function()
         assert.equals(0, normalizations)
     end)
 
-    it('abandons a registered self-rolled-back effect before failing', function()
-        local registry, abandoned = Registry.new(), nil
+    it('abandons a registered self-rolled-back effect through the real cleanup service',
+            function()
+        local registry, command_events, cleanup_events = Registry.new(), {}, {}
         registry:register_builtin({name='rolled-back', kind=CommandKind.ACTION,
             normalize=function() return {} end,
             preflight=function() return require('dwarfspec.driver.command.outcomes')
                 .ready(true) end,
             execute=function() return require('dwarfspec.driver.command.outcomes')
-                .executed('private', {receipt='value'}, {resource='temporary'}) end,
+                .executed('private', {receipt='value'}, {item_id='item-1'}) end,
             verify=function() return require('dwarfspec.driver.command.outcomes')
                 .effect_absent('effect self-rolled back', {
-                    absent_resources={{resource_kind='test',
-                        resource_identity='temporary'}}}) end,
-            cleanup={lifetime='owner', restore=function() end,
+                    absent_resources={{resource_kind='item',
+                        resource_identity='item-1'}}}) end,
+            claims=function()
+                return {{claim_key='item', resource_kind='item',
+                    resource_identity='item-1', exclusive=true}}
+            end,
+            cleanup={lifetime='command', resources=function()
+                return {{claim_key='item'}}
+            end, restore=function() end,
                 verify=function() return true end}, execution_retry_policy='once',
             intrinsic_verification=IntrinsicKind.CALLBACK})
         local injected = dependencies()
-        local cleanup_service = {begin_mutation=function()
-            return {release=function() end}
-        end, register=function()
-            return {transaction_id=function() return 'transaction-1' end,
-                isPending=function() return false end}
-        end, abandonSelfRolledBack=function(_, transaction_id, _, proof)
-            abandoned = {transaction_id=transaction_id, proof=proof}
-        end}
-        assert.has_error(function()
-            runner(registry, injected, cleanup_service):invoke('rolled-back', {})
+        injected.publish=function(event_type, payload)
+            command_events[#command_events + 1] = {event_type=event_type,
+                payload=payload}
+        end
+        local resource_index = ResourceDependencyIndex.new('run', function()
+            return 'abandoned'
         end)
-        assert.equals('transaction-1', abandoned.transaction_id)
-        assert.equals('effect self-rolled back', abandoned.proof.message)
+        local cleanup_service = CleanupRegistrationService.new({service_run_id='run',
+            resource_index=resource_index, now_ms=injected.now_ms,
+            publish_event=function(event) cleanup_events[#cleanup_events + 1] = event end})
+        local succeeded, message = pcall(function()
+            runner(registry, injected, cleanup_service, resource_index)
+                :invoke('rolled-back', {})
+        end)
+        assert.is_false(succeeded)
+        assert.is_truthy(message:find('intrinsic_verification:', 1, true), message)
+        assert.is_truthy(message:find('effect self-rolled back', 1, true))
+        assert.same({'cleanup.transaction_registered',
+            'cleanup.transaction_abandoned'}, {cleanup_events[1].event_type,
+                cleanup_events[2].event_type})
+        assert.equals(2, #cleanup_events)
+        assert.same({}, cleanup_service:pendingCommandTransactions('run:command:1'))
+        local lease = cleanup_service:begin_mutation('next-command')
+        lease:release()
+        resource_index:validate_plan(injected.owner(), 'next-command',
+            CleanupLifetime.COMMAND, {{claim_key='item', resource_kind='item',
+                resource_identity='item-1', exclusive=true}})
+        assert_terminal_events(command_events, 'failure',
+            'intrinsic_verification')
     end)
 
     it('composes primary and command-lifetime cleanup failures', function()
@@ -394,7 +746,7 @@ describe('common command runner', function()
         end)
         assert.is_false(succeeded)
         assert.is_truthy(message:find('primary failed', 1, true))
-        assert.is_truthy(message:find('command cleanup:', 1, true))
+        assert.is_truthy(message:find('command_cleanup:', 1, true))
         assert.is_truthy(message:find('cleanup failed', 1, true))
     end)
 
@@ -590,7 +942,408 @@ describe('common command runner', function()
         end)
         assert.is_false(succeeded)
         assert.is_truthy(message:find('retained_subject_refresh:', 1, true))
+        assert.is_truthy(message:find('latest evidence: {receipt=true}', 1, true))
         assert.equals('failure', terminal.status)
         assert.equals('retained_subject_refresh', terminal.stage)
+    end)
+
+    it('retains bounded evidence through lifecycle and finalization failures',
+            function()
+        ---Registers one definition in a fresh isolated command registry.
+        ---@param definition dwarfspec.CommandDefinition
+        ---@return dwarfspec.CommandRegistry
+        local function register(definition)
+            local registry = Registry.new()
+            registry:register_builtin(definition)
+            return registry
+        end
+
+        ---Invokes one isolated registry while retaining only the dependency table.
+        ---@param registry dwarfspec.CommandRegistry
+        ---@param name string
+        ---@param options? table
+        ---@param cleanup_service? table
+        ---@return any
+        local function invoke(registry, name, options, cleanup_service)
+            local injected = dependencies()
+            return runner(registry, injected, cleanup_service):invoke(name, {},
+                options)
+        end
+
+        assert_stage_failure(function()
+            local registry = register({name='preflight-evidence',
+                kind=CommandKind.QUERY, normalize=function() return {} end,
+                preflight=function()
+                    return Outcomes.fatal('preflight failed', {marker='preflight'})
+                end, execute=function() return Outcomes.ready(true) end,
+                execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+            invoke(registry, 'preflight-evidence')
+        end, 'preflight', '{marker="preflight"}')
+
+        assert_stage_failure(function()
+            local registry = register({name='execution-evidence',
+                kind=CommandKind.ACTION, normalize=function() return {} end,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function()
+                    return Outcomes.failed('execution failed', nil,
+                        {marker='execution'})
+                end, execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+            invoke(registry, 'execution-evidence')
+        end, 'execution', '{marker="execution"}')
+
+        assert_stage_failure(function()
+            local registry = register({name='intrinsic-evidence',
+                kind=CommandKind.ACTION, normalize=function() return {} end,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function() return Outcomes.executed('done', {receipt=true}) end,
+                verify=function()
+                    return Outcomes.fatal('intrinsic failed', {marker='intrinsic'})
+                end, execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.CALLBACK})
+            invoke(registry, 'intrinsic-evidence')
+        end, 'intrinsic_verification', '{marker="intrinsic"}')
+
+        assert_stage_failure(function()
+            local registry = register({name='caller-evidence', kind=CommandKind.QUERY,
+                normalize=function() return {} end,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function() return Outcomes.ready('done') end,
+                execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+            invoke(registry, 'caller-evidence', {
+                verify=function() error('caller observation failed') end})
+        end, 'caller_verification', '{message=')
+
+        assert_stage_failure(function()
+            local registry = register({name='lease-evidence', kind=CommandKind.ACTION,
+                normalize=function() return {} end,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function() return Outcomes.executed('done', {receipt=true}) end,
+                execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+            local cleanup_service = {begin_mutation=function()
+                return {release=function() error('lease release failed') end}
+            end}
+            invoke(registry, 'lease-evidence', nil, cleanup_service)
+        end, 'mutation_lease_release', '{receipt=true}')
+
+        assert_stage_failure(function()
+            local registry = register({name='cleanup-evidence', kind=CommandKind.ACTION,
+                normalize=function() return {} end,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function()
+                    return Outcomes.executed('done', {receipt=true}, {item_id='item-1'})
+                end, cleanup={lifetime='command', restore=function() end,
+                    verify=function() return true end}, execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+            local cleanup_service = {begin_mutation=function()
+                return {release=function() end}
+            end, register=function()
+                return {isPending=function() return true end,
+                    execute=function() error('cleanup execution failed') end}
+            end}
+            invoke(registry, 'cleanup-evidence', nil, cleanup_service)
+        end, 'command_cleanup', '{receipt=true}')
+
+        assert_stage_failure(function()
+            local registry = register({name='cleanup-discovery-evidence',
+                kind=CommandKind.ACTION, normalize=function() return {} end,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function() return Outcomes.executed('done', {receipt=true}) end,
+                execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+            local cleanup_service = {begin_mutation=function()
+                return {release=function() end}
+            end, pendingCommandTransactions=function()
+                error('cleanup discovery failed')
+            end}
+            invoke(registry, 'cleanup-discovery-evidence', nil, cleanup_service)
+        end, 'command_cleanup_discovery', '{receipt=true}')
+    end)
+
+    it('attributes claim-planning failure before primary execution', function()
+        local registry, events, executions = Registry.new(), {}, 0
+        registry:register_builtin({name='claim-failure', kind=CommandKind.ACTION,
+            normalize=function() return {} end,
+            preflight=function()
+                return Outcomes.ready(true, {marker='claim-ready'})
+            end,
+            claims=function()
+                return {{claim_key='item', resource_kind='item',
+                    resource_identity='item-1', exclusive=true}}
+            end,
+            execute=function()
+                executions = executions + 1
+                return Outcomes.executed('unexpected', {receipt=true})
+            end,
+            cleanup={lifetime='command', restore=function() end,
+                verify=function() return true end},
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected = dependencies()
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local resource_index = {validate_plan=function()
+            error('claim plan rejected')
+        end}
+        assert_stage_failure(function()
+            runner(registry, injected, nil, resource_index)
+                :invoke('claim-failure', {})
+        end, 'claim_planning', '{marker="claim-ready"}')
+        assert.equals(0, executions)
+        assert_terminal_events(events, 'failure', 'claim_planning')
+    end)
+
+    it('keeps final ready evidence after pending preflight observations', function()
+        local registry, polls = Registry.new(), 0
+        registry:register_builtin({name='claim-ready-evidence',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function()
+                polls = polls + 1
+                if polls == 1 then
+                    return Outcomes.pending('not ready', {marker='pending'})
+                end
+                return Outcomes.ready(true, {marker='ready'})
+            end,
+            claims=function()
+                return {{claim_key='item', resource_kind='item',
+                    resource_identity='item-1', exclusive=true}}
+            end,
+            execute=function()
+                return Outcomes.executed('unexpected', {receipt=true})
+            end,
+            cleanup={lifetime='command', restore=function() end,
+                verify=function() return true end},
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local resource_index = {validate_plan=function()
+            error('claim plan rejected')
+        end}
+        assert_stage_failure(function()
+            runner(registry, dependencies(), nil, resource_index)
+                :invoke('claim-ready-evidence', {})
+        end, 'claim_planning', '{marker="ready"}')
+    end)
+
+    it('keeps preflight evidence when execution supplies none', function()
+        local registry, injected = Registry.new(), dependencies()
+        registry:register_builtin({name='execution-without-evidence',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function()
+                return Outcomes.ready(true, {marker='preflight'})
+            end,
+            execute=function()
+                return Outcomes.failed('execution failed')
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        assert_stage_failure(function()
+            runner(registry, injected):invoke(
+                'execution-without-evidence', {})
+        end, 'execution', '{marker="preflight"}')
+    end)
+
+    it('keeps preflight evidence when read-only execution supplies none',
+            function()
+        local registry, injected = Registry.new(), dependencies()
+        registry:register_builtin({name='observation-without-evidence',
+            kind=CommandKind.QUERY, normalize=function() return {} end,
+            preflight=function()
+                return Outcomes.ready(true, {marker='preflight'})
+            end,
+            execute=function()
+                return Outcomes.fatal('observation failed')
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        assert_stage_failure(function()
+            runner(registry, injected):invoke(
+                'observation-without-evidence', {})
+        end, 'execution', '{marker="preflight"}')
+    end)
+
+    it('keeps earlier evidence when intrinsic success supplies none', function()
+        local registry, injected = Registry.new(), dependencies()
+        registry:register_builtin({name='intrinsic-without-evidence',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function()
+                return Outcomes.ready(true, {marker='preflight'})
+            end,
+            execute=function()
+                return Outcomes.executed('public', {receipt=true})
+            end,
+            verify=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.CALLBACK})
+        local command_runner = runner(registry, injected)
+        command_runner:setRefreshRetainedSubjects(function()
+            error('refresh failed')
+        end)
+        assert_stage_failure(function()
+            command_runner:invoke('intrinsic-without-evidence', {})
+        end, 'retained_subject_refresh', '{marker="preflight"}')
+    end)
+
+    it('keeps intrinsic evidence through caller success and refresh failure',
+            function()
+        local registry, injected = Registry.new(), dependencies()
+        registry:register_builtin({name='caller-without-evidence',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                return Outcomes.executed('public', {marker='intrinsic'})
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local command_runner = runner(registry, injected)
+        command_runner:setRefreshRetainedSubjects(function()
+            error('refresh failed')
+        end)
+        assert_stage_failure(function()
+            command_runner:invoke('caller-without-evidence', {}, {
+                verify=function() return true end})
+        end, 'retained_subject_refresh', '{marker="intrinsic"}')
+    end)
+
+    it('attributes cleanup-registration failure and releases its lease', function()
+        local registry, events, executions, releases = Registry.new(), {}, 0, 0
+        registry:register_builtin({name='registration-failure',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                executions = executions + 1
+                return Outcomes.failed('effect failed', {item_id='item-1'},
+                    {marker='registration'})
+            end,
+            cleanup={lifetime='command', restore=function() end,
+                verify=function() return true end},
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected = dependencies()
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local cleanup_service = {begin_mutation=function()
+            return {release=function() releases = releases + 1 end}
+        end, register=function() error('cleanup registration failed') end}
+        assert_stage_failure(function()
+            runner(registry, injected, cleanup_service)
+                :invoke('registration-failure', {})
+        end, 'cleanup_registration', '{marker="registration"}')
+        assert.equals(1, executions)
+        assert.equals(1, releases)
+        assert_terminal_events(events, 'failure', 'cleanup_registration')
+    end)
+
+    it('cleans a registered effect after synchronous execution overruns', function()
+        local registry, events = Registry.new(), {}
+        local executions, cleanup_calls = 0, 0
+        registry:register_builtin({name='execution-overrun',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                executions = executions + 1
+                return Outcomes.executed('late', {receipt=true},
+                    {item_id='item-1'})
+            end,
+            cleanup={lifetime='command', restore=function() end,
+                verify=function() return true end},
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected, state = dependencies()
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local cleanup_service = {begin_mutation=function()
+            return {release=function() end}
+        end, register=function()
+            state.now = 2
+            return {isPending=function() return true end,
+                execute=function() cleanup_calls = cleanup_calls + 1 end}
+        end}
+        assert_stage_failure(function()
+            runner(registry, injected, cleanup_service)
+                :invoke('execution-overrun', {}, {timeout_ms=2})
+        end, 'execution', '<none>')
+        assert.equals(1, executions)
+        assert.equals(1, cleanup_calls)
+        assert_terminal_events(events, 'failure', 'execution')
+    end)
+
+    it('times out intrinsic verification then expends command cleanup', function()
+        local registry, events = Registry.new(), {}
+        local executions, cleanup_calls = 0, 0
+        registry:register_builtin({name='intrinsic-timeout',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                executions = executions + 1
+                return Outcomes.executed('private', {receipt=true},
+                    {item_id='item-1'})
+            end,
+            verify=function()
+                return Outcomes.pending('intrinsic pending',
+                    {marker='intrinsic-pending'})
+            end,
+            cleanup={lifetime='command', restore=function() end,
+                verify=function() return true end},
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.CALLBACK})
+        local injected = dependencies()
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local cleanup_service = {begin_mutation=function()
+            return {release=function() end}
+        end, register=function()
+            return {isPending=function() return true end,
+                execute=function() cleanup_calls = cleanup_calls + 1 end}
+        end}
+        assert_stage_failure(function()
+            runner(registry, injected, cleanup_service)
+                :invoke('intrinsic-timeout', {}, {timeout_ms=2})
+        end, 'intrinsic_verification',
+            '{evidence={marker="intrinsic-pending"}, message="intrinsic pending"}')
+        assert.equals(1, executions)
+        assert.equals(1, cleanup_calls)
+        assert_terminal_events(events, 'failure', 'intrinsic_verification')
+    end)
+
+    it('times out caller verification then expends command cleanup', function()
+        local registry, events = Registry.new(), {}
+        local executions, cleanup_calls = 0, 0
+        registry:register_builtin({name='caller-timeout', kind=CommandKind.ACTION,
+            normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function()
+                executions = executions + 1
+                return Outcomes.executed('public', {receipt=true},
+                    {item_id='item-1'})
+            end,
+            cleanup={lifetime='command', restore=function() end,
+                verify=function() return true end},
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected = dependencies()
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local cleanup_service = {begin_mutation=function()
+            return {release=function() end}
+        end, register=function()
+            return {isPending=function() return true end,
+                execute=function() cleanup_calls = cleanup_calls + 1 end}
+        end}
+        assert_stage_failure(function()
+            runner(registry, injected, cleanup_service):invoke('caller-timeout',
+                {}, {timeout_ms=2, verify=function() return false end})
+        end, 'caller_verification',
+            '{message="caller verification is not yet satisfied"}')
+        assert.equals(1, executions)
+        assert.equals(1, cleanup_calls)
+        assert_terminal_events(events, 'failure', 'caller_verification')
     end)
 end)

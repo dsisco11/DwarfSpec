@@ -1,6 +1,8 @@
 -- Executes one validated command lifecycle with a single shared deadline.
 
 local CleanupLifetime = require('dwarfspec.protocol.enums.cleanup_lifetimes')
+local CommandFailureStage = require(
+    'dwarfspec.protocol.enums.command_failure_stages')
 local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
 local Context = require('dwarfspec.driver.command.context')
 local Deadline = require('dwarfspec.driver.command.deadline')
@@ -77,17 +79,15 @@ end
 ---Creates the immutable identity supplied to callback contexts.
 ---@param runner dwarfspec.CommandRunner
 ---@param owner table
----@param checkpoint integer
 ---@return table
-function Internals.identity(runner, owner, checkpoint)
+function Internals.identity(runner, owner)
     runner._next_invocation_ordinal = runner._next_invocation_ordinal + 1
     local id = owner.service_run_id .. ':command:' ..
         tostring(runner._next_invocation_ordinal)
     return {invocation_id=id, root_invocation_id=id,
         owner_scope=owner.owner_scope, service_run_id=owner.service_run_id,
         suite_execution_id=owner.suite_execution_id,
-        test_attempt_id=owner.test_attempt_id,
-        cleanup_checkpoint=checkpoint}
+        test_attempt_id=owner.test_attempt_id}
 end
 
 ---Creates a callback context for the runner's current lifecycle stage.
@@ -163,6 +163,32 @@ function Internals.poll(runner, deadline, stage, invoke, allow_effect_absent,
     return false, 'command deadline expired', latest
 end
 
+---Selects the newest bounded gate evidence without erasing earlier evidence.
+---@param result table|string
+---@param latest table|nil
+---@param previous table|nil
+---@return table|nil
+function Internals.latest_gate_evidence(result, latest, previous)
+    if type(result) == 'table' and result.evidence ~= nil then
+        return result.evidence
+    end
+    if latest ~= nil then return latest end
+    return previous
+end
+
+---Copies validated immutable outcome data into mutable-free plain transport data.
+---@param value any
+---@return any
+function Internals.detach_outcome_data(value)
+    if type(value) ~= 'table' then return value end
+    local copy = {}
+    for key, entry in pairs(value) do
+        copy[Internals.detach_outcome_data(key)] =
+            Internals.detach_outcome_data(entry)
+    end
+    return copy
+end
+
 ---Registers cleanup before any later fallible lifecycle work.
 ---@param runner dwarfspec.CommandRunner
 ---@param definition table
@@ -182,7 +208,8 @@ function Internals.register_cleanup(runner, definition, identity, owner, plan,
     return runner._cleanup_service:register({owner=owner,
         command_invocation_id=identity.invocation_id,
         mutation_lease=mutation_lease, label=definition.name,
-        lifetime=definition.cleanup.lifetime, receipt=outcome.effect_receipt,
+        lifetime=definition.cleanup.lifetime,
+        receipt=Internals.detach_outcome_data(outcome.effect_receipt),
         plan=plan, bindings=bindings, restore=definition.cleanup.restore,
         verify=definition.cleanup.verify,
         cleanup_timeout_ms=runner._dependencies.cleanup_timeout_ms,
@@ -218,22 +245,59 @@ function Internals.quarantine_ambiguous(runner, identity, owner, stage, failure,
     return message
 end
 
+---Formats detached bounded diagnostic data deterministically for one error.
+---@param evidence any
+---@return string
+function Internals.evidence_text(evidence)
+    if evidence == nil then return '<none>' end
+    local function format(value)
+        local value_type = type(value)
+        if value_type == 'string' then return string.format('%q', value) end
+        if value_type ~= 'table' then return tostring(value) end
+        local keys = {}
+        for key in pairs(value) do keys[#keys + 1] = key end
+        table.sort(keys, function(left, right) return tostring(left) < tostring(right) end)
+        local entries = {}
+        for _, key in ipairs(keys) do
+            entries[#entries + 1] = tostring(key) .. '=' .. format(value[key])
+        end
+        return '{' .. table.concat(entries, ', ') .. '}'
+    end
+    local succeeded, text = pcall(format, evidence)
+    if not succeeded then return '<unprintable evidence>' end
+    return Internals.error_text(text)
+end
+
+---Appends one stage-attributed finalization failure without replacement.
+---@param failure string|nil
+---@param stage string
+---@param value any
+---@param evidence any
+---@return string
+function Internals.append_failure(failure, stage, value, evidence)
+    local message = Internals.stage_failure(stage, value, evidence)
+    return failure and failure .. '\n' .. message or message
+end
+
 ---Executes a still-pending command-lifetime transaction and composes failure.
 ---@param definition table
 ---@param transaction any
 ---@param failure string|nil
+---@param evidence any
 ---@return string|nil
-function Internals.finish_command_cleanup(definition, transaction, failure)
-    if transaction == nil or definition.cleanup.lifetime ~= CleanupLifetime.COMMAND or
-            not transaction:isPending() then
-        return failure
-    end
+function Internals.finish_command_cleanup(definition, transaction, failure,
+        evidence)
     local succeeded, cleanup_failure = Internals.call(function()
+        if transaction == nil or definition.cleanup == nil or
+                definition.cleanup.lifetime ~= CleanupLifetime.COMMAND or
+                not transaction:isPending() then
+            return
+        end
         transaction:execute('command lifecycle finalization')
     end)
     if succeeded then return failure end
-    local message = 'command cleanup: ' .. Internals.error_text(cleanup_failure)
-    return failure and failure .. '\n' .. message or message
+    return Internals.append_failure(failure, 'command_cleanup', cleanup_failure,
+        evidence)
 end
 
 ---Publishes optional bounded lifecycle evidence through the host event seam.
@@ -283,9 +347,11 @@ end
 ---Attributes one bounded lifecycle failure to its exact current stage.
 ---@param stage string
 ---@param failure any
+---@param evidence any
 ---@return string
-function Internals.stage_failure(stage, failure)
-    return stage .. ': ' .. Internals.error_text(failure)
+function Internals.stage_failure(stage, failure, evidence)
+    return stage .. ': ' .. Internals.error_text(failure) ..
+        '; latest evidence: ' .. Internals.evidence_text(evidence)
 end
 
 ---Creates one command runner with all host-owned mutation seams injected.
@@ -344,38 +410,53 @@ function Runner:invoke(name, arguments, options)
     options = Internals.options(options)
     local definition = assert(self._registry:get(name),
         'unknown command ' .. name)
-    local normalized_ok, request = Internals.call(definition.normalize, arguments)
-    assert(normalized_ok, Internals.error_text(request))
-    request = Internals.diagnostics:sanitize(request, 'normalized command request')
-    local operation_key
-    if definition.execution_retry_policy == RetryPolicy.EXPLICIT_RETRY_SAFE then
-        local keyed, value = Internals.call(definition.operation_key, request)
-        assert(keyed, Internals.error_text(value))
-        assert(type(value) == 'string' and value ~= '' and #value <= 128,
-            'command operation key must be a bounded nonempty string')
-        operation_key = value
+    local normalized, normalized_or_failure = Internals.call(function()
+        local request = definition.normalize(arguments)
+        request = Internals.diagnostics:sanitize(request,
+            'normalized command request')
+        local operation_key
+        if definition.execution_retry_policy == RetryPolicy.EXPLICIT_RETRY_SAFE then
+            operation_key = definition.operation_key(request)
+            assert(type(operation_key) == 'string' and operation_key ~= '' and
+                #operation_key <= 128,
+                'command operation key must be a bounded nonempty string')
+        end
+        return {request=request, operation_key=operation_key}
+    end)
+    if not normalized then
+        error(Internals.stage_failure(CommandFailureStage.NORMALIZATION,
+            normalized_or_failure, nil), 0)
     end
+    local request = normalized_or_failure.request
+    local operation_key = normalized_or_failure.operation_key
     local timeout_ms = options.timeout_ms or definition.default_timeout_ms or
         self._default_timeout_ms
     local deadline = Deadline.new(self._dependencies.now_ms, timeout_ms)
     local owner = self._dependencies.owner()
-    local checkpoint = self._dependencies.cleanup_checkpoint()
-    local identity = Internals.identity(self, owner, checkpoint)
+    local identity = Internals.identity(self, owner)
     local started_at_ms = self._dependencies.now_ms()
-    Internals.publish(self, 'command.started', {name=name,
-        subject_identity=identity.target_identity or '<none>',
-        safe_arguments=request})
+    local start_published, start_publish_failure = Internals.call(function()
+        Internals.publish(self, 'command.started', {name=name,
+            subject_identity=identity.target_identity or '<none>',
+            safe_arguments=request})
+    end)
+    if not start_published then
+        error(Internals.stage_failure(CommandFailureStage.RESULT_PROJECTION,
+            start_publish_failure, nil), 0)
+    end
     local stage = 'preflight'
     local latest_evidence
     local transaction
     local mutation_lease
     local completed, result = xpcall(function()
+    identity.cleanup_checkpoint = self._dependencies.cleanup_checkpoint()
     local function current_stage() return stage end
     local context = Internals.context(self, identity, current_stage, true,
         false, nil)
     local ready_ok, ready_or_failure, evidence = Internals.poll(self, deadline,
         current_stage, function() return definition.preflight(context, request) end)
-    latest_evidence = evidence
+    latest_evidence = Internals.latest_gate_evidence(ready_or_failure, evidence,
+        latest_evidence)
     if not ready_ok then
         error(Internals.gate_failure(ready_or_failure, evidence), 2)
     end
@@ -384,7 +465,8 @@ function Runner:invoke(name, arguments, options)
         deadline, current_stage, function()
             return definition.preflight(context, request)
         end)
-    latest_evidence = final_evidence
+    latest_evidence = Internals.latest_gate_evidence(final_ready_or_failure,
+        final_evidence, latest_evidence)
     if not final_ready_ok then
         error(Internals.gate_failure(final_ready_or_failure, final_evidence), 2)
     end
@@ -415,7 +497,8 @@ function Runner:invoke(name, arguments, options)
             self, deadline, current_stage, function()
                 return definition.execute(context, request, ready)
             end)
-        latest_evidence = primary_evidence
+        latest_evidence = Internals.latest_gate_evidence(gate_or_failure,
+            primary_evidence, latest_evidence)
         if not observed then
             error(Internals.gate_failure(gate_or_failure, primary_evidence), 2)
         end
@@ -436,14 +519,16 @@ function Runner:invoke(name, arguments, options)
                 validated, plan), 2)
         end
         outcome = validated
-        latest_evidence = outcome.evidence
+        latest_evidence = outcome.evidence or latest_evidence
     end
     if outcome.effect_receipt ~= nil then
+        stage = 'cleanup_registration'
         local registered, registered_or_error = Internals.call(
             Internals.register_cleanup, self, definition, identity, owner, plan,
             outcome, mutation_lease)
         if not registered then error(Internals.error_text(registered_or_error), 2) end
         transaction = registered_or_error
+        stage = 'execution'
     end
     if not Internals.read_only(definition) and
             not deadline:check_execution_return() then
@@ -466,16 +551,14 @@ function Runner:invoke(name, arguments, options)
             true)
         latest_intrinsic_evidence = type(result) == 'table' and
             result.evidence or latest
-        latest_evidence = latest_intrinsic_evidence
+        latest_evidence = latest_intrinsic_evidence or latest_evidence
         if not verified then
             error(Internals.gate_failure(result, latest), 2)
         end
         if Outcomes.is_effect_absent(result) then
             assert(transaction ~= nil, 'effect_absent requires registered cleanup')
-            local lease = self._cleanup_service:begin_mutation(identity.invocation_id)
             self._cleanup_service:abandonSelfRolledBack(transaction:transaction_id(),
-                lease, result)
-            lease:release()
+                mutation_lease, result)
             error(result.message, 2)
         end
     elseif definition.intrinsic_verification ==
@@ -509,7 +592,8 @@ function Runner:invoke(name, arguments, options)
                 return accepted and Outcomes.ready(true) or
                     Outcomes.pending('caller verification is not yet satisfied')
             end, false, true)
-        latest_evidence = latest
+        latest_evidence = Internals.latest_gate_evidence(result, latest,
+            latest_evidence)
         if not verified then
             error(Internals.gate_failure(result, latest), 2)
         end
@@ -517,52 +601,68 @@ function Runner:invoke(name, arguments, options)
     return outcome.public_result
     end, debug.traceback)
 
+    local terminal_stage = completed and 'completed' or stage
+    local failure
+    if not completed then
+        failure = Internals.stage_failure(stage, result, latest_evidence)
+    end
     if mutation_lease then
         local released, release_failure = Internals.call(function()
             mutation_lease:release()
         end)
         mutation_lease = nil
         if not released then
-            local message = 'mutation lease release: ' ..
-                Internals.error_text(release_failure)
-            result = completed and message or result .. '\n' .. message
+            failure = Internals.append_failure(failure, 'mutation_lease_release',
+                release_failure, latest_evidence)
+            if completed then terminal_stage = 'mutation_lease_release' end
             completed = false
         end
     end
 
-    local terminal_stage = stage
-    local failure
-    if not completed then
-        failure = Internals.stage_failure(stage, result)
-    end
     local pending = {}
     if transaction ~= nil then pending[1] = transaction end
     if type(self._cleanup_service.pendingCommandTransactions) == 'function' then
-        local discovered, candidates = Internals.call(function()
-            return self._cleanup_service:pendingCommandTransactions(
+        local discovered, merged_or_failure = Internals.call(function()
+            local candidates = self._cleanup_service:pendingCommandTransactions(
                 identity.invocation_id)
+            assert(type(candidates) == 'table',
+                'command cleanup discovery must return a table')
+            local count, greatest_index = 0, 0
+            for index in pairs(candidates) do
+                assert(type(index) == 'number' and index >= 1 and
+                    index % 1 == 0,
+                    'command cleanup discovery must return an array')
+                count = count + 1
+                greatest_index = math.max(greatest_index, index)
+            end
+            assert(count == greatest_index,
+                'command cleanup discovery must return a contiguous array')
+            local merged = {}
+            for _, known in ipairs(pending) do merged[#merged + 1] = known end
+            for _, candidate in ipairs(candidates) do
+                local duplicate = false
+                for _, known in ipairs(merged) do
+                    if known == candidate then duplicate = true break end
+                end
+                if not duplicate then merged[#merged + 1] = candidate end
+            end
+            return merged
         end)
         if not discovered then
-            local message = 'command cleanup discovery: ' ..
-                Internals.error_text(candidates)
-            failure = failure and failure .. '\n' .. message or message
-            terminal_stage = 'command_cleanup'
-            candidates = {}
-        end
-        for _, candidate in ipairs(candidates) do
-            local duplicate = false
-            for _, known in ipairs(pending) do
-                if known == candidate then duplicate = true break end
-            end
-            if not duplicate then pending[#pending + 1] = candidate end
+            failure = Internals.append_failure(failure,
+                'command_cleanup_discovery', merged_or_failure, latest_evidence)
+            if completed then terminal_stage = 'command_cleanup_discovery' end
+            completed = false
+        else
+            pending = merged_or_failure
         end
     end
-    stage = 'command_cleanup'
     for _, candidate in ipairs(pending) do
         local prior_failure = failure
-        failure = Internals.finish_command_cleanup(definition, candidate, failure)
+        failure = Internals.finish_command_cleanup(definition, candidate, failure,
+            latest_evidence)
         if prior_failure == nil and failure ~= nil then
-            terminal_stage = stage
+            terminal_stage = 'command_cleanup'
         end
     end
     completed = failure == nil
@@ -574,14 +674,23 @@ function Runner:invoke(name, arguments, options)
         if not refreshed then
             completed = false
             terminal_stage = stage
-            failure = Internals.stage_failure(stage, refresh_failure)
+            failure = Internals.stage_failure(stage, refresh_failure,
+                latest_evidence)
         end
     end
-    Internals.publish(self, 'command.finished', {name=name,
-        status=completed and 'success' or 'failure',
-        stage=completed and 'completed' or terminal_stage,
-        duration_ms=math.max(0, math.floor(self._dependencies.now_ms() -
-            started_at_ms))})
+    local terminal_published, terminal_publish_failure = Internals.call(function()
+        Internals.publish(self, 'command.finished', {name=name,
+            status=completed and 'success' or 'failure',
+            stage=completed and 'completed' or terminal_stage,
+            duration_ms=math.max(0, math.floor(self._dependencies.now_ms() -
+                started_at_ms))})
+    end)
+    if not terminal_published then
+        failure = Internals.append_failure(failure,
+            CommandFailureStage.RESULT_PROJECTION, terminal_publish_failure,
+            latest_evidence)
+        completed = false
+    end
     if not completed then error(failure, 0) end
     return result
 end

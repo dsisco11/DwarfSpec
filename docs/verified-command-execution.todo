@@ -884,6 +884,199 @@ failure handling.
         harness into this remediation.
   - [x] Perform a fresh follow-up review against the proposal's ordered
         lifecycle after all remediation changes and before checking this block.
+- [x] Correct the remaining Phase 10 lifecycle discrepancies identified by the
+      post-remediation completion audit before beginning explicit retry-safe
+      execution.
+  - [x] Make intrinsic `effect_absent` abandonment use the invocation's active
+        mutation lease without attempting to acquire a conflicting second
+        lease. Preserve the cleanup service's single-active-mutation invariant,
+        atomically abandon only the current invocation's registered pending
+        transaction, release its claims, and propagate the intended intrinsic
+        failure after abandonment.
+  - [x] Carry the latest bounded lifecycle evidence into every propagated
+        command failure together with the exact failing stage. Attribute
+        mutation-lease release, command-cleanup discovery/execution, and
+        retained-subject refresh failures to their actual finalization stage,
+        while preserving the first earlier failure and appending later cleanup
+        or finalization failures without replacement.
+  - [x] Add a focused runner integration regression using the real cleanup
+        registration service and resource dependency index. Prove that a valid
+        intrinsic `effect_absent` result abandons the registered transaction,
+        releases its claims, emits the single abandonment transition, leaves no
+        active mutation lease, and still publishes exactly one failed terminal
+        command event after finalization.
+  - [x] Add focused failure-diagnostic regressions proving that propagated
+        preflight, execution, intrinsic, caller-verification, lease-release,
+        command-cleanup, and retained-subject-refresh failures retain the exact
+        stage and latest available bounded evidence without exposing mutable or
+        unbounded values.
+  - [x] Keep the remediation limited to Phase 10's start/finish publication and
+        focused contract tests. Do not introduce Phase 14's richer stage-event
+        family, receipt or cleanup-evidence schemas, controller rendering, or
+        reusable exhaustive conformance harness.
+  - [x] Perform a fresh follow-up review against the proposal's ordered
+        lifecycle and the real cleanup-service lease contract before checking
+        this remediation block.
+- [x] Close the remaining Phase 10 deterministic-proof gaps identified by the
+      post-completion audit.
+  - [x] Strengthen every focused runner assertion that claims exactly one
+        start/finish pair or abandonment transition. Assert the complete event
+        collection length as well as ordered event types and terminal status so
+        an unexpected additional publication cannot pass unnoticed.
+  - [x] Add deterministic runner regressions for claim-planning failure,
+        cleanup-registration failure, execution deadline overrun,
+        intrinsic-verification timeout, and caller-verification timeout.
+  - [x] For each added failure boundary, assert the exact propagated stage and
+        latest bounded evidence, whether primary behavior ran, whether
+        registered command-lifetime cleanup was expended, and that exactly one
+        failed terminal event followed the start event.
+  - [x] Keep these tests on injected clocks, waits, ownership services, and
+        cleanup doubles or the existing real cleanup integration seam. Do not
+        introduce Phase 11 retry execution or Phase 14 event-schema and reusable
+        conformance work.
+  - [x] Perform a fresh follow-up review against the Phase 10 lifecycle and
+        timeout-boundary requirements before checking this remediation block.
+- [x] Preserve the latest available bounded lifecycle evidence across every
+      Phase 10 stage transition.
+  - [x] Replace direct evidence assignments that can erase earlier valid
+        evidence when a later primary, intrinsic, or caller-verification result
+        supplies no new evidence.
+  - [x] Keep genuinely newer evidence authoritative, including fatal or pending
+        gate evidence and validated execution or intrinsic evidence.
+  - [x] Add focused regressions for a pending-to-ready preflight followed by
+        claim-planning failure, mutating and read-only execution failures
+        without new evidence, intrinsic callback success without evidence, and
+        successful caller verification followed by retained-subject refresh
+        failure. Assert the exact retained evidence and failure stage.
+  - [x] Keep this correction within Phase 10 diagnostics and focused runner
+        tests; do not add Phase 11 retry execution or Phase 14 event schemas and
+        reusable conformance machinery.
+  - [x] Perform a fresh follow-up review of every `latest_evidence` update before
+        checking this remediation block.
+- [x] Make command-event publication a protected Phase 10 lifecycle boundary.
+  - [x] Attribute a thrown start-event publisher to the closed
+        `result_projection` failure stage with bounded evidence rather than
+        propagating a raw callback error.
+  - [x] Attempt terminal publication exactly once after command-lifetime cleanup
+        and retained-subject refresh, and capture any thrown publisher failure
+        at `result_projection`.
+  - [x] Preserve the first command, verification, cleanup, or refresh failure
+        when terminal publication also fails; append the publication failure
+        without replacement and retain the latest bounded lifecycle evidence.
+  - [x] Add focused failure-injection regressions for start publication failure,
+        terminal publication failure after lifecycle success, and terminal
+        publication failure after an earlier command failure. Assert exact
+        stage attribution, attempt counts, evidence, and failure ordering.
+  - [x] Keep the correction within Phase 10's existing start/finish events and
+        closed failure-stage vocabulary. Do not introduce Phase 14 event-family,
+        payload-schema, controller, or reusable-conformance work.
+  - [x] Perform a fresh follow-up review of both publication seams and composed
+        error ordering before checking this remediation block.
+- [x] Restore the proposal's start-publication/checkpoint ordering.
+  - [x] Allocate the invocation identity without marking cleanup state, publish
+        sanitized command-started evidence, and only then mark the command-local
+        cleanup checkpoint used by callback contexts.
+  - [x] Prove successful start publication observes no command checkpoint yet,
+        while a thrown start publisher leaves no checkpoint and invokes no
+        command callback.
+  - [x] Perform a fresh follow-up review of identity initialization, start
+        publication, and both command/attempt checkpoint boundaries before
+        checking this remediation block.
+- [x] Protect command-checkpoint initialization after start publication.
+  - [x] Move command-checkpoint creation inside the protected command lifecycle
+        so a thrown checkpoint callback receives bounded stage attribution and
+        proceeds through ordinary terminal finalization.
+  - [x] Add a failure-injection regression proving one successful start and one
+        failed terminal publication, exact stage/evidence attribution, and zero
+        preflight, primary, or cleanup execution after checkpoint failure.
+  - [x] Perform a fresh follow-up review of the protected-lifecycle entry and
+        terminal finalization path before checking this remediation block.
+- [x] Protect cleanup discovery and pending-state inspection through terminal
+      finalization.
+  - [x] Validate and merge cleanup discovery results atomically inside a
+        protected `command_cleanup_discovery` boundary so malformed collections,
+        iterators, or candidate comparisons cannot escape composed failure
+        handling or partially alter the pending set.
+  - [x] Protect each transaction's pending-state inspection together with its
+        cleanup execution and attribute either failure to `command_cleanup`
+        without replacing an earlier lifecycle failure.
+  - [x] Add focused failure-injection regressions for malformed discovery,
+        throwing pending-state inspection after lifecycle success, and throwing
+        pending-state inspection after an earlier command failure. Assert exact
+        stages, evidence, failure ordering, and terminal event counts.
+  - [x] Perform a fresh follow-up review of every operation between protected
+        command completion and terminal publication before checking this block.
+- [x] Protect and attribute the complete pre-deadline normalization boundary.
+  - [x] Execute logical normalization, bounded defensive request copying, and
+        retry-safe operation-key derivation/validation inside one protected
+        `normalization` boundary with bounded empty evidence on failure.
+  - [x] Ensure normalization failure remains an immediate invocation error and
+        does not create the command deadline, resolve ownership, publish events,
+        mark cleanup checkpoints, or invoke any command lifecycle callback.
+  - [x] Add focused failure-injection regressions for a thrown normalizer,
+        rejected normalized request, thrown operation-key projector, and invalid
+        projected key with exact stage/evidence and zero-lifecycle assertions.
+  - [x] Perform a fresh follow-up review of every operation before deadline
+        creation before checking this remediation block.
+
+### Phase 10A: Consolidate immutable table primitives
+
+Outcome: behavior-preserving immutable table construction is centralized in one
+small support module without conflating shallow views, recursive snapshots,
+enums, or class-like capability objects.
+
+- [ ] Add `src/dwarfspec/support/immutable.lua` with two documented operations.
+  - [ ] Implement `read_only(source, label)` as a shallow proxy over framework-
+        owned or already-detached data, preserving indexed reads, `pairs`, array
+        length, hidden metatable behavior, and the caller-supplied mutation error.
+  - [ ] Implement `freeze(value, label, preserve?)` as a recursive defensive
+        snapshot that copies keys and values, rejects cycles, preserves scalar
+        values, produces immutable proxies at every table level, and optionally
+        retains explicitly recognized framework-owned tokens by identity.
+  - [ ] Keep the API narrow: do not add copying modes, mutable escape hatches,
+        class construction, weak-map ownership, enum validation, serialization,
+        or domain-specific policy to the shared module.
+- [ ] Add `tests/unit/support/immutable_spec.lua` covering shallow aliasing,
+      recursive detachment, nested and key mutation rejection, `pairs`, length,
+      hidden metatables, deterministic labels, cycles, and the preservation hook.
+- [ ] Migrate exact shallow-proxy duplication first.
+  - [ ] Replace `driver/command/outcomes.lua`'s private `read_only` helper while
+        preserving outcome provenance weak maps and public-result identity.
+  - [ ] Replace `driver/command/diagnostics.lua`'s private `read_only` helper
+        only after bounded plain-data copying; do not make `read_only` itself a
+        sanitizer or deep-copy operation.
+- [ ] Migrate recursive snapshot duplication second.
+  - [ ] Replace `driver/command/definition.lua`'s private recursive freezer while
+        preserving complete caller-table detachment, function identity, cycle
+        rejection, array behavior, and the exact command-definition error label.
+  - [ ] Replace `driver/command/resource_dependency_index.lua`'s private freezer
+        using the preservation hook only for its recognized reference tokens;
+        preserve immutable keys, token identity, cycle rejection, and the exact
+        resource-claim error label.
+- [ ] Reuse the shallow primitive in `support/immutable_enum.lua` only for final
+      proxy construction. Keep string/numeric validation, duplicate rejection,
+      enum-specific error text, and enum constructors owned by that module.
+- [ ] Inventory every remaining `__newindex`/hidden-metatable construction and
+      classify it before migration.
+  - [ ] Migrate only plain shallow views or recursively copied snapshots whose
+        semantics match the shared operations exactly.
+  - [ ] Keep command contexts, stage guards, cleanup capabilities, class-like
+        domain objects, weak-map identities, method-bearing proxies, TestBed
+        environments, and other custom metatables local unless equivalence is
+        independently proven by focused tests.
+  - [ ] Record each retained local implementation and the semantic reason it is
+        not an immutable-table primitive, preventing later mechanical rewrites.
+- [ ] Preserve module ownership and dependency direction: protocol and driver
+      modules may depend on `dwarfspec.support.immutable`; the support module
+      must not depend on protocol, driver, host, controller, or TestBed modules.
+- [ ] Run focused immutable-support, enum, command-definition, command-outcome,
+      diagnostics, resource-index, runner, and host-assembly suites after the
+      migration, followed by the full unit, Lua syntax/formatting, and source-
+      declaration checks.
+- [ ] Perform a follow-up review comparing every migrated metatable field,
+      mutation message, iteration behavior, length behavior, copy boundary,
+      cycle rule, token-preservation rule, and weak-map identity before checking
+      this subphase.
 
 Completion criteria:
 
@@ -899,6 +1092,39 @@ Completion criteria:
 - [x] Successful retained-subject refresh, exact failure-stage attribution, and
       focused remediation regressions pass without implementing Phase 14's
       richer event and reusable-conformance scope early.
+- [x] A valid intrinsic `effect_absent` outcome completes runner-only
+      abandonment through the real cleanup service without a second-lease
+      conflict, stale claims, a leaked mutation lease, or command success.
+- [x] Every propagated lifecycle failure contains its exact current stage and
+      latest bounded evidence, including failures introduced during runner
+      finalization.
+- [x] Focused real-service abandonment and failure-diagnostic regressions pass
+      while Phase 14's exhaustive conformance and richer event work remain
+      unimplemented.
+- [x] Exact event-count assertions reject unexpected extra command or cleanup
+      publications on successful, failed, and self-rolled-back lifecycles.
+- [x] Deterministic focused tests prove claim-planning, cleanup-registration,
+      execution-overrun, intrinsic-timeout, and caller-timeout behavior with
+      exact stage, bounded evidence, cleanup, and terminal-event assertions.
+- [x] A lifecycle stage that produces no new bounded evidence cannot erase the
+      latest evidence retained from an earlier successful or pending stage.
+- [x] A throwing start or terminal publisher is stage-attributed, and terminal
+      publication failure cannot replace an earlier composed lifecycle failure.
+- [x] Command-started publication precedes the command cleanup checkpoint, and
+      failed start publication leaves no command cleanup checkpoint behind.
+- [x] A command-checkpoint failure after successful start publication is
+      stage-attributed and produces exactly one failed terminal event.
+- [x] Cleanup discovery, candidate merging, pending-state inspection, and
+      execution cannot escape composed finalization or suppress its terminal
+      event.
+- [x] Every normalizer, normalized-request sanitizer, and retry-safe
+      operation-key failure is bounded and attributed to `normalization` before
+      any timed lifecycle work begins.
+- [ ] One dependency-neutral immutable support module owns the shared shallow
+      proxy and recursive snapshot mechanics without absorbing domain policy.
+- [ ] Every migrated caller preserves its previous observable immutability,
+      detachment, provenance, token-identity, iteration, length, and error-text
+      contracts, and every retained local metatable has a documented reason.
 
 Validation evidence:
 
@@ -909,6 +1135,68 @@ Validation evidence:
   0 pending after the final follow-up review.
 - Lua syntax and formatting passed for 420 files, and valid source declaration
   fixtures passed.
+- Post-audit remediation validation passed: the focused command-runner,
+  cleanup-registration-service, and command-outcome suites reported 24, 15,
+  and 5 successes respectively, with no failures, errors, or pending tests.
+  The full unit suite passed with 1,123 successes; Lua syntax/formatting and
+  valid source-declaration checks also passed.
+- The earlier ordered-lifecycle review cleared the implementation discrepancies
+  known at that point; a subsequent proof audit identified the exact-count and
+  timeout-boundary gaps addressed by the final remediation block above.
+- Final deterministic-proof validation passed with 29 command-runner, 15
+  cleanup-registration-service, 5 command-outcome, and 5 host-assembly
+  successes, with no failures, errors, or pending tests. The full unit suite
+  passed with 1,128 successes; Lua syntax/formatting passed for 420 files and
+  valid source-declaration fixtures passed.
+- The final follow-up review and independent completion audit found no remaining
+  Phase 10 requirement or evidence gap. Explicit retry execution remains Phase
+  11 work; reusable conformance and richer event contracts remain deferred to
+  Phase 14.
+- Cross-stage evidence-preservation validation passed with 34 focused command-
+  runner successes, 15 cleanup-registration-service successes, 5 command-
+  outcome successes, and 5 host-assembly successes, with no failures, errors,
+  or pending tests. The full unit suite passed with 1,133 successes; Lua syntax
+  and formatting passed for 420 files, and valid source-declaration fixtures
+  passed. A follow-up review confirmed every `latest_evidence` update preserves
+  earlier valid evidence when its current stage supplies none without exposing
+  earlier lifecycle evidence as intrinsic evidence.
+- Protected-publication remediation validation passed with 37 focused command-
+  runner successes, 15 cleanup-registration-service successes, 5 command-
+  outcome successes, and 5 host-assembly successes, with no failures, errors,
+  or pending tests. The full unit suite passed with 1,136 successes; Lua syntax
+  and formatting passed for 420 files, and valid source-declaration fixtures
+  passed. The follow-up review confirmed that both publication seams are
+  protected and terminal publication failures append after earlier lifecycle
+  failures without replacing their bounded evidence.
+- Start/checkpoint ordering remediation passed with 37 focused command-runner
+  successes and 5 host-assembly successes, with no failures, errors, or pending
+  tests. The full unit suite passed with 1,136 successes; Lua syntax and
+  formatting passed for 420 files, and valid source-declaration fixtures passed.
+  The follow-up review confirmed identity allocation is side-effect free, start
+  publication precedes the command checkpoint, and the attempt checkpoint still
+  occurs immediately before mutating execution ownership.
+- Checkpoint-failure protection validation passed with 38 focused command-runner
+  successes and 5 host-assembly successes, with no failures, errors, or pending
+  tests. The full unit suite passed with 1,137 successes; Lua syntax and
+  formatting passed for 420 files, and valid source-declaration fixtures passed.
+  The follow-up review confirmed that checkpoint creation is inside protected
+  lifecycle finalization and retains its preflight-stage error and bounded
+  evidence through exactly one failed terminal event.
+- Cleanup-finalization hardening passed with 41 focused command-runner
+  successes, 15 cleanup-registration-service successes, and 5 host-assembly
+  successes, with no failures, errors, or pending tests. The full unit suite
+  passed with 1,140 successes; Lua syntax and formatting passed for 420 files,
+  and valid source-declaration fixtures passed. The follow-up review confirmed
+  discovery validation and merging are atomic, known pending transactions remain
+  available after discovery failure, and pending inspection or execution failure
+  composes before exactly one terminal event.
+- Normalization-boundary remediation passed with 44 focused command-runner
+  successes, 5 command-outcome successes, and 5 host-assembly successes, with
+  no failures, errors, or pending tests. The full unit suite passed with 1,143
+  successes; Lua syntax and formatting passed for 420 files, and valid source-
+  declaration fixtures passed. The follow-up review confirmed normalizer,
+  request-sanitizer, and operation-key failures are bounded and attributed
+  before the first clock, ownership, event, checkpoint, or callback operation.
 
 ## Phase 11: Implement explicit retry-safe execution
 
