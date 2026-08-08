@@ -44,8 +44,8 @@ end
 ---@return table
 local function registry(run)
     return {
-        schema='dwarfspec.service.v2',
-        protocol_version=2,
+        schema='dwarfspec.service.v3',
+        protocol_version=3,
         service_instance_id='service-schema-1',
         package_root='D:/Packages/DwarfSpec',
         package_version='0.2.1',
@@ -62,7 +62,7 @@ local function registry(run)
                     'dwarfspec/results.json',
             result_policy=ResultPolicy.FILE,
                 client_compatibility={
-                    protocol=2,
+                    protocol=3,
                     package_version='0.2.1',
                 },
                 registered_at=50,
@@ -85,7 +85,7 @@ describe('automation version 2 schemas and snapshots', function()
         local service = registry(run)
         local snapshot = snapshots.run(run, service)
 
-        assert.equals('dwarfspec.run.v2', snapshot.schema)
+        assert.equals('dwarfspec.run.v3', snapshot.schema)
         assert.equals(1, snapshot.queue_position)
         assert.equals(0, snapshot.last_sequence)
         assert.is_true(snapshot.queue_lease.active)
@@ -159,7 +159,7 @@ describe('automation version 2 schemas and snapshots', function()
         local service = registry(run)
         local snapshot = snapshots.scheduler(service)
 
-        assert.equals('dwarfspec.scheduler.v2', snapshot.schema)
+        assert.equals('dwarfspec.scheduler.v3', snapshot.schema)
         assert.same({
             {run_id='run-schema-1', project_id='project-schema-1'},
         }, snapshot.queue)
@@ -197,7 +197,7 @@ describe('automation version 2 schemas and snapshots', function()
 
         local history = {
             schema='dwarfspec.history.v1',
-            protocol=2,
+            protocol=3,
             service_loaded=true,
             service_instance_id=service.service_instance_id,
             runs=snapshots.history(service),
@@ -227,7 +227,7 @@ describe('automation version 2 schemas and snapshots', function()
         local retained = events.read(run.event_journal, 0)
         local inspection = {
             schema='dwarfspec.run-inspection.v1',
-            protocol=2,
+            protocol=3,
             service_loaded=true,
             found=true,
             run_id=run.run_id,
@@ -239,7 +239,7 @@ describe('automation version 2 schemas and snapshots', function()
         }
         local logs = {
             schema='dwarfspec.run-logs.v1',
-            protocol=2,
+            protocol=3,
             service_loaded=true,
             found=true,
             service_instance_id=run.service_instance_id,
@@ -264,13 +264,13 @@ describe('automation version 2 schemas and snapshots', function()
         assert.same(logs, schemas.validate_run_logs(logs))
         assert.same({
             schema='dwarfspec.run-inspection.v1',
-            protocol=2,
+            protocol=3,
             service_loaded=false,
             found=false,
             run_id='missing',
         }, schemas.validate_run_inspection({
             schema='dwarfspec.run-inspection.v1',
-            protocol=2,
+            protocol=3,
             service_loaded=false,
             found=false,
             run_id='missing',
@@ -290,8 +290,8 @@ describe('automation version 2 schemas and snapshots', function()
         }, 110)
         local snapshot = snapshots.run(run, registry(run))
         local response = {
-            schema='dwarfspec.transport.v2',
-            protocol=2,
+            schema='dwarfspec.transport.v3',
+            protocol=3,
             service_instance_id=run.service_instance_id,
             project_id=run.project_id,
             run_id=run.run_id,
@@ -332,7 +332,7 @@ describe('automation version 2 schemas and snapshots', function()
 
         assert.has_error(function()
             schemas.validate_result({
-                schema='dwarfspec.result.v2',
+                schema='dwarfspec.result.v3',
             state=ResultState.PASSED,
                 terminal=true,
                 service_instance_id='service-schema-1',
@@ -357,13 +357,13 @@ describe('automation version 2 schemas and snapshots', function()
         end, 'unsupported automation service schema: dwarfspec.service.v1')
         assert.has_error(function()
             schemas.validate_scheduler({
-                schema='dwarfspec.scheduler.v2',
+                schema='dwarfspec.scheduler.v3',
                 protocol_version=1,
             })
         end, 'unsupported automation scheduler protocol: 1')
         assert.has_error(function()
             schemas.validate_result({
-                schema='dwarfspec.result.v2',
+                schema='dwarfspec.result.v3',
                 state='invented',
                 terminal=true,
             })

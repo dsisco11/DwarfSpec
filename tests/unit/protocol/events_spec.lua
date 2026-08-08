@@ -39,6 +39,9 @@ local function payloads()
         [EventType.RUN_STARTED]={repeat_count=1, options={shuffle=false}},
         [EventType.REPEAT_STARTED]={repeat_index=1, repeat_count=1},
         [EventType.REPEAT_FINISHED]={repeat_index=1, counts=counts},
+        [EventType.SUITE_FINISHED]={suite_execution_id='suite-1',
+            repeat_index=1, spec_file_identity='tests/example.ds.lua',
+            behavior_summary=counts, cleanup_outcome='complete'},
         [EventType.TEST_STARTED]={
             name='suite test',
             source_identity='tests/example.ds.lua',
@@ -86,6 +89,41 @@ local function payloads()
             cleanup_confirmed=true,
             mount_cleanup_verified=true,
         },
+        [EventType.CLEANUP_TRANSACTION_REGISTERED]={cleanup_event={
+            schema='dwarfspec.event.v3', protocol_version=3,
+            event_type='cleanup.transaction_registered',
+            transaction_id='cleanup-1', registration_ordinal=1,
+            label='restore fixture', lifetime='owner', owner_scope='service_run',
+            service_run_id='run-events-1', state='pending', registered_at_ms=100,
+        }},
+        [EventType.CLEANUP_TRANSACTION_STARTED]={cleanup_event={
+            schema='dwarfspec.event.v3', protocol_version=3,
+            event_type='cleanup.transaction_started',
+            transaction_id='cleanup-1', registration_ordinal=1,
+            label='restore fixture', lifetime='owner', owner_scope='service_run',
+            service_run_id='run-events-1', state='running', registered_at_ms=100,
+            trigger='owner_teardown', execution_started_at_ms=101,
+        }},
+        [EventType.CLEANUP_TRANSACTION_FINISHED]={cleanup_event={
+            schema='dwarfspec.event.v3', protocol_version=3,
+            event_type='cleanup.transaction_finished',
+            transaction_id='cleanup-1', registration_ordinal=1,
+            label='restore fixture', lifetime='owner', owner_scope='service_run',
+            service_run_id='run-events-1', state='complete', registered_at_ms=100,
+            trigger='owner_teardown', execution_started_at_ms=101,
+            completed_at_ms=102, disposition='complete',
+            restore_outcome='complete', verification_outcome='complete',
+            evidence={},
+        }},
+        [EventType.CLEANUP_TRANSACTION_ABANDONED]={cleanup_event={
+            schema='dwarfspec.event.v3', protocol_version=3,
+            event_type='cleanup.transaction_abandoned',
+            transaction_id='cleanup-2', registration_ordinal=2,
+            label='restore second fixture', lifetime='owner',
+            owner_scope='service_run', service_run_id='run-events-1',
+            state='abandoned', registered_at_ms=100, completed_at_ms=102,
+            disposition='abandoned', evidence={},
+        }},
         [EventType.RUN_ABORTED]={reason='external timeout'},
         [EventType.RUN_FINISHED]={
             terminal_state=RunState.PASSED,
@@ -159,11 +197,11 @@ describe('automation structured events', function()
         local samples = payloads()
         local types = events.types()
 
-        assert.equals(18, #types)
+        assert.equals(23, #types)
         for index, event_type in ipairs(types) do
             local event = events.publish(journal, event_type,
                 samples[event_type], 100 + index)
-            assert.equals('dwarfspec.event.v1', event.schema)
+            assert.equals('dwarfspec.event.v3', event.schema)
             assert.equals('service-events-1', event.service_instance_id)
             assert.equals('project-events-1', event.project_id)
             assert.equals('run-events-1', event.run_id)

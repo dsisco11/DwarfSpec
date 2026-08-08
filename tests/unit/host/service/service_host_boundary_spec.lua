@@ -28,7 +28,7 @@ local function activated_run()
         end,
     }
     service.bootstrap({
-        protocol_version=2,
+        protocol_version=3,
         package_root='.',
         package_version='0.2.1',
     }, dependencies)
@@ -36,7 +36,7 @@ local function activated_run()
         project_root='tests/framework/minimal_project',
         normalized_configuration={},
         result_policy=ResultPolicy.NONE,
-        client_compatibility={protocol=2, package_version='0.2.1'},
+        client_compatibility={protocol=3, package_version='0.2.1'},
     }, dependencies)
     local admitted = service.submit(project.project_id, {
         request_key='host-boundary-request-key',

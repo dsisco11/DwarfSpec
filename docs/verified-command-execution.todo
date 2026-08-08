@@ -710,45 +710,58 @@ Outcome: live, retained, controller, persisted, and future UI consumers can
 inspect complete owner-specific cleanup ledgers derived from the authoritative
 journal.
 
-- [ ] Fold test-attempt transaction events by owner and registration ordinal
+- [x] Fold test-attempt transaction events by owner and registration ordinal
       into `host_report.test_attempts[].cleanup_transactions`.
-- [ ] Fold suite-execution events into
+- [x] Fold suite-execution events into
       `host_report.suite_executions[].cleanup_transactions`.
-- [ ] Fold service-run events into `host_report.service_cleanup_transactions`.
-- [ ] Include exactly one terminal disposition per registered transaction:
+- [x] Fold service-run events into `host_report.service_cleanup_transactions`.
+- [x] Include exactly one terminal disposition per registered transaction:
       `complete`, `failed`, `abandoned`, or `unconfirmed`.
-- [ ] Preserve parent suite, repeat, stable suite/test identity, behavior
+- [x] Preserve parent suite, repeat, stable suite/test identity, behavior
       summary, cleanup outcome, and bounded failure references where applicable.
-- [ ] Update cursor reads and retained-run inspection so transaction state can
+- [x] Update cursor reads and retained-run inspection so transaction state can
       be observed during execution and after terminalization.
-- [ ] Update controller result interpretation to validate and persist the
+- [x] Update controller result interpretation to validate and persist the
       supplied journal and projections without deriving cleanup semantics from
       private runtime state.
-- [ ] Update result storage and formatting for all owner scopes.
-- [ ] Validate duplicate IDs, owner-local ordinal rules, owner attribution,
+- [x] Update result storage and formatting for all owner scopes.
+- [x] Validate duplicate IDs, owner-local ordinal rules, owner attribution,
       missing terminal dispositions, journal/result outcome consistency, and
       exact projection equality.
-- [ ] Preserve acknowledgement semantics: release admission without erasing the
+- [x] Preserve acknowledgement semantics: release admission without erasing the
       read-only retained run record.
-- [ ] Keep process/service destruction outside the complete-ledger guarantee;
+- [x] Keep process/service destruction outside the complete-ledger guarantee;
       do not synthesize registrations or dispositions that the service could
       not publish.
-- [ ] Keep successful cleanup absent from high-level warning/status surfaces
+- [x] Keep successful cleanup absent from high-level warning/status surfaces
       while retaining it for explicit cleanup inspectors.
-- [ ] Update protocol snapshots, transport fixtures, retained-run fixtures,
+- [x] Update protocol snapshots, transport fixtures, retained-run fixtures,
       controller tests, persistence tests, and reporting tests together.
-- [ ] Run the focused protocol/event-journal/result/controller/configuration/
+- [x] Run the focused protocol/event-journal/result/controller/configuration/
       host-loading/declaration validation gate.
-- [ ] Perform a follow-up cross-boundary review for schema and projection
+- [x] Perform a follow-up cross-boundary review for schema and projection
       equality.
 
 Completion criteria:
 
-- [ ] The service journal is the sole history source of truth.
-- [ ] All three terminal projections are complete, owner-correct, and equal to
+- [x] The service journal is the sole history source of truth.
+- [x] All three terminal projections are complete, owner-correct, and equal to
       their authoritative journal folds.
-- [ ] Old clients/services reject the successor protocol instead of partially
+- [x] Old clients/services reject the successor protocol instead of partially
       interpreting it.
+
+Evidence recorded 2026-08-08:
+
+- Focused cleanup materialization, cleanup-registration, owner-lifecycle,
+  suite-executor, protocol-event, result-interpreter, transport-client, and
+  run-assembly gates passed with no failures, errors, or pending tests.
+- The complete unit suite passed with 1,097 successes, 0 failures, 0 errors,
+  and 0 pending.
+- Lua syntax/formatting passed for 418 files and valid source declaration
+  fixtures passed.
+- The follow-up cross-boundary review added `suite.finished` publication after
+  suite cleanup materialization. The independent completion audit found no
+  confirmed issue, partially satisfied requirement, or evidence gap.
 
 ## Phase 10: Implement the common command runner
 
@@ -1343,7 +1356,125 @@ Completion criteria:
       verification and can convert project commands without reading internals.
 - [ ] Source, installed declarations, package contents, and documentation agree.
 
-## Phase 23: Final exhaustive qualification and acceptance audit
+## Phase 23: Refactor event definitions into closed protocol structs
+
+Outcome: each supported event type has one explicit, inspectable, immutable
+definition struct that owns its required payload fields and semantic
+validation. `events.lua` retains the bounded JSON copy, envelope, append-only
+journal, sequence, and cursor responsibilities, with one generic payload
+validation path.
+
+Scope and compatibility boundary:
+
+- [ ] Treat `src/dwarfspec/protocol/enums/event_types.lua` as the sole closed
+      event vocabulary. At implementation start, inventory its complete current
+      value set and reconcile the registry against it; do not rely on a stale
+      hard-coded event count.
+- [ ] Preserve every existing event identifier, `dwarfspec.event.v3` envelope,
+      field name, required/optional distinction, field type, accepted payload,
+      rejected payload category, journal ordering rule, and detached-copy
+      behavior. This is a source refactor only: no schema-version change,
+      wire migration, event addition/removal/rename, transport change, retained
+      journal rewrite, or controller/result-format redesign belongs here.
+- [ ] Use the current `events.validate_payload()`, `validate()`, `publish()`,
+      `validate_journal()`, and `read()` contracts as the behavioral baseline.
+      Preserve their public call shapes and keep validation observational: a
+      definition validator must not mutate the caller payload or journal.
+
+Definition design and ownership:
+
+- [ ] Add one protocol-local `event_definitions` module. Its only runtime
+      authority is a private closed registry keyed by `DwarfSpecEventType`; it
+      must not expose that mutable table to consumers.
+- [ ] Define documented class-like `EventDefinition` and `EventFieldDefinition`
+      shapes. Each definition contains: its exact event identifier; an ordered
+      array of named required-field descriptors; and one optional, pure semantic
+      validator callback. Field descriptors use only the already-supported
+      primitive types (`string`, `table`, `boolean`, and nonnegative `integer`)
+      and may not repeat a field name.
+- [ ] Make the definitions immutable after construction. “Data-only” means
+      declarative metadata plus the definition's fixed validator callback, not
+      a mutable runtime service; do not use global state, dynamic registration,
+      payload metatables, plugin-defined event types, or one module per event.
+- [ ] Extract only shared, stateless validation primitives needed by both
+      modules into one protocol-local helper module. Its dependency direction
+      must be `events.lua -> event_definitions.lua -> shared helper`; event
+      definitions must not require `events.lua`. Keep JSON-safe copying,
+      envelope validation, journal mutation, sequencing, and cursor reads in
+      `events.lua` to avoid a load cycle or split journal authority.
+- [ ] Keep the existing specialized validators authoritative rather than
+      reimplementing them: problem-record validation, focus-diagnostic
+      validation, and `VerifiedExecutionSchemas:validate_cleanup_event()` stay
+      the validation mechanisms called by their owning event definitions.
+
+Migration requirements:
+
+- [ ] Create one definition for each current enum value: `RUN_QUEUED`,
+      `RUN_ACTIVATED`, `RUN_CANCELLED`, `RUN_STARTED`, `REPEAT_STARTED`,
+      `REPEAT_FINISHED`, `SUITE_FINISHED`, `TEST_STARTED`, `TEST_FINISHED`,
+      `PROBLEM_RECORDED`, `COMMAND_STARTED`, `COMMAND_FINISHED`,
+      `DIAGNOSTIC_RECORDED`, `CLEANUP_STARTED`, `CLEANUP_FAILED`,
+      `CLEANUP_FINISHED`, `CLEANUP_TRANSACTION_REGISTERED`,
+      `CLEANUP_TRANSACTION_STARTED`, `CLEANUP_TRANSACTION_FINISHED`,
+      `CLEANUP_TRANSACTION_ABANDONED`, `RUN_ABORTED`, `RUN_FINISHED`, and
+      `SCHEDULER_BLOCKED`. Reconcile this list against the enum before coding;
+      the enum remains controlling if it has changed.
+- [ ] Move every required-field declaration from the existing field map into
+      the matching definition without changing the public payload shape or
+      accidentally making currently optional semantic fields required.
+- [ ] Move all event-specific rules into the matching definition: terminal run
+      states and totals; test statuses; repeat bounds and counts; suite behavior
+      counts; optional scheduler-blocked kind and its quarantine details;
+      problem records; recognized focus diagnostics; and nested cleanup
+      lifecycle schema delegation.
+- [ ] Keep generic validation ordered as: reject an unknown type; require a
+      payload table; perform the bounded JSON-safe check; look up the one
+      definition; validate all required fields; then invoke its semantic
+      validator. Preserve the present rejection classes and path context.
+- [ ] Replace the old required-field map and every event-type conditional chain
+      in `events.lua` in the same change. Do not leave a second authoritative
+      map, compatibility branch, or duplicated semantic validation path.
+- [ ] Update LuaDoc for the definition structs, field descriptors, validator
+      callback input, and private-registry access boundary. Do not publish a
+      mutable registry solely for introspection.
+
+Verification and review:
+
+- [ ] Add focused registry-conformance coverage proving, by iterating the enum,
+      that every supported value has exactly one definition; that no unsupported
+      type resolves; and that each definition's identifier, descriptors, and
+      validator contract are well formed.
+- [ ] Characterize and retain valid/invalid fixtures for every event family,
+      including the special semantic cases above. Assert both direct payload
+      validation and event-envelope/journal publication behavior so the
+      refactor cannot silently change serialized payloads or detached copies.
+- [ ] Update event-schema, journal, transport, retained-run, controller, and
+      fixture tests only where their expectations must name the new internal
+      module; their wire-contract assertions must remain unchanged.
+- [ ] Run focused event-definition, event-schema, journal, transport,
+      retained-run, controller, host-loading, and declaration checks; then run
+      Lua syntax/formatting, source declarations, and the full unit suite.
+- [ ] Perform the required follow-up implementation review. Confirm the
+      dependency direction has no module-load cycle, `events.lua` contains no
+      type-specific payload policy, specialized cleanup validation was
+      delegated rather than copied, and the diff contains no unrelated protocol
+      behavior or schema change.
+
+Completion criteria:
+
+- [ ] The private closed registry and the enum agree one-for-one, every
+      definition is immutable to consumers, and no unsupported type can obtain
+      a definition.
+- [ ] `events.lua` has one generic payload-validation path with no event-type
+      field map or event-specific conditional chain; it remains the sole owner
+      of JSON copying, envelopes, journal mutation, sequence, and cursor logic.
+- [ ] Every current event preserves its externally observable payload,
+      validation acceptance/rejection behavior, serialized envelope, and
+      journal/cursor behavior under focused conformance evidence.
+- [ ] The focused and full validation evidence, plus the follow-up review,
+      explicitly cover all boundaries above.
+
+## Phase 24: Final exhaustive qualification and acceptance audit
 
 Outcome: source, installed, packaged, framework, service, and live evidence
 collectively prove the complete proposal after all old paths are gone.

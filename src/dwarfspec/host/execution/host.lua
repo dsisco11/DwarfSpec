@@ -29,7 +29,7 @@ local suite_executor_module = require('dwarfspec.host.execution.suite_executor')
 local run_lifecycle_module = require('dwarfspec.host.execution.run_lifecycle')
 
 local M = {
-    protocol_version=2,
+    protocol_version=3,
     package_version='0.2.2',
 }
 

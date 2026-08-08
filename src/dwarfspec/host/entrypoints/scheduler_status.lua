@@ -50,7 +50,7 @@ if run_id == nil then
     local loaded = dfhack.dwarfspec ~= nil
     print('DWARFSPEC_JSON ' .. host.encode_transport({
         schema='dwarfspec.status.v1',
-        protocol=2,
+        protocol=3,
         service_loaded=loaded,
         scheduler=loaded and host.scheduler_snapshot() or nil,
     }))

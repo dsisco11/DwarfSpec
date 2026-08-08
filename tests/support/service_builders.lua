@@ -145,7 +145,7 @@ function M.project(overrides)
         result_path='tests/framework/service_project_alpha/tests/' ..
             '.test-results/dwarfspec/results.json',
         result_policy=ResultPolicy.FILE,
-        client_compatibility={protocol=2, package_version='0.1.2'},
+        client_compatibility={protocol=3, package_version='0.1.2'},
         registered_at_ms=0,
         outstanding_run_id=nil,
     }, overrides)
@@ -176,7 +176,7 @@ end
 ---@return table
 function M.registry(overrides)
     return record({
-        protocol_version=2,
+        protocol_version=3,
         service_instance_id='service-fixture-1',
         package_root='D:/package',
         package_version='0.1.2',

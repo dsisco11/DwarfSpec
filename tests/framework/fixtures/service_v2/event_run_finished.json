@@ -1,5 +1,5 @@
 {
-  "schema": "dwarfspec.event.v1",
+  "schema": "dwarfspec.event.v3",
   "service_instance_id": "service-fixture-1",
   "project_id": "project-alpha",
   "run_id": "run-failed",

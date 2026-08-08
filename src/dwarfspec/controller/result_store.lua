@@ -1,4 +1,4 @@
--- Version 2 latest-invocation result construction and safe persistence.
+-- Version 3 latest-invocation result construction and safe persistence.
 
 local json = require('dkjson')
 local project = require('dwarfspec.controller.discovery.project')
@@ -32,14 +32,14 @@ function M.resolve_path(project_root, configured_path, filesystem)
         case_insensitive)
 end
 
----Constructs and validates one version 2 invocation result.
+---Constructs and validates one version 3 invocation result.
 ---@param source table
 ---@return table
 function M.build(source)
     assert(type(source) == 'table',
         'result construction source must be a table')
     local result = {
-        schema='dwarfspec.result.v2',
+        schema='dwarfspec.result.v3',
         service_instance_id=source.service_instance_id,
         project_id=source.project_id,
         run_id=source.run_id,

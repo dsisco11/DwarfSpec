@@ -146,8 +146,8 @@ describe('DwarfSpec CLI selection', function()
                 status=function(options)
                     invoked = {command='status', options=options}
                     local scheduler = {
-                            schema='dwarfspec.scheduler.v2',
-                            protocol_version=2,
+                            schema='dwarfspec.scheduler.v3',
+                            protocol_version=3,
                             service_instance_id='service-cli-fixture',
                             package_root='D:/Packages/DwarfSpec',
                             package_version='0.2.1',
@@ -157,7 +157,7 @@ describe('DwarfSpec CLI selection', function()
                         }
                     return {exit_code=0, scheduler=scheduler, status={
                         schema='dwarfspec.status.v1',
-                        protocol=2,
+                        protocol=3,
                         service_loaded=true,
                         scheduler=scheduler,
                     }}
@@ -169,7 +169,7 @@ describe('DwarfSpec CLI selection', function()
                     invoked = {command='history', options=options}
                     return {exit_code=0, history={
                         schema='dwarfspec.history.v1',
-                        protocol=2,
+                        protocol=3,
                         service_loaded=true,
                         service_instance_id='service-cli-fixture',
                         runs={{
@@ -198,13 +198,13 @@ describe('DwarfSpec CLI selection', function()
                     }
                     return {exit_code=0, inspection={
                         schema='dwarfspec.run-inspection.v1',
-                        protocol=2,
+                        protocol=3,
                         service_loaded=true,
                         found=true,
                         run_id=run_id,
                         snapshot={
-                            schema='dwarfspec.run.v2',
-                            protocol_version=2,
+                            schema='dwarfspec.run.v3',
+                            protocol_version=3,
                             service_instance_id='service-cli-fixture',
                             project_id='project-cli-fixture',
                             run_id=run_id,
@@ -241,7 +241,7 @@ describe('DwarfSpec CLI selection', function()
                     }
                     return {exit_code=0, logs={
                         schema='dwarfspec.run-logs.v1',
-                        protocol=2,
+                        protocol=3,
                         service_loaded=true,
                         found=true,
                         service_instance_id='service-cli-fixture',
@@ -261,8 +261,8 @@ describe('DwarfSpec CLI selection', function()
                         reason=reason,
                     }
                     return {exit_code=0, scheduler={
-                        schema='dwarfspec.scheduler.v2',
-                        protocol_version=2,
+                        schema='dwarfspec.scheduler.v3',
+                        protocol_version=3,
                         service_instance_id='service-cli-fixture',
                         package_root='D:/Packages/DwarfSpec',
                         package_version='0.2.1',

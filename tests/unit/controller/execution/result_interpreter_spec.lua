@@ -74,7 +74,10 @@ describe('controller result interpreter', function()
         local native = {
             service_instance_id='service', project_id='project', run_id='run',
             generation=2, state=RunState.FAILED, activated_at_ms=1,
-            queue_wait_ms=7,
+            queue_wait_ms=7, host_report={schema='dwarfspec.result.v3',
+                protocol_version=3, service_run_id='run',
+                service_cleanup_transactions={}, suite_executions={},
+                test_attempts={}},
         }
         local runner_error = {kind=kinds.TEST, message='native failure'}
         local document = value.build({project_root='project/../project',
@@ -93,7 +96,7 @@ describe('controller result interpreter', function()
         assert.same('finished', document.finished_at)
         assert.same(7, document.queue_wait_ms)
         assert.same({kind=kinds.TEST, message='native failure'}, document.error)
-        assert.same(native, document.host_report)
+        assert.same(native.host_report, document.host_report)
         assert.same({}, document.events)
     end)
 

@@ -1,13 +1,13 @@
 {
-  "schema": "dwarfspec.transport.v2",
-  "protocol": 2,
+  "schema": "dwarfspec.transport.v3",
+  "protocol": 3,
   "service_instance_id": "service-fixture-1",
   "project_id": "project-alpha",
   "run_id": "run-failed",
   "generation": 4,
   "snapshot": {
-    "schema": "dwarfspec.run.v2",
-    "protocol_version": 2,
+    "schema": "dwarfspec.run.v3",
+    "protocol_version": 3,
     "service_instance_id": "service-fixture-1",
     "project_id": "project-alpha",
     "run_id": "run-failed",
@@ -54,7 +54,7 @@
   },
   "events": [
     {
-      "schema": "dwarfspec.event.v1",
+      "schema": "dwarfspec.event.v3",
       "service_instance_id": "service-fixture-1",
       "project_id": "project-alpha",
       "run_id": "run-failed",

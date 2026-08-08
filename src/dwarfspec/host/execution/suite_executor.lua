@@ -66,10 +66,21 @@ function M.execute(package_root, project_root, run, scheduler_module,
             end, debug.traceback)
             local cleanup_ok = run.cleanup_owner_lifecycle:suite_exit(
                 'suite teardown', not focus_ok)
+            local suite = run.cleanup_owner_lifecycle:latest_suite()
+            run.event_publisher.publish('suite.finished', {
+                suite_execution_id=suite.suite_execution_id,
+                repeat_index=suite.repeat_index,
+                spec_file_identity=suite.spec_file_identity,
+                behavior_summary=suite.behavior_summary,
+                cleanup_outcome=suite.cleanup_outcome,
+            })
             if not focus_ok then error(focus_error, 0) end
             assert(cleanup_ok, 'suite cleanup finalization was not confirmed')
         end,
-        on_test_start=lifecycle.test_start})
+        on_test_start=function(identity)
+            run.cleanup_owner_lifecycle:test_start(identity)
+            lifecycle.test_start(identity)
+        end})
     dependencies.install_entry(lifecycle_adapter, busted, {
         example_entry=function()
             run.cleanup_owner_lifecycle:test_entry()

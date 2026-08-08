@@ -204,7 +204,7 @@ describe('version 2 automation entrypoint contract', function()
 
         assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
         assert.equals('dwarfspec.error.v1', encoded[1].schema)
-        assert.equals(2, encoded[1].protocol)
+        assert.equals(3, encoded[1].protocol)
         assert.equals('registration', encoded[1].kind)
         assert.matches('unknown automation option: --unknown',
             encoded[1].message, 1, true)
@@ -229,7 +229,7 @@ describe('version 2 automation entrypoint contract', function()
         load_host_script('bootstrap')(
             'admission-owner', '--project-root=.', '--result-policy=file',
             '--result-path=' .. result_path)
-        assert.equals('dwarfspec.transport.v2', encoded[2].schema)
+        assert.equals('dwarfspec.transport.v3', encoded[2].schema)
         assert.matches('DWARFSPEC_OWNER ', lines[2], 1, true)
         assert.equals(1, registry.generation)
 
@@ -240,7 +240,7 @@ describe('version 2 automation entrypoint contract', function()
         assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
         assert.same({
             schema='dwarfspec.error.v1',
-            protocol=2,
+            protocol=3,
             kind='registration',
             code='request_key_conflict',
             message='This request identity is already bound to a different ' ..
@@ -301,7 +301,7 @@ describe('version 2 automation entrypoint contract', function()
 
         local registry = dfhack.dwarfspec
         local run = registry.runs['entrypoint-contract']
-        assert.equals(2, registry.protocol_version)
+        assert.equals(3, registry.protocol_version)
         assert.equals(1, registry.generation)
         assert.equals(run.run_id, registry.active_run_id)
         assert.equals('starting', run.state)
@@ -311,13 +311,13 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals(4, run.options.lease_check_frames)
         assert.equals('tests/live/*.ds.lua', run.options.test_glob)
         assert.same({'live/shared_spec.ds.lua'}, run.options.specs)
-        assert.matches('DWARFSPEC protocol=2 ' ..
+        assert.matches('DWARFSPEC protocol=3 ' ..
             'run_id=entrypoint-contract state=queued generation=1',
             lines[1], 1, true)
         assert.matches('DWARFSPEC_OWNER owner-', lines[2], 1, true)
         assert.equals('DWARFSPEC_JSON {"encoded":true}', lines[3])
-        assert.equals('dwarfspec.transport.v2', encoded[1].schema)
-        assert.equals(2, encoded[1].protocol)
+        assert.equals('dwarfspec.transport.v3', encoded[1].schema)
+        assert.equals(3, encoded[1].protocol)
 
         lines = {}
         load_host_script('abort')(
@@ -331,12 +331,12 @@ describe('version 2 automation entrypoint contract', function()
         assert.is_false(run.terminal_observed)
         assert.equals(run.run_id,
             registry.projects[run.project_id].outstanding_run_id)
-        assert.matches('DWARFSPEC protocol=2 ' ..
+        assert.matches('DWARFSPEC protocol=3 ' ..
             'run_id=entrypoint-contract state=aborted generation=1',
             lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"encoded":true}', lines[2])
-        assert.equals('dwarfspec.transport.v2', encoded[2].schema)
-        assert.equals(2, encoded[2].protocol)
+        assert.equals('dwarfspec.transport.v3', encoded[2].schema)
+        assert.equals(3, encoded[2].protocol)
 
         lines = {}
         load_host_script('acknowledge')(
@@ -346,7 +346,7 @@ describe('version 2 automation entrypoint contract', function()
         assert.is_nil(registry.projects[run.project_id].outstanding_run_id)
         assert.matches('acknowledged=true', lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"encoded":true}', lines[2])
-        assert.equals('dwarfspec.transport.v2', encoded[3].schema)
+        assert.equals('dwarfspec.transport.v3', encoded[3].schema)
 
         registry.package_version = '0.1.3'
         lines = {}
@@ -354,7 +354,7 @@ describe('version 2 automation entrypoint contract', function()
             'entrypoint-version-rejection')
         assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
         assert.equals('dwarfspec.error.v1', encoded[4].schema)
-        assert.equals(2, encoded[4].protocol)
+        assert.equals(3, encoded[4].protocol)
         assert.equals('registration', encoded[4].kind)
         assert.equals('package_version_mismatch', encoded[4].code)
         assert.equals('0.1.3', encoded[4].running_version)
@@ -404,7 +404,7 @@ describe('version 2 automation entrypoint contract', function()
         load_host_script('cancel')(
             queued.run_id, queued.owner_capability, '0', 'fixture cancel')
         assert.equals('cancelled', queued.state)
-        assert.equals('dwarfspec.transport.v2',
+        assert.equals('dwarfspec.transport.v3',
             encoded[#encoded].schema)
         assert.equals('cancelled', encoded[#encoded].snapshot.state)
 
@@ -412,14 +412,14 @@ describe('version 2 automation entrypoint contract', function()
         load_host_script('event_read')(
             queued.run_id, tostring(encoded[#encoded].last_sequence))
         assert.equals(1, #lines)
-        assert.equals('dwarfspec.transport.v2',
+        assert.equals('dwarfspec.transport.v3',
             encoded[#encoded].schema)
         assert.same({}, encoded[#encoded].events)
 
         lines = {}
         load_host_script('scheduler_status')(
             queued.run_id, tostring(encoded[#encoded].last_sequence))
-        assert.equals('dwarfspec.scheduler.v2',
+        assert.equals('dwarfspec.scheduler.v3',
             encoded[#encoded].scheduler.schema)
         local query_cursor = encoded[#encoded].last_sequence
 
@@ -459,7 +459,7 @@ describe('version 2 automation entrypoint contract', function()
             queued.run_id, tostring(queued.generation),
             tostring(query_cursor), 'fixture discard')
         assert.is_true(queued.discarded)
-        assert.equals('dwarfspec.transport.v2',
+        assert.equals('dwarfspec.transport.v3',
             encoded[#encoded].schema)
 
         local active = host.start(root,
@@ -476,7 +476,7 @@ describe('version 2 automation entrypoint contract', function()
             'fixture recovery')
         assert.equals('aborted', active.state)
         assert.is_true(active.cleanup_confirmed)
-        assert.equals('dwarfspec.transport.v2',
+        assert.equals('dwarfspec.transport.v3',
             encoded[#encoded].schema)
 
         dfhack.dwarfspec.quarantine = {
@@ -488,7 +488,7 @@ describe('version 2 automation entrypoint contract', function()
             active.run_id, tostring(active.generation),
             tostring(#active.event_journal.events), 'fixture verified clean')
         assert.same({'DWARFSPEC_JSON {"encoded":true}'}, lines)
-        assert.equals('dwarfspec.transport.v2', encoded[#encoded].schema)
+        assert.equals('dwarfspec.transport.v3', encoded[#encoded].schema)
         assert.is_false(encoded[#encoded].scheduler.quarantine.active)
         assert.is_false(dfhack.dwarfspec.quarantine.active)
 
@@ -498,7 +498,7 @@ describe('version 2 automation entrypoint contract', function()
         assert.equals('dwarfspec.status.v1',
             encoded[#encoded].schema)
         assert.is_true(encoded[#encoded].service_loaded)
-        assert.equals('dwarfspec.scheduler.v2',
+        assert.equals('dwarfspec.scheduler.v3',
             encoded[#encoded].scheduler.schema)
     end)
 end)

@@ -50,7 +50,7 @@ function M.environment()
             table.insert(controls.cancelled_timers, timer_id)
         end,
     }
-    service.bootstrap({protocol_version=2, package_root='.',
+    service.bootstrap({protocol_version=3, package_root='.',
         package_version='0.2.1'}, dependencies)
     controls.set_time = function(value) now = value end
     controls.registry = namespace.dwarfspec
@@ -67,7 +67,7 @@ function M.project(dependencies, suffix, overrides)
         display_name='Direct Scheduler ' .. suffix,
         normalized_configuration={suffix=suffix},
         result_policy=ResultPolicy.NONE,
-        client_compatibility={protocol=2, package_version='0.2.1'},
+        client_compatibility={protocol=3, package_version='0.2.1'},
     }
     for key, value in pairs(overrides or {}) do request[key] = value end
     return service.register_project(request, dependencies)

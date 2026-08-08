@@ -1,4 +1,4 @@
--- Owns run-scoped atomic cleanup registration and the authoritative lifecycle journal.
+-- Owns run-scoped atomic cleanup registration and lifecycle-event publication.
 
 local CleanupRegistry = require('dwarfspec.driver.cleanup.cleanup_registry')
 local CleanupTransaction = require('dwarfspec.driver.cleanup.cleanup_transaction')
@@ -7,6 +7,8 @@ local CleanupState = require('dwarfspec.protocol.enums.cleanup_states')
 local CleanupLifetime = require('dwarfspec.protocol.enums.cleanup_lifetimes')
 local OwnerScope = require('dwarfspec.protocol.enums.execution_owner_scopes')
 local Outcomes = require('dwarfspec.driver.command.outcomes')
+local Revision = require('dwarfspec.protocol.verified_execution_revision')
+local events = require('dwarfspec.protocol.events')
 
 local LEASE_STATE = setmetatable({}, {__mode='k'})
 
@@ -20,6 +22,8 @@ local LEASE_STATE = setmetatable({}, {__mode='k'})
 ---@field private _next_transaction_id integer
 ---@field private _next_registration_ordinals table<string, integer>
 ---@field private _journal table[]
+---@field private _publish_event? fun(event: dwarfspec.CleanupLifecycleEvent)
+---@field private _read_journal? fun(): dwarfspec.CleanupLifecycleEvent[]
 ---@field private _closed_owners table<string, true>
 ---@field private _owner_results table<string, table>
 ---@field private _quarantine fun(evidence: table)
@@ -53,6 +57,16 @@ end
 function Internals.owner_key(owner)
     return table.concat({owner.owner_scope, owner.service_run_id,
         owner.suite_execution_id or '', owner.test_attempt_id or ''}, ':')
+end
+
+---Copies trusted bounded diagnostic data without its read-only metatable.
+---@param value any
+---@return any
+function Internals.plain(value)
+    if type(value) ~= 'table' then return value end
+    local result = {}
+    for key, entry in pairs(value) do result[key] = Internals.plain(entry) end
+    return result
 end
 
 ---Checks that an owner belongs to this service run.
@@ -166,14 +180,53 @@ end
 ---@param record table
 ---@param details? table
 function Internals.publish(service, event, transaction, record, details)
-    local projection = {event=event, service_run_id=service._service_run_id,
-        timestamp_ms=service._now_ms(), transaction_id=transaction:transaction_id(),
+    local timestamp_ms = service._now_ms()
+    local projection = {schema=Revision.EVENT_SCHEMA,
+        protocol_version=Revision.PROTOCOL_VERSION, event_type=event,
+        service_run_id=service._service_run_id, timestamp_ms=timestamp_ms,
+        transaction_id=transaction:transaction_id(),
         registration_ordinal=transaction:registration_ordinal(), label=record.label,
-        lifetime=record.lifetime, owner=record.owner,
-        command_invocation_id=record.command_invocation_id, state=transaction:state()}
-    if details ~= nil then projection.details = details end
-    service._journal[#service._journal + 1] = Internals.diagnostics:sanitize(
-        projection, 'cleanup lifecycle event')
+        lifetime=record.lifetime, owner_scope=record.owner.owner_scope,
+        suite_execution_id=record.owner.suite_execution_id,
+        test_attempt_id=record.owner.test_attempt_id,
+        repeat_index=record.owner.repeat_index,
+        spec_file_identity=record.owner.spec_file_identity,
+        test_identity=record.owner.test_identity,
+        command_invocation_id=record.command_invocation_id,
+        state=transaction:state(), registered_at_ms=record.registered_at_ms}
+    if event == 'cleanup.transaction_registered' then
+        projection.evidence = details
+    end
+    if event == 'cleanup.transaction_started' then
+        projection.trigger = details.trigger
+        projection.execution_started_at_ms = timestamp_ms
+    elseif event == 'cleanup.transaction_finished' then
+        projection.trigger = details.trigger or 'owner_teardown'
+        projection.execution_started_at_ms = record.execution_started_at_ms or
+            timestamp_ms
+        projection.completed_at_ms = timestamp_ms
+        projection.disposition = details.disposition
+        projection.restore_outcome = details.evidence.restore_succeeded and
+            'complete' or 'failed'
+        projection.verification_outcome = details.evidence.verification_succeeded and
+            'complete' or 'failed'
+        projection.evidence = details.evidence
+    elseif event == 'cleanup.transaction_abandoned' then
+        projection.completed_at_ms = timestamp_ms
+        projection.disposition = CleanupState.ABANDONED
+        projection.evidence = details.proof
+    end
+    if event == 'cleanup.transaction_started' then
+        record.execution_started_at_ms = projection.execution_started_at_ms
+    end
+    local safe_projection = events.copy_json(Internals.plain(projection),
+        'cleanup lifecycle event')
+    if service._publish_event ~= nil then
+        service._publish_event(events.copy_json(safe_projection,
+            'cleanup lifecycle event'))
+    else
+        service._journal[#service._journal + 1] = safe_projection
+    end
 end
 
 ---Releases this invocation's mutation serialization lease.
@@ -233,6 +286,10 @@ function CleanupRegistrationService.new(options)
         'cleanup registration service requires monotonic clock')
     assert(options.quarantine == nil or type(options.quarantine) == 'function',
         'cleanup registration quarantine callback must be callable')
+    assert(options.publish_event == nil or type(options.publish_event) == 'function',
+        'cleanup lifecycle publisher must be callable')
+    assert(options.read_journal == nil or type(options.read_journal) == 'function',
+        'cleanup lifecycle journal reader must be callable')
     assert(options.recover == nil or type(options.recover) == 'function',
         'cleanup registration recovery callback must be callable')
     return setmetatable({_service_run_id=Internals.identity(options.service_run_id,
@@ -241,6 +298,7 @@ function CleanupRegistrationService.new(options)
         _transaction_records={}, _next_transaction_id=0,
         _next_registration_ordinals={}, _journal={},
         _closed_owners={}, _owner_results={},
+        _publish_event=options.publish_event, _read_journal=options.read_journal,
         _quarantine=options.quarantine or function() end,
         _recover=options.recover or function() end,
         _active_mutation_invocation_id=nil},
@@ -295,7 +353,8 @@ function CleanupRegistrationService:register(registration)
     local registry = Internals.registry(self, owner)
     local record = {owner=owner, label=Internals.identity(registration.label,
         'cleanup label'), lifetime=registration.lifetime,
-        command_invocation_id=command_invocation_id}
+        command_invocation_id=command_invocation_id,
+        registered_at_ms=self._now_ms()}
     local transaction
     transaction = CleanupTransaction.new({transaction_id=transaction_id,
         registration_ordinal=ordinal, label=record.label, receipt=registration.receipt,
@@ -320,7 +379,8 @@ function CleanupRegistrationService:register(registration)
         end,
         on_finished=function(item, disposition, evidence)
             Internals.publish(self, 'cleanup.transaction_finished', item, record,
-                {disposition=disposition, evidence=evidence})
+                {disposition=disposition, evidence=evidence,
+                    trigger='owner_teardown'})
             if disposition == CleanupState.FAILED then
                 self._quarantine(Internals.diagnostics:sanitize({
                     reason=Internals.release_failure(evidence) and
@@ -439,7 +499,10 @@ end
 ---Returns the immutable run-scoped cleanup journal.
 ---@return table[]
 function CleanupRegistrationService:journal()
-    return Internals.diagnostics:sanitize(self._journal, 'cleanup journal')
+    if self._read_journal ~= nil then
+        return events.copy_json(self._read_journal(), 'cleanup journal')
+    end
+    return events.copy_json(self._journal, 'cleanup journal')
 end
 
 ---Returns a detached snapshot of one owner's pending transaction identifiers.

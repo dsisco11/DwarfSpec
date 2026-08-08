@@ -9,7 +9,7 @@ local SchedulerFailureKind =
 local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
 
 local M = {
-    schema='dwarfspec.event.v1',
+    schema='dwarfspec.event.v3',
 }
 
 local DEFAULT_LIMITS = {
@@ -29,6 +29,13 @@ local PAYLOAD_FIELDS = {
     [EventType.RUN_STARTED]={repeat_count='integer', options='table'},
     [EventType.REPEAT_STARTED]={repeat_index='integer', repeat_count='integer'},
     [EventType.REPEAT_FINISHED]={repeat_index='integer', counts='table'},
+    [EventType.SUITE_FINISHED]={
+        suite_execution_id='string',
+        repeat_index='integer',
+        spec_file_identity='string',
+        behavior_summary='table',
+        cleanup_outcome='string',
+    },
     [EventType.TEST_STARTED]={name='string'},
     [EventType.TEST_FINISHED]={
         name='string',
@@ -64,6 +71,10 @@ local PAYLOAD_FIELDS = {
         cleanup_confirmed='boolean',
         mount_cleanup_verified='boolean',
     },
+    [EventType.CLEANUP_TRANSACTION_REGISTERED]={cleanup_event='table'},
+    [EventType.CLEANUP_TRANSACTION_STARTED]={cleanup_event='table'},
+    [EventType.CLEANUP_TRANSACTION_FINISHED]={cleanup_event='table'},
+    [EventType.CLEANUP_TRANSACTION_ABANDONED]={cleanup_event='table'},
     [EventType.RUN_ABORTED]={reason='string'},
     [EventType.RUN_FINISHED]={
         terminal_state='string',
@@ -310,6 +321,9 @@ function M.validate_payload(event_type, payload)
     elseif event_type == EventType.REPEAT_FINISHED then
         assert(payload.repeat_index > 0,
             'event payload repeat.finished has invalid repeat index')
+    elseif event_type == EventType.SUITE_FINISHED then
+        validate_counts(payload.behavior_summary,
+            'event payload suite.finished.behavior_summary')
     elseif event_type == EventType.SCHEDULER_BLOCKED and
             payload.kind ~= nil then
         assert(payload.kind == SchedulerFailureKind.EXECUTOR_QUARANTINED or
@@ -331,6 +345,13 @@ function M.validate_payload(event_type, payload)
                 payload.kind == focus_diagnostics.INCOMPLETE_KIND) then
         focus_diagnostics.validate(
             payload, 'event payload diagnostic.recorded')
+    end
+    if event_type == EventType.CLEANUP_TRANSACTION_REGISTERED or
+            event_type == EventType.CLEANUP_TRANSACTION_STARTED or
+            event_type == EventType.CLEANUP_TRANSACTION_FINISHED or
+            event_type == EventType.CLEANUP_TRANSACTION_ABANDONED then
+        require('dwarfspec.protocol.verified_execution_schemas').new()
+            :validate_cleanup_event(payload.cleanup_event)
     end
     if event_type == EventType.REPEAT_FINISHED then
         validate_counts(payload.counts,

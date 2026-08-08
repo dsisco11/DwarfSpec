@@ -104,7 +104,7 @@ function M.parse_transport_response(lines, expected, decoder)
         if not valid then error(invalid_adapter_error(response_error), 0) end
         return nil, payload, response_error
     end
-    if report.schema ~= 'dwarfspec.transport.v2' then
+    if report.schema ~= 'dwarfspec.transport.v3' then
         error('unsupported DwarfSpec report schema: ' ..
             tostring(report.schema), 0)
     end
@@ -153,7 +153,7 @@ function M.parse_status(lines, decoder)
     assert(type(status) == 'table' and
         status.schema == 'dwarfspec.status.v1',
         'DFHack output did not contain DwarfSpec service status')
-    assert(status.protocol == 2,
+    assert(status.protocol == 3,
         'unsupported DwarfSpec protocol: ' .. tostring(status.protocol))
     assert(type(status.service_loaded) == 'boolean',
         'DwarfSpec service status must declare whether the service is loaded')
@@ -306,6 +306,27 @@ function M.format_run_inspection(inspection)
         table.insert(lines, ('EVENT %d %s %s'):format(
             event.sequence, event.type, payload))
     end
+    if run.host_report ~= nil then
+        local report = run.host_report
+        table.insert(lines, ('CLEANUP_TRANSACTIONS service=%d suites=%d tests=%d')
+            :format(#report.service_cleanup_transactions,
+                #report.suite_executions, #report.test_attempts))
+        local function append(scope, transactions)
+            for _, transaction in ipairs(transactions) do
+                table.insert(lines, ('CLEANUP_TRANSACTION %s scope=%s ordinal=%d disposition=%s')
+                    :format(transaction.transaction_id, scope,
+                        transaction.registration_ordinal,
+                        transaction.disposition))
+            end
+        end
+        append('service_run', report.service_cleanup_transactions)
+        for _, suite in ipairs(report.suite_executions) do
+            append('suite_execution', suite.cleanup_transactions)
+        end
+        for _, attempt in ipairs(report.test_attempts) do
+            append('test_attempt', attempt.cleanup_transactions)
+        end
+    end
     return lines
 end
 
@@ -337,6 +358,9 @@ local function format_event(event, options)
             :format(payload.repeat_index, payload.counts.successes,
                 payload.counts.failures, payload.counts.errors,
                 payload.counts.pending)
+    elseif event.type == EventType.SUITE_FINISHED then
+        return ('SUITE %s cleanup=%s'):format(payload.spec_file_identity,
+            payload.cleanup_outcome)
     elseif event.type == EventType.TEST_STARTED then
         return 'START ' .. payload.name
     elseif event.type == EventType.TEST_FINISHED then

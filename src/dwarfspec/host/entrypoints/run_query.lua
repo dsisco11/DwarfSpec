@@ -45,7 +45,7 @@ local function query(host)
     if operation == 'history' then
         return {
             schema='dwarfspec.history.v1',
-            protocol=2,
+            protocol=3,
             service_loaded=loaded,
             service_instance_id=loaded and
                 dfhack.dwarfspec.service_instance_id or nil,
@@ -61,7 +61,7 @@ local function query(host)
     if operation == 'show' then
         local response = {
             schema='dwarfspec.run-inspection.v1',
-            protocol=2,
+            protocol=3,
             service_loaded=loaded,
             found=found,
             run_id=run_id,
@@ -75,7 +75,7 @@ local function query(host)
 
     local response = {
         schema='dwarfspec.run-logs.v1',
-        protocol=2,
+        protocol=3,
         service_loaded=loaded,
         found=found,
         run_id=run_id,

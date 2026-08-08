@@ -57,6 +57,7 @@ function M.new(dependencies)
         if run.cleanup_owner_lifecycle ~= nil then
             owner_cleanup_ok = run.cleanup_owner_lifecycle:finalize_all(reason,
                 reason ~= 'suite completion')
+            run.host_report = run.cleanup_owner_lifecycle:host_report()
         end
         if run.focus_lifecycle ~= nil then
             run.focus_lifecycle.clear()

@@ -10,8 +10,8 @@ local schemas = require('dwarfspec.protocol.schemas')
 local snapshots = require('dwarfspec.host.service.snapshots')
 
 local M = {
-    protocol_version=2,
-    schema='dwarfspec.service.v2',
+    protocol_version=3,
+    schema='dwarfspec.service.v3',
 }
 
 ---Returns the runtime namespace that owns the process-wide service registry.
@@ -376,7 +376,7 @@ function M.transport(run_id, after_sequence, dependencies)
     local snapshot = M.snapshot(run_id, dependencies)
     local journal = M.events(run_id, after_sequence, dependencies)
     local response = {
-        schema='dwarfspec.transport.v2',
+        schema='dwarfspec.transport.v3',
         protocol=M.protocol_version,
         service_instance_id=snapshot.service_instance_id,
         project_id=snapshot.project_id,

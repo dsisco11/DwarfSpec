@@ -1,6 +1,6 @@
 {
-  "schema": "dwarfspec.scheduler.v2",
-  "protocol_version": 2,
+  "schema": "dwarfspec.scheduler.v3",
+  "protocol_version": 3,
   "service_instance_id": "service-fixture-1",
   "package_root": "D:/Packages/DwarfSpec",
   "package_version": "0.2.1",

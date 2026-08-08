@@ -5,7 +5,7 @@ local reports = require('dwarfspec.controller.reporting.report')
 
 local M = {}
 local PROBE_MARKER = 'DWARFSPEC_PROBE'
-local EXPECTED_PROTOCOL = 2
+local EXPECTED_PROTOCOL = 3
 local MAX_OUTPUT_LINES = 8
 local MAX_LINE_BYTES = 512
 local MAX_OUTPUT_BYTES = 2048

@@ -45,8 +45,8 @@ function M.run(run, registry)
     local mount_cleanup = run.mount_cleanup_state or {}
     local unit_speed_cleanup = run.unit_speed_cleanup_state or {}
     local snapshot = {
-        schema='dwarfspec.run.v2',
-        protocol_version=2,
+        schema='dwarfspec.run.v3',
+        protocol_version=3,
         service_instance_id=run.service_instance_id or
             registry.service_instance_id,
         project_id=run.project_id,
@@ -78,6 +78,7 @@ function M.run(run, registry)
         unit_position_active=unit_speed_cleanup.unit_position_active == true,
         owned_position_count=unit_speed_cleanup.owned_position_count or 0,
         host_error=run.host_error,
+        host_report=run.host_report,
         failures=run.failures or {},
     }
     schemas.validate_run(snapshot)
@@ -192,7 +193,7 @@ function M.scheduler(registry)
     local active_run = registry.active_run_id and
         registry.runs[registry.active_run_id] or nil
     local snapshot = {
-        schema='dwarfspec.scheduler.v2',
+        schema='dwarfspec.scheduler.v3',
         protocol_version=registry.protocol_version,
         service_instance_id=registry.service_instance_id,
         package_root=registry.package_root,

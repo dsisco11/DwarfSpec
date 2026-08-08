@@ -178,7 +178,7 @@ describe('DwarfSpec native reports', function()
             function()
                 return {
                     schema='dwarfspec.status.v1',
-                    protocol=2,
+                    protocol=3,
                     service_loaded=false,
                 }
             end)
@@ -259,7 +259,7 @@ describe('DwarfSpec native reports', function()
             }, function()
                 return {
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind='registration',
                     message='incompatible automation package version: ' ..
                         'expected 0.1.3, found 0.2.1',
@@ -278,7 +278,7 @@ describe('DwarfSpec native reports', function()
             {'DWARFSPEC_JSON ignored'}, {}, function()
                 return {
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind='registration',
                     code='package_version_mismatch',
                     message='different version loaded',
@@ -294,7 +294,7 @@ describe('DwarfSpec native reports', function()
             {'DWARFSPEC_JSON ignored'}, {}, function()
                 return {
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind='executor_quarantined',
                     message='cleanup unconfirmed',
                     blocking_run_id='run-blocking',
@@ -312,7 +312,7 @@ describe('DwarfSpec native reports', function()
             {'DWARFSPEC_JSON ignored'}, {}, function()
                 return {
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind='registration',
                     code='future_registration_code',
                     message='future registration rejection',
@@ -340,7 +340,7 @@ describe('DwarfSpec native reports', function()
                 {'DWARFSPEC_JSON ignored'}, {}, function()
                     return {
                         schema='dwarfspec.error.v1',
-                        protocol=2,
+                        protocol=3,
                         kind='registration',
                         code='package_version_mismatch',
                         message='different version loaded',
@@ -359,7 +359,7 @@ describe('DwarfSpec native reports', function()
             {'DWARFSPEC_JSON ignored'}, {}, function()
                 return {
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind='registration',
                     code=42,
                     message='typed code',
@@ -375,7 +375,7 @@ describe('DwarfSpec native reports', function()
             {'DWARFSPEC_JSON ignored'}, {}, function()
                 return {
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind='registration',
                     message='unsafe rejection',
                     unsafe=function() end,
@@ -399,7 +399,7 @@ describe('DwarfSpec native reports', function()
             after_sequence=0,
         })
 
-        assert.equals('dwarfspec.transport.v2', transport.schema)
+        assert.equals('dwarfspec.transport.v3', transport.schema)
         assert.equals(RunState.FAILED, transport.snapshot.state)
         assert.equals(1, transport.last_sequence)
     end)
@@ -435,7 +435,7 @@ describe('DwarfSpec native reports', function()
             }, function()
                 return {
                     schema='another.schema',
-                    protocol=2,
+                    protocol=3,
                 }
             end)
         end, 'unsupported DwarfSpec report schema: another.schema')
@@ -452,7 +452,7 @@ describe('DwarfSpec native reports', function()
                 after_sequence=0,
             })
 
-        assert.equals('dwarfspec.transport.v2', parsed.schema)
+        assert.equals('dwarfspec.transport.v3', parsed.schema)
         assert.equals(RunState.FAILED,
             parsed.snapshot.state)
         assert.has_error(function()
@@ -483,7 +483,7 @@ describe('DwarfSpec native reports', function()
         })
         local inspection = {
             schema='dwarfspec.run-inspection.v1',
-            protocol=2,
+            protocol=3,
             service_loaded=true,
             found=true,
             run_id=transport.run_id,

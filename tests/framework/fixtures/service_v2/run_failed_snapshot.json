@@ -1,6 +1,6 @@
 {
-  "schema": "dwarfspec.run.v2",
-  "protocol_version": 2,
+  "schema": "dwarfspec.run.v3",
+  "protocol_version": 3,
   "service_instance_id": "service-fixture-1",
   "project_id": "project-alpha",
   "run_id": "run-failed",

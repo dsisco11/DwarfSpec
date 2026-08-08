@@ -62,7 +62,7 @@ describe('DFHack connection probe entrypoint', function()
             timeout=function() end,
         })
 
-        assert.equals('DWARFSPEC_PROBE protocol=2 core=true ' ..
+        assert.equals('DWARFSPEC_PROBE protocol=3 core=true ' ..
             'timeout=function dfhack=53.15-r1', line)
     end)
 
@@ -81,27 +81,27 @@ describe('DFHack connection probe entrypoint', function()
 
         assert.has_no.errors(load_probe(environment))
 
-        assert.same({'DWARFSPEC_PROBE protocol=2 core=true ' ..
+        assert.same({'DWARFSPEC_PROBE protocol=3 core=true ' ..
             'timeout=function dfhack=53.15-r2'}, lines)
     end)
 
     it('reports an absent DFHack global without throwing', function()
-        assert.equals('DWARFSPEC_PROBE protocol=2 core=unavailable ' ..
+        assert.equals('DWARFSPEC_PROBE protocol=3 core=unavailable ' ..
             'timeout=unavailable', probe(nil))
     end)
 
     it('reports a missing core-context capability independently', function()
-        assert.equals('DWARFSPEC_PROBE protocol=2 core=unavailable ' ..
+        assert.equals('DWARFSPEC_PROBE protocol=3 core=unavailable ' ..
             'timeout=function', probe({timeout=function() end}))
     end)
 
     it('reports a missing timeout capability independently', function()
-        assert.equals('DWARFSPEC_PROBE protocol=2 core=true timeout=nil',
+        assert.equals('DWARFSPEC_PROBE protocol=3 core=true timeout=nil',
             probe({is_core_context=true}))
     end)
 
     it('normalizes an incorrectly typed core-context capability', function()
-        assert.equals('DWARFSPEC_PROBE protocol=2 core=unavailable ' ..
+        assert.equals('DWARFSPEC_PROBE protocol=3 core=unavailable ' ..
             'timeout=function', probe({
                 is_core_context='true',
                 timeout=function() end,
@@ -109,12 +109,12 @@ describe('DFHack connection probe entrypoint', function()
     end)
 
     it('reports an incorrectly typed timeout capability', function()
-        assert.equals('DWARFSPEC_PROBE protocol=2 core=true timeout=table',
+        assert.equals('DWARFSPEC_PROBE protocol=3 core=true timeout=table',
             probe({is_core_context=true, timeout={}}))
     end)
 
     it('omits an unsafe optional DFHack version', function()
-        assert.equals('DWARFSPEC_PROBE protocol=2 core=true ' ..
+        assert.equals('DWARFSPEC_PROBE protocol=3 core=true ' ..
             'timeout=function', probe({
                 VERSION='53.15 release candidate',
                 is_core_context=true,
@@ -143,7 +143,7 @@ describe('DFHack connection probe entrypoint', function()
 
         assert.is_true(ok, probe_error)
         assert.equals(loaded_before, loaded_after)
-        assert.same({'DWARFSPEC_PROBE protocol=2 core=true ' ..
+        assert.same({'DWARFSPEC_PROBE protocol=3 core=true ' ..
             'timeout=function'}, lines)
     end)
 end)

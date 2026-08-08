@@ -30,8 +30,8 @@ local OWNER_CAPABILITY = 'runner-owner-capability-000000000001'
 ---@return table
 local function scheduler_snapshot(quarantine)
     return {
-        schema='dwarfspec.scheduler.v2',
-        protocol_version=2,
+        schema='dwarfspec.scheduler.v3',
+        protocol_version=3,
         service_instance_id='service-runner-fixture',
         package_root='D:/Packages/DwarfSpec',
         package_version='0.2.1',
@@ -67,7 +67,7 @@ local function report_lines(run_id, state, cleanup_confirmed, output_count,
     local transport_events = {}
     if output_count then
         table.insert(transport_events, {
-            schema='dwarfspec.event.v1',
+            schema='dwarfspec.event.v3',
             service_instance_id='service-runner-fixture',
             project_id='project-runner-fixture',
             run_id=run_id,
@@ -80,8 +80,8 @@ local function report_lines(run_id, state, cleanup_confirmed, output_count,
     end
     local last_sequence = after_sequence + #transport_events
     local snapshot = {
-        schema='dwarfspec.run.v2',
-        protocol_version=2,
+        schema='dwarfspec.run.v3',
+        protocol_version=3,
         service_instance_id='service-runner-fixture',
         project_id='project-runner-fixture',
         run_id=run_id,
@@ -109,8 +109,8 @@ local function report_lines(run_id, state, cleanup_confirmed, output_count,
         snapshot.queue_wait_ms = 1
     end
     local transport = {
-        schema='dwarfspec.transport.v2',
-        protocol=2,
+        schema='dwarfspec.transport.v3',
+        protocol=3,
         service_instance_id=snapshot.service_instance_id,
         project_id=snapshot.project_id,
         run_id=run_id,
@@ -157,7 +157,7 @@ local function transport_with_events(arguments, run_id, state,
     transport.events = {}
     for index, value in ipairs(event_values) do
         table.insert(transport.events, {
-            schema='dwarfspec.event.v1',
+            schema='dwarfspec.event.v3',
             service_instance_id=transport.service_instance_id,
             project_id=transport.project_id,
             run_id=run_id,
@@ -326,7 +326,7 @@ describe('DwarfSpec external runner', function()
             calls = calls + 1
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 bootstrap_arguments = arguments
                 return {exit_code=0,
@@ -343,7 +343,7 @@ describe('DwarfSpec external runner', function()
         assert.equals(0, outcome.exit_code)
         assert.equals(RunState.PASSED, outcome.report.state)
         assert.equals(ResultState.PASSED, outcome.result.state)
-        assert.equals('dwarfspec.result.v2', outcome.result.schema)
+        assert.equals('dwarfspec.result.v3', outcome.result.schema)
         assert.same({'START progress line'}, emitted)
         assert.equals(EventType.TEST_STARTED, outcome.result.events[1].type)
         assert.equals(4, calls)
@@ -384,7 +384,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0, lines=transport_lines(arguments,
                     'warning-pass-run', RunState.STARTING, false)}
@@ -453,7 +453,7 @@ describe('DwarfSpec external runner', function()
             run_options.invoke = function(_, arguments)
                 if arguments[3]:match('probe%.lua$') then
                     return {exit_code=0, lines={
-                        'DWARFSPEC_PROBE protocol=2 core=true ' ..
+                        'DWARFSPEC_PROBE protocol=3 core=true ' ..
                             'timeout=function'}}
                 elseif arguments[3]:match('bootstrap%.lua$') then
                     return {exit_code=0,
@@ -505,7 +505,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -560,7 +560,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -622,7 +622,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 bootstrap_arguments_seen = arguments
                 return {exit_code=0,
@@ -666,7 +666,7 @@ describe('DwarfSpec external runner', function()
             table.insert(calls, arguments[3])
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -694,7 +694,7 @@ describe('DwarfSpec external runner', function()
             table.insert(calls, arguments[3])
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -725,7 +725,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -760,7 +760,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0, lines=transport_lines(arguments,
                     'separate-timeout-budgets', RunState.QUEUED, false)}
@@ -791,7 +791,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 table.insert(bootstrap_calls, table.concat(arguments, '\0'))
                 if #bootstrap_calls == 1 then
@@ -821,7 +821,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             return {exit_code=0,
                 lines=transport_lines(arguments,
@@ -842,7 +842,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -872,7 +872,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0, lines=transport_lines(arguments,
                     'double-failure', RunState.STARTING, false)}
@@ -901,20 +901,20 @@ describe('DwarfSpec external runner', function()
             {name='missing', result={exit_code=0, lines={'ordinary output'}},
                 message='emitted no DwarfSpec probe report'},
             {name='multiple', result={exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function',
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function',
                 }}, message='emitted 2 DwarfSpec probe reports'},
             {name='malformed', result={exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true',
+                    'DWARFSPEC_PROBE protocol=3 core=true',
                 }}, message='malformed DwarfSpec probe report'},
             {name='protocol', result={exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function',
-                }}, message='controller expects 2, probe reported 3'},
+                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
+                }}, message='controller expects 3, probe reported 2'},
             {name='core', result={exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=false timeout=function',
+                    'DWARFSPEC_PROBE protocol=3 core=false timeout=function',
                 }}, message='reported core=false'},
             {name='timeout', result={exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=nil',
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=nil',
                 }}, message='reported timeout=nil'},
         }
         for _, case in ipairs(cases) do
@@ -950,7 +950,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -975,7 +975,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             return {exit_code=0,
                 lines=transport_lines(arguments,
@@ -998,7 +998,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             return {exit_code=0,
                 lines=transport_lines(arguments,
@@ -1014,7 +1014,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=9, lines={'bootstrap failed'}}
             end
@@ -1040,12 +1040,12 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 bootstrap_calls = bootstrap_calls + 1
                 return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind=runner.failure_kinds.REGISTRATION,
                     code='package_version_mismatch',
                     message='different version loaded',
@@ -1106,12 +1106,12 @@ describe('DwarfSpec external runner', function()
             run_options.invoke = function(_, arguments)
                 if arguments[3]:match('probe%.lua$') then
                     return {exit_code=0, lines={
-                        'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                        'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
                 elseif arguments[3]:match('bootstrap%.lua$') then
                     bootstrap_calls = bootstrap_calls + 1
                     return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
                         schema='dwarfspec.error.v1',
-                        protocol=2,
+                        protocol=3,
                         kind=runner.failure_kinds.REGISTRATION,
                         code=case.code,
                         message='opaque host wording that must not be parsed',
@@ -1157,7 +1157,7 @@ describe('DwarfSpec external runner', function()
                 name='generic-old-phrase',
                 response={
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind=runner.failure_kinds.REGISTRATION,
                     message='incompatible automation package version in ' ..
                         'unrelated registration detail',
@@ -1167,7 +1167,7 @@ describe('DwarfSpec external runner', function()
                 name='unknown-code',
                 response={
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind=runner.failure_kinds.REGISTRATION,
                     code='future_registration_code',
                     message='future registration rejection',
@@ -1180,7 +1180,7 @@ describe('DwarfSpec external runner', function()
             run_options.invoke = function(_, arguments)
                 if arguments[3]:match('probe%.lua$') then
                     return {exit_code=0, lines={
-                        'DWARFSPEC_PROBE protocol=2 core=true ' ..
+                        'DWARFSPEC_PROBE protocol=3 core=true ' ..
                             'timeout=function'}}
                 elseif arguments[3]:match('bootstrap%.lua$') then
                     return {exit_code=0, lines={
@@ -1213,12 +1213,12 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 bootstrap_calls = bootstrap_calls + 1
                 return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
                     schema='dwarfspec.error.v1',
-                    protocol=2,
+                    protocol=3,
                     kind=runner.failure_kinds.REGISTRATION,
                     code='package_version_mismatch',
                     message='different version loaded',
@@ -1251,12 +1251,12 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             bootstrap_calls = bootstrap_calls + 1
             return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
                 schema='dwarfspec.error.v1',
-                protocol=2,
+                protocol=3,
                 kind=runner.failure_kinds.EXECUTOR_QUARANTINED,
                 message='DwarfSpec executor is quarantined by run old-run ' ..
                     'generation 4: cleanup unconfirmed. Recover it with: ' ..
@@ -1284,7 +1284,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -1311,7 +1311,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -1335,7 +1335,7 @@ describe('DwarfSpec external runner', function()
             table.insert(calls, arguments[3])
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             return {exit_code=0,
                     lines=transport_lines(arguments,
@@ -1365,7 +1365,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             return {exit_code=0,
                 lines=transport_lines(arguments,
@@ -1382,7 +1382,7 @@ describe('DwarfSpec external runner', function()
 
         assert.equals(runner.exit_codes[runner.failure_kinds.SUCCESS],
             outcome.exit_code)
-        assert.equals('dwarfspec.result.v2', persisted.schema)
+        assert.equals('dwarfspec.result.v3', persisted.schema)
         assert.equals('stable-result', persisted.run_id)
         assert.equals(RunState.PASSED, persisted.state)
     end)
@@ -1398,14 +1398,14 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             assert.matches('scheduler_status%.lua$', arguments[3])
             assert.equals(3, #arguments)
             return {exit_code=0,
                 lines={'DWARFSPEC_JSON ' .. json.encode({
                     schema='dwarfspec.status.v1',
-                    protocol=2,
+                    protocol=3,
                     service_loaded=true,
                     scheduler=scheduler,
                 })}}
@@ -1424,7 +1424,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             assert.matches('run_query%.lua$', arguments[3])
             local operation = arguments[4]
@@ -1432,7 +1432,7 @@ describe('DwarfSpec external runner', function()
                 return {exit_code=0, lines={'DWARFSPEC_JSON ' ..
                     json.encode({
                         schema='dwarfspec.history.v1',
-                        protocol=2,
+                        protocol=3,
                         service_loaded=true,
                         service_instance_id='service-runner-fixture',
                         runs={{
@@ -1457,7 +1457,7 @@ describe('DwarfSpec external runner', function()
                 return {exit_code=0, lines={'DWARFSPEC_JSON ' ..
                     json.encode({
                         schema='dwarfspec.run-inspection.v1',
-                        protocol=2,
+                        protocol=3,
                         service_loaded=true,
                         found=true,
                         run_id='retained-run',
@@ -1470,7 +1470,7 @@ describe('DwarfSpec external runner', function()
             assert.equals('logs', operation)
             return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
                 schema='dwarfspec.run-logs.v1',
-                protocol=2,
+                protocol=3,
                 service_loaded=true,
                 found=true,
                 service_instance_id='service-runner-fixture',
@@ -1501,11 +1501,11 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
                 schema='dwarfspec.run-inspection.v1',
-                protocol=2,
+                protocol=3,
                 service_loaded=true,
                 found=false,
                 run_id='missing-run',
@@ -1527,14 +1527,14 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0, lines=transport_lines(arguments,
                     run_options.run_id, RunState.STARTING, false)}
             elseif arguments[3]:match('status%.lua$') then
                 status_calls = status_calls + 1
                 return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
-                    schema='dwarfspec.error.v1', protocol=2,
+                    schema='dwarfspec.error.v1', protocol=3,
                     kind=runner.failure_kinds.HOST,
                     code='event_cursor_ahead', message='cursor rejected',
                     operation='status poll', run_id=run_options.run_id,
@@ -1545,7 +1545,7 @@ describe('DwarfSpec external runner', function()
             assert.matches('recover%.lua$', arguments[3])
             recovery_calls = recovery_calls + 1
             return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
-                schema='dwarfspec.error.v1', protocol=2,
+                schema='dwarfspec.error.v1', protocol=3,
                 kind=runner.failure_kinds.HOST,
                 code='run_not_found', message='run disappeared',
                 operation='recover', run_id=run_options.run_id,
@@ -1628,7 +1628,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             end
             recovery_arguments = arguments
             local lines = report_lines('blocking-run', RunState.ABORTED,
@@ -1682,9 +1682,9 @@ describe('DwarfSpec external runner', function()
             run_options.invoke = function(_, arguments)
                 if arguments[3]:match('probe%.lua$') then
                     return {exit_code=0, lines={
-                        'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                        'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
                 end
-                local response = {schema='dwarfspec.error.v1', protocol=2,
+                local response = {schema='dwarfspec.error.v1', protocol=3,
                     kind=runner.failure_kinds.HOST,
                     message='structured direct rejection'}
                 for name, value in pairs(case.response) do
@@ -1708,7 +1708,7 @@ describe('DwarfSpec external runner', function()
         run_options.invoke = function(_, arguments)
             if arguments[3]:match('probe%.lua$') then
                 return {exit_code=0, lines={
-                    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'}}
+                    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'}}
             elseif arguments[3]:match('bootstrap%.lua$') then
                 return {exit_code=0, lines=transport_lines(arguments,
                     run_options.run_id, RunState.STARTING, false)}
@@ -1718,7 +1718,7 @@ describe('DwarfSpec external runner', function()
             end
             assert.matches('acknowledge%.lua$', arguments[3])
             return {exit_code=0, lines={'DWARFSPEC_JSON ' .. json.encode({
-                schema='dwarfspec.error.v1', protocol=2,
+                schema='dwarfspec.error.v1', protocol=3,
                 kind=runner.failure_kinds.HOST,
                 code='owner_capability_rejected',
                 message='owner rejected', operation='acknowledgement',

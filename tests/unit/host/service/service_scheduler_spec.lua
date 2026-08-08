@@ -57,7 +57,7 @@ local function environment()
         end,
     }
     service.bootstrap({
-        protocol_version=2,
+        protocol_version=3,
         package_root='.',
         package_version='0.2.1',
     }, dependencies)
@@ -77,7 +77,7 @@ local function register_project(dependencies, index, overrides)
         result_policy=ResultPolicy.FILE,
         result_path='tests/.test-results/dwarfspec/results.json',
         client_compatibility={
-            protocol=2,
+            protocol=3,
             package_version='0.2.1',
         },
     }
@@ -171,8 +171,8 @@ describe('multi-project automation service scheduler', function()
 
         local initial = service.transport(admitted.identity.run_id, 0,
             dependencies)
-        assert.equals('dwarfspec.transport.v2', initial.schema)
-        assert.equals(2, initial.protocol)
+        assert.equals('dwarfspec.transport.v3', initial.schema)
+        assert.equals(3, initial.protocol)
         assert.equals(admitted.identity.service_instance_id,
             initial.service_instance_id)
         assert.equals(admitted.identity.project_id, initial.project_id)

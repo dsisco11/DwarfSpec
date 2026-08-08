@@ -317,6 +317,7 @@
 ---@field test_attempt_id string
 ---@field repeat_index integer
 ---@field test_identity string
+---@field behavior_status? string
 ---@field cleanup_transactions dwarfspec.CleanupTransactionResult[]
 
 ---@class dwarfspec.VerifiedExecutionHostReport

@@ -27,7 +27,7 @@ describe('multi-project automation service', function()
     ---@return table
     local function bootstrap_request(package_root, package_version)
         return {
-            protocol_version=2,
+            protocol_version=3,
             package_root=package_root or 'D:/Packages/DwarfSpec',
             package_version=package_version or '0.2.1',
         }
@@ -49,7 +49,7 @@ describe('multi-project automation service', function()
                 '/tests/.test-results/dwarfspec/results.json',
             result_policy=ResultPolicy.FILE,
             client_compatibility={
-                protocol=2,
+                protocol=3,
             package_version='0.2.1',
             },
         }
@@ -102,8 +102,8 @@ describe('multi-project automation service', function()
             dependencies)
         package.preload['consumer.phase1_should_not_load'] = nil
 
-        assert.equals('dwarfspec.service.v2', registry.schema)
-        assert.equals(2, registry.protocol_version)
+        assert.equals('dwarfspec.service.v3', registry.schema)
+        assert.equals(3, registry.protocol_version)
         assert.equals('service-contract-1', registry.service_instance_id)
         assert.equals('D:/Packages/DwarfSpec', registry.package_root)
         assert.equals('0.2.1', registry.package_version)
@@ -215,11 +215,11 @@ describe('multi-project automation service', function()
                     package_version='0.2.1',
                 },
             }), dependencies)
-        end, 'incompatible project protocol: expected 2, found 1')
+        end, 'incompatible project protocol: expected 3, found 1')
         assert.has_error(function()
             service.register_project(registration('D:/Clients/Alpha', {
                 client_compatibility={
-                    protocol=2,
+                    protocol=3,
                     package_version='9.9.9',
                 },
             }), dependencies)
@@ -308,7 +308,7 @@ describe('multi-project automation service', function()
                 package_root='D:/Packages/DwarfSpec',
                 package_version='9.9.9',
             }, dependencies)
-        end, 'incompatible automation service protocol: expected 2, found 1')
+        end, 'incompatible automation service protocol: expected 3, found 1')
 
         assert.equals(registry, namespace.dwarfspec)
         assert.same(registry_before, events.copy_json(

@@ -7,7 +7,7 @@ local RunState = require('dwarfspec.protocol.enums.run_states')
 local OwnerKind = require('dwarfspec.protocol.enums.owner_kinds')
 
 local M = {
-    protocol_version=2,
+    protocol_version=3,
 }
 
 local RESULT_POLICIES = {
@@ -130,11 +130,11 @@ local function validate_project(project)
         'scheduler project summary has invalid result policy')
 end
 
----Validates one version 2 service snapshot.
+---Validates one version 3 service snapshot.
 ---@param value table
 ---@return table
 function M.validate_service(value)
-    require_schema(value, 'dwarfspec.service.v2', 'automation service')
+    require_schema(value, 'dwarfspec.service.v3', 'automation service')
     require_protocol(value, 'automation service')
     for _, field in ipairs({
             'service_instance_id', 'package_root', 'package_version'}) do
@@ -157,11 +157,11 @@ function M.validate_service(value)
     return value
 end
 
----Validates one version 2 scheduler snapshot.
+---Validates one version 3 scheduler snapshot.
 ---@param value table
 ---@return table
 function M.validate_scheduler(value)
-    require_schema(value, 'dwarfspec.scheduler.v2',
+    require_schema(value, 'dwarfspec.scheduler.v3',
         'automation scheduler')
     require_protocol(value, 'automation scheduler')
     for _, field in ipairs({
@@ -199,11 +199,11 @@ function M.validate_scheduler(value)
     return value
 end
 
----Validates one version 2 immutable run snapshot.
+---Validates one version 3 immutable run snapshot.
 ---@param value table
 ---@return table
 function M.validate_run(value)
-    require_schema(value, 'dwarfspec.run.v2', 'automation run')
+    require_schema(value, 'dwarfspec.run.v3', 'automation run')
     require_protocol(value, 'automation run')
     for _, field in ipairs({
             'service_instance_id', 'project_id', 'run_id', 'state',
@@ -282,6 +282,10 @@ function M.validate_run(value)
     if value.host_error ~= nil then
         assert(type(value.host_error) == 'table',
             'automation run host error must be a table')
+    end
+    if value.host_report ~= nil then
+        require('dwarfspec.protocol.verified_execution_schemas').new()
+            :validate_host_report(value.host_report)
     end
     for index, failure in ipairs(value.failures) do
         assert(type(failure) == 'table',
@@ -419,7 +423,7 @@ function M.validate_run_inspection(value)
     assert(value.snapshot.run_id == value.run_id,
         'automation run inspection identity mismatch')
     local transport = {
-        schema='dwarfspec.transport.v2',
+        schema='dwarfspec.transport.v3',
         protocol=M.protocol_version,
         service_instance_id=value.snapshot.service_instance_id,
         project_id=value.snapshot.project_id,
@@ -481,12 +485,12 @@ function M.validate_event(value, expected)
     return events.validate(value, expected)
 end
 
----Validates one version 2 status transport response.
+---Validates one version 3 status transport response.
 ---@param value table
 ---@param expected table|nil
 ---@return table
 function M.validate_transport(value, expected)
-    require_schema(value, 'dwarfspec.transport.v2',
+    require_schema(value, 'dwarfspec.transport.v3',
         'automation transport')
     assert(value.protocol == M.protocol_version,
         'unsupported automation transport protocol: ' ..
@@ -535,11 +539,11 @@ function M.validate_transport(value, expected)
     return value
 end
 
----Validates one version 2 persisted invocation result.
+---Validates one version 3 persisted invocation result.
 ---@param value table
 ---@return table
 function M.validate_result(value)
-    require_schema(value, 'dwarfspec.result.v2',
+    require_schema(value, 'dwarfspec.result.v3',
         'automation result')
     require_string(value, 'state', 'automation result')
     local state = RESULT_STATE_METADATA[value.state]
@@ -578,6 +582,8 @@ function M.validate_result(value)
     end
     if value.host_report ~= nil then
         require_table(value, 'host_report', 'automation result')
+        require('dwarfspec.protocol.verified_execution_schemas').new()
+            :validate_host_report(value.host_report)
     end
 
     local identity_fields = {
@@ -608,6 +614,10 @@ function M.validate_result(value)
         assert(event.sequence == previous_sequence + 1,
             'automation result event sequence discontinuity')
         previous_sequence = event.sequence
+    end
+    if value.host_report ~= nil then
+        require('dwarfspec.protocol.verified_execution_schemas').new()
+            :validate_cleanup_projections(value.host_report, value.events)
     end
     events.copy_json(value, 'automation result')
     return value

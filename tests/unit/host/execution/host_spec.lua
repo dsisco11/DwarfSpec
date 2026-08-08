@@ -217,8 +217,8 @@ describe('automation host ownership', function()
         local run = host.start('.', '.', options('registry-contract'))
         local registry = dfhack.dwarfspec
 
-        assert.equals(2, registry.protocol_version)
-        assert.equals('dwarfspec.service.v2', registry.schema)
+        assert.equals(3, registry.protocol_version)
+        assert.equals('dwarfspec.service.v3', registry.schema)
         assert.equals(1, registry.generation)
         assert.equals(run.run_id, registry.active_run_id)
         assert.equals(run, registry.runs[run.run_id])

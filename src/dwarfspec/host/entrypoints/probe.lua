@@ -36,6 +36,6 @@ local function version_field(context)
 end
 
 local context = dfhack_context()
-print(('DWARFSPEC_PROBE protocol=2 core=%s timeout=%s%s')
+print(('DWARFSPEC_PROBE protocol=3 core=%s timeout=%s%s')
     :format(core_capability(context), timeout_capability(context),
         version_field(context)))

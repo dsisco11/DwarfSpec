@@ -2,6 +2,13 @@
 
 local M = {}
 
+local CLEANUP_LIFECYCLE_EVENT_TYPES = {
+    ['cleanup.transaction_registered']='cleanup.transaction_registered',
+    ['cleanup.transaction_started']='cleanup.transaction_started',
+    ['cleanup.transaction_finished']='cleanup.transaction_finished',
+    ['cleanup.transaction_abandoned']='cleanup.transaction_abandoned',
+}
+
 ---Names run fields whose values belong exclusively to one execution.
 local TRANSIENT_RUN_FIELDS = {
     'started_ms', 'started_frame', 'finished_ms', 'finished_frame',
@@ -32,6 +39,10 @@ function M.initialize(run, package_root, project_root, options, dependencies)
     for _, field in ipairs(TRANSIENT_RUN_FIELDS) do run[field] = nil end
     run.output_lines, run.failure_details, run.discovered_files, run.recorded_cleanup_failures = {}, {}, {}, {}
     run.cleanup_module, run.cleanup_failure_reported_by_busted, run.suspended, run.terminal_observed = cleanup, false, false, false
+    run.event_publisher = dependencies.create_event_publisher(run, {
+        now_ms=dependencies.now_ms,
+        publish_active_event=dependencies.publish_active_event,
+    })
     local resource_index = dependencies.load_module(package_root,
         'dwarfspec.driver.command.resource_dependency_index')
     local cleanup_service = dependencies.load_module(package_root,
@@ -41,15 +52,27 @@ function M.initialize(run, package_root, project_root, options, dependencies)
     run.resource_dependency_index = resource_index.new(run.run_id)
     run.cleanup_registration_service = cleanup_service.new({
         service_run_id=run.run_id, resource_index=run.resource_dependency_index,
-        now_ms=dependencies.now_ms})
+        now_ms=dependencies.now_ms,
+        publish_event=function(cleanup_event)
+            local event_type = assert(CLEANUP_LIFECYCLE_EVENT_TYPES[
+                cleanup_event.event_type],
+                'cleanup service emitted an unsupported lifecycle event')
+            run.event_publisher.publish(event_type,
+                {cleanup_event=cleanup_event})
+        end,
+        read_journal=function()
+            local journal = {}
+            for _, event in ipairs(run.event_journal.events) do
+                if CLEANUP_LIFECYCLE_EVENT_TYPES[event.type] ~= nil then
+                    journal[#journal + 1] = event.payload.cleanup_event
+                end
+            end
+            return journal
+        end})
     run.cleanup_owner_lifecycle = owner_lifecycle.new(run.run_id,
-        run.cleanup_registration_service)
+        run.cleanup_registration_service, run.event_journal)
     assert(type(run.lease_check_frames) == 'number' and run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0, 'lease check interval must be a positive integer')
     run.cleanup_registry = cleanup.new(run, dependencies.is_active)
-    run.event_publisher = dependencies.create_event_publisher(run, {
-        now_ms=dependencies.now_ms,
-        publish_active_event=dependencies.publish_active_event,
-    })
 end
 
 ---Creates the coroutine scheduler and its host timing adapters for a run.

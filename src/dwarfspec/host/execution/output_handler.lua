@@ -183,6 +183,9 @@ function M.new(busted, run, publisher)
                 publisher_time(publisher) -
                     (run.current_test_started_ms or 0)),
         })
+        if run.cleanup_owner_lifecycle ~= nil then
+            run.cleanup_owner_lifecycle:test_finished(status)
+        end
         run.current_test = nil
         run.current_test_started_ms = nil
         return first, second

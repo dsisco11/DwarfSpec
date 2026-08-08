@@ -44,7 +44,9 @@ local function result(root, run_id, state)
         activated_at='2026-07-23T11:00:01Z',
         finished_at='2026-07-23T11:00:02Z',
         queue_wait_ms=1,
-        host_report={state=state},
+        host_report={schema='dwarfspec.result.v3', protocol_version=3,
+            service_run_id=run_id, service_cleanup_transactions={},
+            suite_executions={}, test_attempts={}},
         events=journal.events,
     })
 end

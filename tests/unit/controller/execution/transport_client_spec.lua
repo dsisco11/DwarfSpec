@@ -4,7 +4,7 @@ local module = require('dwarfspec.controller.execution.transport_client')
 local json = require('dkjson')
 local RunState = require('dwarfspec.protocol.enums.run_states')
 local HEALTHY_PROBE =
-    'DWARFSPEC_PROBE protocol=2 core=true timeout=function'
+    'DWARFSPEC_PROBE protocol=3 core=true timeout=function'
 
 ---Creates a transport client with a minimal command builder.
 ---@return table
@@ -62,7 +62,7 @@ end
 ---@return string[]
 local function transport_lines(after_sequence)
     local snapshot = {
-        schema='dwarfspec.run.v2', protocol_version=2,
+        schema='dwarfspec.run.v3', protocol_version=3,
         service_instance_id='service', project_id='project', run_id='run',
         state=RunState.PASSED, terminal=true, generation=1,
         submitted_at_ms=1, activated_at_ms=2, queue_wait_ms=1,
@@ -73,7 +73,7 @@ local function transport_lines(after_sequence)
         cleanup_confirmed=true, mount_cleanup_verified=true, failures={},
     }
     return {'DWARFSPEC_JSON ' .. json.encode({
-        schema='dwarfspec.transport.v2', protocol=2,
+        schema='dwarfspec.transport.v3', protocol=3,
         service_instance_id='service', project_id='project', run_id='run',
         generation=1, snapshot=snapshot, events={},
         last_sequence=after_sequence,
@@ -107,7 +107,7 @@ describe('controller transport client', function()
     it('ignores embedded markers and well-formed unknown fields', function()
         assert_connection_success({
             'prefix DWARFSPEC_PROBE protocol=999 core=false timeout=nil',
-            'DWARFSPEC_PROBE timeout=function future=value protocol=2 core=true',
+            'DWARFSPEC_PROBE timeout=function future=value protocol=3 core=true',
         })
     end)
 
@@ -135,12 +135,12 @@ describe('controller transport client', function()
             'probe report. Output: ordinary DFHack output', detail.message)
 
         detail = connection_failure({
-            'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
-            'DWARFSPEC_PROBE protocol=2 core=true timeout=function',
+            'DWARFSPEC_PROBE protocol=3 core=true timeout=function',
+            'DWARFSPEC_PROBE protocol=3 core=true timeout=function',
         })
         assert.same('DFHack emitted 2 DwarfSpec probe reports; expected exactly ' ..
-            'one. Output: DWARFSPEC_PROBE protocol=2 core=true timeout=function | ' ..
-            'DWARFSPEC_PROBE protocol=2 core=true timeout=function', detail.message)
+            'one. Output: DWARFSPEC_PROBE protocol=3 core=true timeout=function | ' ..
+            'DWARFSPEC_PROBE protocol=3 core=true timeout=function', detail.message)
     end)
 
     it('reports malformed probe fields with specific context', function()
@@ -150,17 +150,17 @@ describe('controller transport client', function()
                 'invalid field name: Protocol'},
             {'DWARFSPEC_PROBE protocol= core=true timeout=function',
                 'empty value for field protocol'},
-            {'DWARFSPEC_PROBE protocol=2 protocol=3 core=true timeout=function',
+            {'DWARFSPEC_PROBE protocol=3 protocol=3 core=true timeout=function',
                 'duplicate field: protocol'},
             {'DWARFSPEC_PROBE core=true timeout=function',
                 'missing required field: protocol'},
             {'DWARFSPEC_PROBE protocol=02 core=true timeout=function',
                 'invalid protocol value: 02'},
-            {'DWARFSPEC_PROBE protocol=2 core=yes timeout=function',
+            {'DWARFSPEC_PROBE protocol=3 core=yes timeout=function',
                 'invalid core value: yes'},
-            {'DWARFSPEC_PROBE protocol=2 core=true timeout=callable',
+            {'DWARFSPEC_PROBE protocol=3 core=true timeout=callable',
                 'invalid timeout value: callable'},
-            {'DWARFSPEC_PROBE protocol=2 core=true timeout=function future=bad/value',
+            {'DWARFSPEC_PROBE protocol=3 core=true timeout=function future=bad/value',
                 'invalid value for field future: bad/value'},
         }
         for _, case in ipairs(cases) do
@@ -175,16 +175,16 @@ describe('controller transport client', function()
 
     it('reports expected and observed protocol values before health failures', function()
         local detail = connection_failure({
-            'DWARFSPEC_PROBE protocol=3 core=false timeout=nil',
+            'DWARFSPEC_PROBE protocol=2 core=false timeout=nil',
         })
-        assert.same('DwarfSpec protocol mismatch: controller expects 2, probe ' ..
-            'reported 3. Check for mixed installed DwarfSpec package versions.',
+        assert.same('DwarfSpec protocol mismatch: controller expects 3, probe ' ..
+            'reported 2. Check for mixed installed DwarfSpec package versions.',
             detail.message)
     end)
 
     it('reports core=false independently from timeout health', function()
         local detail = connection_failure({
-            'DWARFSPEC_PROBE protocol=2 core=false timeout=function',
+            'DWARFSPEC_PROBE protocol=3 core=false timeout=function',
         })
         assert.same('DFHack probe did not run in a healthy core Lua context: ' ..
             'expected core=true, reported core=false.', detail.message)
@@ -196,7 +196,7 @@ describe('controller transport client', function()
                 'table', 'unavailable',
             }) do
             local detail = connection_failure({
-                'DWARFSPEC_PROBE protocol=2 core=true timeout=' .. timeout_type,
+                'DWARFSPEC_PROBE protocol=3 core=true timeout=' .. timeout_type,
             })
             assert.same('DFHack core Lua context is missing the required ' ..
                 'dfhack.timeout function: reported timeout=' .. timeout_type .. '.',
@@ -269,7 +269,7 @@ describe('controller transport client', function()
 
     it('preserves structured errors from nonzero subprocess results', function()
         local lines = {'DWARFSPEC_JSON ' .. json.encode({
-            schema='dwarfspec.error.v1', protocol=2,
+            schema='dwarfspec.error.v1', protocol=3,
             kind='registration', code='package_version_mismatch',
             message='different version loaded',
             running_version='0.2.1', requested_version='0.2.2',
@@ -318,7 +318,7 @@ describe('controller transport client', function()
                 guidance='requested cursor 8, retained cursor 7'},
         }
         for _, case in ipairs(cases) do
-            local response = {schema='dwarfspec.error.v1', protocol=2,
+            local response = {schema='dwarfspec.error.v1', protocol=3,
                 kind='host', message='opaque host prose'}
             for name, value in pairs(case) do
                 if name ~= 'guidance' then response[name] = value end
@@ -365,7 +365,7 @@ describe('controller transport client', function()
         assert.is_true(#detail.message < 2200)
 
         local malformed = {'DWARFSPEC_JSON ' .. json.encode({
-            schema='dwarfspec.error.v1', protocol=2,
+            schema='dwarfspec.error.v1', protocol=3,
             kind='registration', code='package_version_mismatch',
             message='different version loaded', running_version='0.2.1',
         })}

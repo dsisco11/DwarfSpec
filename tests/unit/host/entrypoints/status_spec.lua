@@ -95,7 +95,7 @@ describe('automation status formatting', function()
         assert(loadfile(layout.current().host_scripts.status))('status-run',
             run.owner_capability, '0')
 
-        assert.matches('DWARFSPEC protocol=2 run_id=status-run ' ..
+        assert.matches('DWARFSPEC protocol=3 run_id=status-run ' ..
             'state=starting generation=1', lines[1], 1, true)
         assert.equals('DWARFSPEC_JSON {"native":true}', lines[2])
         assert.equals(run, host.find('status-run'))

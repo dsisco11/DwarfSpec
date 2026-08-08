@@ -262,12 +262,22 @@ function Schemas:validate_host_report(value)
         type(value.test_attempts) == 'table',
         'host report requires all cleanup result projections')
     local transaction_ids = {}
+    local suite_ids = {}
+    local attempt_ids = {}
     ---Records one transaction identity and rejects duplicate projections.
     ---@param transaction table
     local function validate_unique(transaction)
         assert(not transaction_ids[transaction.transaction_id],
             'cleanup transaction must appear exactly once in result projections')
         transaction_ids[transaction.transaction_id] = true
+    end
+    ---Requires each owner-local registration ordinal exactly once.
+    ---@param transactions dwarfspec.CleanupTransactionResult[]
+    local function validate_ordinals(transactions)
+        for ordinal, transaction in ipairs(transactions) do
+            assert(transaction.registration_ordinal == ordinal,
+                'cleanup result registration ordinals must be owner-local and contiguous')
+        end
     end
     for _, transaction in ipairs(value.service_cleanup_transactions) do
         self:validate_cleanup_result(transaction)
@@ -276,10 +286,15 @@ function Schemas:validate_host_report(value)
             transaction.service_run_id == value.service_run_id,
             'service cleanup transaction has inconsistent ownership')
     end
+    validate_ordinals(value.service_cleanup_transactions)
     for _, suite in ipairs(value.suite_executions) do
         assert(suite.service_run_id == value.service_run_id,
             'suite execution has inconsistent service ownership')
         self:validate_suite_execution(suite)
+        assert(not suite_ids[suite.suite_execution_id],
+            'host report cannot repeat a suite execution')
+        suite_ids[suite.suite_execution_id] = true
+        validate_ordinals(suite.cleanup_transactions)
         for _, transaction in ipairs(suite.cleanup_transactions) do
             validate_unique(transaction)
         end
@@ -288,11 +303,61 @@ function Schemas:validate_host_report(value)
         assert(attempt.service_run_id == value.service_run_id,
             'test attempt has inconsistent service ownership')
         self:validate_test_attempt(attempt)
+        assert(not attempt_ids[attempt.test_attempt_id],
+            'host report cannot repeat a test attempt')
+        attempt_ids[attempt.test_attempt_id] = true
+        validate_ordinals(attempt.cleanup_transactions)
         for _, transaction in ipairs(attempt.cleanup_transactions) do
             validate_unique(transaction)
         end
     end
     return value
+end
+
+---Validates that every materialized cleanup ledger exactly folds its journal.
+---@param report dwarfspec.VerifiedExecutionHostReport
+---@param journal table[]
+---@return dwarfspec.VerifiedExecutionHostReport
+function Schemas:validate_cleanup_projections(report, journal)
+    self:validate_host_report(report)
+    assert(type(journal) == 'table',
+        'cleanup projection validation requires the complete journal')
+    local materializer = require(
+        'dwarfspec.host.execution.cleanup_result_materializer')
+    local function equal(left, right)
+        if type(left) ~= type(right) then return false end
+        if type(left) ~= 'table' then return left == right end
+        for key, value in pairs(left) do
+            if not equal(value, right[key]) then return false end
+        end
+        for key in pairs(right) do
+            if left[key] == nil then return false end
+        end
+        return true
+    end
+    local function validate(owner, actual)
+        local expected = materializer.fold_owner(journal, owner)
+        assert(equal(require('dwarfspec.protocol.events').copy_json(actual,
+            'cleanup result projection'), expected),
+            'cleanup result projection does not equal its journal fold')
+    end
+    validate({owner_scope=CleanupOwnerScope.SERVICE_RUN,
+        service_run_id=report.service_run_id},
+        report.service_cleanup_transactions)
+    for _, suite in ipairs(report.suite_executions) do
+        validate({owner_scope=CleanupOwnerScope.SUITE_EXECUTION,
+            service_run_id=suite.service_run_id,
+            suite_execution_id=suite.suite_execution_id},
+            suite.cleanup_transactions)
+    end
+    for _, attempt in ipairs(report.test_attempts) do
+        validate({owner_scope=CleanupOwnerScope.TEST_ATTEMPT,
+            service_run_id=attempt.service_run_id,
+            suite_execution_id=attempt.suite_execution_id,
+            test_attempt_id=attempt.test_attempt_id},
+            attempt.cleanup_transactions)
+    end
+    return report
 end
 
 ---Creates the stateless structural validator.

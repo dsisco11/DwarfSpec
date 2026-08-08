@@ -37,7 +37,7 @@ describe('adapter error protocol', function()
         assert.same(emitted, rejection)
         assert.same({
             schema='dwarfspec.error.v1',
-            protocol=2,
+            protocol=3,
             kind='registration',
             code='package_version_mismatch',
             message='different version loaded',

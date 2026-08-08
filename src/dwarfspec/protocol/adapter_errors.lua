@@ -7,7 +7,7 @@ local SchedulerFailureKind =
     require('dwarfspec.protocol.enums.scheduler_failure_kinds')
 
 local M = {
-    protocol=2,
+    protocol=3,
     schema='dwarfspec.error.v1',
 }
 

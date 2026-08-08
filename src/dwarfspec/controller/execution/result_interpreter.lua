@@ -115,8 +115,7 @@ function M.new(dependencies)
             queue_wait_ms=native_report and native_report.queue_wait_ms or nil,
             error=runner_error and {kind=runner_error.kind,
                 message=runner_error.message} or nil,
-            host_report=native_report and interpreter.entered_executor(native_report) and
-                native_report or nil,
+            host_report=native_report and native_report.host_report or nil,
             events=journal or {},
         })
     end

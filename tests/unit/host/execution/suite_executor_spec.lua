@@ -24,6 +24,10 @@ describe('host suite executor', function()
             end},
             cleanup_owner_lifecycle={suite_entry=function() end,
                 suite_exit=function() return true end,
+                latest_suite=function() return {suite_execution_id='suite-1',
+                    repeat_index=1, spec_file_identity='selected_spec.lua',
+                    behavior_summary={successes=0, failures=0, errors=0,
+                        pending=0}, cleanup_outcome='complete'} end,
                 test_entry=function() end, test_exit=function() return true end},
         }
         local project={}
@@ -45,8 +49,7 @@ describe('host suite executor', function()
                     return {install=function(_, options)
                         assert.is_function(options.on_suite_entry)
                         assert.is_function(options.on_suite_exit)
-                        assert.equals(lifecycle.test_start,
-                            options.on_test_start)
+                        assert.is_function(options.on_test_start)
                     end}
                 elseif name:match('base_screen_focus_guard') then
                     return {new=function() return {} end}
