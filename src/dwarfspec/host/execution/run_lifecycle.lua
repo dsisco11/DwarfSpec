@@ -53,6 +53,11 @@ function M.new(dependencies)
     ---@param reason string
     ---@return boolean
     function lifecycle.clean(run, reason)
+        local owner_cleanup_ok = true
+        if run.cleanup_owner_lifecycle ~= nil then
+            owner_cleanup_ok = run.cleanup_owner_lifecycle:finalize_all(reason,
+                reason ~= 'suite completion')
+        end
         if run.focus_lifecycle ~= nil then
             run.focus_lifecycle.clear()
             run.focus_lifecycle = nil
@@ -121,7 +126,7 @@ function M.new(dependencies)
         local module_audit = run.module_environment_audit
         local module_environment_ok = module_audit == nil or
             module_audit.restored == true and module_audit.path_restored == true
-        run.cleanup_confirmed = ok and #run.cleanup_registry.failures == 0 and
+        run.cleanup_confirmed = owner_cleanup_ok and ok and #run.cleanup_registry.failures == 0 and
             mount_ok and unit_speed_ok and module_environment_ok and
             run.cleanup_module.pending_count(run.cleanup_registry) == 0 and
             run.outstanding_wait == nil and run.coroutine == nil and

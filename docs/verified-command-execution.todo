@@ -641,51 +641,68 @@ finalization infrastructure. Phase 10 makes public commands consume that
 infrastructure through the common runner and supplies the command-path legality
 proof; command routing is not a completion requirement of this phase.
 
-- [ ] Introduce stable suite-execution identity for each selected spec file in
+- [x] Introduce stable suite-execution identity for each selected spec file in
       each repeat.
-- [ ] Activate suite ownership before suite setup and keep it active through
+- [x] Activate suite ownership before suite setup and keep it active through
       suite teardown and suite cleanup.
-- [ ] Activate a nested test-attempt identity before attempt setup and keep it
+- [x] Activate a nested test-attempt identity before attempt setup and keep it
       active through body, teardown, and attempt cleanup.
-- [ ] Select the most specific active public owner.
-  - [ ] Attribute attempt setup/body/teardown work to the test attempt.
-  - [ ] Attribute suite setup/teardown work outside an attempt to the suite.
-  - [ ] Reject caller-initiated commands and cleanup registration when neither
+- [x] Select the most specific active public owner.
+  - [x] Attribute attempt setup/body/teardown work to the test attempt.
+  - [x] Attribute suite setup/teardown work outside an attempt to the suite.
+  - [x] Reject caller-initiated commands and cleanup registration when neither
         suite nor test ownership is active.
-  - [ ] Reserve `SERVICE_RUN` commands exclusively for read-only query/assertion
+  - [x] Reserve `SERVICE_RUN` commands exclusively for read-only query/assertion
         children of service-owned cleanup verification.
-- [ ] Support internal service effects through the same transaction abstraction
+- [x] Support internal service effects through the same transaction abstraction
       and `SERVICE_RUN` cleanup owner.
-- [ ] Close test registration after attempt teardown, execute remaining pending
+- [x] Close test registration after attempt teardown, execute remaining pending
       work, terminalize unresolved transactions, and materialize results before
       `test.finished`.
-- [ ] Close suite registration after suite teardown, execute and terminalize
+- [x] Close suite registration after suite teardown, execute and terminalize
       remaining suite work, and materialize results before `suite.finished`.
-- [ ] Guarantee suite finalization after suite setup failure, skipped teardown,
+- [x] Guarantee suite finalization after suite setup failure, skipped teardown,
       zero runnable tests, or interruption.
-- [ ] Run service cleanup after all suite and test owners close and materialize
+- [x] Run service cleanup after all suite and test owners close and materialize
       it before `run.finished`.
-- [ ] Apply dependency-safe ordering across owner scopes and retain blocked
+- [x] Apply dependency-safe ordering across owner scopes and retain blocked
       prerequisite evidence when failed/unconfirmed dependents remain.
-- [ ] Keep manual execution attributed to the transaction's original owner even
+- [x] Keep manual execution attributed to the transaction's original owner even
       when a suite transaction is executed from a nested test.
-- [ ] Keep behavior status distinct from cleanup outcome while making failed or
+- [x] Keep behavior status distinct from cleanup outcome while making failed or
       unconfirmed cleanup affect run failure and quarantine.
-- [ ] Combine all transaction failures with the existing lifecycle probes before
+- [x] Combine all transaction failures with the existing lifecycle probes before
       setting authoritative `cleanup_confirmed`.
-- [ ] Ensure emergency finalizers attempt safe pending work and mark only work
+- [x] Ensure emergency finalizers attempt safe pending work and mark only work
       that remains unresolved as `unconfirmed`.
-- [ ] Add lifecycle tests for ownership selection, setup/teardown legality,
+- [x] Add lifecycle tests for ownership selection, setup/teardown legality,
       finalization ordering, setup failure, zero tests, skipped teardown,
       interruption, manual cross-context execution, and service cleanup.
-- [ ] Perform a follow-up lifecycle review before exposing result projections.
+- [x] Perform a follow-up lifecycle review before exposing result projections.
 
 Completion criteria:
 
-- [ ] Suite-, test-, and service-owned transactions never leak into another
+- [x] Suite-, test-, and service-owned transactions never leak into another
       owner's registry or result set.
-- [ ] `test.finished`, `suite.finished`, and `run.finished` are each published
+- [x] `test.finished`, `suite.finished`, and `run.finished` are each published
       only after the relevant cleanup projection is terminal.
+
+Evidence recorded 2026-08-08:
+
+- `CleanupOwnerLifecycle` activates deterministic suite and nested test owners,
+  finalizes test then suite then service cleanup, and rejects public ownership
+  outside an active owner window. `CleanupRegistrationService` closes owner
+  registration before executing its pending transactions and retains its
+  terminal owner result.
+- The Busted suite executor installs the owner windows around file and example
+  hooks; run finalization completes any abandoned owner windows before the
+  existing cleanup probes compute `cleanup_confirmed`.
+- Focused cleanup-service, owner-lifecycle, suite-executor, and assembly tests
+  passed with 27 successes, 0 failures, 0 errors, and 0 pending. Lua syntax and
+  formatting passed for 416 files, valid source declaration fixtures passed,
+  and `git diff --check` passed.
+- The required follow-up review and independent completion audit found no
+  confirmed issue, partially satisfied requirement, or evidence gap.
 
 ## Phase 9: Materialize and validate cleanup results end to end
 

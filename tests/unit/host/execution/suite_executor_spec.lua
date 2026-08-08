@@ -22,6 +22,9 @@ describe('host suite executor', function()
             cleanup_module={push=function(_, name, callback)
                 pushed={name=name, callback=callback}
             end},
+            cleanup_owner_lifecycle={suite_entry=function() end,
+                suite_exit=function() return true end,
+                test_entry=function() end, test_exit=function() return true end},
         }
         local project={}
         local capabilities={run_id='run-1'}
@@ -40,10 +43,8 @@ describe('host suite executor', function()
                     return {load=function() return {settings={}} end}
                 elseif name:match('busted_lifecycle_adapter') then
                     return {install=function(_, options)
-                        assert.equals(lifecycle.suite_entry,
-                            options.on_suite_entry)
-                        assert.equals(lifecycle.suite_exit,
-                            options.on_suite_exit)
+                        assert.is_function(options.on_suite_entry)
+                        assert.is_function(options.on_suite_exit)
                         assert.equals(lifecycle.test_start,
                             options.on_test_start)
                     end}

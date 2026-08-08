@@ -55,6 +55,19 @@ function CleanupRegistry:pending_ids()
     return pending
 end
 
+---Returns the pending transactions as a detached deterministic array.
+---@return dwarfspec.CleanupTransaction[]
+function CleanupRegistry:pending_transactions()
+    local transactions = {}
+    for transaction_id in pairs(self._pending) do
+        transactions[#transactions + 1] = self._transactions[transaction_id]
+    end
+    table.sort(transactions, function(left, right)
+        return left:registration_ordinal() < right:registration_ordinal()
+    end)
+    return transactions
+end
+
 ---Returns transactions whose retained claims still protect prerequisites.
 ---@return table<string, true>
 function CleanupRegistry:protection_ids()

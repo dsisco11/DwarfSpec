@@ -116,6 +116,31 @@ describe('CleanupRegistrationService', function()
         assert.are.equal(3, #cleanup_service:journal())
     end)
 
+    it('closes an owner after finalizing its pending transactions', function()
+        local index = ResourceDependencyIndex.new('run-1', function() return 'complete' end)
+        local cleanup_service = service(index)
+        register(cleanup_service, index)
+        local confirmed, result = cleanup_service:finalize_owner(owner(),
+            'test teardown')
+        assert.is_true(confirmed)
+        assert.is_true(result.confirmed)
+        assert.same(result, cleanup_service:owner_result(owner()))
+        assert_error(function() register(cleanup_service, index) end,
+            'registration is closed')
+    end)
+
+    it('attempts safe owner cleanup before terminalizing interruption work', function()
+        local index = ResourceDependencyIndex.new('run-1', function() return 'complete' end)
+        local cleanup_service = service(index)
+        local transaction = register(cleanup_service, index)
+        local confirmed = cleanup_service:finalize_owner(owner(),
+            'host abort', true)
+        assert.is_true(confirmed)
+        assert.equals('complete', transaction:state())
+        local journal = cleanup_service:journal()
+        assert.equals('complete', journal[#journal].details.disposition)
+    end)
+
     it('retains unconfirmed claims and one terminal journal event after interruption',
             function()
         local index = ResourceDependencyIndex.new('run-1', function() return 'complete' end)

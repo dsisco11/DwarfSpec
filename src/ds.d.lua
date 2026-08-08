@@ -242,6 +242,8 @@
 ---@field abandonSelfRolledBack fun(self: dwarfspec.CleanupRegistrationService, transaction_id: string, mutation_lease: dwarfspec.CleanupMutationLease, proof: table)
 ---@field journal fun(self: dwarfspec.CleanupRegistrationService): table[]
 ---@field pending_ids_for fun(self: dwarfspec.CleanupRegistrationService, owner: dwarfspec.ExecutionOwnerIdentity): table<string, true>
+---@field finalize_owner fun(self: dwarfspec.CleanupRegistrationService, owner: dwarfspec.ExecutionOwnerIdentity, reason: string, interrupted?: boolean): boolean, table
+---@field owner_result fun(self: dwarfspec.CleanupRegistrationService, owner: dwarfspec.ExecutionOwnerIdentity): table|nil
 
 ---Runner-owned lease that serializes one mutating command attempt.
 ---@class dwarfspec.CleanupMutationLease

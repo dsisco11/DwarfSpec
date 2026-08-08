@@ -2,6 +2,18 @@
 
 local M = {}
 
+---Names run fields whose values belong exclusively to one execution.
+local TRANSIENT_RUN_FIELDS = {
+    'started_ms', 'started_frame', 'finished_ms', 'finished_frame',
+    'last_status_poll_ms', 'last_status_poll_frame', 'current_test',
+    'coroutine', 'scheduled_timeout_id', 'outstanding_wait', 'cleanup_registry',
+    'cleanup_reason', 'mount_cleanup_probe', 'mount_cleanup_state',
+    'unit_speed_cleanup_probe', 'unit_speed_cleanup_state',
+    'module_environment_audit', 'scheduler_module', 'scheduler',
+    'resource_dependency_index', 'cleanup_registration_service',
+    'cleanup_owner_lifecycle',
+}
+
 ---Initializes a run with its cleanup, scheduler, and event-publisher dependencies.
 ---@param run table
 ---@param package_root string
@@ -17,9 +29,21 @@ function M.initialize(run, package_root, project_root, options, dependencies)
         'run assembly requires an injected dwarfspec.ds factory')
     run.ds_factory = dependencies.ds_factory
     run.state_changed_ms, run.created_ms, run.created_frame = created_ms, created_ms, dependencies.current_frame()
-    for _, field in ipairs({'started_ms','started_frame','finished_ms','finished_frame','last_status_poll_ms','last_status_poll_frame','current_test','coroutine','scheduled_timeout_id','outstanding_wait','cleanup_registry','cleanup_reason','mount_cleanup_probe','mount_cleanup_state','unit_speed_cleanup_probe','unit_speed_cleanup_state','module_environment_audit','scheduler_module','scheduler'}) do run[field] = nil end
+    for _, field in ipairs(TRANSIENT_RUN_FIELDS) do run[field] = nil end
     run.output_lines, run.failure_details, run.discovered_files, run.recorded_cleanup_failures = {}, {}, {}, {}
     run.cleanup_module, run.cleanup_failure_reported_by_busted, run.suspended, run.terminal_observed = cleanup, false, false, false
+    local resource_index = dependencies.load_module(package_root,
+        'dwarfspec.driver.command.resource_dependency_index')
+    local cleanup_service = dependencies.load_module(package_root,
+        'dwarfspec.driver.cleanup.cleanup_registration_service')
+    local owner_lifecycle = dependencies.load_module(package_root,
+        'dwarfspec.host.execution.cleanup_owner_lifecycle')
+    run.resource_dependency_index = resource_index.new(run.run_id)
+    run.cleanup_registration_service = cleanup_service.new({
+        service_run_id=run.run_id, resource_index=run.resource_dependency_index,
+        now_ms=dependencies.now_ms})
+    run.cleanup_owner_lifecycle = owner_lifecycle.new(run.run_id,
+        run.cleanup_registration_service)
     assert(type(run.lease_check_frames) == 'number' and run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0, 'lease check interval must be a positive integer')
     run.cleanup_registry = cleanup.new(run, dependencies.is_active)
     run.event_publisher = dependencies.create_event_publisher(run, {

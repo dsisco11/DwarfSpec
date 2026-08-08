@@ -11,8 +11,25 @@ describe('host run assembly', function()
             ds_factory={new=function() end},
             load_module=function(root, name)
                 assert.equals('package', root)
-                assert.equals('dwarfspec.host.execution.cleanup', name)
-                return cleanup
+                if name == 'dwarfspec.host.execution.cleanup' then
+                    return cleanup
+                elseif name == 'dwarfspec.driver.command.resource_dependency_index' then
+                    return {new=function(service_run_id)
+                        return {service_run_id=service_run_id}
+                    end}
+                elseif name == 'dwarfspec.driver.cleanup.cleanup_registration_service' then
+                    return {new=function(options)
+                        return {service_run_id=options.service_run_id,
+                            resource_index=options.resource_index,
+                            finalize_owner=function() return true end}
+                    end}
+                end
+                assert.equals('dwarfspec.host.execution.cleanup_owner_lifecycle',
+                    name)
+                return {new=function(service_run_id, cleanup_service)
+                    return {service_run_id=service_run_id,
+                        cleanup_service=cleanup_service}
+                end}
             end,
             now_ms=function() return 100 end,
             current_frame=function() return 20 end,
@@ -35,6 +52,8 @@ describe('host run assembly', function()
         assert.equals(20, run.created_frame)
         assert.equals(cleanup, run.cleanup_module)
         assert.is_true(run.cleanup_registry.active())
+        assert.equals('run', run.resource_dependency_index.service_run_id)
+        assert.equals('run', run.cleanup_owner_lifecycle.service_run_id)
         run.event_publisher.publish('started', {value=1})
         assert.same({'run', 4, 'started', {value=1}}, published)
     end)

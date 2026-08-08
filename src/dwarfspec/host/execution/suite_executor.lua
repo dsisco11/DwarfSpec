@@ -56,11 +56,37 @@ function M.execute(package_root, project_root, run, scheduler_module,
         run, reset, guard_factory.new(dependencies.gui))
     run.focus_lifecycle = lifecycle
     lifecycle_adapter.install(busted, {project_root=project_root,
-        on_suite_entry=lifecycle.suite_entry,
-        on_suite_exit=lifecycle.suite_exit,
+        on_suite_entry=function(identity)
+            run.cleanup_owner_lifecycle:suite_entry(identity)
+            return lifecycle.suite_entry(identity)
+        end,
+        on_suite_exit=function(identity, state)
+            local focus_ok, focus_error = xpcall(function()
+                lifecycle.suite_exit(identity, state)
+            end, debug.traceback)
+            local cleanup_ok = run.cleanup_owner_lifecycle:suite_exit(
+                'suite teardown', not focus_ok)
+            if not focus_ok then error(focus_error, 0) end
+            assert(cleanup_ok, 'suite cleanup finalization was not confirmed')
+        end,
         on_test_start=lifecycle.test_start})
-    dependencies.install_entry(lifecycle_adapter, busted, lifecycle)
-    dependencies.install_exit(lifecycle_adapter, busted, lifecycle)
+    dependencies.install_entry(lifecycle_adapter, busted, {
+        example_entry=function()
+            run.cleanup_owner_lifecycle:test_entry()
+            lifecycle.example_entry()
+        end,
+    })
+    dependencies.install_exit(lifecycle_adapter, busted, {
+        example_exit=function()
+            local focus_ok, focus_error = xpcall(function()
+                lifecycle.example_exit()
+            end, debug.traceback)
+            local cleanup_ok = run.cleanup_owner_lifecycle:test_exit(
+                'test teardown', not focus_ok)
+            if not focus_ok then error(focus_error, 0) end
+            assert(cleanup_ok, 'test cleanup finalization was not confirmed')
+        end,
+    })
 
     dependencies.load_module(package_root,
         'dwarfspec.host.execution.output_handler').new(

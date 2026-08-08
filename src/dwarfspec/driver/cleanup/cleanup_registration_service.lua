@@ -20,6 +20,8 @@ local LEASE_STATE = setmetatable({}, {__mode='k'})
 ---@field private _next_transaction_id integer
 ---@field private _next_registration_ordinals table<string, integer>
 ---@field private _journal table[]
+---@field private _closed_owners table<string, true>
+---@field private _owner_results table<string, table>
 ---@field private _quarantine fun(evidence: table)
 ---@field private _recover fun(transaction_id: string, proof: table)
 ---@field private _active_mutation_invocation_id? string
@@ -238,6 +240,7 @@ function CleanupRegistrationService.new(options)
         _now_ms=options.now_ms, _registries={}, _transactions={},
         _transaction_records={}, _next_transaction_id=0,
         _next_registration_ordinals={}, _journal={},
+        _closed_owners={}, _owner_results={},
         _quarantine=options.quarantine or function() end,
         _recover=options.recover or function() end,
         _active_mutation_invocation_id=nil},
@@ -265,6 +268,8 @@ end
 function CleanupRegistrationService:register(registration)
     assert(type(registration) == 'table', 'cleanup registration is required')
     local owner = Internals.owner(self, registration.owner)
+    assert(not self._closed_owners[Internals.owner_key(owner)],
+        'cleanup registration is closed for this owner')
     assert(type(registration.receipt) == 'table', 'cleanup registration receipt is required')
     assert(type(registration.restore) == 'function' and type(registration.verify) == 'function',
         'cleanup registration requires restore and verification callbacks')
@@ -361,6 +366,56 @@ function CleanupRegistrationService:register(registration)
     Internals.publish(self, 'cleanup.transaction_registered', transaction, record,
         {claim_references=activated})
     return transaction
+end
+
+---Closes registration and terminalizes all pending work for one owner.
+---@param owner dwarfspec.ExecutionOwnerIdentity
+---@param reason string
+---@param interrupted boolean|nil
+---@return boolean, table
+function CleanupRegistrationService:finalize_owner(owner, reason, interrupted)
+    owner = Internals.owner(self, owner)
+    assert(type(reason) == 'string' and reason ~= '',
+        'cleanup finalization reason must be a nonempty string')
+    local key = Internals.owner_key(owner)
+    if self._owner_results[key] ~= nil then
+        return self._owner_results[key].confirmed,
+            Internals.diagnostics:sanitize(self._owner_results[key],
+                'cleanup owner result')
+    end
+    self._closed_owners[key] = true
+    local registry = Internals.registry(self, owner)
+    local confirmed, failures = registry:execute_all(reason)
+    if interrupted then
+        local unresolved = false
+        for _, transaction in ipairs(registry:pending_transactions()) do
+            unresolved = true
+            CleanupTransaction._mark_unconfirmed(transaction, {
+                reason='owner_interrupted', owner=owner,
+                finalization_reason=reason,
+            })
+        end
+        if unresolved then
+            confirmed = false
+            failures[#failures + 1] = 'cleanup owner interrupted'
+        end
+    end
+    local result = Internals.diagnostics:sanitize({owner=owner,
+        confirmed=confirmed and #registry:pending_transactions() == 0,
+        failures=failures, reason=reason}, 'cleanup owner result')
+    self._owner_results[key] = result
+    return result.confirmed, Internals.diagnostics:sanitize(result,
+        'cleanup owner result')
+end
+
+---Returns the terminal result retained for one finalized cleanup owner.
+---@param owner dwarfspec.ExecutionOwnerIdentity
+---@return table|nil
+function CleanupRegistrationService:owner_result(owner)
+    local result = self._owner_results[Internals.owner_key(
+        Internals.owner(self, owner))]
+    if result == nil then return nil end
+    return Internals.diagnostics:sanitize(result, 'cleanup owner result')
 end
 
 ---Abandons a pending current-lease transaction only after absence proof.
