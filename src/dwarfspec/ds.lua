@@ -67,7 +67,7 @@ end
 ---@return table
 function M.new(package_root, project, scheduler_module, scheduler,
         cleanup_module, cleanup_registry, extensions, mount_dependencies,
-        run_capabilities)
+        run_capabilities, command_runner)
     assert(type(run_capabilities) == 'table',
         'DwarfSpec ds factory requires injected run capabilities')
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
@@ -307,6 +307,7 @@ local command_observer_module = load_automation_module(package_root,
         scheduler_module=scheduler_module,
         cleanup_module=cleanup_module,
         cleanup_registry=cleanup_registry,
+        command_runner=command_runner,
         pointer=pointer_adapter_module.new(cleanup_module, cleanup_registry, {
             get_geometry=get_pointer_geometry,
             screen=pointer_screen,
@@ -743,6 +744,14 @@ local command_observer_module = load_automation_module(package_root,
         testbed_host={require=require, reqscript=dfhack.reqscript,
             base=dfhack.BASE_G, dfhack=dfhack},
     })
+    if command_runner ~= nil then
+        assert(type(command_runner.setRefreshRetainedSubjects) == 'function',
+            'DwarfSpec command runner requires retained-subject refresh')
+        command_runner:setRefreshRetainedSubjects(function()
+            local mount = context.mount_context.current
+            if mount ~= nil then context.mount_context:refresh_views(mount) end
+        end)
+    end
     local search_command = text_search_command.new_command({
         mount_context=context.mount_context,
         matcher=rendered_text_search,

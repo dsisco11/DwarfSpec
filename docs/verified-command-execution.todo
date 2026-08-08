@@ -769,83 +769,146 @@ Outcome: every supported command lifecycle can execute through one runner with
 stage attribution, a shared deadline, effect-driven cleanup, and composed
 failure handling.
 
-- [ ] Add `src/dwarfspec/driver/command/runner.lua` and construct it once per
+- [x] Add `src/dwarfspec/driver/command/runner.lua` and construct it once per
       run through `run_assembly` and `dwarfspec.ds`.
-- [ ] Implement invocation setup.
-  - [ ] Resolve and validate invocation-level options.
-  - [ ] Normalize and defensively copy logical arguments synchronously before
+- [x] Implement invocation setup.
+  - [x] Resolve and validate invocation-level options.
+  - [x] Normalize and defensively copy logical arguments synchronously before
         starting the timed lifecycle.
-  - [ ] Derive and freeze the stable operation key during normalization for
+  - [x] Derive and freeze the stable operation key during normalization for
         `EXPLICIT_RETRY_SAFE` only.
-  - [ ] Resolve the effective finite timeout and create one deadline.
-  - [ ] Allocate invocation/root/owner identities and publish sanitized start
+  - [x] Resolve the effective finite timeout and create one deadline.
+  - [x] Allocate invocation/root/owner identities and publish sanitized start
         evidence.
-  - [ ] Mark command and attempt-local cleanup checkpoints.
-- [ ] Implement retryable read-only preflight.
-  - [ ] Handle ready, pending, fatal, thrown, cancellation, and timeout.
-  - [ ] Retain the latest bounded pending reason/evidence.
-  - [ ] Re-resolve stable subjects and mounts across yields.
-  - [ ] Revalidate volatile target identity immediately before execution and
+  - [x] Mark command and attempt-local cleanup checkpoints.
+- [x] Implement retryable read-only preflight.
+  - [x] Handle ready, pending, fatal, thrown, cancellation, and timeout.
+  - [x] Retain the latest bounded pending reason/evidence.
+  - [x] Re-resolve stable subjects and mounts across yields.
+  - [x] Revalidate volatile target identity immediately before execution and
         return recoverable changes to the same preflight loop.
-- [ ] After successful final target validation, invoke the proposal's optional
+- [x] After successful final target validation, invoke the proposal's optional
       `claims(context, request, ready)` hook when present; otherwise use a frozen
       empty plan. Validate and freeze any returned inert plan without changing
       ownership.
-- [ ] Implement primary behavior by command kind.
-  - [ ] Poll query/assertion primary observations and preserve successful nil
+- [x] Implement primary behavior by command kind.
+  - [x] Poll query/assertion primary observations and preserve successful nil
         distinctly from pending.
-  - [ ] Execute `ONCE` mutators no more than once.
-  - [ ] Reject every retry result returned by an `ONCE` definition.
-  - [ ] Validate every runtime outcome against its frozen definition.
-  - [ ] Fail without executing when no deadline time remains before primary
+  - [x] Execute `ONCE` mutators no more than once.
+  - [x] Reject every retry result returned by an `ONCE` definition.
+  - [x] Validate every runtime outcome against its frozen definition.
+  - [x] Fail without executing when no deadline time remains before primary
         execution.
-- [ ] Register cleanup immediately when an executed, retry, or failed outcome
+- [x] Register cleanup immediately when an executed, retry, or failed outcome
       conclusively returns an effect receipt.
-  - [ ] Perform registration before later fallible work, yield, verification,
+  - [x] Perform registration before later fallible work, yield, verification,
         retry, or publication.
-  - [ ] Bind only planned claims through the immutable cleanup policy.
-  - [ ] Discard the inert plan on every proven no-effect exit without index
+  - [x] Bind only planned claims through the immutable cleanup policy.
+  - [x] Discard the inert plan on every proven no-effect exit without index
         unwind.
-  - [ ] Retain available effect evidence and quarantine if effect absence cannot
+  - [x] Retain available effect evidence and quarantine if effect absence cannot
         be established after an adapter-contract failure.
-- [ ] Establish intrinsic evidence exactly by selected policy.
-  - [ ] Retain validated primary observation for `PRIMARY_OBSERVATION`.
-  - [ ] Poll the read-only intrinsic callback for `CALLBACK`.
-  - [ ] Accept only the immutable execution receipt for
+- [x] Establish intrinsic evidence exactly by selected policy.
+  - [x] Retain validated primary observation for `PRIMARY_OBSERVATION`.
+  - [x] Poll the read-only intrinsic callback for `CALLBACK`.
+  - [x] Accept only the immutable execution receipt for
         `EXECUTION_RECEIPT`.
-  - [ ] Route valid `effect_absent` through runner-only abandonment and fail the
+  - [x] Route valid `effect_absent` through runner-only abandonment and fail the
         intended command effect.
-- [ ] Implement optional caller verification after intrinsic verification.
-  - [ ] Provide a bounded read-only observation containing command name/kind,
+- [x] Implement optional caller verification after intrinsic verification.
+  - [x] Provide a bounded read-only observation containing command name/kind,
         stable target identity, public result, copied receipt, attempt count,
         elapsed/remaining time, and latest intrinsic evidence.
-  - [ ] Retry false/nil and thrown observations under the shared remaining
+  - [x] Retry false/nil and thrown observations under the shared remaining
         deadline.
-  - [ ] Preserve the last bounded error/traceback on timeout.
-  - [ ] Never replace the command's public return or weaken intrinsic checks.
-- [ ] Always expend still-pending command-lifetime cleanup at the finally
+  - [x] Preserve the last bounded error/traceback on timeout.
+  - [x] Never replace the command's public return or weaken intrinsic checks.
+- [x] Always expend still-pending command-lifetime cleanup at the finally
       boundary, regardless of primary or verification outcome.
-- [ ] Compose primary, intrinsic, caller, timeout, cancellation, and
+- [x] Compose primary, intrinsic, caller, timeout, cancellation, and
       command-lifetime cleanup failures without replacing earlier failures.
-- [ ] Refresh retained subjects only after the complete composed outcome
+- [x] Refresh retained subjects only after the complete composed outcome
       remains successful.
-- [ ] Publish exactly one terminal command event after command-lifetime cleanup,
+- [x] Publish exactly one terminal command event after command-lifetime cleanup,
       then return the original public result or raise the composed lifecycle
       error into the active Busted owner.
-- [ ] Do not drain unrelated owner-lifetime transactions on command failure.
-- [ ] Add fake-clock/fake-scheduler runner tests for every lifecycle stage,
+- [x] Do not drain unrelated owner-lifetime transactions on command failure.
+- [x] Add fake-clock/fake-scheduler runner tests for every lifecycle stage,
       timeout boundary, receipt path, cleanup checkpoint, composed failure, and
       stable return guarantee.
-- [ ] Perform a follow-up runner review against the proposal's ordered
+- [x] Perform a follow-up runner review against the proposal's ordered
       lifecycle before adding workflows and public bindings.
+- [x] Remediate the Phase 10 completion-audit discrepancies before beginning
+      explicit retry-safe execution.
+  - [x] Add one authoritative runtime-outcome validator and require every
+        query/assertion gate and mutating execution result to satisfy its
+        frozen definition. Reject mutable or forged outcome tables, invalid
+        kinds, missing required fields, incompatible retry results, and receipt
+        shapes that do not satisfy the selected intrinsic or cleanup policy.
+  - [x] Implement all three intrinsic-evidence branches explicitly:
+        retain the validated successful primary observation for
+        `PRIMARY_OBSERVATION`, poll only the declared read-only callback for
+        `CALLBACK`, and require the immutable private execution receipt for
+        `EXECUTION_RECEIPT`. Do not treat the absence of branch-specific work as
+        intrinsic success.
+  - [x] Restructure invocation finalization so every registered, still-pending
+        command-lifetime transaction is executed and verified from one
+        unconditional finally boundary after the protected command lifecycle,
+        including when later validation, intrinsic verification, caller
+        verification, abandonment, refresh, publication preparation, or other
+        unexpected runner work throws.
+  - [x] Preserve the first lifecycle failure and compose command-lifetime
+        cleanup failure after it; never let cleanup success erase the original
+        failure or let an unexpected post-registration error bypass cleanup.
+  - [x] Add a runner-level fail-closed adapter-contract path for a thrown or
+        malformed primary result when effect absence cannot be established.
+        Retain bounded available effect evidence, record unresolved resource
+        ownership through the existing cleanup/resource service seam, fail at
+        the exact stage, and apply executor quarantine until recovery. Do not
+        duplicate the cleanup service's existing post-effect conflict logic.
+  - [x] Inject and invoke the retained-subject refresh seam only after primary,
+        intrinsic, caller, and command-lifetime cleanup outcomes compose to
+        success. Treat refresh failure as a stage-attributed command failure
+        and do not publish command success.
+  - [x] Attach the exact current lifecycle stage and latest bounded evidence to
+        every propagated command failure. Keep Phase 10 terminal publication
+        limited to exactly one start/finish pair after cleanup; defer the rich
+        stage-event family, receipt summaries, cleanup-evidence schema, and
+        controller rendering to Phase 14.
+  - [x] Add focused fake-clock/fake-scheduler regressions for forged and
+        malformed outcomes, each intrinsic policy, absent execution receipts,
+        unexpected failures after cleanup registration, composed finally
+        failures, ambiguous adapter effects and quarantine, refresh ordering
+        and failure, exact stage attribution, and exactly-one terminal
+        publication. Do not pull Phase 14's reusable exhaustive conformance
+        harness into this remediation.
+  - [x] Perform a fresh follow-up review against the proposal's ordered
+        lifecycle after all remediation changes and before checking this block.
 
 Completion criteria:
 
-- [ ] No command can report success before its selected intrinsic evidence and
+- [x] No command can report success before its selected intrinsic evidence and
       optional caller verification pass.
-- [ ] One deadline covers preflight through caller verification without reset.
-- [ ] Cleanup remains independently bounded and survives command failure or
+- [x] One deadline covers preflight through caller verification without reset.
+- [x] Cleanup remains independently bounded and survives command failure or
       expiry.
+- [x] Every runtime outcome is definition-compatible and every selected
+      intrinsic policy contributes truthful validated evidence before success.
+- [x] No failure after effect registration can bypass command-lifetime cleanup
+      or lose fail-closed ownership/quarantine evidence.
+- [x] Successful retained-subject refresh, exact failure-stage attribution, and
+      focused remediation regressions pass without implementing Phase 14's
+      richer event and reusable-conformance scope early.
+
+Validation evidence:
+
+- Focused remediation suites passed with 48 successes, 0 failures, 0 errors,
+  and 0 pending across command runner, outcome, cleanup registration, and host
+  assembly contracts.
+- The full unit suite passed with 1,122 successes, 0 failures, 0 errors, and
+  0 pending after the final follow-up review.
+- Lua syntax and formatting passed for 420 files, and valid source declaration
+  fixtures passed.
 
 ## Phase 11: Implement explicit retry-safe execution
 

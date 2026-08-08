@@ -630,6 +630,19 @@ function ResourceDependencyIndex:record_conflicted_registration(transaction_id,
     return record
 end
 
+---Retains fail-closed ownership evidence for an ambiguous adapter effect.
+---@param invocation_id string
+---@param owner table
+---@param evidence table
+---@return string
+function ResourceDependencyIndex:record_ambiguous_effect(invocation_id, owner,
+        evidence)
+    invocation_id = Internals.string(invocation_id, 'invocation_id')
+    local record_id = self._service_run_id .. ':ambiguous:' .. invocation_id
+    self:record_conflicted_registration(record_id, owner, evidence)
+    return record_id
+end
+
 ---Retains unresolved claims after failed or unconfirmed cleanup.
 ---@param transaction_id string
 function ResourceDependencyIndex:retain_unresolved(transaction_id)

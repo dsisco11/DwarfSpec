@@ -23,6 +23,13 @@ describe('host run assembly', function()
                             resource_index=options.resource_index,
                             finalize_owner=function() return true end}
                     end}
+                elseif name == 'dwarfspec.driver.command.registry' then
+                    return {new=function() return {get=function() end} end}
+                elseif name == 'dwarfspec.driver.command.runner' then
+                    return {new=function(options)
+                        return {registry=options.registry,
+                            cleanup_service=options.cleanup_service}
+                    end}
                 end
                 assert.equals('dwarfspec.host.execution.cleanup_owner_lifecycle',
                     name)
@@ -54,6 +61,8 @@ describe('host run assembly', function()
         assert.is_true(run.cleanup_registry.active())
         assert.equals('run', run.resource_dependency_index.service_run_id)
         assert.equals('run', run.cleanup_owner_lifecycle.service_run_id)
+        assert.equals(run.cleanup_registration_service,
+            run.command_runner.cleanup_service)
         run.event_publisher.publish('started', {value=1})
         assert.same({'run', 4, 'started', {value=1}}, published)
     end)

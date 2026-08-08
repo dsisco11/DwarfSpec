@@ -46,7 +46,8 @@ function M.execute(package_root, project_root, run, scheduler_module,
     })
     local ds, reset = dependencies.ds_factory.new(package_root, project,
         scheduler_module, scheduler, run.cleanup_module,
-        run.cleanup_registry, extensions, nil, run_capabilities)
+        run.cleanup_registry, extensions, nil, run_capabilities,
+        run.command_runner)
     busted.export('ds', ds)
     local lifecycle_adapter = dependencies.load_module(package_root,
         'dwarfspec.host.execution.busted_lifecycle_adapter')

@@ -73,8 +73,9 @@ describe('host suite executor', function()
             create_recurring_operations=function()
                 return {identity='recurring-operations'}
             end,
-            ds_factory={new=function(_, _, _, _, _, _, _, _, value)
+            ds_factory={new=function(_, _, _, _, _, _, _, _, value, runner)
                 forwarded_capabilities = value
+                assert.equals(run.command_runner, runner)
                 table.insert(calls, 'ds')
                 return {}, function() end
             end},

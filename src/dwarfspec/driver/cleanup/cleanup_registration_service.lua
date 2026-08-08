@@ -320,6 +320,50 @@ function CleanupRegistrationService:begin_mutation(command_invocation_id)
     return lease
 end
 
+---Retains and quarantines a mutating adapter failure with an unknown effect.
+---@param command_invocation_id string
+---@param owner table
+---@param evidence table
+---@return string
+function CleanupRegistrationService:quarantineAmbiguousEffect(
+        command_invocation_id, owner, evidence)
+    command_invocation_id = Internals.identity(command_invocation_id,
+        'command invocation ID')
+    owner = Internals.owner(self, owner)
+    local safe_evidence = Internals.diagnostics:sanitize(evidence,
+        'ambiguous command effect evidence')
+    local record_id = self._resource_index:record_ambiguous_effect(
+        command_invocation_id, owner, safe_evidence)
+    self._quarantine(Internals.diagnostics:sanitize({
+        reason='ambiguous_command_effect', record_id=record_id,
+        command_invocation_id=command_invocation_id, owner=owner,
+        evidence=safe_evidence,
+    }, 'ambiguous command effect quarantine evidence'))
+    return record_id
+end
+
+---Returns pending command-lifetime transactions for one invocation.
+---@param command_invocation_id string
+---@return dwarfspec.CleanupTransaction[]
+function CleanupRegistrationService:pendingCommandTransactions(
+        command_invocation_id)
+    command_invocation_id = Internals.identity(command_invocation_id,
+        'command invocation ID')
+    local pending = {}
+    for transaction_id, transaction in pairs(self._transactions) do
+        local record = self._transaction_records[transaction_id]
+        if record.command_invocation_id == command_invocation_id and
+                record.lifetime == CleanupLifetime.COMMAND and
+                transaction:isPending() then
+            pending[#pending + 1] = transaction
+        end
+    end
+    table.sort(pending, function(left, right)
+        return left:registration_ordinal() > right:registration_ordinal()
+    end)
+    return pending
+end
+
 ---Atomically registers one effect-backed cleanup transaction and active claims.
 ---@param registration table
 ---@return dwarfspec.CleanupTransaction

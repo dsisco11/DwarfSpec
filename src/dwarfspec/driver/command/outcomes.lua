@@ -6,6 +6,7 @@ local diagnostics = Diagnostics.new()
 ---@class dwarfspec.CommandOutcomes
 local Outcomes = {}
 local EFFECT_ABSENT_OUTCOMES = setmetatable({}, {__mode='k'})
+local OUTCOME_KINDS = setmetatable({}, {__mode='k'})
 
 ---@class dwarfspec.driver.command.OutcomeInternals
 local Internals = {}
@@ -38,7 +39,21 @@ end
 ---@param values table
 ---@return table
 function Internals.outcome(values)
-    return Internals.read_only(values, 'command outcome')
+    local outcome = Internals.read_only(values, 'command outcome')
+    OUTCOME_KINDS[outcome] = values.kind
+    return outcome
+end
+
+---Requires an outcome constructed by this module with one permitted kind.
+---@param outcome any
+---@param kinds table<string, true>
+---@param label string
+---@return table
+function Internals.constructed(outcome, kinds, label)
+    local kind = OUTCOME_KINDS[outcome]
+    assert(kind ~= nil, label .. ' must use a command outcome constructor')
+    assert(kinds[kind] == true, label .. ' returned unsupported kind ' .. kind)
+    return outcome
 end
 
 ---Validates optional bounded evidence.
@@ -123,6 +138,39 @@ end
 ---@return boolean
 function Outcomes.is_effect_absent(outcome)
     return EFFECT_ABSENT_OUTCOMES[outcome] == true
+end
+
+---Validates a runtime gate outcome and its permitted intrinsic-only result.
+---@param outcome any
+---@param allow_effect_absent? boolean
+---@return table
+function Outcomes.validate_gate(outcome, allow_effect_absent)
+    local kinds = {ready=true, pending=true, fatal=true}
+    if allow_effect_absent then kinds.effect_absent = true end
+    return Internals.constructed(outcome, kinds, 'command gate')
+end
+
+---Validates a runtime primary-execution outcome against retry and proof policy.
+---@param outcome any
+---@param definition dwarfspec.CommandDefinition
+---@return table
+function Outcomes.validate_execution(outcome, definition)
+    Internals.constructed(outcome, {executed=true, retry=true, failed=true},
+        'command primary execution')
+    if outcome.kind == 'retry' then
+        assert(definition.execution_retry_policy == 'explicit_retry_safe',
+            'once command cannot return retry')
+    end
+    if outcome.effect_receipt ~= nil then
+        assert(definition.cleanup ~= nil,
+            'command without cleanup policy returned an effect receipt')
+    end
+    if definition.intrinsic_verification == 'execution_receipt' and
+            outcome.kind == 'executed' then
+        assert(outcome.receipt ~= nil,
+            'execution_receipt verification requires an immutable receipt')
+    end
+    return outcome
 end
 
 ---Creates a successful primary-execution result.

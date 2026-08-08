@@ -264,6 +264,25 @@ describe('CleanupRegistrationService', function()
         lease:release()
     end)
 
+    it('retains and quarantines ambiguous adapter effect evidence', function()
+        local index = ResourceDependencyIndex.new('run-1')
+        local quarantined
+        local cleanup_service = CleanupRegistrationService.new({
+            service_run_id='run-1', resource_index=index,
+            now_ms=function() return 10 end,
+            quarantine=function(evidence) quarantined = evidence end,
+        })
+        local record_id = cleanup_service:quarantineAmbiguousEffect(
+            'command-1', owner(), {stage='execution', failure='disconnected'})
+        assert.equals('run-1:ambiguous:command-1', record_id)
+        assert.equals('ambiguous_command_effect', quarantined.reason)
+        assert.equals(record_id, quarantined.record_id)
+        assert_error(function()
+            index:validate_plan(owner(), 'command-2', CleanupLifetime.OWNER,
+                {}, nil)
+        end, 'quarantined pending cleanup recovery')
+    end)
+
     it('excludes a competing mutating attempt across a cooperative yield',
             function()
         local index = ResourceDependencyIndex.new('run-1', function() return 'complete' end)

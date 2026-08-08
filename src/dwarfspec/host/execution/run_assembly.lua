@@ -18,7 +18,7 @@ local TRANSIENT_RUN_FIELDS = {
     'unit_speed_cleanup_probe', 'unit_speed_cleanup_state',
     'module_environment_audit', 'scheduler_module', 'scheduler',
     'resource_dependency_index', 'cleanup_registration_service',
-    'cleanup_owner_lifecycle',
+    'cleanup_owner_lifecycle', 'command_runner',
 }
 
 ---Initializes a run with its cleanup, scheduler, and event-publisher dependencies.
@@ -49,10 +49,18 @@ function M.initialize(run, package_root, project_root, options, dependencies)
         'dwarfspec.driver.cleanup.cleanup_registration_service')
     local owner_lifecycle = dependencies.load_module(package_root,
         'dwarfspec.host.execution.cleanup_owner_lifecycle')
+    local command_registry = dependencies.load_module(package_root,
+        'dwarfspec.driver.command.registry')
+    local command_runner = dependencies.load_module(package_root,
+        'dwarfspec.driver.command.runner')
     run.resource_dependency_index = resource_index.new(run.run_id)
     run.cleanup_registration_service = cleanup_service.new({
         service_run_id=run.run_id, resource_index=run.resource_dependency_index,
         now_ms=dependencies.now_ms,
+        quarantine=function(evidence)
+            run.recorded_cleanup_failures[#run.recorded_cleanup_failures + 1] =
+                evidence
+        end,
         publish_event=function(cleanup_event)
             local event_type = assert(CLEANUP_LIFECYCLE_EVENT_TYPES[
                 cleanup_event.event_type],
@@ -73,6 +81,32 @@ function M.initialize(run, package_root, project_root, options, dependencies)
         run.cleanup_registration_service, run.event_journal)
     assert(type(run.lease_check_frames) == 'number' and run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0, 'lease check interval must be a positive integer')
     run.cleanup_registry = cleanup.new(run, dependencies.is_active)
+    run.command_runner = command_runner.new({registry=command_registry.new(),
+        resource_index=run.resource_dependency_index,
+        cleanup_service=run.cleanup_registration_service,
+        default_timeout_ms=options.command_timeout_ms or 10000,
+        dependencies=dependencies.command_dependencies or {
+            now_ms=dependencies.now_ms,
+            wait=function()
+                error('command execution is unavailable before suite assembly')
+            end,
+            cancellation=function() return false, nil end,
+            owner=function()
+                return run.cleanup_owner_lifecycle:public_owner()
+            end,
+            cleanup_checkpoint=function()
+                return cleanup.mark(run.cleanup_registry)
+            end,
+            new_cancellation=function() return function() return false, nil end end,
+            invoke_readonly=function()
+                error('nested command execution is unavailable before suite assembly')
+            end,
+            record_diagnostic=function() end,
+            assert_cleanup_executable=function() end,
+            publish=function(event_type, payload)
+                return run.event_publisher.publish(event_type, payload)
+            end,
+        }})
 end
 
 ---Creates the coroutine scheduler and its host timing adapters for a run.

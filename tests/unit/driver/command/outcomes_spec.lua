@@ -60,4 +60,23 @@ describe('command outcomes', function()
         assert_error(function() Outcomes.effect_absent('gone', {}) end,
             'observation evidence')
     end)
+
+    it('rejects forged gates and definition-incompatible execution outcomes',
+            function()
+        assert_error(function()
+            Outcomes.validate_gate({kind='ready', value=true})
+        end, 'outcome constructor')
+        assert_error(function()
+            Outcomes.validate_execution(Outcomes.executed('value'), {
+                execution_retry_policy='once',
+                intrinsic_verification='execution_receipt',
+            })
+        end, 'requires an immutable receipt')
+        assert_error(function()
+            Outcomes.validate_execution(Outcomes.retry('again'), {
+                execution_retry_policy='once',
+                intrinsic_verification='callback',
+            })
+        end, 'once command cannot return retry')
+    end)
 end)
