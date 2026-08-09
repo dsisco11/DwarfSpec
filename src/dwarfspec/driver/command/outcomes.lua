@@ -1,6 +1,7 @@
 -- Explicit immutable outcomes shared by command gates and primary execution.
 
 local Diagnostics = require('dwarfspec.driver.command.diagnostics')
+local Immutable = require('dwarfspec.support.immutable')
 local diagnostics = Diagnostics.new()
 
 ---@class dwarfspec.CommandOutcomes
@@ -10,22 +11,6 @@ local OUTCOME_KINDS = setmetatable({}, {__mode='k'})
 
 ---@class dwarfspec.driver.command.OutcomeInternals
 local Internals = {}
-
----Creates a read-only proxy around a detached table.
----@param source table
----@param label string
----@return table
-function Internals.read_only(source, label)
-    return setmetatable({}, {
-        __index=source,
-        __newindex=function()
-            error(label .. ' is immutable', 2)
-        end,
-        __pairs=function() return pairs(source) end,
-        __len=function() return #source end,
-        __metatable=false,
-    })
-end
 
 ---Copies plain bounded diagnostic or receipt data through the shared sanitizer.
 ---@param value any
@@ -39,7 +24,7 @@ end
 ---@param values table
 ---@return table
 function Internals.outcome(values)
-    local outcome = Internals.read_only(values, 'command outcome')
+    local outcome = Immutable.read_only(values, 'command outcome')
     OUTCOME_KINDS[outcome] = values.kind
     return outcome
 end

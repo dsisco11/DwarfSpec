@@ -2,6 +2,8 @@
 
 local M = {}
 
+local Immutable = require('dwarfspec.support.immutable')
+
 local DEFAULT_MODULE_ROOTS = {'src/scripts_modinstalled', 'src', '.'}
 local DEFAULT_SCRIPT_ROOTS = {'src/scripts_modinstalled'}
 local RESERVED_GLOBALS = require('dwarfspec.testbed.base_environment').RESERVED_POLICY.base
@@ -27,15 +29,8 @@ end
 ---@param value table
 ---@return table
 local function freeze(value)
-    return setmetatable({}, {
-        __index=value,
-        __newindex=function()
-            error('TestBed normalized configuration is immutable', 2)
-        end,
-        __pairs=function() return pairs(value) end,
-        __len=function() return #value end,
-        __metatable=false,
-    })
+    return Immutable.read_only(value,
+        'TestBed normalized configuration')
 end
 
 ---Joins a consumer root and logical child path without claiming containment.

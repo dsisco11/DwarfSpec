@@ -1,5 +1,6 @@
 -- Run-owned configuration and targeting for unit-speed behavior.
 
+local Immutable = require('dwarfspec.support.immutable')
 local M = {}
 
 local supported_fields = {
@@ -22,15 +23,8 @@ end
 local function immutable_sequence(values)
     local backing = {}
     for index, value in ipairs(values) do backing[index] = value end
-    return setmetatable({}, {
-        __index=backing,
-        __len=function() return #backing end,
-        __pairs=function() return pairs(backing) end,
-        __newindex=function()
-            error('normalized unit-speed configuration is immutable', 2)
-        end,
-        __metatable=false,
-    })
+    return Immutable.read_only(backing,
+        'normalized unit-speed configuration')
 end
 
 ---Creates an immutable normalized option record.
@@ -44,14 +38,8 @@ local function immutable_options(fast_actions, teleport_jobs, unit_ids)
         teleport_jobs=teleport_jobs,
         unit_ids=unit_ids,
     }
-    return setmetatable({}, {
-        __index=backing,
-        __pairs=function() return pairs(backing) end,
-        __newindex=function()
-            error('normalized unit-speed configuration is immutable', 2)
-        end,
-        __metatable=false,
-    })
+    return Immutable.read_only(backing,
+        'normalized unit-speed configuration')
 end
 
 ---Validates and copies the public unit-speed options.

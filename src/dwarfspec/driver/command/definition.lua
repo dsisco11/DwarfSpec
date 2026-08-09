@@ -6,6 +6,7 @@ local IntrinsicKind = require(
     'dwarfspec.protocol.enums.intrinsic_verification_kinds')
 local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
+local Immutable = require('dwarfspec.support.immutable')
 
 ---@class dwarfspec.CommandDefinitionValidator
 local Definition = {}
@@ -23,31 +24,6 @@ function Internals.enum_contains(enum, value)
         if candidate == value then return true end
     end
     return false
-end
-
----Copies a definition tree into recursively immutable proxies.
----@param value any
----@param copies? table
----@return any
-function Internals.freeze(value, copies)
-    if type(value) ~= 'table' then return value end
-    copies = copies or {}
-    assert(copies[value] == nil, 'command definition tables must be acyclic')
-    copies[value] = true
-    local data = {}
-    for key, entry in pairs(value) do
-        data[key] = Internals.freeze(entry, copies)
-    end
-    copies[value] = nil
-    return setmetatable({}, {
-        __index=data,
-        __newindex=function()
-            error('command definition is immutable', 2)
-        end,
-        __pairs=function() return pairs(data) end,
-        __len=function() return #data end,
-        __metatable=false,
-    })
 end
 
 ---Validates an optional positive finite timeout.
@@ -237,7 +213,7 @@ function Definition.validate(value)
     else
         Internals.executable(value, label, false)
     end
-    local definition = Internals.freeze(value)
+    local definition = Immutable.freeze(value, 'command definition')
     VALIDATED[definition] = true
     return definition
 end

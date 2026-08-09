@@ -1,5 +1,6 @@
 -- Native DFHack state-change event awaiting.
 
+local Immutable = require('dwarfspec.support.immutable')
 local M = {}
 local next_listener_id = 0
 
@@ -34,19 +35,7 @@ local function immutable_record(values, label)
             label .. ' fields must be scalar values')
         if value ~= nil then data[name] = value end
     end
-    return setmetatable({}, {
-        __index=data,
-        ---Rejects mutation of an immutable event record.
-        __newindex=function()
-            error(label .. ' is immutable', 2)
-        end,
-        ---Iterates detached event-record fields.
-        ---@return function, table, nil
-        __pairs=function()
-            return pairs(data)
-        end,
-        __metatable=false,
-    })
+    return Immutable.read_only(data, label)
 end
 
 ---Creates an immutable occurrence around one immutable payload snapshot.
@@ -59,19 +48,7 @@ local function immutable_occurrence(event, payload)
         source='state_change',
         payload=payload,
     }
-    return setmetatable({}, {
-        __index=data,
-        ---Rejects mutation of an immutable event occurrence.
-        __newindex=function()
-            error('event occurrence is immutable', 2)
-        end,
-        ---Iterates detached event-occurrence fields.
-        ---@return function, table, nil
-        __pairs=function()
-            return pairs(data)
-        end,
-        __metatable=false,
-    })
+    return Immutable.read_only(data, 'event occurrence')
 end
 
 ---Reads one optional native value without allowing unavailability to fail.

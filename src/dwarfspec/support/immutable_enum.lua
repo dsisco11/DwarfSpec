@@ -1,5 +1,6 @@
 -- Immutable string enum construction for closed DwarfSpec identifiers.
 
+local Immutable = require('dwarfspec.support.immutable')
 local M = {}
 
 ---Creates an immutable string enum and rejects duplicate values.
@@ -16,19 +17,7 @@ function M.define(values)
         seen[value] = true
     end
 
-    return setmetatable({}, {
-        __index=data,
-        ---Rejects mutation of the immutable enum.
-        __newindex=function()
-            error('Enums are immutable.', 2)
-        end,
-        ---Iterates the immutable enum names and string values.
-        ---@return function, table, nil
-        __pairs=function()
-            return pairs(data)
-        end,
-        __metatable=false,
-    })
+    return Immutable.read_only(data, 'enum namespace')
 end
 
 ---Creates an immutable numeric enum and rejects duplicate values.
@@ -46,19 +35,7 @@ function M.define_numeric(values)
         seen[value] = true
     end
 
-    return setmetatable({}, {
-        __index=data,
-        ---Rejects mutation of the immutable enum.
-        __newindex=function()
-            error('Enums are immutable.', 2)
-        end,
-        ---Iterates the immutable enum names and numeric values.
-        ---@return function, table, nil
-        __pairs=function()
-            return pairs(data)
-        end,
-        __metatable=false,
-    })
+    return Immutable.read_only(data, 'enum namespace')
 end
 
 return M

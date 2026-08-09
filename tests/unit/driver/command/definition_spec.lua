@@ -151,14 +151,26 @@ describe('command definition invalid combinations', function()
 
     it('detaches and recursively freezes accepted definitions', function()
         local value = workflow()
+        local result = value.workflow.result
         local accepted = Definition.validate(value)
         value.name = 'changed'
         value.workflow.steps[1].name = 'changed'
         assert.equals('workflow', accepted.name)
         assert.equals('observe', accepted.workflow.steps[1].name)
+        assert.is_true(accepted.workflow.result == result)
         assert.has_error(function() accepted.name = 'changed' end)
         assert.has_error(function()
             accepted.workflow.steps[1].name = 'changed'
         end)
+    end)
+
+    it('rejects cyclic definition tables with command attribution', function()
+        local value = workflow()
+        value.workflow.loop = value.workflow
+        local succeeded, message = pcall(Definition.validate, value)
+        assert.is_false(succeeded)
+        assert.is_truthy(tostring(message):find(
+            'command definition', 1, true))
+        assert.is_truthy(tostring(message):find('acyclic', 1, true))
     end)
 end)

@@ -34,7 +34,7 @@ local function assert_immutable(enum, member_name)
     local member = enum[member_name]
     assert.has_error(function()
         enum[member_name] = member
-    end, 'Enums are immutable.')
+    end, 'enum namespace is immutable')
 end
 
 describe('immutable DwarfSpec contract enums', function()

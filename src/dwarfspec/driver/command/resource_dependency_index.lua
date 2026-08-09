@@ -6,6 +6,7 @@ local CleanupLifetime = require('dwarfspec.protocol.enums.cleanup_lifetimes')
 local OwnerScope = require('dwarfspec.protocol.enums.execution_owner_scopes')
 local Diagnostics = require('dwarfspec.driver.command.diagnostics')
 local Definition = require('dwarfspec.driver.command.definition')
+local Immutable = require('dwarfspec.support.immutable')
 
 ---@class dwarfspec.ResourceDependencyIndex
 ---@field private _service_run_id string
@@ -30,26 +31,11 @@ Internals.evidence_diagnostics = Diagnostics.new({max_depth=8, max_entries=32,
 
 ---Creates a recursively immutable snapshot without retaining caller tables.
 ---@param value any
----@param copies? table
 ---@return any
-function Internals.freeze(value, copies)
-    if type(value) ~= 'table' then return value end
-    if Internals.reference_tokens[value] then return value end
-    copies = copies or {}
-    assert(copies[value] == nil, 'resource claim values must be acyclic')
-    copies[value] = true
-    local data = {}
-    for key, entry in pairs(value) do
-        data[Internals.freeze(key, copies)] = Internals.freeze(entry, copies)
-    end
-    copies[value] = nil
-    return setmetatable({}, {
-        __index=data,
-        __newindex=function() error('resource claim values are immutable', 2) end,
-        __pairs=function() return pairs(data) end,
-        __len=function() return #data end,
-        __metatable=false,
-    })
+function Internals.freeze(value)
+    return Immutable.freeze(value, 'resource claim values', function(candidate)
+        return Internals.reference_tokens[candidate] == true
+    end)
 end
 
 ---Requires a nonempty string.

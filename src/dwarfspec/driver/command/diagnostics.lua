@@ -1,5 +1,7 @@
 -- Bounded serialization-safe diagnostics for verified command execution.
 
+local Immutable = require('dwarfspec.support.immutable')
+
 ---@class dwarfspec.CommandDiagnostics
 ---@field private _max_depth integer
 ---@field private _max_entries integer
@@ -24,20 +26,6 @@ function Internals.positive_integer(value, label)
     assert(type(value) == 'number' and value >= 1 and value % 1 == 0 and
         value < math.huge, label .. ' must be a positive finite integer')
     return value
-end
-
----Creates a read-only proxy over detached diagnostic data.
----@param data table
----@param label string
----@return table
-function Internals.read_only(data, label)
-    return setmetatable({}, {
-        __index=data,
-        __newindex=function() error(label .. ' is immutable', 2) end,
-        __pairs=function() return pairs(data) end,
-        __len=function() return #data end,
-        __metatable=false,
-    })
 end
 
 ---Copies plain data within one shared size budget.
@@ -80,7 +68,7 @@ function Internals.copy_plain(diagnostics, value, label, depth, budget, active)
             budget, active)
     end
     active[value] = nil
-    return Internals.read_only(copy, label)
+    return Immutable.read_only(copy, label)
 end
 
 ---Copies a string while guaranteeing the configured bound.
@@ -265,9 +253,9 @@ function Diagnostics:snapshot()
     end)
     local entries = {}
     for index, entry in ipairs(self._entries) do entries[index] = entry end
-    return Internals.read_only({
-        entries=Internals.read_only(entries, 'diagnostic entries'),
-        pending=Internals.read_only(pending, 'pending summaries'),
+    return Immutable.read_only({
+        entries=Immutable.read_only(entries, 'diagnostic entries'),
+        pending=Immutable.read_only(pending, 'pending summaries'),
         dropped_entries=self._dropped_entries,
         dropped_pending=self._dropped_pending,
     }, 'diagnostic snapshot')

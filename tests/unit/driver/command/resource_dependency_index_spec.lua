@@ -207,6 +207,8 @@ describe('ResourceDependencyIndex activation', function()
                 resource_identity='unit-1', exclusive=false,
                 shares_with_references={reference}}})
         assert.are.equal('compatible', compatible.entries[1].claim_key)
+        assert.is_true(compatible.entries[1].shares_with_references[1] ==
+            reference)
         assert_error(function()
             plan(index, owner(OwnerScope.TEST_ATTEMPT, 'suite-1', 'test-2'), {
                 {claim_key='implicit', resource_kind='unit',

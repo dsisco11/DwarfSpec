@@ -460,7 +460,7 @@ describe('automation structured events', function()
         assert.equals('run.finished', values.RUN_FINISHED)
         assert.has_error(function()
             EventType.RUN_QUEUED = EventType.RUN_FINISHED
-        end, 'Enums are immutable.')
+        end, 'enum namespace is immutable')
     end)
 
     it('bounds JSON values and excludes capabilities and live objects',

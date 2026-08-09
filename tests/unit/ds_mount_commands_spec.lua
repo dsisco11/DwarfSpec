@@ -721,7 +721,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(EEvent.UNPAUSED, ds.EEvent.UNPAUSED)
         assert.has_error(function()
             ds.EEvent.MAP_LOADED = 'changed'
-        end, 'Enums are immutable.')
+        end, 'enum namespace is immutable')
         assert.equals(1, #event_wait_calls)
         assert.equals(EEvent.MAP_LOADED, event_wait_calls[1].event)
         assert.equals(options, event_wait_calls[1].options)

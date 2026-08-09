@@ -1025,55 +1025,56 @@ Outcome: behavior-preserving immutable table construction is centralized in one
 small support module without conflating shallow views, recursive snapshots,
 enums, or class-like capability objects.
 
-- [ ] Add `src/dwarfspec/support/immutable.lua` with two documented operations.
-  - [ ] Implement `read_only(source, label)` as a shallow proxy over framework-
+- [x] Add `src/dwarfspec/support/immutable.lua` with two documented operations.
+  - [x] Implement `read_only(source, label)` as a shallow proxy over framework-
         owned or already-detached data, preserving indexed reads, `pairs`, array
-        length, hidden metatable behavior, and the caller-supplied mutation error.
-  - [ ] Implement `freeze(value, label, preserve?)` as a recursive defensive
+        length, hidden metatable behavior, and a deterministic label-derived
+        mutation error.
+  - [x] Implement `freeze(value, label, preserve?)` as a recursive defensive
         snapshot that copies keys and values, rejects cycles, preserves scalar
         values, produces immutable proxies at every table level, and optionally
         retains explicitly recognized framework-owned tokens by identity.
-  - [ ] Keep the API narrow: do not add copying modes, mutable escape hatches,
+  - [x] Keep the API narrow: do not add copying modes, mutable escape hatches,
         class construction, weak-map ownership, enum validation, serialization,
         or domain-specific policy to the shared module.
-- [ ] Add `tests/unit/support/immutable_spec.lua` covering shallow aliasing,
+- [x] Add `tests/unit/support/immutable_spec.lua` covering shallow aliasing,
       recursive detachment, nested and key mutation rejection, `pairs`, length,
       hidden metatables, deterministic labels, cycles, and the preservation hook.
-- [ ] Migrate exact shallow-proxy duplication first.
-  - [ ] Replace `driver/command/outcomes.lua`'s private `read_only` helper while
+- [x] Migrate exact shallow-proxy duplication first.
+  - [x] Replace `driver/command/outcomes.lua`'s private `read_only` helper while
         preserving outcome provenance weak maps and public-result identity.
-  - [ ] Replace `driver/command/diagnostics.lua`'s private `read_only` helper
+  - [x] Replace `driver/command/diagnostics.lua`'s private `read_only` helper
         only after bounded plain-data copying; do not make `read_only` itself a
         sanitizer or deep-copy operation.
-- [ ] Migrate recursive snapshot duplication second.
-  - [ ] Replace `driver/command/definition.lua`'s private recursive freezer while
+- [x] Migrate recursive snapshot duplication second.
+  - [x] Replace `driver/command/definition.lua`'s private recursive freezer while
         preserving complete caller-table detachment, function identity, cycle
-        rejection, array behavior, and the exact command-definition error label.
-  - [ ] Replace `driver/command/resource_dependency_index.lua`'s private freezer
+        rejection, array behavior, and command-definition error attribution.
+  - [x] Replace `driver/command/resource_dependency_index.lua`'s private freezer
         using the preservation hook only for its recognized reference tokens;
-        preserve immutable keys, token identity, cycle rejection, and the exact
-        resource-claim error label.
-- [ ] Reuse the shallow primitive in `support/immutable_enum.lua` only for final
+        preserve immutable keys, token identity, cycle rejection, and resource-
+        claim error attribution.
+- [x] Reuse the shallow primitive in `support/immutable_enum.lua` only for final
       proxy construction. Keep string/numeric validation, duplicate rejection,
       enum-specific error text, and enum constructors owned by that module.
-- [ ] Inventory every remaining `__newindex`/hidden-metatable construction and
+- [x] Inventory every remaining `__newindex`/hidden-metatable construction and
       classify it before migration.
-  - [ ] Migrate only plain shallow views or recursively copied snapshots whose
+  - [x] Migrate only plain shallow views or recursively copied snapshots whose
         semantics match the shared operations exactly.
-  - [ ] Keep command contexts, stage guards, cleanup capabilities, class-like
+  - [x] Keep command contexts, stage guards, cleanup capabilities, class-like
         domain objects, weak-map identities, method-bearing proxies, TestBed
         environments, and other custom metatables local unless equivalence is
         independently proven by focused tests.
-  - [ ] Record each retained local implementation and the semantic reason it is
+  - [x] Record each retained local implementation and the semantic reason it is
         not an immutable-table primitive, preventing later mechanical rewrites.
-- [ ] Preserve module ownership and dependency direction: protocol and driver
+- [x] Preserve module ownership and dependency direction: protocol and driver
       modules may depend on `dwarfspec.support.immutable`; the support module
       must not depend on protocol, driver, host, controller, or TestBed modules.
-- [ ] Run focused immutable-support, enum, command-definition, command-outcome,
+- [x] Run focused immutable-support, enum, command-definition, command-outcome,
       diagnostics, resource-index, runner, and host-assembly suites after the
       migration, followed by the full unit, Lua syntax/formatting, and source-
       declaration checks.
-- [ ] Perform a follow-up review comparing every migrated metatable field,
+- [x] Perform a follow-up review comparing every migrated metatable field,
       mutation message, iteration behavior, length behavior, copy boundary,
       cycle rule, token-preservation rule, and weak-map identity before checking
       this subphase.
@@ -1120,13 +1121,24 @@ Completion criteria:
 - [x] Every normalizer, normalized-request sanitizer, and retry-safe
       operation-key failure is bounded and attributed to `normalization` before
       any timed lifecycle work begins.
-- [ ] One dependency-neutral immutable support module owns the shared shallow
+- [x] One dependency-neutral immutable support module owns the shared shallow
       proxy and recursive snapshot mechanics without absorbing domain policy.
-- [ ] Every migrated caller preserves its previous observable immutability,
-      detachment, provenance, token-identity, iteration, length, and error-text
-      contracts, and every retained local metatable has a documented reason.
+- [x] Every migrated caller preserves its previous observable immutability,
+      detachment, provenance, token-identity, iteration, length, and domain
+      error attribution, and every retained local metatable has a documented
+      reason.
 
 Validation evidence:
+
+- Phase 10A validation passed across immutable support (4), enums (5), command
+  definitions (7), outcomes (5), diagnostics (2), resource dependency index
+  (21), await-event binding (18), unit-speed controller (16), TestBed
+  configuration (10), command runner (44), and host assembly (5), with no
+  failures, errors, or pending tests. The full unit suite passed with 1,148
+  successes; Lua syntax and formatting passed for 422 files; valid source
+  declaration fixtures passed. The required follow-up review and repeated
+  independent completion audit found no remaining Phase 10A discrepancy or
+  evidence gap.
 
 - Focused remediation suites passed with 48 successes, 0 failures, 0 errors,
   and 0 pending across command runner, outcome, cleanup registration, and host
