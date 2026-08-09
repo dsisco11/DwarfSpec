@@ -95,6 +95,36 @@ describe('verified execution contracts', function()
             test_attempt_id='attempt-1',
         })
         assert.has_error(function()
+            schemas:validate_command_identity({invocation_id='cleanup-child',
+                root_invocation_id='foreign-root',
+                parent_cleanup_transaction_id='cleanup-1',
+                owner_scope='service_run', service_run_id='service-1'})
+        end)
+        assert.has_error(function()
+            schemas:validate_nested_command_identity({invocation_id='child',
+                root_invocation_id='root', parent_invocation_id='root',
+                owner_scope='service_run', service_run_id='service-2'},
+                {invocation_id='root', root_invocation_id='root',
+                    owner_scope='service_run', service_run_id='service-1'})
+        end)
+        assert.has_error(function()
+            schemas:validate_cleanup_command_identity({
+                invocation_id='cleanup-child',
+                root_invocation_id='cleanup-child',
+                parent_cleanup_transaction_id='cleanup-2',
+                owner_scope='service_run', service_run_id='service-1'},
+                'cleanup-1', {owner_scope='service_run',
+                    service_run_id='service-1'})
+        end)
+        assert.has_error(function()
+            schemas:validate_cleanup_command_identity({
+                invocation_id='cleanup-child',
+                root_invocation_id='cleanup-child',
+                owner_scope='service_run', service_run_id='service-1'},
+                'cleanup-1', {owner_scope='service_run',
+                    service_run_id='service-1'})
+        end)
+        assert.has_error(function()
             schemas:validate_command_identity({
                 invocation_id='child', root_invocation_id='root',
                 parent_invocation_id='root',

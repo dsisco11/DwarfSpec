@@ -93,7 +93,8 @@ function Internals.context(transaction, mode, deadline, cancellation)
             'cleanup restore cannot invoke public commands')
         assert(kind == CommandKind.QUERY or kind == CommandKind.ASSERTION,
             'cleanup verification can invoke only read-only commands')
-        return dependencies.invoke_readonly(kind, name, ...)
+        return dependencies.invoke_readonly(deadline, cancellation,
+            kind, name, ...)
     end
     return setmetatable({}, {__index=context, __newindex=function()
         error('cleanup execution context is immutable', 2)
@@ -136,9 +137,14 @@ function CleanupTransaction.new(options)
             return function() return false, nil end
         end,
         wait=options.wait or function() end,
-        invoke_readonly=options.invoke_readonly or function()
-            error('nested cleanup verification commands are unavailable', 2)
-        end,
+        invoke_readonly=options.invoke_readonly_with_scope or
+            function(_, _, kind, name, ...)
+                local invoke = options.invoke_readonly or function()
+                    error('nested cleanup verification commands are unavailable',
+                        2)
+                end
+                return invoke(kind, name, ...)
+            end,
         record_diagnostic=options.record_diagnostic or function() end,
         claim_references=options.claim_references or function() return {} end,
         assert_executable=options.assert_executable or function() end,

@@ -12,6 +12,9 @@ local IntrinsicKind = require(
 local Outcomes = require('dwarfspec.driver.command.outcomes')
 local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
+local VerifiedSchemas = require(
+    'dwarfspec.protocol.verified_execution_schemas')
+local Workflow = require('dwarfspec.driver.command.workflow')
 
 ---@class dwarfspec.CommandRunner
 ---@field private _registry dwarfspec.CommandRegistry
@@ -80,15 +83,36 @@ end
 ---Creates the immutable identity supplied to callback contexts.
 ---@param runner dwarfspec.CommandRunner
 ---@param owner table
+---@param ancestry? table
 ---@return table
-function Internals.identity(runner, owner)
+function Internals.identity(runner, owner, ancestry)
     runner._next_invocation_ordinal = runner._next_invocation_ordinal + 1
     local id = owner.service_run_id .. ':command:' ..
         tostring(runner._next_invocation_ordinal)
-    return {invocation_id=id, root_invocation_id=id,
+    ancestry = ancestry or {}
+    local identity = {invocation_id=id,
+        root_invocation_id=ancestry.root_invocation_id or id,
         owner_scope=owner.owner_scope, service_run_id=owner.service_run_id,
         suite_execution_id=owner.suite_execution_id,
         test_attempt_id=owner.test_attempt_id}
+    if ancestry.parent_invocation_id ~= nil then
+        identity.parent_invocation_id = ancestry.parent_invocation_id
+    elseif ancestry.parent_cleanup_transaction_id ~= nil then
+        identity.parent_cleanup_transaction_id =
+            ancestry.parent_cleanup_transaction_id
+        identity.root_invocation_id = id
+    end
+    local schemas = VerifiedSchemas.new()
+    if ancestry.parent_identity ~= nil then
+        schemas:validate_nested_command_identity(identity,
+            ancestry.parent_identity)
+    elseif ancestry.parent_cleanup_transaction_id ~= nil then
+        schemas:validate_cleanup_command_identity(identity,
+            ancestry.parent_cleanup_transaction_id, owner)
+    else
+        schemas:validate_command_identity(identity)
+    end
+    return identity
 end
 
 ---Creates a callback context for the runner's current lifecycle stage.
@@ -98,10 +122,12 @@ end
 ---@param read_only boolean|nil
 ---@param privileged boolean
 ---@param mutation_lease any
+---@param dependencies? table
 ---@return table
 function Internals.context(runner, identity, stage, read_only, privileged,
-        mutation_lease)
-    local options = {dependencies=runner._dependencies, identity=identity,
+        mutation_lease, dependencies)
+    local options = {dependencies=dependencies or runner._dependencies,
+        identity=identity,
         stage=stage(), guard=Context.StageGuard.new(stage)}
     if read_only then return Context.new_read(options) end
     if not privileged then return Context.new_execution(options) end
@@ -116,9 +142,11 @@ end
 ---Waits once while preserving the single deadline and cancellation boundary.
 ---@param runner dwarfspec.CommandRunner
 ---@param deadline dwarfspec.CommandDeadline
+---@param cancellation? fun(): boolean, string|nil
 ---@return boolean, string|nil
-function Internals.wait(runner, deadline)
-    local cancelled, reason = runner._dependencies.cancellation()
+function Internals.wait(runner, deadline, cancellation)
+    cancellation = cancellation or runner._dependencies.cancellation
+    local cancelled, reason = cancellation()
     if cancelled then return false, 'cancelled: ' .. tostring(reason) end
     local remaining = deadline:remaining_ms()
     if remaining == 0 then return false, 'command deadline expired' end
@@ -136,19 +164,21 @@ end
 ---@param invoke function
 ---@param allow_effect_absent boolean|nil
 ---@param retry_errors boolean|nil
+---@param cancellation? fun(): boolean, string|nil
 ---@return boolean, table|string, table|nil
 function Internals.poll(runner, deadline, stage, invoke, allow_effect_absent,
-        retry_errors)
+        retry_errors, cancellation)
+    cancellation = cancellation or runner._dependencies.cancellation
     local latest
     while deadline:remaining_ms() > 0 do
-        local cancelled, reason = runner._dependencies.cancellation()
+        local cancelled, reason = cancellation()
         if cancelled then return false, 'cancelled: ' .. tostring(reason), latest end
         local ok, result = Internals.call(invoke)
         if not ok then
             local message = Internals.error_text(result)
             if not retry_errors then return false, message, latest end
             latest = {message=message}
-            local waited, failure = Internals.wait(runner, deadline)
+            local waited, failure = Internals.wait(runner, deadline, cancellation)
             if not waited then return false, failure, latest end
         else
         local gate = Internals.gate(result, stage() .. ' callback',
@@ -157,7 +187,7 @@ function Internals.poll(runner, deadline, stage, invoke, allow_effect_absent,
         if gate.kind == 'fatal' then return false, gate.message, gate.evidence end
         if Outcomes.is_effect_absent(gate) then return true, gate, latest end
         latest = {message=gate.message, evidence=gate.evidence}
-        local waited, failure = Internals.wait(runner, deadline)
+        local waited, failure = Internals.wait(runner, deadline, cancellation)
         if not waited then return false, failure, latest end
         end
     end
@@ -216,7 +246,11 @@ function Internals.register_cleanup(runner, definition, identity, owner, plan,
         cleanup_timeout_ms=runner._dependencies.cleanup_timeout_ms,
         wait=runner._dependencies.wait,
         new_cancellation=runner._dependencies.new_cancellation,
-        invoke_readonly=runner._dependencies.invoke_readonly,
+        invoke_readonly=function(transaction_id, cleanup_owner, deadline,
+                cancellation, kind, name, ...)
+            return runner:_invoke_cleanup_readonly(transaction_id,
+                cleanup_owner, deadline, cancellation, kind, name, ...)
+        end,
         record_diagnostic=runner._dependencies.record_diagnostic,
         assert_executable=runner._dependencies.assert_cleanup_executable})
 end
@@ -482,11 +516,14 @@ Invocation.__index = Invocation
 ---@param name string
 ---@param arguments table
 ---@param options table
+---@param inheritance? table
 ---@return table
-function Invocation.new(runner, name, arguments, options)
+function Invocation.new(runner, name, arguments, options, inheritance)
+    inheritance = inheritance or {}
     return setmetatable({_runner=runner, _name=name, _arguments=arguments,
-        _options=options, _definition=assert(runner._registry:get(name),
-            'unknown command ' .. name), _stage='normalization',
+        _options=options, _definition=inheritance.definition or
+            assert(runner._registry:get(name), 'unknown command ' .. name),
+        _inheritance=inheritance, _stage='normalization',
         _latest_evidence=nil, _transaction=nil, _mutation_lease=nil,
         _attempt=1, _retry_attempts={}, _attempt_receipts={}}, Invocation)
 end
@@ -500,7 +537,8 @@ end
 ---Normalizes input and establishes immutable invocation-wide dependencies.
 function Invocation:normalize()
     local normalized, value = Internals.call(function()
-        local request = self._definition.normalize(self._arguments)
+        local request = self._inheritance.normalized_request or
+            self._definition.normalize(self._arguments)
         request = Internals.diagnostics:sanitize(request,
             'normalized command request')
         local operation_key
@@ -519,15 +557,94 @@ function Invocation:normalize()
     end
     self._request = value.request
     self._operation_key = value.operation_key
-    self._timeout_ms = self._options.timeout_ms or
-        self._definition.default_timeout_ms or self._runner._default_timeout_ms
-    self._deadline = Deadline.new(self._runner._dependencies.now_ms,
-        self._timeout_ms)
-    self._deadline_started_at_ms = self._deadline:expires_at_ms() -
-        self._timeout_ms
-    self._owner = self._runner._dependencies.owner()
-    self._identity = Internals.identity(self._runner, self._owner)
+    if self._inheritance.deadline ~= nil then
+        assert(self._options.timeout_ms == nil,
+            'nested commands inherit their parent deadline')
+        self._deadline = self._inheritance.deadline
+        self._timeout_ms = self._inheritance.timeout_ms
+        self._deadline_started_at_ms = self._inheritance.deadline_started_at_ms
+        self._owner = self._inheritance.owner
+        self._cancellation = self._inheritance.cancellation
+        self._identity = Internals.identity(self._runner, self._owner,
+            self._inheritance.ancestry)
+    else
+        self._timeout_ms = self._options.timeout_ms or
+            self._definition.default_timeout_ms or self._runner._default_timeout_ms
+        self._deadline = Deadline.new(self._runner._dependencies.now_ms,
+            self._timeout_ms)
+        self._deadline_started_at_ms = self._deadline:expires_at_ms() -
+            self._timeout_ms
+        self._owner = self._runner._dependencies.owner()
+        self._cancellation = self._runner._dependencies.cancellation
+        self._identity = Internals.identity(self._runner, self._owner)
+    end
     self._started_at_ms = self._runner._dependencies.now_ms()
+    self._context_dependencies = {}
+    for key, entry in pairs(self._runner._dependencies) do
+        self._context_dependencies[key] = entry
+    end
+    self._context_dependencies.remaining_ms = function()
+        return self._deadline:remaining_ms()
+    end
+    self._context_dependencies.cancellation = self._cancellation
+    self._context_dependencies.invoke_readonly = function(kind, name, ...)
+        return self:invoke_readonly(kind, name, ...)
+    end
+    self._context_dependencies.execute_step = function(step, state)
+        return self:execute_workflow_step(step, state)
+    end
+end
+
+---Invokes one nested public read-only command under inherited boundaries.
+---@param kind string
+---@param name string
+---@param arguments? table
+---@param options? table
+---@return any
+function Invocation:invoke_readonly(kind, name, arguments, options)
+    assert(kind == CommandKind.QUERY or kind == CommandKind.ASSERTION,
+        'nested invocation requires a read-only command kind')
+    arguments = arguments or {}
+    options = Internals.options(options)
+    assert(options.timeout_ms == nil,
+        'nested commands inherit their parent deadline')
+    local definition = assert(self._runner._registry:get(name),
+        'unknown command ' .. tostring(name))
+    assert(definition.kind == kind,
+        'nested command kind does not match its registered definition')
+    local child = Invocation.new(self._runner, name, arguments, options, {
+        deadline=self._deadline, timeout_ms=self._timeout_ms,
+        deadline_started_at_ms=self._deadline_started_at_ms,
+        cancellation=self._cancellation, owner=self._owner,
+        ancestry={root_invocation_id=self._identity.root_invocation_id,
+            parent_invocation_id=self._identity.invocation_id,
+            parent_identity=self._identity}})
+    child:normalize()
+    child:publish_start()
+    local completed, result = xpcall(function() return child:run() end,
+        debug.traceback)
+    return child:finalize(completed, result)
+end
+
+---Executes one workflow step as an inherited internal invocation.
+---@param step dwarfspec.WorkflowStepDefinition
+---@param state dwarfspec.WorkflowState
+---@return any
+function Invocation:execute_workflow_step(step, state)
+    local child = Invocation.new(self._runner,
+        self._name .. '.' .. step.name, {}, {}, {definition=step,
+            normalized_request=state, deadline=self._deadline,
+            timeout_ms=self._timeout_ms,
+            deadline_started_at_ms=self._deadline_started_at_ms,
+            cancellation=self._cancellation, owner=self._owner,
+            ancestry={root_invocation_id=self._identity.root_invocation_id,
+                parent_invocation_id=self._identity.invocation_id,
+                parent_identity=self._identity}})
+    child:normalize()
+    child:publish_start()
+    local completed, result = xpcall(function() return child:run() end,
+        debug.traceback)
+    return child:finalize(completed, result)
 end
 
 ---Publishes the invocation start envelope before command execution begins.
@@ -535,7 +652,8 @@ function Invocation:publish_start()
     local published, failure = Internals.call(function()
         Internals.publish(self._runner, 'command.started', {name=self._name,
             subject_identity=self._identity.target_identity or '<none>',
-            safe_arguments=self._request, operation_key=self._operation_key})
+            safe_arguments=self._request, operation_key=self._operation_key,
+            command=self._identity})
     end)
     if not published then
         error(Internals.stage_failure(CommandFailureStage.RESULT_PROJECTION,
@@ -549,14 +667,15 @@ function Invocation:run_preflight()
     self._stage = 'preflight'
     self._identity.attempt = self._attempt
     local context = Internals.context(self._runner, self._identity,
-        function() return self:current_stage() end, true, false, nil)
+        function() return self:current_stage() end, true, false, nil,
+        self._context_dependencies)
     local ready
     for _ = 1, 2 do
         local accepted, result, evidence = Internals.poll(self._runner,
             self._deadline, function() return self:current_stage() end,
             function()
                 return self._definition.preflight(context, self._request)
-            end)
+            end, nil, nil, self._cancellation)
         self._latest_evidence = Internals.latest_gate_evidence(result, evidence,
             self._latest_evidence)
         if not accepted then
@@ -614,7 +733,8 @@ function Invocation:execute_attempt(ready, context, plan)
     if Internals.read_only(definition) then
         local observed, result, evidence = Internals.poll(self._runner,
             self._deadline, function() return self:current_stage() end,
-            function() return definition.execute(context, self._request, ready) end)
+            function() return definition.execute(context, self._request, ready) end,
+            nil, nil, self._cancellation)
         self._latest_evidence = Internals.latest_gate_evidence(result, evidence,
             self._latest_evidence)
         if not observed then error(Internals.gate_failure(result, evidence), 2) end
@@ -629,7 +749,7 @@ function Invocation:execute_attempt(ready, context, plan)
             self._identity.invocation_id)
         context = Internals.context(self._runner, self._identity,
             function() return self:current_stage() end, false, false,
-            self._mutation_lease)
+            self._mutation_lease, self._context_dependencies)
         local executed, value = Internals.call(definition.execute, context,
             self._request, ready)
         if not executed then
@@ -684,7 +804,8 @@ function Invocation:finish_attempt(outcome)
         self._identity.attempt_cleanup_checkpoint)
     self._transaction = nil
     self._stage = 'retry_wait'
-    local waited, failure = Internals.wait(self._runner, self._deadline)
+    local waited, failure = Internals.wait(self._runner, self._deadline,
+        self._cancellation)
     if not waited then error(failure, 2) end
     self._attempt = self._attempt + 1
     return true
@@ -698,12 +819,13 @@ function Invocation:verify_intrinsic(outcome)
     local definition = self._definition
     if definition.intrinsic_verification == IntrinsicKind.CALLBACK then
         local context = Internals.context(self._runner, self._identity,
-            function() return self:current_stage() end, true, false, nil)
+            function() return self:current_stage() end, true, false, nil,
+            self._context_dependencies)
         local verified, result, latest = Internals.poll(self._runner,
             self._deadline, function() return self:current_stage() end,
             function()
                 return definition.verify(context, self._request, outcome.receipt)
-            end, true)
+            end, true, nil, self._cancellation)
         self._latest_intrinsic_evidence = type(result) == 'table' and
             result.evidence or latest
         self._latest_evidence = self._latest_intrinsic_evidence or
@@ -753,10 +875,24 @@ function Invocation:verify_caller(outcome)
             local accepted = self._options.verify(observation)
             return accepted and Outcomes.ready(true) or
                 Outcomes.pending('caller verification is not yet satisfied')
-        end, false, true)
+        end, false, true, self._cancellation)
     self._latest_evidence = Internals.latest_gate_evidence(result, latest,
         self._latest_evidence)
     if not verified then error(Internals.gate_failure(result, latest), 2) end
+end
+
+---Runs the ordered internal steps and projects one stable public result.
+---@return table
+function Invocation:run_workflow()
+    self:run_preflight()
+    self._stage = 'workflow'
+    local workflow = Workflow.new(self._definition.workflow, self._request)
+    local state = workflow:execute_steps(function(step, current_state)
+        return self:execute_workflow_step(step, current_state)
+    end)
+    self._stage = 'execution'
+    local projected = workflow:project(state)
+    return Outcomes.executed(projected, {outputs=state.outputs})
 end
 
 ---Runs attempts followed by intrinsic and caller verification.
@@ -766,12 +902,16 @@ function Invocation:run()
     self._identity.cleanup_checkpoint =
         self._runner._dependencies.cleanup_checkpoint()
     local outcome
-    repeat
-        local ready, context = self:run_preflight()
-        local plan, retry_plan = self:plan_claims(ready, context)
-        outcome = self:execute_attempt(ready, context, plan)
-        self:register_effect(outcome, plan, retry_plan)
-    until not self:finish_attempt(outcome)
+    if self._definition.kind == CommandKind.WORKFLOW then
+        outcome = self:run_workflow()
+    else
+        repeat
+            local ready, context = self:run_preflight()
+            local plan, retry_plan = self:plan_claims(ready, context)
+            outcome = self:execute_attempt(ready, context, plan)
+            self:register_effect(outcome, plan, retry_plan)
+        until not self:finish_attempt(outcome)
+    end
     self:verify_intrinsic(outcome)
     self:verify_caller(outcome)
     return outcome.public_result
@@ -879,6 +1019,7 @@ function Invocation:publish_terminal(completed, failure, terminal_stage)
             stage=completed and 'completed' or terminal_stage,
             operation_key=self._operation_key, attempt_count=self._attempt,
             retry_attempts=self._retry_attempts,
+            command=self._identity,
             duration_ms=math.max(0, math.floor(
                 self._runner._dependencies.now_ms() - self._started_at_ms))})
     end)
@@ -907,6 +1048,49 @@ function Invocation:finalize(completed, result)
         terminal_stage)
     if not completed then error(failure, 0) end
     return result
+end
+
+---Invokes a cleanup-rooted read-only child under cleanup-owned boundaries.
+---@param transaction_id string
+---@param owner table
+---@param deadline dwarfspec.CommandDeadline
+---@param cancellation fun(): boolean, string|nil
+---@param kind string
+---@param name string
+---@param arguments? table
+---@param options? table
+---@return any
+function Runner:_invoke_cleanup_readonly(transaction_id, owner, deadline,
+        cancellation, kind, name, arguments, options)
+    assert(type(transaction_id) == 'string' and transaction_id ~= '',
+        'cleanup-rooted command requires a cleanup transaction ID')
+    assert(type(owner) == 'table',
+        'cleanup-rooted command requires its cleanup owner')
+    assert(type(deadline) == 'table' and
+        type(deadline.remaining_ms) == 'function',
+        'cleanup-rooted command requires its cleanup deadline')
+    assert(type(cancellation) == 'function',
+        'cleanup-rooted command requires its cleanup cancellation scope')
+    assert(kind == CommandKind.QUERY or kind == CommandKind.ASSERTION,
+        'cleanup verification can invoke only read-only commands')
+    arguments = arguments or {}
+    options = Internals.options(options)
+    assert(options.timeout_ms == nil,
+        'cleanup-rooted commands inherit their cleanup deadline')
+    local definition = assert(self._registry:get(name),
+        'unknown command ' .. tostring(name))
+    assert(definition.kind == kind,
+        'cleanup-rooted command kind does not match its definition')
+    local child = Invocation.new(self, name, arguments, options, {
+        deadline=deadline, timeout_ms=deadline:remaining_ms(),
+        deadline_started_at_ms=self._dependencies.now_ms(),
+        cancellation=cancellation, owner=owner,
+        ancestry={parent_cleanup_transaction_id=transaction_id}})
+    child:normalize()
+    child:publish_start()
+    local completed, result = xpcall(function() return child:run() end,
+        debug.traceback)
+    return child:finalize(completed, result)
 end
 
 ---Runs one registered command and returns only its original public result.

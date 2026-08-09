@@ -1253,57 +1253,57 @@ Outcome: composite commands and verification queries share parent ownership,
 deadline, cancellation, and trace ancestry without creating parallel public
 results.
 
-- [ ] Add `src/dwarfspec/driver/command/workflow.lua`.
-- [ ] Validate workflow definitions.
-  - [ ] Require unique named steps and one bounded synchronous result projector.
-  - [ ] Allow `QUERY`, `ASSERTION`, `ACTION`, `STATE_SETTER`, and `FIXTURE`
+- [x] Add `src/dwarfspec/driver/command/workflow.lua`.
+- [x] Validate workflow definitions.
+  - [x] Require unique named steps and one bounded synchronous result projector.
+  - [x] Allow `QUERY`, `ASSERTION`, `ACTION`, `STATE_SETTER`, and `FIXTURE`
         steps; reject nested `WORKFLOW` steps.
-  - [ ] Apply the same gate, claims, execution result, retry, effect cleanup,
+  - [x] Apply the same gate, claims, execution result, retry, effect cleanup,
         intrinsic, diagnostics, and context validation as equivalent public
         command kinds.
-  - [ ] Require the containing workflow to use `ONCE` plus
+  - [x] Require the containing workflow to use `ONCE` plus
         `EXECUTION_RECEIPT` and omit containing-level execute, claims,
         operation-key, verify, and cleanup callbacks.
-- [ ] Implement immutable `WorkflowState` and named `WorkflowOutput` values.
-  - [ ] Freeze the normalized request and every bounded successful output.
-  - [ ] Represent successful nil as `has_value=false` while retaining the step
+- [x] Implement immutable `WorkflowState` and named `WorkflowOutput` values.
+  - [x] Freeze the normalized request and every bounded successful output.
+  - [x] Represent successful nil as `has_value=false` while retaining the step
         key.
-  - [ ] Commit no output for retry, fatal, thrown, cancelled, or timed-out
+  - [x] Commit no output for retry, fatal, thrown, cancelled, or timed-out
         outcomes.
-  - [ ] Require later steps to re-resolve live objects from stable descriptors.
-  - [ ] Derive the stable public result through the pure result projector after
+  - [x] Require later steps to re-resolve live objects from stable descriptors.
+  - [x] Derive the stable public result through the pure result projector after
         all steps pass.
-- [ ] Give workflow steps unique invocation IDs and parent/root/owner/stage
+- [x] Give workflow steps unique invocation IDs and parent/root/owner/stage
       correlation without independent public command results or deadlines.
-- [ ] Permit read-only public queries/assertions from command preflight and
+- [x] Permit read-only public queries/assertions from command preflight and
       intrinsic/caller verification.
-  - [ ] Inherit the exact parent deadline, cancellation, owner, root, and
+  - [x] Inherit the exact parent deadline, cancellation, owner, root, and
         read-only stage.
-  - [ ] Allocate a distinct invocation ID and immediate
+  - [x] Allocate a distinct invocation ID and immediate
         `parent_invocation_id`.
-  - [ ] Reject mutating public commands from read-only stages.
-- [ ] Permit read-only public queries/assertions from cleanup verification.
-  - [ ] Inherit the cleanup owner, fresh cleanup cancellation scope, and
+  - [x] Reject mutating public commands from read-only stages.
+- [x] Permit read-only public queries/assertions from cleanup verification.
+  - [x] Inherit the cleanup owner, fresh cleanup cancellation scope, and
         remaining cleanup deadline.
-  - [ ] Use `SERVICE_RUN` execution ownership only for service cleanup.
-  - [ ] Set only `parent_cleanup_transaction_id` for the direct child and use
+  - [x] Use `SERVICE_RUN` execution ownership only for service cleanup.
+  - [x] Set only `parent_cleanup_transaction_id` for the direct child and use
         its own invocation ID as root.
-  - [ ] Use normal parent-invocation ancestry and preserve that root for deeper
+  - [x] Use normal parent-invocation ancestry and preserve that root for deeper
         descendants.
-  - [ ] Reject cleanup registration or public mutation.
-- [ ] Add ancestry/schema validation rejecting both parent fields, missing or
+  - [x] Reject cleanup registration or public mutation.
+- [x] Add ancestry/schema validation rejecting both parent fields, missing or
       foreign cleanup parents, invalid cleanup stages, and inconsistent
       parent/root/owner identity.
-- [ ] Add unit tests for workflow state/output/result behavior, nested command
+- [x] Add unit tests for workflow state/output/result behavior, nested command
       deadlines and cancellation, duplicate same-named children, cleanup-rooted
       ancestry, service-run verification, and mutation rejection.
-- [ ] Perform a follow-up workflow/nesting review.
+- [x] Perform a follow-up workflow/nesting review.
 
 Completion criteria:
 
-- [ ] Composite behavior uses internal steps rather than calling public
+- [x] Composite behavior uses internal steps rather than calling public
       mutators from primary execution.
-- [ ] Every nested event belongs to one valid command tree and exact execution
+- [x] Every nested event belongs to one valid command tree and exact execution
       owner without extending a deadline.
 
 ## Phase 13: Route public cleanup registration and project commands

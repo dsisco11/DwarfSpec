@@ -341,6 +341,7 @@
 ---@field allow_cross_owner_consumption? boolean
 
 ---@class dwarfspec.WorkflowOutput
+---@field name string
 ---@field has_value boolean
 ---@field value? any
 
@@ -356,6 +357,7 @@
 ---@field execute fun(context: dwarfspec.CommandExecutionContext, state: dwarfspec.WorkflowState, ready: any): dwarfspec.ExecutionResult|dwarfspec.GateResult
 ---@field execution_retry_policy dwarfspec.EExecutionRetryPolicy
 ---@field operation_key? fun(state: dwarfspec.WorkflowState): string
+---@field retry_safety? dwarfspec.CommandRetrySafety
 ---@field intrinsic_verification dwarfspec.EIntrinsicVerificationKind
 ---@field verify? fun(context: dwarfspec.CommandReadContext, state: dwarfspec.WorkflowState, receipt: any): dwarfspec.IntrinsicVerificationResult
 ---@field cleanup? dwarfspec.CommandCleanupPolicy

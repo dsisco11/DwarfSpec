@@ -1588,4 +1588,285 @@ describe('common command runner', function()
             assert.equals(1, executions, fixture.name .. ': ' .. tostring(message))
         end
     end)
+
+    it('executes workflow steps under one inherited command tree', function()
+        local registry, events, identities = Registry.new(), {}, {}
+        local injected = dependencies()
+        injected.resolve_target = function(identity)
+            assert.equals('unit-7', identity)
+            return {stable_identity=identity}
+        end
+        injected.publish = function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        registry:register_builtin({name='composite', kind=CommandKind.WORKFLOW,
+            normalize=function(arguments) return {unit_id=arguments.unit_id} end,
+            preflight=function(context)
+                identities.outer = context:identity()
+                return Outcomes.ready(true)
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT,
+            workflow={steps={{name='observe', kind=CommandKind.QUERY,
+                preflight=function(context, state)
+                    identities.observe = context:identity()
+                    assert.equals('unit-7', state.request.unit_id)
+                    return Outcomes.ready(true)
+                end,
+                execute=function(_, state)
+                    return Outcomes.ready({unit_id=state.request.unit_id})
+                end, execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION},
+            {name='mutate', kind=CommandKind.ACTION,
+                preflight=function(context, state)
+                    identities.mutate = context:identity()
+                    local target = context:resolve_target(
+                        state.outputs.observe.value.unit_id)
+                    return Outcomes.ready(target)
+                end,
+                execute=function(_, state, ready)
+                    assert.equals('unit-7', ready.stable_identity)
+                    assert.equals('unit-7',
+                        state.outputs.observe.value.unit_id)
+                    return Outcomes.executed({changed=true}, {confirmed=true})
+                end, execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT},
+            {name='empty', kind=CommandKind.ACTION,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function()
+                    return Outcomes.executed(nil, {confirmed=true})
+                end, execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT}},
+            result=function(state)
+                assert.is_false(state.outputs.empty.has_value)
+                return {changed=state.outputs.mutate.value.changed}
+            end}})
+        local result = runner(registry, injected):invoke('composite',
+            {unit_id='unit-7'})
+        assert.is_true(result.changed)
+        assert.equals(8, #events)
+        assert.equals(identities.outer.invocation_id,
+            identities.observe.parent_invocation_id)
+        assert.equals(identities.outer.invocation_id,
+            identities.mutate.parent_invocation_id)
+        assert.equals(identities.outer.root_invocation_id,
+            identities.mutate.root_invocation_id)
+        assert.equals(identities.outer.owner_scope,
+            identities.mutate.owner_scope)
+        assert.not_equals(identities.observe.invocation_id,
+            identities.mutate.invocation_id)
+        for _, event in ipairs(events) do
+            assert.equals(identities.outer.root_invocation_id,
+                event.payload.command.root_invocation_id)
+            assert.equals(identities.outer.owner_scope,
+                event.payload.command.owner_scope)
+        end
+    end)
+
+    it('attributes workflow result projection to primary execution', function()
+        local registry, events = Registry.new(), {}
+        registry:register_builtin({name='projection-failure',
+            kind=CommandKind.WORKFLOW, normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT,
+            workflow={steps={{name='observe', kind=CommandKind.QUERY,
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function() return Outcomes.ready(true) end,
+                execution_retry_policy='once',
+                intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION}},
+                result=function() error('projection failed') end}})
+        local injected = dependencies()
+        injected.publish = function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local message = assert_stage_failure(function()
+            runner(registry, injected):invoke('projection-failure', {})
+        end, 'execution', '<none>')
+        assert.is_truthy(message:find('projection failed', 1, true), message)
+        assert.equals('failure', events[#events].payload.status)
+        assert.equals('execution', events[#events].payload.stage)
+    end)
+
+    it('inherits boundaries for nested public reads and rejects mutation', function()
+        local registry, events, child_identities, leaf_identities =
+            Registry.new(), {}, {}, {}
+        registry:register_builtin({name='nested-leaf', kind=CommandKind.QUERY,
+            normalize=function(arguments) return arguments end,
+            preflight=function(context)
+                leaf_identities[#leaf_identities + 1] = context:identity()
+                return Outcomes.ready(true)
+            end,
+            execute=function() return Outcomes.ready('leaf') end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        registry:register_builtin({name='nested-query', kind=CommandKind.QUERY,
+            normalize=function(arguments) return arguments end,
+            preflight=function(context)
+                child_identities[#child_identities + 1] = context:identity()
+                assert.equals(10, context:remaining_ms())
+                assert.equals('leaf', context:invoke_readonly(
+                    CommandKind.QUERY, 'nested-leaf', {}))
+                return Outcomes.ready(true)
+            end,
+            execute=function() return Outcomes.ready('nested') end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        registry:register_builtin({name='nested-action', kind=CommandKind.ACTION,
+            normalize=function(arguments) return arguments end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function() return Outcomes.executed(true, {done=true}) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local parent_identity
+        registry:register_builtin({name='read-parent', kind=CommandKind.QUERY,
+            normalize=function(arguments) return arguments end,
+            preflight=function(context)
+                parent_identity = context:identity()
+                assert.equals('nested', context:invoke_readonly(
+                    CommandKind.QUERY, 'nested-query', {}))
+                assert.has_error(function()
+                    context:invoke_readonly(CommandKind.ACTION,
+                        'nested-action', {})
+                end)
+                assert.has_error(function()
+                    context:invoke_readonly(CommandKind.QUERY,
+                        'nested-query', {}, {timeout_ms=20})
+                end)
+                return Outcomes.ready(true)
+            end,
+            execute=function() return Outcomes.ready('parent') end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        local injected = dependencies()
+        injected.publish = function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        assert.equals('parent', runner(registry, injected):invoke(
+            'read-parent', {}))
+        assert.equals(4, #child_identities)
+        for _, child in ipairs(child_identities) do
+            assert.equals(parent_identity.invocation_id,
+                child.parent_invocation_id)
+            assert.equals(parent_identity.root_invocation_id,
+                child.root_invocation_id)
+            assert.equals(parent_identity.test_attempt_id,
+                child.test_attempt_id)
+        end
+        assert.equals(child_identities[1].invocation_id,
+            child_identities[2].invocation_id)
+        assert.not_equals(child_identities[1].invocation_id,
+            child_identities[3].invocation_id)
+        assert.equals(8, #leaf_identities)
+        for _, leaf in ipairs(leaf_identities) do
+            assert.equals(parent_identity.root_invocation_id,
+                leaf.root_invocation_id)
+            assert.is_truthy(leaf.parent_invocation_id)
+        end
+        assert.equals(14, #events)
+        for _, event in ipairs(events) do
+            assert.equals(parent_identity.root_invocation_id,
+                event.payload.command.root_invocation_id)
+            assert.equals(parent_identity.owner_scope,
+                event.payload.command.owner_scope)
+        end
+    end)
+
+    it('shares cancellation with nested public reads', function()
+        local registry, cancellation_checks = Registry.new(), 0
+        registry:register_builtin({name='cancel-child', kind=CommandKind.QUERY,
+            normalize=function(arguments) return arguments end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        registry:register_builtin({name='cancel-parent', kind=CommandKind.QUERY,
+            normalize=function(arguments) return arguments end,
+            preflight=function(context)
+                context:invoke_readonly(CommandKind.QUERY, 'cancel-child', {})
+                return Outcomes.ready(true)
+            end,
+            execute=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        local injected = dependencies()
+        injected.cancellation = function()
+            cancellation_checks = cancellation_checks + 1
+            return cancellation_checks >= 3, 'shared cancellation'
+        end
+        local succeeded, message = pcall(function()
+            runner(registry, injected):invoke('cancel-parent', {})
+        end)
+        assert.is_false(succeeded)
+        assert.is_truthy(tostring(message):find(
+            'cancelled: shared cancellation', 1, true), tostring(message))
+        assert.equals(3, cancellation_checks)
+    end)
+
+    it('roots cleanup verification reads at their cleanup transaction', function()
+        local registry, cleanup_child, events = Registry.new(), nil, {}
+        registry:register_builtin({name='cleanup-query', kind=CommandKind.QUERY,
+            normalize=function(arguments) return arguments end,
+            preflight=function(context)
+                cleanup_child = context:identity()
+                return Outcomes.ready(true)
+            end,
+            execute=function() return Outcomes.ready(true) end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        registry:register_builtin({name='cleanup-parent', kind=CommandKind.ACTION,
+            normalize=function() return {} end,
+            preflight=function() return Outcomes.ready(true) end,
+            claims=function()
+                return {{claim_key='item', resource_kind='item',
+                    resource_identity='item-1', exclusive=true}}
+            end,
+            execute=function()
+                return Outcomes.executed(true, {done=true}, {item_id='item-1'})
+            end,
+            cleanup={lifetime=CleanupLifetime.COMMAND,
+                resources=function(receipt)
+                    return {{claim_key='item',
+                        resource_identity=receipt.item_id}}
+                end,
+                restore=function() end,
+                verify=function(context)
+                    return context:invoke_readonly(CommandKind.QUERY,
+                        'cleanup-query', {})
+                end},
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected = dependencies()
+        injected.owner = function()
+            return {owner_scope='service_run', service_run_id='run'}
+        end
+        injected.publish = function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        local index = ResourceDependencyIndex.new('run', function()
+            return 'complete'
+        end)
+        local cleanup = CleanupRegistrationService.new({service_run_id='run',
+            resource_index=index, now_ms=injected.now_ms})
+        assert.is_true(runner(registry, injected, cleanup, index):invoke(
+            'cleanup-parent', {}))
+        assert.is_truthy(cleanup_child.parent_cleanup_transaction_id)
+        assert.is_nil(cleanup_child.parent_invocation_id)
+        assert.equals(cleanup_child.invocation_id,
+            cleanup_child.root_invocation_id)
+        assert.equals('service_run', cleanup_child.owner_scope)
+        assert.is_nil(cleanup_child.suite_execution_id)
+        assert.is_nil(cleanup_child.test_attempt_id)
+        local cleanup_child_events = 0
+        for _, event in ipairs(events) do
+            if event.payload.command.parent_cleanup_transaction_id ~= nil then
+                cleanup_child_events = cleanup_child_events + 1
+                assert.equals(cleanup_child.invocation_id,
+                    event.payload.command.root_invocation_id)
+                assert.equals('service_run',
+                    event.payload.command.owner_scope)
+            end
+        end
+        assert.equals(2, cleanup_child_events)
+    end)
 end)

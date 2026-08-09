@@ -179,6 +179,8 @@ function Internals.workflow(value, label)
         label .. ' containing workflow must omit step-owned policies')
     assert(value.execution_retry_policy == RetryPolicy.ONCE,
         label .. ' workflow requires once execution policy')
+    assert(value.retry_safety == nil,
+        label .. ' containing workflow must omit retry safety policy')
     assert(value.intrinsic_verification == IntrinsicKind.EXECUTION_RECEIPT,
         label .. ' workflow requires execution_receipt verification')
     assert(type(value.workflow) == 'table',

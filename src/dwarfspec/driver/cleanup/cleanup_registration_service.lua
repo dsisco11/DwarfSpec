@@ -467,7 +467,12 @@ function CleanupRegistrationService:register(registration)
         retain_unresolved=function() self._resource_index:retain_unresolved(transaction_id) end,
         blocking_dependents=function() return registry:blocking_dependents(transaction_id) end,
         wait=registration.wait, new_cancellation=registration.new_cancellation,
-        invoke_readonly=registration.invoke_readonly,
+        invoke_readonly_with_scope=
+            type(registration.invoke_readonly) == 'function' and
+            function(deadline, cancellation, kind, name, ...)
+                return registration.invoke_readonly(transaction_id, owner,
+                    deadline, cancellation, kind, name, ...)
+            end or nil,
         record_diagnostic=registration.record_diagnostic,
         assert_executable=registration.assert_executable,
         on_started=function(item, trigger)

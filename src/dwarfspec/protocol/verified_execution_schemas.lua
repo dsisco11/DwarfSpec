@@ -78,6 +78,58 @@ function Schemas:validate_command_identity(value)
             'command identity')
     end
     self:_owner(value, ExecutionOwnerScope, 'command identity')
+    if value.parent_invocation_id == nil and
+            value.parent_cleanup_transaction_id == nil then
+        assert(value.root_invocation_id == value.invocation_id,
+            'root command identity must identify itself as root')
+    elseif value.parent_cleanup_transaction_id ~= nil then
+        assert(value.root_invocation_id == value.invocation_id,
+            'cleanup-rooted command identity must identify itself as root')
+    else
+        assert(value.parent_invocation_id ~= value.invocation_id and
+            value.root_invocation_id ~= value.invocation_id,
+            'nested command identity cannot identify itself as parent or root')
+    end
+    return value
+end
+
+---Validates one invocation-rooted child against its exact parent identity.
+---@param value table
+---@param parent table
+---@return table
+function Schemas:validate_nested_command_identity(value, parent)
+    self:validate_command_identity(value)
+    self:validate_command_identity(parent)
+    assert(value.parent_invocation_id == parent.invocation_id and
+        value.parent_cleanup_transaction_id == nil,
+        'nested command identity has a missing or foreign parent invocation')
+    assert(value.root_invocation_id == parent.root_invocation_id,
+        'nested command identity must preserve its parent root')
+    for _, field in ipairs({'owner_scope', 'service_run_id',
+            'suite_execution_id', 'test_attempt_id'}) do
+        assert(value[field] == parent[field],
+            'nested command identity must preserve parent owner identity')
+    end
+    return value
+end
+
+---Validates one cleanup-rooted child against its transaction and owner.
+---@param value table
+---@param transaction_id string
+---@param owner table
+---@return table
+function Schemas:validate_cleanup_command_identity(value, transaction_id, owner)
+    self:validate_command_identity(value)
+    self:_string({transaction_id=transaction_id}, 'transaction_id',
+        'cleanup command ancestry')
+    assert(value.parent_cleanup_transaction_id == transaction_id and
+        value.parent_invocation_id == nil,
+        'cleanup-rooted command identity has a missing or foreign cleanup parent')
+    for _, field in ipairs({'owner_scope', 'service_run_id',
+            'suite_execution_id', 'test_attempt_id'}) do
+        assert(value[field] == owner[field],
+            'cleanup-rooted command identity must preserve cleanup owner identity')
+    end
     return value
 end
 

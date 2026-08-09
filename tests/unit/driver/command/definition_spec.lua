@@ -104,6 +104,21 @@ describe('command definition valid combinations', function()
             end
         end
         assert.is_table(Definition.validate(workflow()))
+        for _, kind in ipairs({CommandKind.QUERY, CommandKind.ASSERTION,
+                CommandKind.ACTION, CommandKind.STATE_SETTER,
+                CommandKind.FIXTURE}) do
+            local intrinsic = (kind == CommandKind.QUERY or
+                kind == CommandKind.ASSERTION) and
+                IntrinsicKind.PRIMARY_OBSERVATION or
+                IntrinsicKind.EXECUTION_RECEIPT
+            local step = executable(kind, intrinsic, RetryPolicy.ONCE)
+            step.name = 'step-' .. kind
+            step.normalize = nil
+            step.default_timeout_ms = nil
+            local value = workflow()
+            value.workflow.steps = {step}
+            assert.is_table(Definition.validate(value))
+        end
     end)
 
     it('accepts coherent immutable cleanup and claim policy', function()
@@ -133,6 +148,12 @@ describe('command definition invalid combinations', function()
         value = workflow()
         value.workflow.steps[3] = value.workflow.steps[1]
         value.workflow.steps[1] = nil
+        assert.has_error(function() Definition.validate(value) end)
+        value = workflow()
+        value.workflow.steps[2] = value.workflow.steps[1]
+        assert.has_error(function() Definition.validate(value) end)
+        value = workflow()
+        value.workflow.steps[1].kind = CommandKind.WORKFLOW
         assert.has_error(function() Definition.validate(value) end)
         value = executable(CommandKind.ACTION,
             IntrinsicKind.EXECUTION_RECEIPT, RetryPolicy.ONCE)
