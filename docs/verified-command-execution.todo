@@ -1215,36 +1215,36 @@ Validation evidence:
 Outcome: the uncommon mutation-retry policy is fully available and proven even
 though initial built-ins remain `ONCE`.
 
-- [ ] Validate documented stable operation key, idempotency guarantee,
+- [x] Validate documented stable operation key, idempotency guarantee,
       attempt-receipt policy, effect-receipt policy, and a command-specific
       conformance fixture for every `EXPLICIT_RETRY_SAFE` definition.
-- [ ] Accept another attempt only after an explicit `command.retry` result.
-- [ ] Retain bounded immutable attempt receipts and correlate every attempt in
+- [x] Accept another attempt only after an explicit `command.retry` result.
+- [x] Retain bounded immutable attempt receipts and correlate every attempt in
       events and diagnostics.
-- [ ] Register every reported retry-attempt effect immediately with forced
+- [x] Register every reported retry-attempt effect immediately with forced
       command lifetime.
-- [ ] Execute and verify every transaction created since the attempt checkpoint
+- [x] Execute and verify every transaction created since the attempt checkpoint
       before another attempt.
-- [ ] Terminate retry when prior-attempt cleanup is failed or unconfirmed.
-- [ ] Re-run preflight, volatile target validation, and claim projection/
+- [x] Terminate retry when prior-attempt cleanup is failed or unconfirmed.
+- [x] Re-run preflight, volatile target validation, and claim projection/
       validation before each later attempt.
-- [ ] Reuse the frozen operation key and original absolute command deadline for
+- [x] Reuse the frozen operation key and original absolute command deadline for
       all attempts.
-- [ ] Let cleanup use its independent deadline while counting elapsed cleanup
+- [x] Let cleanup use its independent deadline while counting elapsed cleanup
       wall time against the parent command deadline.
-- [ ] Add a synthetic retry-safe definition that proves eventual success,
+- [x] Add a synthetic retry-safe definition that proves eventual success,
       fatality, cancellation, timeout, yielding, no-effect retry, effect cleanup,
       cleanup failure, and no retry inferred from false/nil/throw.
-- [ ] Add operation-key conformance proving stable bounded scalar derivation
+- [x] Add operation-key conformance proving stable bounded scalar derivation
       from the same normalized request.
-- [ ] Perform a follow-up retry-policy review and confirm no initial built-in
+- [x] Perform a follow-up retry-policy review and confirm no initial built-in
       mutator opts in without its own proof fixture.
 
 Completion criteria:
 
-- [ ] A later attempt can never execute on top of an unverified prior-attempt
+- [x] A later attempt can never execute on top of an unverified prior-attempt
       effect.
-- [ ] The runner implements both retry policies from the first production
+- [x] The runner implements both retry policies from the first production
       release of the new architecture.
 
 ## Phase 12: Implement workflows and nested read-only commands

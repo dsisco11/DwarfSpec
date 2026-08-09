@@ -8,6 +8,16 @@ local Outcomes = require('dwarfspec.driver.command.outcomes')
 local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
 
+---Returns complete qualification documentation for a synthetic retry policy.
+---@return table
+local function retry_safety()
+    return {stable_operation_key='normalized request identity',
+        idempotency_guarantee='same key cannot duplicate the logical effect',
+        attempt_receipt_policy='every attempted effect returns a receipt',
+        effect_receipt_policy='every reversible effect returns cleanup identity',
+        conformance_fixture='command definition synthetic retry fixture'}
+end
+
 ---Creates the smallest structurally valid non-workflow definition.
 ---@param kind string
 ---@param intrinsic string
@@ -28,6 +38,7 @@ local function executable(kind, intrinsic, retry)
     end
     if retry == RetryPolicy.EXPLICIT_RETRY_SAFE then
         value.operation_key = function() return 'stable-operation' end
+        value.retry_safety = retry_safety()
     end
     return value
 end
@@ -55,6 +66,26 @@ local function workflow()
 end
 
 describe('command definition valid combinations', function()
+    it('qualifies a stable bounded operation key from one normalized request',
+            function()
+        local value = executable(CommandKind.ACTION,
+            IntrinsicKind.EXECUTION_RECEIPT,
+            RetryPolicy.EXPLICIT_RETRY_SAFE)
+        value.normalize = function(arguments)
+            return {subject=tostring(arguments.subject)}
+        end
+        value.operation_key = function(request)
+            return 'synthetic:' .. request.subject
+        end
+        local definition = Definition.validate(value)
+        local request = definition.normalize({subject=7})
+        local first = definition.operation_key(request)
+        local second = definition.operation_key(request)
+        assert.equals('synthetic:7', first)
+        assert.equals(first, second)
+        assert.is_true(#first <= 128)
+    end)
+
     it('accepts every supported kind, intrinsic, and retry combination',
             function()
         for _, kind in ipairs({CommandKind.QUERY, CommandKind.ASSERTION}) do
@@ -124,6 +155,19 @@ describe('command definition invalid combinations', function()
             IntrinsicKind.EXECUTION_RECEIPT,
             RetryPolicy.EXPLICIT_RETRY_SAFE)
         value.operation_key = nil
+        assert.has_error(function() Definition.validate(value) end)
+        for _, missing in ipairs({'stable_operation_key',
+                'idempotency_guarantee', 'attempt_receipt_policy',
+                'effect_receipt_policy', 'conformance_fixture'}) do
+            value = executable(CommandKind.ACTION,
+                IntrinsicKind.EXECUTION_RECEIPT,
+                RetryPolicy.EXPLICIT_RETRY_SAFE)
+            value.retry_safety[missing] = nil
+            assert.has_error(function() Definition.validate(value) end)
+        end
+        value = executable(CommandKind.ACTION,
+            IntrinsicKind.EXECUTION_RECEIPT, RetryPolicy.ONCE)
+        value.retry_safety = retry_safety()
         assert.has_error(function() Definition.validate(value) end)
     end)
 

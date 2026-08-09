@@ -144,6 +144,8 @@
 ---@field test_attempt_id? string
 ---@field target_identity? string
 ---@field cleanup_checkpoint integer
+---@field attempt? integer
+---@field attempt_cleanup_checkpoint? integer
 ---@field current_stage string
 
 ---@class dwarfspec.CleanupRegistrationCapability
@@ -239,6 +241,9 @@
 ---@class dwarfspec.CleanupRegistrationService
 ---@field new fun(options: table): dwarfspec.CleanupRegistrationService
 ---@field register fun(self: dwarfspec.CleanupRegistrationService, registration: table): dwarfspec.CleanupTransaction
+---@field commandCheckpoint fun(self: dwarfspec.CleanupRegistrationService): integer
+---@field pendingCommandTransactionsSince fun(self: dwarfspec.CleanupRegistrationService, command_invocation_id: string, checkpoint: integer): dwarfspec.CleanupTransaction[]
+---@field executeCommandTransactionsSince fun(self: dwarfspec.CleanupRegistrationService, command_invocation_id: string, checkpoint: integer, reason: string): boolean, table[]
 ---@field abandonSelfRolledBack fun(self: dwarfspec.CleanupRegistrationService, transaction_id: string, mutation_lease: dwarfspec.CleanupMutationLease, proof: table)
 ---@field journal fun(self: dwarfspec.CleanupRegistrationService): table[]
 ---@field pending_ids_for fun(self: dwarfspec.CleanupRegistrationService, owner: dwarfspec.ExecutionOwnerIdentity): table<string, true>
@@ -370,11 +375,19 @@
 ---@field workflow? dwarfspec.WorkflowDefinition
 ---@field execution_retry_policy dwarfspec.EExecutionRetryPolicy
 ---@field operation_key? fun(request: any): string
+---@field retry_safety? dwarfspec.CommandRetrySafety
 ---@field intrinsic_verification dwarfspec.EIntrinsicVerificationKind
 ---@field verify? fun(context: dwarfspec.CommandReadContext, request: any, receipt: any): dwarfspec.IntrinsicVerificationResult
 ---@field cleanup? dwarfspec.CommandCleanupPolicy
 ---@field default_timeout_ms? integer
 ---@field diagnostics? fun(request: any, receipt: any): table
+
+---@class dwarfspec.CommandRetrySafety
+---@field stable_operation_key string
+---@field idempotency_guarantee string
+---@field attempt_receipt_policy string
+---@field effect_receipt_policy string
+---@field conformance_fixture string
 
 ---A declared game-UI field, exact widget name, or zero-based widget index.
 ---@alias dwarfspec.NativePathSegment string|integer

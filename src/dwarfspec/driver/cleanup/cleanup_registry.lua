@@ -89,15 +89,18 @@ function CleanupRegistry:blocking_dependents(transaction_id)
     return self._planner:blocking_dependents(transaction_id, self:protection_ids())
 end
 
----Executes all pending transactions in dependency-safe deterministic order.
+---Executes selected pending transactions in dependency-safe deterministic order.
+---@param transactions dwarfspec.CleanupTransaction[]
 ---@param reason string
 ---@return boolean, table[]
-function CleanupRegistry:execute_all(reason)
+function CleanupRegistry:execute_transactions(transactions, reason)
+    assert(type(transactions) == 'table',
+        'cleanup execution transactions must be a table')
     assert(type(reason) == 'string' and reason ~= '',
         'cleanup execution reason must be a nonempty string')
-    local transactions = {}
-    for transaction_id in pairs(self._pending) do
-        transactions[#transactions + 1] = self._transactions[transaction_id]
+    for _, transaction in ipairs(transactions) do
+        assert(self._transactions[transaction:transaction_id()] == transaction,
+            'cleanup transaction is not registered in this registry')
     end
     local failures = {}
     for _, transaction in ipairs(self._planner:order(transactions)) do
@@ -113,6 +116,17 @@ function CleanupRegistry:execute_all(reason)
         end
     end
     return #failures == 0, failures
+end
+
+---Executes all pending transactions in dependency-safe deterministic order.
+---@param reason string
+---@return boolean, table[]
+function CleanupRegistry:execute_all(reason)
+    local transactions = {}
+    for transaction_id in pairs(self._pending) do
+        transactions[#transactions + 1] = self._transactions[transaction_id]
+    end
+    return self:execute_transactions(transactions, reason)
 end
 
 return CleanupRegistry

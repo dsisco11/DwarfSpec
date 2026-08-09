@@ -145,6 +145,10 @@ function Outcomes.validate_execution(outcome, definition)
     if outcome.kind == 'retry' then
         assert(definition.execution_retry_policy == 'explicit_retry_safe',
             'once command cannot return retry')
+        if outcome.effect_receipt ~= nil then
+            assert(outcome.attempt_receipt ~= nil,
+                'retry effect requires an immutable attempt receipt')
+        end
     end
     if outcome.effect_receipt ~= nil then
         assert(definition.cleanup ~= nil,

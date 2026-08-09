@@ -90,12 +90,23 @@ function Internals.retry(value, label)
     if value.execution_retry_policy == RetryPolicy.EXPLICIT_RETRY_SAFE then
         assert(type(value.operation_key) == 'function',
             label .. ' explicit_retry_safe requires operation_key')
+        assert(type(value.retry_safety) == 'table',
+            label .. ' explicit_retry_safe requires retry_safety documentation')
+        for _, field in ipairs({'stable_operation_key',
+                'idempotency_guarantee', 'attempt_receipt_policy',
+                'effect_receipt_policy', 'conformance_fixture'}) do
+            assert(type(value.retry_safety[field]) == 'string' and
+                value.retry_safety[field] ~= '',
+                label .. ' retry_safety requires nonempty ' .. field)
+        end
         assert(value.kind ~= CommandKind.QUERY and
             value.kind ~= CommandKind.ASSERTION,
             label .. ' read-only observations cannot retry execution')
     else
         assert(value.operation_key == nil,
             label .. ' once policy must omit operation_key')
+        assert(value.retry_safety == nil,
+            label .. ' once policy must omit retry_safety')
     end
 end
 

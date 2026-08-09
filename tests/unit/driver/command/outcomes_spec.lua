@@ -78,5 +78,11 @@ describe('command outcomes', function()
                 intrinsic_verification='callback',
             })
         end, 'once command cannot return retry')
+        assert_error(function()
+            Outcomes.validate_execution(Outcomes.retry('again', nil,
+                {item_id='partial'}), {
+                execution_retry_policy='explicit_retry_safe',
+                intrinsic_verification='callback', cleanup={}})
+        end, 'attempt receipt')
     end)
 end)

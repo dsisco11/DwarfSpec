@@ -12,6 +12,16 @@ local ResourceDependencyIndex = require(
     'dwarfspec.driver.command.resource_dependency_index')
 local Outcomes = require('dwarfspec.driver.command.outcomes')
 
+---Returns complete qualification documentation for a synthetic retry policy.
+---@return table
+local function retry_safety()
+    return {stable_operation_key='normalized request identity',
+        idempotency_guarantee='same key cannot duplicate the logical effect',
+        attempt_receipt_policy='every attempted effect returns a receipt',
+        effect_receipt_policy='every reversible effect returns cleanup identity',
+        conformance_fixture='common command runner synthetic retry fixture'}
+end
+
 ---Asserts that one invocation reports a stage and bounded evidence fragment.
 ---@param callback fun()
 ---@param stage string
@@ -165,6 +175,7 @@ describe('common command runner', function()
                 execute=function() return Outcomes.executed(true, {receipt=true}) end,
                 execution_retry_policy='explicit_retry_safe',
                 operation_key=fixture.operation_key,
+                retry_safety=retry_safety(),
                 intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
             assert_normalization_failure(registry, fixture.name, fixture.expected)
         end
@@ -320,6 +331,7 @@ describe('common command runner', function()
             execute=function() return require('dwarfspec.driver.command.outcomes')
                 .retry('not completed') end,
             execution_retry_policy='explicit_retry_safe',
+            retry_safety=retry_safety(),
             intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
         local injected = dependencies()
         local index = {validate_plan=function(_, _, _, _, _, key)
@@ -1345,5 +1357,235 @@ describe('common command runner', function()
         assert.equals(1, executions)
         assert.equals(1, cleanup_calls)
         assert_terminal_events(events, 'failure', 'caller_verification')
+    end)
+
+    it('revalidates and yields until an explicit retry reaches success', function()
+        local registry, executions, preflights, claims = Registry.new(), 0, 0, 0
+        local operation_keys, diagnostics, events = {}, {}, {}
+        registry:register_builtin({name='retry-eventual', kind=CommandKind.ACTION,
+            normalize=function(arguments) return {subject=arguments.subject} end,
+            operation_key=function(request)
+                operation_keys[#operation_keys + 1] = 'key:' .. request.subject
+                return operation_keys[#operation_keys]
+            end,
+            retry_safety=retry_safety(),
+            preflight=function(context)
+                preflights = preflights + 1
+                assert.equals(executions + 1, context:identity().attempt)
+                return Outcomes.ready({target_identity='target-' ..
+                    tostring(executions + 1)})
+            end,
+            claims=function()
+                claims = claims + 1
+                return {}
+            end,
+            execute=function()
+                executions = executions + 1
+                if executions < 3 then
+                    return Outcomes.retry('native operation pending',
+                        {attempt=executions}, nil, {marker='retry-' .. executions})
+                end
+                return Outcomes.executed('done', {attempt=executions})
+            end,
+            cleanup={lifetime=CleanupLifetime.COMMAND,
+                restore=function() end, verify=function() return true end},
+            execution_retry_policy='explicit_retry_safe',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected, state = dependencies()
+        injected.record_diagnostic=function(kind, evidence)
+            diagnostics[#diagnostics + 1] = {kind=kind, evidence=evidence}
+        end
+        injected.publish=function(event_type, payload)
+            events[#events + 1] = {event_type=event_type, payload=payload}
+        end
+        assert.equals('done', runner(registry, injected):invoke(
+            'retry-eventual', {subject='stable'}, {verify=function(observation)
+                assert.equals(2, #observation.attempt_receipts)
+                assert.equals(1,
+                    observation.attempt_receipts[1].receipt.attempt)
+                assert.equals(2,
+                    observation.attempt_receipts[2].receipt.attempt)
+                return true
+            end}))
+        assert.equals(3, executions)
+        assert.equals(6, preflights)
+        assert.equals(3, claims)
+        assert.equals(2, state.now)
+        assert.same({'key:stable'}, operation_keys)
+        assert.equals(2, #diagnostics)
+        assert.equals('command.retry', diagnostics[1].kind)
+        assert.is_true(diagnostics[1].evidence.attempt_receipt_present)
+        assert.equals(3, events[2].payload.attempt_count)
+        assert.equals('key:stable', events[2].payload.operation_key)
+        assert.equals(2, #events[2].payload.retry_attempts)
+        assert.has_error(function()
+            events[2].payload.retry_attempts[1].attempt = 99
+        end)
+    end)
+
+    it('cleans a forced command-lifetime retry effect before re-execution',
+            function()
+        local registry, executions, restores, cleanup_events =
+            Registry.new(), 0, 0, {}
+        registry:register_builtin({name='retry-effect', kind=CommandKind.FIXTURE,
+            normalize=function() return {} end,
+            operation_key=function() return 'retry-effect:stable' end,
+            retry_safety=retry_safety(),
+            preflight=function() return Outcomes.ready(true) end,
+            claims=function()
+                return {{claim_key='item', resource_kind='item',
+                    resource_identity='item-1', exclusive=true}}
+            end,
+            execute=function()
+                executions = executions + 1
+                if executions == 1 then
+                    return Outcomes.retry('created transient item',
+                        {native_attempt=1}, {item_id='item-1'})
+                end
+                assert.equals(1, restores)
+                return Outcomes.executed('done', {native_attempt=2})
+            end,
+            cleanup={lifetime=CleanupLifetime.OWNER,
+                resources=function(receipt)
+                    return {{claim_key='item',
+                        resource_identity=receipt.item_id}}
+                end,
+                restore=function(_, receipt)
+                    assert.equals('item-1', receipt.item_id)
+                    restores = restores + 1
+                end,
+                verify=function() return true end},
+            execution_retry_policy='explicit_retry_safe',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected = dependencies()
+        local resource_index = ResourceDependencyIndex.new('run', function()
+            return 'complete'
+        end)
+        local cleanup_service = CleanupRegistrationService.new({
+            service_run_id='run', resource_index=resource_index,
+            now_ms=injected.now_ms, publish_event=function(event)
+                cleanup_events[#cleanup_events + 1] = event
+            end})
+        assert.equals('done', runner(registry, injected, cleanup_service,
+            resource_index):invoke('retry-effect', {}))
+        assert.equals(2, executions)
+        assert.equals(1, restores)
+        assert.same({'cleanup.transaction_registered',
+            'cleanup.transaction_started', 'cleanup.transaction_finished'},
+            {cleanup_events[1].event_type, cleanup_events[2].event_type,
+                cleanup_events[3].event_type})
+        assert.equals(CleanupLifetime.COMMAND,
+            cleanup_events[1].lifetime)
+        assert.same({}, cleanup_service:pendingCommandTransactions(
+            'run:command:1'))
+    end)
+
+    it('terminates retry when prior-attempt cleanup is not confirmed', function()
+        local registry, executions = Registry.new(), 0
+        registry:register_builtin({name='retry-cleanup-failure',
+            kind=CommandKind.ACTION, normalize=function() return {} end,
+            operation_key=function() return 'cleanup-failure:stable' end,
+            retry_safety=retry_safety(),
+            preflight=function() return Outcomes.ready(true) end,
+            claims=function()
+                return {{claim_key='item', resource_kind='item',
+                    resource_identity='item-1', exclusive=true}}
+            end,
+            execute=function()
+                executions = executions + 1
+                return Outcomes.retry('partial effect', {attempt=executions},
+                    {item_id='item-1'})
+            end,
+            cleanup={lifetime=CleanupLifetime.OWNER,
+                resources=function(receipt)
+                    return {{claim_key='item',
+                        resource_identity=receipt.item_id}}
+                end,
+                restore=function() error('restore failed') end,
+                verify=function() return false end},
+            execution_retry_policy='explicit_retry_safe',
+            intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+        local injected = dependencies()
+        local resource_index = ResourceDependencyIndex.new('run', function()
+            return 'complete'
+        end)
+        local cleanup_service = CleanupRegistrationService.new({
+            service_run_id='run', resource_index=resource_index,
+            now_ms=injected.now_ms})
+        local message = assert_stage_failure(function()
+            runner(registry, injected, cleanup_service, resource_index)
+                :invoke('retry-cleanup-failure', {}, {timeout_ms=3})
+        end, 'retry_cleanup', '{attempt=1')
+        assert.is_truthy(message:find('cleanup transaction failed', 1, true),
+            message)
+        assert.equals(1, executions)
+    end)
+
+    it('shares cancellation and the absolute deadline across attempts', function()
+        for _, fixture in ipairs({
+            {name='cancelled', timeout_ms=5, cancellation=function(executions)
+                return executions > 0, 'cancel requested'
+            end, expected='cancelled: cancel requested'},
+            {name='timed-out', timeout_ms=1, cancellation=function()
+                return false
+            end, expected='command deadline expired'},
+        }) do
+            local registry, executions = Registry.new(), 0
+            registry:register_builtin({name='retry-' .. fixture.name,
+                kind=CommandKind.ACTION, normalize=function() return {} end,
+                operation_key=function() return fixture.name .. ':stable' end,
+                retry_safety=retry_safety(),
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function()
+                    executions = executions + 1
+                    return Outcomes.retry('explicit retry',
+                        {attempt=executions})
+                end,
+                execution_retry_policy='explicit_retry_safe',
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+            local injected = dependencies()
+            injected.cancellation=function()
+                return fixture.cancellation(executions)
+            end
+            local succeeded, message = pcall(function()
+                runner(registry, injected):invoke('retry-' .. fixture.name,
+                    {}, {timeout_ms=fixture.timeout_ms})
+            end)
+            assert.is_false(succeeded)
+            assert.is_truthy(tostring(message):find(fixture.expected, 1, true),
+                tostring(message))
+            assert.equals(1, executions)
+        end
+    end)
+
+    it('never infers retry from fatal, thrown, nil, or false execution', function()
+        for _, fixture in ipairs({
+            {name='fatal', execute=function()
+                return Outcomes.failed('fatal execution')
+            end},
+            {name='throw', execute=function() error('thrown execution') end},
+            {name='nil', execute=function() return nil end},
+            {name='false', execute=function() return false end},
+        }) do
+            local registry, executions = Registry.new(), 0
+            registry:register_builtin({name='retry-' .. fixture.name,
+                kind=CommandKind.ACTION, normalize=function() return {} end,
+                operation_key=function() return fixture.name .. ':stable' end,
+                retry_safety=retry_safety(),
+                preflight=function() return Outcomes.ready(true) end,
+                execute=function(...)
+                    executions = executions + 1
+                    return fixture.execute(...)
+                end,
+                execution_retry_policy='explicit_retry_safe',
+                intrinsic_verification=IntrinsicKind.EXECUTION_RECEIPT})
+            local injected = dependencies()
+            local succeeded, message = pcall(function()
+                runner(registry, injected):invoke('retry-' ..
+                    fixture.name, {})
+            end)
+            assert.is_false(succeeded)
+            assert.equals(1, executions, fixture.name .. ': ' .. tostring(message))
+        end
     end)
 end)

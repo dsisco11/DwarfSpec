@@ -364,6 +364,58 @@ function CleanupRegistrationService:pendingCommandTransactions(
     return pending
 end
 
+---Returns the current run-scoped cleanup transaction checkpoint.
+---@return integer
+function CleanupRegistrationService:commandCheckpoint()
+    return self._next_transaction_id
+end
+
+---Returns pending command transactions created after one checkpoint.
+---@param command_invocation_id string
+---@param checkpoint integer
+---@return dwarfspec.CleanupTransaction[]
+function CleanupRegistrationService:pendingCommandTransactionsSince(
+        command_invocation_id, checkpoint)
+    command_invocation_id = Internals.identity(command_invocation_id,
+        'command invocation ID')
+    assert(type(checkpoint) == 'number' and checkpoint >= 0 and
+        checkpoint % 1 == 0 and checkpoint <= self._next_transaction_id,
+        'command cleanup checkpoint must identify this service history')
+    local pending = {}
+    for transaction_id, transaction in pairs(self._transactions) do
+        local record = self._transaction_records[transaction_id]
+        if record.command_invocation_id == command_invocation_id and
+                record.transaction_number > checkpoint and
+                transaction:isPending() then
+            pending[#pending + 1] = transaction
+        end
+    end
+    table.sort(pending, function(left, right)
+        return left:registration_ordinal() > right:registration_ordinal()
+    end)
+    return pending
+end
+
+---Executes checkpoint-selected command transactions through their owner planner.
+---@param command_invocation_id string
+---@param checkpoint integer
+---@param reason string
+---@return boolean, table[]
+function CleanupRegistrationService:executeCommandTransactionsSince(
+        command_invocation_id, checkpoint, reason)
+    local transactions = self:pendingCommandTransactionsSince(
+        command_invocation_id, checkpoint)
+    if #transactions == 0 then return true, {} end
+    local first_record = self._transaction_records[
+        transactions[1]:transaction_id()]
+    local registry = Internals.registry(self, first_record.owner)
+    for _, transaction in ipairs(transactions) do
+        local record = self._transaction_records[transaction:transaction_id()]
+        Internals.same_owner(first_record.owner, record.owner)
+    end
+    return registry:execute_transactions(transactions, reason)
+end
+
 ---Atomically registers one effect-backed cleanup transaction and active claims.
 ---@param registration table
 ---@return dwarfspec.CleanupTransaction
@@ -397,6 +449,7 @@ function CleanupRegistrationService:register(registration)
     local registry = Internals.registry(self, owner)
     local record = {owner=owner, label=Internals.identity(registration.label,
         'cleanup label'), lifetime=registration.lifetime,
+        transaction_number=transaction_number,
         command_invocation_id=command_invocation_id,
         registered_at_ms=self._now_ms()}
     local transaction
