@@ -25,6 +25,7 @@ local LEASE_STATE = setmetatable({}, {__mode='k'})
 ---@field private _publish_event? fun(event: dwarfspec.CleanupLifecycleEvent)
 ---@field private _read_journal? fun(): dwarfspec.CleanupLifecycleEvent[]
 ---@field private _closed_owners table<string, true>
+---@field private _executing_owners table<string, true>
 ---@field private _owner_results table<string, table>
 ---@field private _quarantine fun(evidence: table)
 ---@field private _recover fun(transaction_id: string, proof: table)
@@ -297,7 +298,7 @@ function CleanupRegistrationService.new(options)
         _now_ms=options.now_ms, _registries={}, _transactions={},
         _transaction_records={}, _next_transaction_id=0,
         _next_registration_ordinals={}, _journal={},
-        _closed_owners={}, _owner_results={},
+        _closed_owners={}, _executing_owners={}, _owner_results={},
         _publish_event=options.publish_event, _read_journal=options.read_journal,
         _quarantine=options.quarantine or function() end,
         _recover=options.recover or function() end,
@@ -424,11 +425,25 @@ function CleanupRegistrationService:register(registration)
     local owner = Internals.owner(self, registration.owner)
     assert(not self._closed_owners[Internals.owner_key(owner)],
         'cleanup registration is closed for this owner')
-    assert(type(registration.receipt) == 'table', 'cleanup registration receipt is required')
+    assert(not self._executing_owners[Internals.owner_key(owner)],
+        'cleanup registration is forbidden during cleanup execution')
+    local receipt_type = type(registration.receipt)
+    assert(receipt_type == 'boolean' or receipt_type == 'number' or
+        receipt_type == 'string' or receipt_type == 'table',
+        'cleanup registration receipt must be bounded plain data')
     assert(type(registration.restore) == 'function' and type(registration.verify) == 'function',
         'cleanup registration requires restore and verification callbacks')
-    assert(type(registration.plan) == 'table' and type(registration.bindings) == 'table',
-        'cleanup registration requires validated plan and claim bindings')
+    local post_effect_registrations = registration.registrations
+    if post_effect_registrations == nil then
+        assert(type(registration.plan) == 'table' and
+            type(registration.bindings) == 'table',
+            'cleanup registration requires validated plan and claim bindings')
+    else
+        assert(type(post_effect_registrations) == 'table',
+            'post-effect claim registrations must be a table')
+        assert(registration.plan == nil and registration.bindings == nil,
+            'post-effect registration must omit pre-execution claim data')
+    end
     local command_invocation_id = Internals.identity(registration.command_invocation_id,
         'command invocation ID')
     assert(registration.lifetime == CleanupLifetime.COMMAND or
@@ -436,7 +451,7 @@ function CleanupRegistrationService:register(registration)
         'cleanup registration has unsupported lifetime')
     Internals.mutation_lease(self, registration.mutation_lease,
         command_invocation_id)
-    if type(registration.plan.owner) == 'table' then
+    if registration.plan ~= nil and type(registration.plan.owner) == 'table' then
         Internals.same_owner(owner, registration.plan.owner)
         assert(registration.plan.lifetime == registration.lifetime,
             'cleanup registration lifetime does not match its claim plan')
@@ -462,9 +477,15 @@ function CleanupRegistrationService:register(registration)
             return self._resource_index:references_for_transaction(transaction_id)
         end,
         release_verified=function(_, proof)
+            if not record.conflicted and
+                    #(record.claim_identities or {}) == 0 then return end
             self._resource_index:release_verified(transaction_id, proof)
         end,
-        retain_unresolved=function() self._resource_index:retain_unresolved(transaction_id) end,
+        retain_unresolved=function()
+            if not record.conflicted and
+                    #(record.claim_identities or {}) == 0 then return end
+            self._resource_index:retain_unresolved(transaction_id)
+        end,
         blocking_dependents=function() return registry:blocking_dependents(transaction_id) end,
         wait=registration.wait, new_cancellation=registration.new_cancellation,
         invoke_readonly_with_scope=
@@ -476,10 +497,12 @@ function CleanupRegistrationService:register(registration)
         record_diagnostic=registration.record_diagnostic,
         assert_executable=registration.assert_executable,
         on_started=function(item, trigger)
+            self._executing_owners[owner_key] = true
             Internals.publish(self, 'cleanup.transaction_started', item, record,
                 {trigger=trigger})
         end,
         on_finished=function(item, disposition, evidence)
+            self._executing_owners[owner_key] = nil
             Internals.publish(self, 'cleanup.transaction_finished', item, record,
                 {disposition=disposition, evidence=evidence,
                     trigger='owner_teardown'})
@@ -500,8 +523,12 @@ function CleanupRegistrationService:register(registration)
             if record.conflicted then self._recover(transaction_id, proof) end
         end})
     local activation_succeeded, activated_or_error = xpcall(function()
-        return self._resource_index:activate(registration.plan, transaction_id,
-            registration.bindings)
+        if post_effect_registrations ~= nil then
+            return self._resource_index:register(owner, transaction_id,
+                registration.lifetime, post_effect_registrations)
+        end
+        return self._resource_index:activate(registration.plan,
+            transaction_id, registration.bindings)
     end, debug.traceback)
     self._next_transaction_id = transaction_number
     self._next_registration_ordinals[owner_key] = ordinal
@@ -528,6 +555,74 @@ function CleanupRegistrationService:register(registration)
     Internals.publish(self, 'cleanup.transaction_registered', transaction, record,
         {claim_references=activated})
     return transaction
+end
+
+---Rejects registration after the selected lifecycle owner has closed.
+---@param owner dwarfspec.ExecutionOwnerIdentity
+---@return boolean
+function CleanupRegistrationService:assertRegistrationOpen(owner)
+    owner = Internals.owner(self, owner)
+    assert(not self._closed_owners[Internals.owner_key(owner)],
+        'cleanup registration is closed for this owner')
+    assert(not self._executing_owners[Internals.owner_key(owner)],
+        'cleanup registration is forbidden during cleanup execution')
+    return true
+end
+
+---Verifies one public registration's pending ownership, claims, and journal event.
+---@param transaction_id string
+---@param owner dwarfspec.ExecutionOwnerIdentity
+---@return boolean
+function CleanupRegistrationService:verifyRegistration(transaction_id, owner)
+    transaction_id = Internals.identity(transaction_id,
+        'cleanup transaction ID')
+    owner = Internals.owner(self, owner)
+    local transaction = assert(self._transactions[transaction_id],
+        'cleanup registration transaction was not retained')
+    local record = assert(self._transaction_records[transaction_id],
+        'cleanup registration record was not retained')
+    Internals.same_owner(owner, record.owner)
+    assert(transaction:isPending(),
+        'cleanup registration transaction is not pending')
+    local references = self._resource_index:references_for_transaction(
+        transaction_id)
+    local identities = Internals.claim_identities(self._resource_index,
+        references)
+    assert(#identities == #(record.claim_identities or {}),
+        'cleanup registration claim ownership is incomplete')
+    for ordinal, expected in ipairs(record.claim_identities or {}) do
+        local actual = identities[ordinal]
+        assert(actual.resource_kind == expected.resource_kind and
+            actual.resource_identity == expected.resource_identity,
+            'cleanup registration claim ownership changed')
+    end
+    local found = false
+    for _, event in ipairs(self:journal()) do
+        if event.event_type == 'cleanup.transaction_registered' and
+                event.transaction_id == transaction_id then
+            found = true
+            break
+        end
+    end
+    assert(found, 'cleanup registration event was not journaled')
+    return true
+end
+
+---Authorizes claim release for one service-owned successfully verified cleanup.
+---@param transaction_id string
+---@param proof table
+---@return string
+function CleanupRegistrationService:authorizeRelease(transaction_id, proof)
+    transaction_id = Internals.identity(transaction_id,
+        'cleanup transaction ID')
+    local transaction = assert(self._transactions[transaction_id],
+        'claim release transaction is not owned by this cleanup service')
+    assert(transaction:state() == CleanupState.RUNNING,
+        'claim release requires a running cleanup transaction')
+    assert(type(proof) == 'table' and proof.restore_succeeded == true and
+        proof.verification_succeeded == true,
+        'claim release requires successful cleanup proof')
+    return CleanupState.COMPLETE
 end
 
 ---Closes registration and terminalizes all pending work for one owner.

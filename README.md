@@ -380,6 +380,16 @@ The enum exposes `TOP_LEFT`, `TOP`, `TOP_RIGHT`, `LEFT`, `CENTER`, `RIGHT`,
 `BOTTOM_LEFT`, `BOTTOM`, and `BOTTOM_RIGHT`. Center offsets match DFHack's
 viewport convention: `floor(width/2)` and `floor(height/2)`.
 
+## Receipt-backed cleanup
+
+Use `ds.registerCleanup(registration)` immediately after a direct Lua effect
+that cannot be expressed as a verified command. The registration supplies a
+bounded receipt, exact post-effect `resource_claims`, and `restore` and `verify`
+callbacks. It returns an owner-scoped handle for optional early cleanup; pending
+transactions are otherwise executed automatically at test or suite teardown.
+See [configuration.md](docs/configuration.md#receipt-backed-cleanup-registration)
+for the full safety contract and limitations.
+
 ## Project configuration and custom commands
 
 Configuration is optional. Put project-wide settings in
@@ -398,20 +408,35 @@ Lua modules directly beneath `tests/dwarfspec/` can also add project-specific
 commands to `ds`:
 
 ```lua
+local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
+local IntrinsicKind = require(
+    'dwarfspec.protocol.enums.intrinsic_verification_kinds')
+local RetryPolicy = require(
+    'dwarfspec.protocol.enums.execution_retry_policies')
+local Outcomes = require('dwarfspec.driver.command.outcomes')
+
 return {
     commands={
-        selected_text=function(_, subject)
-            return subject:text()
-        end,
+        project_status={
+            name='project_status', kind=CommandKind.QUERY,
+            normalize=function(arguments) return arguments end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function(_, request)
+                return Outcomes.ready(request.status)
+            end,
+            execution_retry_policy=RetryPolicy.ONCE,
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION,
+        },
     },
 }
 ```
 
-The command is then available as `ds.selected_text(ds.get('status'))` in every
-live spec.
-Keep module top-level code portable and make DFHack-only calls inside command
-callbacks. See [Consumer configuration](docs/configuration.md) for discovery
-overrides and extension rules.
+The command is then available as `ds.project_status({status='ready'})` in every
+live spec. Project commands must be complete verified definition tables; bare
+callbacks are rejected and no compatibility adapter is provided. Keep module
+top-level code portable and make DFHack-only calls inside definition callbacks.
+See [Consumer configuration](docs/configuration.md) for definition, cleanup
+registration, discovery, and extension contracts.
 
 ## Results and cleanup
 

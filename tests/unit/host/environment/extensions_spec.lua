@@ -5,6 +5,25 @@ local project_module = assert(loadfile(
 local extensions = assert(loadfile(
     'src/dwarfspec/host/environment/extensions.lua'))()
 local ErrorFormat = require('dwarfspec.protocol.configuration.error_formats')
+local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
+local IntrinsicKind = require(
+    'dwarfspec.protocol.enums.intrinsic_verification_kinds')
+local RetryPolicy = require(
+    'dwarfspec.protocol.enums.execution_retry_policies')
+local Outcomes = require('dwarfspec.driver.command.outcomes')
+
+---Creates one minimal immutable project query definition fixture.
+---@param name string
+---@param value any
+---@return table
+local function query_definition(name, value)
+    return {name=name, kind=CommandKind.QUERY,
+        normalize=function(arguments) return arguments end,
+        preflight=function() return Outcomes.ready(true) end,
+        execute=function() return Outcomes.ready(value) end,
+        execution_retry_policy=RetryPolicy.ONCE,
+        intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION}
+end
 
 describe('DwarfSpec consumer extensions', function()
     local modules
@@ -47,10 +66,12 @@ describe('DwarfSpec consumer extensions', function()
                 discovery={test_glob='tests/live/*.lua'},
                 error_format=ErrorFormat.ESLINT,
             },
-            commands={tooltip_state=function() return 'tooltip' end},
+            commands={tooltip_state=query_definition(
+                'tooltip_state', 'tooltip')},
         }
         modules['consumer/tests/dwarfspec/commands.lua'] = {
-            commands={consumer_action=function() return 'action' end},
+            commands={consumer_action=query_definition(
+                'consumer_action', 'action')},
         }
         modules['consumer/tests/dwarfspec/duplicate.lua'] = {}
 
@@ -64,8 +85,10 @@ describe('DwarfSpec consumer extensions', function()
             loaded.settings.discovery.test_glob)
         assert.equals(ErrorFormat.ESLINT,
             loaded.settings.error_format)
-        assert.equals('action', loaded.commands.consumer_action.callback())
-        assert.equals('tooltip', loaded.commands.tooltip_state.callback())
+        assert.equals('consumer_action',
+            loaded.commands.consumer_action.definition.name)
+        assert.equals('tooltip_state',
+            loaded.commands.tooltip_state.definition.name)
     end)
 
     it('uses the shared default when no config module exists', function()
@@ -98,10 +121,10 @@ describe('DwarfSpec consumer extensions', function()
     it('rejects duplicate commands with both source modules identified',
             function()
         modules['consumer/tests/dwarfspec/config.lua'] = {
-            commands={same=function() end},
+            commands={same=query_definition('same', 'first')},
         }
         modules['consumer/tests/dwarfspec/commands.lua'] = {
-            commands={same=function() end},
+            commands={same=query_definition('same', 'second')},
         }
         modules['consumer/tests/dwarfspec/duplicate.lua'] = {}
 
@@ -194,6 +217,20 @@ describe('DwarfSpec consumer extensions', function()
         assert.has_error(function() extensions.load(descriptor, loader) end,
             'tests/dwarfspec/config.lua: custom command conflicts with ' ..
             'ds.wait_ticks')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={legacy=function() end},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: commands.legacy must be a command ' ..
+            'definition table; bare callbacks are unsupported')
+
+        modules['consumer/tests/dwarfspec/config.lua'] = {
+            commands={broken={name='different'}},
+        }
+        assert.has_error(function() extensions.load(descriptor, loader) end,
+            'tests/dwarfspec/config.lua: commands.broken definition name ' ..
+            'must match its map key')
 
         modules['consumer/tests/dwarfspec/config.lua'] = {
             commands={isGamePaused=function() end},

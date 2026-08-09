@@ -547,6 +547,20 @@ function ResourceDependencyIndex:register(owner, transaction_id, lifetime, regis
     return self:activate(plan, transaction_id, bindings)
 end
 
+---Validates and freezes exact post-effect claim registrations for later atomic use.
+---@param registrations dwarfspec.ResourceClaimRegistration[]|nil
+---@return dwarfspec.ResourceClaimRegistration[]
+function ResourceDependencyIndex:freeze_registrations(registrations)
+    registrations = Internals.array(registrations, 'claim registrations')
+    for ordinal, registration in ipairs(registrations) do
+        assert(type(registration) == 'table',
+            ('claim registration %d must be a table'):format(ordinal))
+        Internals.registration_shape(registration,
+            ('claim registration %d'):format(ordinal))
+    end
+    return Internals.freeze(registrations)
+end
+
 ---Returns an immutable active claim snapshot for a valid reference.
 ---@param reference dwarfspec.ResourceClaimReference
 ---@return table

@@ -118,7 +118,7 @@ function Internals.cleanup(value, label)
         value.kind == CommandKind.ASSERTION or
         value.kind == CommandKind.WORKFLOW
     if value.cleanup == nil then
-        assert(value.claims == nil,
+        assert(value.claims == nil or value.privileged_cleanup_registration,
             label .. ' claims require a cleanup policy')
         return
     end
@@ -221,6 +221,15 @@ function Definition.validate(value)
         label .. ' default_timeout_ms')
     assert(value.diagnostics == nil or type(value.diagnostics) == 'function',
         label .. ' diagnostics must be callable')
+    assert(value.privileged_cleanup_registration == nil or
+        value.privileged_cleanup_registration == true,
+        label .. ' privileged cleanup marker must be true when present')
+    if value.privileged_cleanup_registration then
+        assert(value.name == 'registerCleanup' and
+            value.kind == CommandKind.ACTION and value.cleanup == nil and
+            value.execution_retry_policy == RetryPolicy.ONCE,
+            label .. ' has an invalid privileged cleanup contract')
+    end
     if value.kind == CommandKind.WORKFLOW then
         Internals.workflow(value, label)
     else

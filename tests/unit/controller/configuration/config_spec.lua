@@ -214,6 +214,12 @@ describe('DwarfSpec external project configuration', function()
                 expected='tests/dwarfspec/config.lua: ' ..
                     'custom command conflicts with ds.search',
             },
+            {
+                module={commands={legacy=function() end}},
+                expected='tests/dwarfspec/config.lua: commands.legacy must ' ..
+                    'be a command definition table; bare callbacks are ' ..
+                    'unsupported',
+            },
         }
         for _, case in ipairs(cases) do
             modules[path] = case.module
@@ -225,7 +231,7 @@ describe('DwarfSpec external project configuration', function()
 
         modules[path] = {
             settings={error_format=ErrorFormat.GCC},
-            commands={consumer_command=function() return true end},
+            commands={consumer_command={name='consumer_command'}},
         }
         assert.equals(ErrorFormat.GCC,
             config.load('project', filesystem, loader)

@@ -62,6 +62,99 @@ local function absence_proof(resource_identity)
 end
 
 describe('CleanupRegistrationService', function()
+    it('registers exact post-effect claims and verifies the pending journaled owner',
+            function()
+        local index = ResourceDependencyIndex.new('run-1',
+            function() return 'complete' end)
+        local cleanup_service = service(index)
+        local lease = cleanup_service:begin_mutation('command-1')
+        local transaction = cleanup_service:register({owner=owner(),
+            command_invocation_id='command-1', label='restore unit',
+            lifetime=CleanupLifetime.OWNER, receipt={unit_id=7},
+            registrations={{claim_key='unit', resource_kind='unit',
+                resource_identity='unit-7', exclusive=true}},
+            mutation_lease=lease, restore=function() end,
+            verify=function() return true end})
+        lease:release()
+
+        assert.is_true(cleanup_service:verifyRegistration(
+            transaction:transaction_id(), owner()))
+        assert.equals(1, #transaction:claimReferences())
+        assert.equals('unit-7',
+            index:lookup(index:references_for_transaction(
+                transaction:transaction_id())[1]).resource_identity)
+    end)
+
+    it('retains fail-closed transaction evidence when post-effect claims conflict',
+            function()
+        local quarantines = {}
+        local index = ResourceDependencyIndex.new('run-1',
+            function() return 'complete' end)
+        local existing_plan = index:validate_plan(owner(), 'existing-command',
+            CleanupLifetime.OWNER, {{claim_key='existing',
+                resource_kind='unit', resource_identity='unit-7',
+                exclusive=true}})
+        index:activate(existing_plan, 'existing-transaction',
+            {{claim_key='existing'}})
+        local cleanup_service = CleanupRegistrationService.new({
+            service_run_id='run-1', resource_index=index,
+            now_ms=function() return 10 end,
+            quarantine=function(evidence)
+                quarantines[#quarantines + 1] = evidence
+            end,
+        })
+        local lease = cleanup_service:begin_mutation('command-1')
+        local succeeded, message = pcall(function()
+            cleanup_service:register({owner=owner(),
+                command_invocation_id='command-1', label='restore invalid',
+                lifetime=CleanupLifetime.OWNER, receipt={unit_id=7},
+                registrations={{claim_key='unit', resource_kind='unit',
+                    resource_identity='unit-7', exclusive=true}},
+                mutation_lease=lease, restore=function() end,
+                verify=function() return true end})
+        end)
+        lease:release()
+
+        assert.is_false(succeeded)
+        assert.is_truthy(tostring(message):find(
+            'cleanup registration failed after effect', 1, true))
+        assert.equals(1, #quarantines)
+        local journal = cleanup_service:journal()
+        assert.equals('cleanup.transaction_registered', journal[1].event_type)
+        assert.is_true(journal[1].evidence.conflicted)
+        local pending_count = 0
+        for _ in pairs(cleanup_service:pending_ids_for(owner())) do
+            pending_count = pending_count + 1
+        end
+        assert.equals(1, pending_count)
+    end)
+
+    it('forbids recursive registration while manual cleanup is executing',
+            function()
+        local index = ResourceDependencyIndex.new('run-1',
+            function() return 'complete' end)
+        local cleanup_service = service(index)
+        local recursive_rejected = false
+        local lease = cleanup_service:begin_mutation('command-1')
+        local transaction = cleanup_service:register({owner=owner(),
+            command_invocation_id='command-1', label='recursive guard',
+            lifetime=CleanupLifetime.OWNER, receipt={}, registrations={},
+            mutation_lease=lease,
+            restore=function()
+                local succeeded, message = pcall(function()
+                    cleanup_service:assertRegistrationOpen(owner())
+                end)
+                recursive_rejected = not succeeded and
+                    tostring(message):find('forbidden during cleanup execution',
+                        1, true) ~= nil
+            end,
+            verify=function() return recursive_rejected end})
+        lease:release()
+
+        assert.is_true(transaction:execute('manual cleanup'))
+        assert.is_true(recursive_rejected)
+    end)
+
     it('creates one pending transaction and all active claims before publishing registration',
             function()
         local index = ResourceDependencyIndex.new('run-1', function() return 'complete' end)

@@ -2,6 +2,30 @@
 
 local M = {}
 
+---Binds validated project definitions to one public namespace and runner.
+---@param ds table
+---@param commands table<string, table>
+---@param command_runner dwarfspec.CommandRunner
+function M.bind_project_commands(ds, commands, command_runner)
+    assert(type(ds) == 'table', 'project command binding requires a namespace')
+    assert(type(commands) == 'table',
+        'project command binding requires definitions')
+    assert(type(command_runner) == 'table' and
+        type(command_runner.invoke) == 'function' and
+        type(command_runner.registerProject) == 'function',
+        'project command binding requires the verified runner')
+    for name, command in pairs(commands) do
+        command_runner:registerProject(command.definition, command.source)
+        ---Invokes one source-attributed project definition through the runner.
+        ---@param arguments? table
+        ---@param command_options? dwarfspec.CommandOptions
+        ---@return any
+        ds[name] = function(arguments, command_options)
+            return command_runner:invoke(name, arguments or {}, command_options)
+        end
+    end
+end
+
 ---Loads an installed DwarfSpec module or its source-tree equivalent.
 ---@param package_root string
 ---@param module_name string
@@ -70,6 +94,16 @@ function M.new(package_root, project, scheduler_module, scheduler,
         run_capabilities, command_runner)
     assert(type(run_capabilities) == 'table',
         'DwarfSpec ds factory requires injected run capabilities')
+    assert(command_runner == nil or type(command_runner) == 'table' and
+        type(command_runner.invoke) == 'function' and
+        type(command_runner.registerBuiltin) == 'function' and
+        type(command_runner.registerProject) == 'function' and
+        type(command_runner.assertHandleExecution) == 'function',
+        'DwarfSpec command runner has an invalid verified interface')
+    local register_cleanup_command = load_automation_module(package_root,
+        'dwarfspec.driver.commands.register_cleanup')
+    local cleanup_handle = load_automation_module(package_root,
+        'dwarfspec.driver.cleanup.cleanup_transaction_handle')
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
     local recurring_operation_module = load_automation_module(package_root,
         'dwarfspec.driver.simulation.recurring_operation')
@@ -798,6 +832,42 @@ local command_observer_module = load_automation_module(package_root,
         ESubjectSource=ESubjectSource,
         EEvent=EEvent,
     }
+
+    if command_runner ~= nil then
+        local cleanup_service = assert(context.run.cleanup_registration_service,
+            'DwarfSpec requires the run cleanup registration service')
+        local resource_index = assert(context.run.resource_dependency_index,
+            'DwarfSpec requires the run resource dependency index')
+        command_runner:registerBuiltin(register_cleanup_command.new({
+            freeze_registrations=function(registrations)
+                return resource_index:freeze_registrations(registrations)
+            end,
+            assert_registration_open=function(owner)
+                return cleanup_service:assertRegistrationOpen(owner)
+            end,
+            verify_registration=function(transaction_id, owner)
+                return cleanup_service:verifyRegistration(transaction_id, owner)
+            end,
+            wrap_handle=function(transaction, owner)
+                return cleanup_handle.new(transaction, owner, function()
+                    return context.run.cleanup_owner_lifecycle:public_owner()
+                end, function(expected)
+                    command_runner:assertHandleExecution(expected)
+                end)
+            end,
+        }))
+    end
+
+    ---Registers one receipt-backed cleanup transaction for the active owner.
+    ---@param registration dwarfspec.CleanupRegistration
+    ---@param command_options? dwarfspec.CommandOptions
+    ---@return dwarfspec.CleanupTransaction
+    function ds.registerCleanup(registration, command_options)
+        assert(command_runner ~= nil,
+            'verified command execution is unavailable')
+        return command_runner:invoke('registerCleanup',
+            {registration=registration}, command_options)
+    end
 
     ---Returns the exact service-owned run that currently owns the executor.
     ---@return table
@@ -2241,24 +2311,10 @@ local command_observer_module = load_automation_module(package_root,
     })
     for name, command in pairs(pointer_commands) do ds[name] = command end
 
-    for name, command in pairs(extensions.commands) do
-        local callback = command.callback
-        ds[name] = function(...)
-            local observation = command_observer.started(name, {
-                mount_id=context.mount_context.current and
-                    context.mount_context.current.id or 0,
-                control_path='<custom>',
-            })
-            local arguments = table.pack(...)
-            local results = table.pack(xpcall(function()
-                return callback(ds,
-                    table.unpack(arguments, 1, arguments.n))
-            end, debug.traceback))
-            command_observer.finished(observation, results[1],
-                results[1] and nil or results[2])
-            if not results[1] then error(results[2], 2) end
-            return table.unpack(results, 2, results.n)
-        end
+    if next(extensions.commands) ~= nil then
+        assert(command_runner ~= nil,
+            'project command execution requires the verified command runner')
+        M.bind_project_commands(ds, extensions.commands, command_runner)
     end
 
     context.mount_context.subject_commands = {

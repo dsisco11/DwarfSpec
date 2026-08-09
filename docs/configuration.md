@@ -160,22 +160,61 @@ three values documented above. Other modules cannot define settings.
 Any module in this directory may declare custom commands:
 
 ```lua
+local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
+local IntrinsicKind = require(
+    'dwarfspec.protocol.enums.intrinsic_verification_kinds')
+local RetryPolicy = require(
+    'dwarfspec.protocol.enums.execution_retry_policies')
+local Outcomes = require('dwarfspec.driver.command.outcomes')
+
 return {
     commands={
-        selected_text=function(_, subject)
-            return subject:text()
-        end,
-        tooltip_state=function(ds, service)
-            return service:get_diagnostics()
-        end,
+        tooltip_state={
+            name='tooltip_state', kind=CommandKind.QUERY,
+            normalize=function(arguments) return arguments end,
+            preflight=function() return Outcomes.ready(true) end,
+            execute=function(_, request)
+                return Outcomes.ready(request.service:get_diagnostics())
+            end,
+            execution_retry_policy=RetryPolicy.ONCE,
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION,
+        },
     },
 }
 ```
 
-Commands become `ds.selected_text(...)` and `ds.tooltip_state(...)`. The first
-callback argument is always the isolated run-scoped `ds` object. Names must be
-Lua identifiers, duplicate names are rejected, and commands cannot replace
-built-in `ds` methods.
+The command becomes `ds.tooltip_state({service=service})`. Every map value must
+be a complete command definition whose `name` matches its map key. Bare callback
+functions are rejected during configuration loading with the source path and
+command name. Names must be Lua identifiers, duplicate names are rejected, and
+commands cannot replace built-in `ds` methods. Definitions are copied and
+frozen before execution and receive the same bounded contexts and lifecycle as
+built-in verified commands; there is no legacy callback adapter.
+
+## Receipt-backed cleanup registration
+
+Use `ds.registerCleanup(registration, command_options)` immediately after a
+bounded caller mutation when cleanup can be described by stable plain data.
+The mandatory `receipt` is bounded plain data: a boolean, finite number,
+bounded string, or recursively plain table. It is the supported correctness
+path for native IDs, resource identity, and scalar baseline values. `restore`
+and required `verify` receive that immutable receipt; although Lua closures
+cannot be structurally prohibited, captured mutable state is not a supported
+cleanup identity path.
+
+Optional `resource_claims` describe exact resources that already exist. The
+registration command makes no product mutation, creates the transaction and all
+claims atomically, and returns a handle with `execute()`, `isPending()`, and
+`claimReferences()`. Pending handles are also expended automatically at their
+test or suite owner boundary. A handle may be executed only while its owning
+lifecycle remains active and only from ordinary suite/test body or hook code.
+Manual execution is rejected from command callbacks and cleanup callbacks.
+
+Direct mutation followed by `registerCleanup()` is not failure-atomic: Lua or
+native code can still fail between those operations. When that window matters,
+define a verified project command whose execution returns a structured effect
+receipt so the runner can register cleanup before any later fallible work or
+yield.
 
 Modules execute in isolated environments. They can read normal Lua and DFHack
 globals, but assigning a global does not modify the process-wide `_G` table.

@@ -53,7 +53,12 @@ function M.initialize(run, package_root, project_root, options, dependencies)
         'dwarfspec.driver.command.registry')
     local command_runner = dependencies.load_module(package_root,
         'dwarfspec.driver.command.runner')
-    run.resource_dependency_index = resource_index.new(run.run_id)
+    local active_cleanup_service
+    run.resource_dependency_index = resource_index.new(run.run_id,
+        function(transaction_id, proof)
+            return active_cleanup_service:authorizeRelease(
+                transaction_id, proof)
+        end)
     run.cleanup_registration_service = cleanup_service.new({
         service_run_id=run.run_id, resource_index=run.resource_dependency_index,
         now_ms=dependencies.now_ms,
@@ -77,6 +82,7 @@ function M.initialize(run, package_root, project_root, options, dependencies)
             end
             return journal
         end})
+    active_cleanup_service = run.cleanup_registration_service
     run.cleanup_owner_lifecycle = owner_lifecycle.new(run.run_id,
         run.cleanup_registration_service, run.event_journal)
     assert(type(run.lease_check_frames) == 'number' and run.lease_check_frames >= 1 and run.lease_check_frames % 1 == 0, 'lease check interval must be a positive integer')

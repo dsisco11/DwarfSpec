@@ -1311,50 +1311,50 @@ Completion criteria:
 Outcome: downstream users and project command modules use the same verified
 runner and cleanup service without a legacy adapter or recursive cleanup.
 
-- [ ] Implement `ds.registerCleanup(registration, command_options)` as a
+- [x] Implement `ds.registerCleanup(registration, command_options)` as a
       privileged public `ACTION` definition.
-  - [ ] Preflight the most-specific active suite/test owner and reject closed or
+  - [x] Preflight the most-specific active suite/test owner and reject closed or
         absent registration scope.
-  - [ ] Validate and freeze label, receipt, restore, required verification,
+  - [x] Validate and freeze label, receipt, restore, required verification,
         optional cleanup timeout, and exact post-effect resource registrations.
-  - [ ] Use empty pre-execution claim projection because the caller's effect
+  - [x] Use empty pre-execution claim projection because the caller's effect
         already exists.
-  - [ ] Execute `ONCE` through `CleanupRegistrationService`.
-  - [ ] Verify the returned transaction is pending under the expected owner,
+  - [x] Execute `ONCE` through `CleanupRegistrationService`.
+  - [x] Verify the returned transaction is pending under the expected owner,
         owns every activated claim, and has a registration event.
-  - [ ] Return the caller-visible transaction handle.
-  - [ ] Use transaction identity as the command verification receipt and omit
+  - [x] Return the caller-visible transaction handle.
+  - [x] Use transaction identity as the command verification receipt and omit
         `effect_receipt` so registration never recursively creates cleanup.
-  - [ ] Retain a fail-closed transaction and conflict evidence if semantic
+  - [x] Retain a fail-closed transaction and conflict evidence if semantic
         registration validation fails after receipt acceptance, even when no
         handle reaches the caller.
-- [ ] Enforce the stage guard on transaction handles captured by user code.
-- [ ] Document receipts as the supported correctness path for cleanup identity
+- [x] Enforce the stage guard on transaction handles captured by user code.
+- [x] Document receipts as the supported correctness path for cleanup identity
       and scalar baseline data; acknowledge that closure use cannot be
       structurally prohibited without promoting it.
-- [ ] Replace project callback modules with immutable command definition tables.
-- [ ] Fail configuration loading early with source path and command name for
+- [x] Replace project callback modules with immutable command definition tables.
+- [x] Fail configuration loading early with source path and command name for
       every bare callback or invalid definition.
-- [ ] Do not implement a legacy callback adapter.
-- [ ] Convert all repository-fixture and known consumer project-command modules
+- [x] Do not implement a legacy callback adapter.
+- [x] Convert all repository-fixture and known consumer project-command modules
       in the same coordinated change as loader enforcement; built-in command
       definitions remain in the dependency-ordered representative and family
       conversion phases below.
-- [ ] Document that direct caller mutation followed by `registerCleanup()` is
+- [x] Document that direct caller mutation followed by `registerCleanup()` is
       not failure-atomic; require a project-defined verified command with a
       structured partial-effect receipt when that mutation-registration window
       matters.
-- [ ] Add focused tests for manual registration, exact claims, returned
+- [x] Add focused tests for manual registration, exact claims, returned
       references, early expenditure, teardown expenditure, already-expended
       behavior, owner attribution, cleanup failure propagation, recursive
       registration prevention, and invalid/bare project commands.
-- [ ] Perform a follow-up public-cleanup/project-command review.
+- [x] Perform a follow-up public-cleanup/project-command review.
 
 Completion criteria:
 
-- [ ] Runner-managed effects and downstream post-effect registrations create
+- [x] Runner-managed effects and downstream post-effect registrations create
       the same transaction type through the same service.
-- [ ] The runtime contains only definition-based project command execution.
+- [x] The runtime contains only definition-based project command execution.
 
 ## Phase 14: Add command events and reusable conformance suites
 

@@ -23,6 +23,7 @@ local Workflow = require('dwarfspec.driver.command.workflow')
 ---@field private _dependencies table
 ---@field private _default_timeout_ms integer
 ---@field private _next_invocation_ordinal integer
+---@field private _active_invocations integer
 local Runner = {}
 Runner.__index = Runner
 
@@ -133,8 +134,27 @@ function Internals.context(runner, identity, stage, read_only, privileged,
     if not privileged then return Context.new_execution(options) end
     return Context.new_privileged_execution(options,
         Context.CleanupRegistrationCapability.new(function(registration)
+            registration.owner = {owner_scope=identity.owner_scope,
+                service_run_id=identity.service_run_id,
+                suite_execution_id=identity.suite_execution_id,
+                test_attempt_id=identity.test_attempt_id}
             registration.mutation_lease = mutation_lease
             registration.command_invocation_id = identity.invocation_id
+            registration.lifetime = CleanupLifetime.OWNER
+            registration.cleanup_timeout_ms =
+                registration.cleanup_timeout_ms or
+                runner._dependencies.cleanup_timeout_ms
+            registration.wait = runner._dependencies.wait
+            registration.new_cancellation =
+                runner._dependencies.new_cancellation
+            registration.invoke_readonly = function(transaction_id,
+                    cleanup_owner, deadline, cancellation, kind, name, ...)
+                return runner:_invoke_cleanup_readonly(transaction_id,
+                    cleanup_owner, deadline, cancellation, kind, name, ...)
+            end
+            registration.record_diagnostic =
+                runner._dependencies.record_diagnostic
+            registration.assert_executable = function() end
             return runner._cleanup_service:register(registration)
         end, options.guard))
 end
@@ -493,6 +513,7 @@ function Runner.new(options)
         _resource_index=options.resource_index,
         _cleanup_service=options.cleanup_service, _dependencies=dependencies,
         _default_timeout_ms=options.default_timeout_ms,
+        _active_invocations=0,
         _next_invocation_ordinal=0,
         _refresh_retained_subjects=options.refresh_retained_subjects or
             function() end}, Runner)
@@ -504,6 +525,29 @@ function Runner:setRefreshRetainedSubjects(callback)
     assert(type(callback) == 'function',
         'retained-subject refresh callback must be callable')
     self._refresh_retained_subjects = callback
+end
+
+---Registers one immutable built-in definition in this run.
+---@param definition table
+---@return dwarfspec.CommandDefinition
+function Runner:registerBuiltin(definition)
+    return self._registry:register_builtin(definition)
+end
+
+---Registers one source-attributed immutable project definition in this run.
+---@param definition table
+---@param source_path string
+---@return dwarfspec.CommandDefinition
+function Runner:registerProject(definition, source_path)
+    return self._registry:register_project(definition, source_path)
+end
+
+---Guards manual cleanup-handle mutation against command and cleanup stages.
+---@param owner dwarfspec.ExecutionOwnerIdentity
+function Runner:assertHandleExecution(owner)
+    assert(self._active_invocations == 0,
+        'cleanup handle execution is forbidden during command execution')
+    self._cleanup_service:assertRegistrationOpen(owner)
 end
 
 ---Owns mutable state and stage transitions for one command invocation.
@@ -539,8 +583,13 @@ function Invocation:normalize()
     local normalized, value = Internals.call(function()
         local request = self._inheritance.normalized_request or
             self._definition.normalize(self._arguments)
-        request = Internals.diagnostics:sanitize(request,
-            'normalized command request')
+        if self._definition.privileged_cleanup_registration then
+            assert(type(request) == 'table',
+                'privileged cleanup request must be a validated table')
+        else
+            request = Internals.diagnostics:sanitize(request,
+                'normalized command request')
+        end
         local operation_key
         if self._definition.execution_retry_policy ==
                 RetryPolicy.EXPLICIT_RETRY_SAFE then
@@ -650,9 +699,16 @@ end
 ---Publishes the invocation start envelope before command execution begins.
 function Invocation:publish_start()
     local published, failure = Internals.call(function()
+        local safe_arguments = self._request
+        if self._definition.privileged_cleanup_registration then
+            safe_arguments = {label=self._request.label,
+                receipt=self._request.receipt,
+                resource_claims=self._request.resource_claims,
+                cleanup_timeout_ms=self._request.cleanup_timeout_ms}
+        end
         Internals.publish(self._runner, 'command.started', {name=self._name,
             subject_identity=self._identity.target_identity or '<none>',
-            safe_arguments=self._request, operation_key=self._operation_key,
+            safe_arguments=safe_arguments, operation_key=self._operation_key,
             command=self._identity})
     end)
     if not published then
@@ -748,7 +804,8 @@ function Invocation:execute_attempt(ready, context, plan)
         self._mutation_lease = self._runner._cleanup_service:begin_mutation(
             self._identity.invocation_id)
         context = Internals.context(self._runner, self._identity,
-            function() return self:current_stage() end, false, false,
+            function() return self:current_stage() end, false,
+            definition.privileged_cleanup_registration == true,
             self._mutation_lease, self._context_dependencies)
         local executed, value = Internals.call(definition.execute, context,
             self._request, ready)
@@ -1103,13 +1160,19 @@ function Runner:invoke(name, arguments, options)
         'command name must be a nonempty string')
     assert(type(arguments) == 'table', 'command arguments must be a table')
     options = Internals.options(options)
-    local invocation = Invocation.new(self, name, arguments, options)
-    invocation:normalize()
-    invocation:publish_start()
-    local completed, result = xpcall(function()
-        return invocation:run()
-    end, debug.traceback)
-    return invocation:finalize(completed, result)
+    self._active_invocations = self._active_invocations + 1
+    local invoked, packed = xpcall(function()
+        local invocation = Invocation.new(self, name, arguments, options)
+        invocation:normalize()
+        invocation:publish_start()
+        local completed, result = xpcall(function()
+            return invocation:run()
+        end, debug.traceback)
+        return table.pack(invocation:finalize(completed, result))
+    end, function(failure) return failure end)
+    self._active_invocations = self._active_invocations - 1
+    if not invoked then error(packed, 0) end
+    return table.unpack(packed, 1, packed.n)
 end
 
 return Runner

@@ -1,21 +1,25 @@
 -- Production consumer configuration, command, and diagnostic extension loader.
 
 local config_schema = require('dwarfspec.protocol.configuration.schema')
+local Definition = require('dwarfspec.driver.command.definition')
 local M = {}
 local settings_validator = require('dwarfspec.protocol.configuration.settings')
 
----Registers one validated command map without permitting duplicates.
+---Registers one validated definition map without permitting duplicates.
 ---@param target table
 ---@param callbacks any
 ---@param source string
 local function register_commands(target, callbacks, source)
     callbacks = config_schema.validate_commands(callbacks, source)
-    for name, callback in pairs(callbacks) do
+    for name, definition in pairs(callbacks) do
         local previous = target[name]
         assert(not previous, ('%s: duplicate commands %q; first registered by %s')
             :format(source, name,
                 previous and previous.source or '<unknown>'))
-        target[name] = {callback=callback, source=source}
+        local accepted, value = pcall(Definition.validate, definition)
+        assert(accepted, source .. ': commands.' .. name .. ': ' ..
+            tostring(value))
+        target[name] = {definition=value, source=source}
     end
 end
 

@@ -75,6 +75,9 @@ function Registry:register_project(definition, source_path)
         self._built_in_names[name])), label .. ': reserved built-in name')
     assert(not (name and self._definitions[name]),
         label .. ': duplicate command name')
+    assert(not (type(definition) == 'table' and
+        definition.privileged_cleanup_registration),
+        label .. ': privileged cleanup registration is reserved')
     local succeeded, accepted = pcall(Definition.validate, definition)
     assert(succeeded, label .. ': ' .. tostring(accepted))
     self._definitions[accepted.name] = accepted

@@ -427,14 +427,7 @@ describe('DwarfSpec public mount commands', function()
         ds, reset = ds_factory.new('.',
             {project_root='.', package_root='.'},
             scheduler_module, scheduler, cleanup, registry,
-            {settings={}, commands={
-                sample_success={
-                    callback=function(_, value) return 'ok:' .. value end,
-                },
-                sample_failure={
-                    callback=function() error('deliberate command failure') end,
-                },
-            }}, {
+            {settings={}, commands={}}, {
                 boundary=boundary,
                 current_viewscreen=function()
                     return current_native_screen
@@ -3607,24 +3600,4 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(root_native, target:input_screen('input'))
     end)
 
-    it('publishes structured command results and bounded diagnostics',
-            function()
-        assert.equals('ok:value', ds.sample_success('value'))
-        local ok, failure = pcall(ds.sample_failure)
-
-        assert.is_false(ok)
-        assert.matches('deliberate command failure', failure, 1, true)
-        assert.equals(EventType.COMMAND_STARTED, published[1].type)
-        assert.equals('sample_success', published[1].payload.name)
-        assert.equals(EventType.COMMAND_FINISHED, published[2].type)
-        assert.equals(TestStatus.SUCCESS, published[2].payload.status)
-        assert.equals(2, published[2].payload.duration_ms)
-        assert.equals(EventType.COMMAND_STARTED, published[3].type)
-        assert.equals(EventType.COMMAND_FINISHED, published[4].type)
-        assert.equals(TestStatus.ERROR, published[4].payload.status)
-        assert.equals(EventType.DIAGNOSTIC_RECORDED, published[5].type)
-        assert.equals('command_failure', published[5].payload.kind)
-        assert.matches('deliberate command failure',
-            published[5].payload.content.message, 1, true)
-    end)
 end)

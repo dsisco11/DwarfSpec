@@ -224,13 +224,15 @@
 ---@field transfer fun(self: dwarfspec.ResourceDependencyIndex, reference: dwarfspec.ResourceClaimReference, owner: dwarfspec.ExecutionOwnerIdentity, transaction_id: string): dwarfspec.ResourceClaimReference
 ---@field release_verified fun(self: dwarfspec.ResourceDependencyIndex, transaction_id: string, proof: any)
 
+---@alias dwarfspec.CleanupReceipt boolean|number|string|table
+
 ---@class dwarfspec.CleanupRegistration
 ---@field label string
----@field receipt table
----@field restore fun(context: dwarfspec.CleanupExecutionContext, receipt: table)
----@field verify fun(context: dwarfspec.CleanupExecutionContext, receipt: table): boolean|dwarfspec.GateResult|nil
+---@field receipt dwarfspec.CleanupReceipt
+---@field restore fun(context: dwarfspec.CleanupExecutionContext, receipt: dwarfspec.CleanupReceipt)
+---@field verify fun(context: dwarfspec.CleanupExecutionContext, receipt: dwarfspec.CleanupReceipt): boolean|dwarfspec.GateResult|nil
 ---@field cleanup_timeout_ms? integer
----@field resources? dwarfspec.ResourceClaimRegistration[]
+---@field resource_claims? dwarfspec.ResourceClaimRegistration[]
 
 ---@class dwarfspec.CleanupTransaction
 ---@field execute fun(self: dwarfspec.CleanupTransaction, reason?: string): boolean
@@ -241,6 +243,9 @@
 ---@class dwarfspec.CleanupRegistrationService
 ---@field new fun(options: table): dwarfspec.CleanupRegistrationService
 ---@field register fun(self: dwarfspec.CleanupRegistrationService, registration: table): dwarfspec.CleanupTransaction
+---@field assertRegistrationOpen fun(self: dwarfspec.CleanupRegistrationService, owner: dwarfspec.ExecutionOwnerIdentity)
+---@field verifyRegistration fun(self: dwarfspec.CleanupRegistrationService, transaction_id: string, owner: dwarfspec.ExecutionOwnerIdentity): boolean
+---@field authorizeRelease fun(self: dwarfspec.CleanupRegistrationService, transaction_id: string, proof: table): string
 ---@field commandCheckpoint fun(self: dwarfspec.CleanupRegistrationService): integer
 ---@field pendingCommandTransactionsSince fun(self: dwarfspec.CleanupRegistrationService, command_invocation_id: string, checkpoint: integer): dwarfspec.CleanupTransaction[]
 ---@field executeCommandTransactionsSince fun(self: dwarfspec.CleanupRegistrationService, command_invocation_id: string, checkpoint: integer, reason: string): boolean, table[]

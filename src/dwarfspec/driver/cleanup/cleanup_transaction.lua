@@ -126,7 +126,10 @@ function CleanupTransaction.new(options)
     Internals.assert_plain_receipt(options.receipt, 'cleanup receipt')
     local receipt = Internals.diagnostics:sanitize(options.receipt,
         'cleanup receipt')
-    assert(type(receipt) == 'table', 'cleanup receipt must be bounded plain data')
+    local receipt_type = type(receipt)
+    assert(receipt_type == 'boolean' or receipt_type == 'number' or
+        receipt_type == 'string' or receipt_type == 'table',
+        'cleanup receipt must be bounded plain data')
     local dependencies = {
         now_ms=options.now_ms,
         timeout_ms=options.cleanup_timeout_ms or 10000,

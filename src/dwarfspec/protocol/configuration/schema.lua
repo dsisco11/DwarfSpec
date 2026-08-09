@@ -30,6 +30,7 @@ local RESERVED_COMMANDS = {
     mouseWheel=true,
     move_pointer=true,
     protocol_version=true,
+    registerCleanup=true,
     redraw=true,
     root=true,
     search=true,
@@ -46,7 +47,7 @@ local RESERVED_COMMANDS = {
     wait_ticks=true,
 }
 
----Validates one project command map without executing callbacks.
+---Validates one project command-definition map without importing its driver.
 ---@param callbacks any
 ---@param source string
 ---@return table
@@ -54,13 +55,17 @@ function M.validate_commands(callbacks, source)
     if callbacks == nil then return {} end
     assert(type(callbacks) == 'table',
         source .. ': commands must be a table')
-    for name, callback in pairs(callbacks) do
+    for name, definition in pairs(callbacks) do
         assert(type(name) == 'string' and name:match('^[%a_][%w_]*$'),
             source .. ': invalid command name: ' .. tostring(name))
-        assert(type(callback) == 'function',
-            source .. ': commands.' .. name .. ' must be a function')
         assert(not RESERVED_COMMANDS[name],
             source .. ': custom command conflicts with ds.' .. name)
+        assert(type(definition) == 'table',
+            source .. ': commands.' .. name ..
+            ' must be a command definition table; bare callbacks are unsupported')
+        assert(definition.name == name,
+            source .. ': commands.' .. name ..
+            ' definition name must match its map key')
     end
     return callbacks
 end
