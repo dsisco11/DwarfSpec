@@ -37,11 +37,26 @@ local function assert_stage_failure(callback, stage, evidence_fragment)
     return message
 end
 
+---Returns only the stable start and terminal command boundaries.
+---@param events table[]
+---@return table[]
+local function boundary_events(events)
+    local result = {}
+    for _, event in ipairs(events) do
+        if event.event_type == 'command.started' or
+                event.event_type == 'command.finished' then
+            result[#result + 1] = event
+        end
+    end
+    return result
+end
+
 ---Asserts one complete start/finish event pair and its terminal outcome.
 ---@param events table[]
 ---@param status string
 ---@param stage? string
 local function assert_terminal_events(events, status, stage)
+    events = boundary_events(events)
     assert.equals(2, #events)
     assert.same({'command.started', 'command.finished'}, {
         events[1].event_type, events[2].event_type})
@@ -59,7 +74,9 @@ local function dependencies()
         cancellation=function() return false, nil end,
         owner=function()
             return {owner_scope='test_attempt', service_run_id='run',
-                suite_execution_id='suite', test_attempt_id='attempt'}
+                suite_execution_id='suite', test_attempt_id='attempt',
+                repeat_index=1, spec_file_identity='synthetic_spec.lua',
+                test_identity='synthetic test'}
         end,
         cleanup_checkpoint=function()
             state.checkpoints = state.checkpoints + 1
@@ -801,7 +818,7 @@ describe('common command runner', function()
         end)
         assert.is_false(succeeded)
         assert.is_truthy(message:find('outcome constructor', 1, true))
-        assert.equals('preflight', events[2].payload.stage)
+        assert.equals('preflight', events[#events].payload.stage)
     end)
 
     it('requires an immutable execution receipt for receipt verification',
@@ -823,7 +840,7 @@ describe('common command runner', function()
         end)
         assert.is_false(succeeded)
         assert.is_truthy(message:find('immutable receipt', 1, true))
-        assert.equals('execution', events[2].payload.stage)
+        assert.equals('execution', events[#events].payload.stage)
     end)
 
     it('runs command cleanup from finally after unexpected intrinsic failure',
@@ -1415,11 +1432,12 @@ describe('common command runner', function()
         assert.equals(2, #diagnostics)
         assert.equals('command.retry', diagnostics[1].kind)
         assert.is_true(diagnostics[1].evidence.attempt_receipt_present)
-        assert.equals(3, events[2].payload.attempt_count)
-        assert.equals('key:stable', events[2].payload.operation_key)
-        assert.equals(2, #events[2].payload.retry_attempts)
+        local terminal = boundary_events(events)[2]
+        assert.equals(3, terminal.payload.attempt_count)
+        assert.equals('key:stable', terminal.payload.operation_key)
+        assert.equals(2, #terminal.payload.retry_attempts)
         assert.has_error(function()
-            events[2].payload.retry_attempts[1].attempt = 99
+            terminal.payload.retry_attempts[1].attempt = 99
         end)
     end)
 
@@ -1644,7 +1662,7 @@ describe('common command runner', function()
         local result = runner(registry, injected):invoke('composite',
             {unit_id='unit-7'})
         assert.is_true(result.changed)
-        assert.equals(8, #events)
+        assert.equals(8, #boundary_events(events))
         assert.equals(identities.outer.invocation_id,
             identities.observe.parent_invocation_id)
         assert.equals(identities.outer.invocation_id,
@@ -1763,7 +1781,7 @@ describe('common command runner', function()
                 leaf.root_invocation_id)
             assert.is_truthy(leaf.parent_invocation_id)
         end
-        assert.equals(14, #events)
+        assert.equals(14, #boundary_events(events))
         for _, event in ipairs(events) do
             assert.equals(parent_identity.root_invocation_id,
                 event.payload.command.root_invocation_id)
@@ -1860,7 +1878,10 @@ describe('common command runner', function()
         local cleanup_child_events = 0
         for _, event in ipairs(events) do
             if event.payload.command.parent_cleanup_transaction_id ~= nil then
-                cleanup_child_events = cleanup_child_events + 1
+                if event.event_type == 'command.started' or
+                        event.event_type == 'command.finished' then
+                    cleanup_child_events = cleanup_child_events + 1
+                end
                 assert.equals(cleanup_child.invocation_id,
                     event.payload.command.root_invocation_id)
                 assert.equals('service_run',

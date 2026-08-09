@@ -96,6 +96,10 @@ function Internals.identity(runner, owner, ancestry)
         owner_scope=owner.owner_scope, service_run_id=owner.service_run_id,
         suite_execution_id=owner.suite_execution_id,
         test_attempt_id=owner.test_attempt_id}
+    for _, field in ipairs({'repeat_index', 'spec_file_identity',
+            'test_identity'}) do
+        if owner[field] ~= nil then identity[field] = owner[field] end
+    end
     if ancestry.parent_invocation_id ~= nil then
         identity.parent_invocation_id = ancestry.parent_invocation_id
     elseif ancestry.parent_cleanup_transaction_id ~= nil then
@@ -159,20 +163,31 @@ function Internals.context(runner, identity, stage, read_only, privileged,
         end, options.guard))
 end
 
+---@class dwarfspec.driver.command.WaitFailure
+---@field status 'timed_out'|'failed'
+---@field message string
+
 ---Waits once while preserving the single deadline and cancellation boundary.
 ---@param runner dwarfspec.CommandRunner
 ---@param deadline dwarfspec.CommandDeadline
 ---@param cancellation? fun(): boolean, string|nil
----@return boolean, string|nil
+---@return boolean, dwarfspec.driver.command.WaitFailure|nil
 function Internals.wait(runner, deadline, cancellation)
     cancellation = cancellation or runner._dependencies.cancellation
     local cancelled, reason = cancellation()
-    if cancelled then return false, 'cancelled: ' .. tostring(reason) end
+    if cancelled then
+        return false, {status='failed',
+            message='cancelled: ' .. tostring(reason)}
+    end
     local remaining = deadline:remaining_ms()
-    if remaining == 0 then return false, 'command deadline expired' end
+    if remaining == 0 then
+        return false, {status='timed_out',
+            message='command deadline expired'}
+    end
     runner._dependencies.wait(remaining)
     if deadline:remaining_ms() >= remaining then
-        return false, 'command scheduler did not advance time'
+        return false, {status='failed',
+            message='command scheduler did not advance time'}
     end
     return true
 end
@@ -185,33 +200,46 @@ end
 ---@param allow_effect_absent boolean|nil
 ---@param retry_errors boolean|nil
 ---@param cancellation? fun(): boolean, string|nil
----@return boolean, table|string, table|nil
+---@return boolean, table|string, table|nil, string
 function Internals.poll(runner, deadline, stage, invoke, allow_effect_absent,
         retry_errors, cancellation)
     cancellation = cancellation or runner._dependencies.cancellation
     local latest
     while deadline:remaining_ms() > 0 do
         local cancelled, reason = cancellation()
-        if cancelled then return false, 'cancelled: ' .. tostring(reason), latest end
+        if cancelled then
+            return false, 'cancelled: ' .. tostring(reason), latest, 'failed'
+        end
         local ok, result = Internals.call(invoke)
         if not ok then
             local message = Internals.error_text(result)
-            if not retry_errors then return false, message, latest end
+            if not retry_errors then return false, message, latest, 'failed' end
             latest = {message=message}
             local waited, failure = Internals.wait(runner, deadline, cancellation)
-            if not waited then return false, failure, latest end
+            if not waited then
+                return false, failure.message, latest, failure.status
+            end
         else
-        local gate = Internals.gate(result, stage() .. ' callback',
-            allow_effect_absent)
-        if gate.kind == 'ready' then return true, gate, latest end
-        if gate.kind == 'fatal' then return false, gate.message, gate.evidence end
-        if Outcomes.is_effect_absent(gate) then return true, gate, latest end
+        local valid_gate, gate = Internals.call(Internals.gate, result,
+            stage() .. ' callback', allow_effect_absent)
+        if not valid_gate then
+            return false, Internals.error_text(gate), latest, 'failed'
+        end
+        if gate.kind == 'ready' then return true, gate, latest, 'passed' end
+        if gate.kind == 'fatal' then
+            return false, gate.message, gate.evidence, 'fatal'
+        end
+        if Outcomes.is_effect_absent(gate) then
+            return true, gate, latest, 'passed'
+        end
         latest = {message=gate.message, evidence=gate.evidence}
         local waited, failure = Internals.wait(runner, deadline, cancellation)
-        if not waited then return false, failure, latest end
+        if not waited then
+            return false, failure.message, latest, failure.status
+        end
         end
     end
-    return false, 'command deadline expired', latest
+    return false, 'command deadline expired', latest, 'timed_out'
 end
 
 ---Selects the newest bounded gate evidence without erasing earlier evidence.
@@ -412,20 +440,22 @@ end
 ---@param transaction any
 ---@param failure string|nil
 ---@param evidence any
----@return string|nil
+---@return string|nil, boolean
 function Internals.finish_command_cleanup(definition, transaction, failure,
         evidence)
+    local attempted = false
     local succeeded, cleanup_failure = Internals.call(function()
         if transaction == nil or definition.cleanup == nil or
                 definition.cleanup.lifetime ~= CleanupLifetime.COMMAND or
                 not transaction:isPending() then
             return
         end
+        attempted = true
         transaction:execute('command lifecycle finalization')
     end)
-    if succeeded then return failure end
+    if succeeded then return failure, attempted end
     return Internals.append_failure(failure, 'command_cleanup', cleanup_failure,
-        evidence)
+        evidence), attempted
 end
 
 ---Publishes optional bounded lifecycle evidence through the host event seam.
@@ -437,6 +467,13 @@ function Internals.publish(runner, event_type, payload)
     if publish == nil then return end
     publish(event_type, Internals.diagnostics:sanitize(payload,
         'command lifecycle event'))
+end
+
+---Publishes optional stage evidence through the lifecycle event seam.
+---@param runner dwarfspec.CommandRunner
+---@param payload table
+function Internals.publish_stage(runner, payload)
+    Internals.publish(runner, 'command.stage', payload)
 end
 
 ---Validates the trailing invocation options without reserving domain fields.
@@ -569,7 +606,8 @@ function Invocation.new(runner, name, arguments, options, inheritance)
             assert(runner._registry:get(name), 'unknown command ' .. name),
         _inheritance=inheritance, _stage='normalization',
         _latest_evidence=nil, _transaction=nil, _mutation_lease=nil,
-        _attempt=1, _retry_attempts={}, _attempt_receipts={}}, Invocation)
+        _attempt=1, _retry_attempts={}, _attempt_receipts={},
+        _pending_observations={}, _cleanup_evidence={}}, Invocation)
 end
 
 ---Returns the current lifecycle stage for command contexts and diagnostics.
@@ -717,6 +755,57 @@ function Invocation:publish_start()
     end
 end
 
+---Returns elapsed invocation time as a nonnegative integer.
+---@return integer
+function Invocation:elapsed_ms()
+    return math.max(0, math.floor(
+        self._runner._dependencies.now_ms() - self._started_at_ms))
+end
+
+---Publishes one bounded stage observation with complete invocation ancestry.
+---@param stage string
+---@param status string
+---@param details? table
+function Invocation:publish_stage(stage, status, details)
+    details = details or {}
+    local payload = {name=self._name, stage=stage, status=status,
+        duration_ms=self:elapsed_ms(), configured_timeout_ms=self._timeout_ms,
+        attempt=self._attempt, command=self._identity,
+        operation_key=self._operation_key,
+        subject_identity=self._identity.target_identity}
+    for key, value in pairs(details) do payload[key] = value end
+    Internals.publish_stage(self._runner, payload)
+end
+
+---Publishes at most one summarized pending observation for one stage.
+---@param stage string
+---@param evidence any
+function Invocation:publish_pending(stage, evidence)
+    if evidence == nil or self._pending_observations[stage] then return end
+    self._pending_observations[stage] = true
+    self:publish_stage(stage, 'pending', {last_observation=evidence})
+end
+
+---Classifies and publishes a terminal gate observation.
+---@param stage string
+---@param accepted boolean
+---@param result any
+---@param evidence any
+---@param outcome_status? string
+function Invocation:publish_gate(stage, accepted, result, evidence,
+        outcome_status)
+    self:publish_pending(stage, evidence)
+    if accepted then
+        self:publish_stage(stage, 'passed', {
+            last_observation=type(result) == 'table' and result.evidence or
+                evidence})
+        return
+    end
+    local status = outcome_status or 'failed'
+    self:publish_stage(stage, status, {last_observation=evidence,
+        failure=Internals.error_text(result)})
+end
+
 ---Runs initial and volatile preflight validation for the current attempt.
 ---@return any, table
 function Invocation:run_preflight()
@@ -727,13 +816,16 @@ function Invocation:run_preflight()
         self._context_dependencies)
     local ready
     for _ = 1, 2 do
-        local accepted, result, evidence = Internals.poll(self._runner,
+        local accepted, result, evidence, observation_status = Internals.poll(
+            self._runner,
             self._deadline, function() return self:current_stage() end,
             function()
                 return self._definition.preflight(context, self._request)
             end, nil, nil, self._cancellation)
         self._latest_evidence = Internals.latest_gate_evidence(result, evidence,
             self._latest_evidence)
+        self:publish_gate('preflight', accepted, result, evidence,
+            observation_status)
         if not accepted then
             error(Internals.gate_failure(result, evidence), 2)
         end
@@ -781,6 +873,8 @@ end
 ---@return table
 function Invocation:execute_attempt(ready, context, plan)
     self._stage = 'execution'
+    self._attempt_terminal_published = false
+    self:publish_stage('attempt', 'started')
     if self._deadline:remaining_ms() == 0 then
         error('command deadline expired', 2)
     end
@@ -822,6 +916,7 @@ function Invocation:execute_attempt(ready, context, plan)
         outcome = validated
         self._latest_evidence = outcome.evidence or self._latest_evidence
     end
+    self._outcome = outcome
     return outcome
 end
 
@@ -847,23 +942,57 @@ end
 ---@param outcome table
 ---@return boolean
 function Invocation:finish_attempt(outcome)
-    if not Internals.read_only(self._definition) and
-            not self._deadline:check_execution_return() then
+    if not self._deadline:check_execution_return() then
+        self:publish_stage('attempt', 'timed_out', {
+            last_observation=outcome.evidence,
+            receipt_summary=outcome.receipt,
+            effect_reported=outcome.effect_receipt ~= nil})
+        self._attempt_terminal_published = true
         error('command deadline expired during execution', 2)
     end
+    self:publish_stage('attempt', outcome.kind == 'failed' and 'failed' or
+        outcome.kind == 'retry' and 'retry' or 'completed', {
+            last_observation=outcome.evidence,
+            receipt_summary=outcome.receipt,
+            effect_reported=outcome.effect_receipt ~= nil})
+    self._attempt_terminal_published = true
     if outcome.kind ~= 'retry' then return false end
     self._latest_evidence = Internals.record_retry(self._runner,
         self._retry_attempts, self._attempt_receipts, self._attempt, outcome)
     self._mutation_lease:release()
     self._mutation_lease = nil
     self._stage = 'retry_cleanup'
-    Internals.finish_retry_cleanup(self._runner, self._identity.invocation_id,
+    local retry_cleanup = Internals.pending_command_transactions(self._runner,
+        self._identity.invocation_id,
         self._identity.attempt_cleanup_checkpoint)
+    local cleanup_attempted = #retry_cleanup > 0
+    if cleanup_attempted then
+        self:publish_stage('command_cleanup', 'attempted', {
+            cleanup_evidence={reason='execution retry'}})
+    end
+    local cleaned, cleanup_failure = Internals.call(
+        Internals.finish_retry_cleanup, self._runner,
+        self._identity.invocation_id,
+        self._identity.attempt_cleanup_checkpoint)
+    if not cleaned then
+        if cleanup_attempted then
+            self:publish_stage('command_cleanup', 'failed', {cleanup_evidence={
+                reason='execution retry', failure=Internals.error_text(
+                    cleanup_failure)}})
+        end
+        error(cleanup_failure, 2)
+    end
+    if cleanup_attempted then
+        self._cleanup_evidence[#self._cleanup_evidence + 1] = {
+            attempt=self._attempt, reason='execution retry', verified=true}
+        self:publish_stage('command_cleanup', 'verified', {
+            cleanup_evidence=self._cleanup_evidence[#self._cleanup_evidence]})
+    end
     self._transaction = nil
     self._stage = 'retry_wait'
     local waited, failure = Internals.wait(self._runner, self._deadline,
         self._cancellation)
-    if not waited then error(failure, 2) end
+    if not waited then error(failure.message, 2) end
     self._attempt = self._attempt + 1
     return true
 end
@@ -878,7 +1007,8 @@ function Invocation:verify_intrinsic(outcome)
         local context = Internals.context(self._runner, self._identity,
             function() return self:current_stage() end, true, false, nil,
             self._context_dependencies)
-        local verified, result, latest = Internals.poll(self._runner,
+        local verified, result, latest, observation_status = Internals.poll(
+            self._runner,
             self._deadline, function() return self:current_stage() end,
             function()
                 return definition.verify(context, self._request, outcome.receipt)
@@ -887,6 +1017,8 @@ function Invocation:verify_intrinsic(outcome)
             result.evidence or latest
         self._latest_evidence = self._latest_intrinsic_evidence or
             self._latest_evidence
+        self:publish_gate('intrinsic_verification', verified, result, latest,
+            observation_status)
         if not verified then error(Internals.gate_failure(result, latest), 2) end
         if Outcomes.is_effect_absent(result) then
             assert(self._transaction ~= nil,
@@ -900,12 +1032,17 @@ function Invocation:verify_intrinsic(outcome)
         self._latest_intrinsic_evidence = outcome.intrinsic_evidence or
             {kind='primary_observation'}
         self._latest_evidence = self._latest_intrinsic_evidence
+        self:publish_stage('intrinsic_verification', 'passed', {
+            last_observation=self._latest_intrinsic_evidence})
     elseif definition.intrinsic_verification ==
             IntrinsicKind.EXECUTION_RECEIPT then
         assert(outcome.receipt ~= nil,
             'execution_receipt verification requires an immutable receipt')
         self._latest_intrinsic_evidence = outcome.receipt
         self._latest_evidence = self._latest_intrinsic_evidence
+        self:publish_stage('intrinsic_verification', 'passed', {
+            last_observation=self._latest_intrinsic_evidence,
+            receipt_summary=outcome.receipt})
     else
         error('command has an unsupported intrinsic verification policy', 2)
     end
@@ -916,7 +1053,8 @@ end
 function Invocation:verify_caller(outcome)
     if self._options.verify == nil then return end
     self._stage = 'caller_verification'
-    local verified, result, latest = Internals.poll(self._runner, self._deadline,
+    local verified, result, latest, observation_status = Internals.poll(
+        self._runner, self._deadline,
         function() return self:current_stage() end, function()
             local observation = Internals.diagnostics:sanitize({name=self._name,
                 kind=self._definition.kind, public_result=outcome.public_result,
@@ -930,11 +1068,15 @@ function Invocation:verify_caller(outcome)
                 latest_intrinsic_evidence=self._latest_intrinsic_evidence},
                 'caller verification observation')
             local accepted = self._options.verify(observation)
+            assert(type(accepted) == 'boolean',
+                'caller verification must return a boolean')
             return accepted and Outcomes.ready(true) or
                 Outcomes.pending('caller verification is not yet satisfied')
         end, false, true, self._cancellation)
     self._latest_evidence = Internals.latest_gate_evidence(result, latest,
         self._latest_evidence)
+    self:publish_gate('caller_verification', verified, result, latest,
+        observation_status)
     if not verified then error(Internals.gate_failure(result, latest), 2) end
 end
 
@@ -942,6 +1084,9 @@ end
 ---@return table
 function Invocation:run_workflow()
     self:run_preflight()
+    self._stage = 'execution'
+    self._attempt_terminal_published = false
+    self:publish_stage('attempt', 'started')
     self._stage = 'workflow'
     local workflow = Workflow.new(self._definition.workflow, self._request)
     local state = workflow:execute_steps(function(step, current_state)
@@ -949,7 +1094,12 @@ function Invocation:run_workflow()
     end)
     self._stage = 'execution'
     local projected = workflow:project(state)
-    return Outcomes.executed(projected, {outputs=state.outputs})
+    local outcome = Outcomes.executed(projected, {outputs=state.outputs})
+    self._outcome = outcome
+    self:publish_stage('attempt', 'completed', {
+        receipt_summary=outcome.receipt})
+    self._attempt_terminal_published = true
+    return outcome
 end
 
 ---Runs attempts followed by intrinsic and caller verification.
@@ -1045,8 +1195,20 @@ function Invocation:finalize_resources(completed, failure, terminal_stage)
     end
     for _, transaction in ipairs(pending) do
         local prior = failure
-        failure = Internals.finish_command_cleanup(self._definition, transaction,
-            failure, self._latest_evidence)
+        local attempted
+        failure, attempted = Internals.finish_command_cleanup(self._definition,
+            transaction, failure, self._latest_evidence)
+        if attempted then
+            self:publish_stage('command_cleanup', 'attempted', {
+                cleanup_evidence={reason='command lifecycle finalization'}})
+            local verified = prior == failure
+            local evidence = {reason='command lifecycle finalization',
+                verified=verified}
+            self._cleanup_evidence[#self._cleanup_evidence + 1] = evidence
+            self:publish_stage('command_cleanup',
+                verified and 'verified' or 'failed', {
+                    cleanup_evidence=evidence})
+        end
         if prior == nil and failure ~= nil then terminal_stage = 'command_cleanup' end
     end
     completed = failure == nil
@@ -1064,6 +1226,21 @@ function Invocation:finalize_resources(completed, failure, terminal_stage)
     return completed, failure, terminal_stage
 end
 
+---Projects bounded command-specific failure evidence without masking failure.
+---@param failure string
+---@return table|nil, table|nil
+function Invocation:project_failure_diagnostics(failure)
+    if type(self._definition.diagnostics) ~= 'function' then return nil, nil end
+    local projected, projection_failure = Internals.diagnostics:project(
+        self._definition.diagnostics, self._request,
+        self._outcome and self._outcome.receipt or nil)
+    local kind = projected and 'command.failure' or
+        'command.diagnostic_projection_failed'
+    Internals.call(self._runner._dependencies.record_diagnostic, kind,
+        projected or projection_failure or {message=Internals.error_text(failure)})
+    return projected, projection_failure
+end
+
 ---Publishes the terminal envelope and merges projection failures.
 ---@param completed boolean
 ---@param failure? string
@@ -1071,14 +1248,59 @@ end
 ---@return boolean, string|nil
 function Invocation:publish_terminal(completed, failure, terminal_stage)
     local published, value = Internals.call(function()
+        local diagnostic_evidence, diagnostic_failure
+        if not completed then
+            diagnostic_evidence, diagnostic_failure =
+                self:project_failure_diagnostics(failure)
+        end
+        local evidence_kind
+        if self._options.verify ~= nil then
+            evidence_kind = 'intrinsic_and_caller'
+        elseif self._definition.intrinsic_verification ==
+                IntrinsicKind.EXECUTION_RECEIPT then
+            evidence_kind = 'execution_receipt_only'
+        else
+            evidence_kind = 'intrinsic_only'
+        end
+        if not completed and not self._attempt_terminal_published and
+                (terminal_stage == 'execution' or
+                    terminal_stage == 'cleanup_registration') then
+            self:publish_stage('attempt', tostring(failure):find(
+                'deadline expired', 1, true) and 'timed_out' or 'failed', {
+                last_observation=self._latest_evidence,
+                failure=failure})
+            self._attempt_terminal_published = true
+        end
+        self:publish_stage('completion', completed and 'completed' or 'failed', {
+            last_observation=self._latest_evidence,
+            receipt_summary=self._outcome and self._outcome.receipt or nil,
+            cleanup_evidence=#self._cleanup_evidence > 0 and
+                self._cleanup_evidence or nil,
+            diagnostic_evidence=diagnostic_evidence,
+            diagnostic_failure=diagnostic_failure,
+            focus=diagnostic_evidence and diagnostic_evidence.focus or nil,
+            viewscreen=diagnostic_evidence and
+                diagnostic_evidence.viewscreen or nil,
+            evidence_kind=evidence_kind,
+            failure=not completed and failure or nil})
         Internals.publish(self._runner, 'command.finished', {name=self._name,
             status=completed and 'success' or 'failure',
             stage=completed and 'completed' or terminal_stage,
             operation_key=self._operation_key, attempt_count=self._attempt,
             retry_attempts=self._retry_attempts,
             command=self._identity,
-            duration_ms=math.max(0, math.floor(
-                self._runner._dependencies.now_ms() - self._started_at_ms))})
+            configured_timeout_ms=self._timeout_ms,
+            last_observation=self._latest_evidence,
+            receipt_summary=self._outcome and self._outcome.receipt or nil,
+            cleanup_evidence=#self._cleanup_evidence > 0 and
+                self._cleanup_evidence or nil,
+            diagnostic_evidence=diagnostic_evidence,
+            diagnostic_failure=diagnostic_failure,
+            focus=diagnostic_evidence and diagnostic_evidence.focus or nil,
+            viewscreen=diagnostic_evidence and
+                diagnostic_evidence.viewscreen or nil,
+            evidence_kind=evidence_kind,
+            duration_ms=self:elapsed_ms()})
     end)
     if not published then
         failure = Internals.append_failure(failure,

@@ -92,7 +92,9 @@ describe('verified execution contracts', function()
             invocation_id='child', root_invocation_id='root',
             parent_invocation_id='root', owner_scope='test_attempt',
             service_run_id='service-1', suite_execution_id='suite-1',
-            test_attempt_id='attempt-1',
+            test_attempt_id='attempt-1', repeat_index=1,
+            spec_file_identity='suite/example.ds.lua',
+            test_identity='suite test',
         })
         assert.has_error(function()
             schemas:validate_command_identity({invocation_id='cleanup-child',
@@ -141,6 +143,46 @@ describe('verified execution contracts', function()
             label='restore fixture', lifetime='owner', registered_at_ms=10,
             execution_started_at_ms=11,
         })
+    end)
+
+    it('requires scope-complete command execution metadata', function()
+        local schemas = Schemas.new()
+        local suite = {
+            invocation_id='suite-command', root_invocation_id='suite-command',
+            owner_scope='suite_execution', service_run_id='service-1',
+            suite_execution_id='suite-1', repeat_index=1,
+            spec_file_identity='suite/example.ds.lua',
+        }
+        assert.equals(suite, schemas:validate_command_identity(suite))
+
+        for _, field in ipairs({'repeat_index', 'spec_file_identity'}) do
+            local incomplete = {}
+            for key, value in pairs(suite) do incomplete[key] = value end
+            incomplete[field] = nil
+            assert.has_error(function()
+                schemas:validate_command_identity(incomplete)
+            end)
+        end
+
+        local attempt = {}
+        for key, value in pairs(suite) do attempt[key] = value end
+        attempt.owner_scope = 'test_attempt'
+        attempt.test_attempt_id = 'attempt-1'
+        attempt.test_identity = 'suite test'
+        assert.equals(attempt, schemas:validate_command_identity(attempt))
+        attempt.test_identity = nil
+        assert.has_error(function()
+            schemas:validate_command_identity(attempt)
+        end)
+
+        assert.has_error(function()
+            schemas:validate_command_identity({
+                invocation_id='service-command',
+                root_invocation_id='service-command',
+                owner_scope='service_run', service_run_id='service-1',
+                repeat_index=1,
+            })
+        end)
     end)
 
     it('requires all three unique ownership-consistent projections', function()

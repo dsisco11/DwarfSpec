@@ -59,6 +59,9 @@ local function identity()
         service_run_id='run-1',
         suite_execution_id='suite-1',
         test_attempt_id='attempt-1',
+        repeat_index=1,
+        spec_file_identity='synthetic_spec.lua',
+        test_identity='synthetic test',
         target_identity='target-7',
         cleanup_checkpoint=4,
     }

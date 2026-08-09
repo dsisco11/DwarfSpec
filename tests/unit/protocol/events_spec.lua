@@ -89,6 +89,14 @@ local function payloads()
             cleanup_confirmed=true,
             mount_cleanup_verified=true,
         },
+        [EventType.COMMAND_STAGE]={
+            name='click', stage='attempt', status='completed', duration_ms=1,
+            configured_timeout_ms=5000, attempt=1,
+            command={invocation_id='run-events-1:command:1',
+                root_invocation_id='run-events-1:command:1',
+                owner_scope='service_run', service_run_id='run-events-1'},
+            subject_identity='screen/button', receipt_summary={dispatched=true},
+        },
         [EventType.CLEANUP_TRANSACTION_REGISTERED]={cleanup_event={
             schema='dwarfspec.event.v3', protocol_version=3,
             event_type='cleanup.transaction_registered',
@@ -197,7 +205,7 @@ describe('automation structured events', function()
         local samples = payloads()
         local types = events.types()
 
-        assert.equals(23, #types)
+        assert.equals(24, #types)
         for index, event_type in ipairs(types) do
             local event = events.publish(journal, event_type,
                 samples[event_type], 100 + index)
@@ -211,6 +219,77 @@ describe('automation structured events', function()
             assert.equals(event_type, event.type)
         end
         assert.equals(#types, #events.validate_journal(journal).events)
+    end)
+
+    it('validates bounded stage-aware command observations', function()
+        local sample = payloads()[EventType.COMMAND_STAGE]
+        local statuses = {preflight={'pending', 'passed', 'fatal', 'failed',
+            'timed_out'}, attempt={'started', 'retry', 'completed', 'failed',
+            'timed_out'}, intrinsic_verification={'pending', 'passed', 'fatal',
+            'failed', 'timed_out'}, caller_verification={'pending', 'passed',
+            'fatal', 'failed', 'timed_out'}, command_cleanup={'attempted',
+            'verified', 'failed', 'timed_out'}, completion={'completed',
+            'failed'}}
+        for stage, accepted in pairs(statuses) do
+            for _, status in ipairs(accepted) do
+                local payload = events.copy_json(sample)
+                payload.stage, payload.status = stage, status
+                assert.has_no.errors(function()
+                    events.validate_payload(EventType.COMMAND_STAGE, payload)
+                end)
+            end
+        end
+        local invalid = events.copy_json(sample)
+        invalid.attempt = 0
+        assert.has_error(function()
+            events.validate_payload(EventType.COMMAND_STAGE, invalid)
+        end, 'event payload command.stage has invalid attempt')
+    end)
+
+    it('validates command ancestry against earlier journal evidence', function()
+        local journal = events.new_journal(identity())
+        local parent = {invocation_id='run-events-1:command:1',
+            root_invocation_id='run-events-1:command:1',
+            owner_scope='service_run', service_run_id='run-events-1'}
+        events.publish(journal, EventType.COMMAND_STARTED, {name='parent',
+            subject_identity='<none>', safe_arguments={}, command=parent}, 101)
+        local child = {invocation_id='run-events-1:command:2',
+            root_invocation_id=parent.root_invocation_id,
+            parent_invocation_id=parent.invocation_id,
+            owner_scope='service_run', service_run_id='run-events-1'}
+        local payload = payloads()[EventType.COMMAND_STAGE]
+        payload.command = child
+        events.publish(journal, EventType.COMMAND_STAGE, payload, 102)
+        assert.has_no.errors(function() events.validate_journal(journal) end)
+
+        child.parent_invocation_id = 'foreign-command'
+        journal.events[2].payload.command.parent_invocation_id =
+            'foreign-command'
+        assert.has_error(function() events.validate_journal(journal) end,
+            'command event journal has an unknown parent invocation')
+    end)
+
+    it('validates cleanup-rooted command ownership against its transaction',
+            function()
+        local journal = events.new_journal(identity())
+        local registered = payloads()[
+            EventType.CLEANUP_TRANSACTION_REGISTERED]
+        events.publish(journal, EventType.CLEANUP_TRANSACTION_REGISTERED,
+            registered, 101)
+        local payload = payloads()[EventType.COMMAND_STAGE]
+        payload.command = {invocation_id='run-events-1:command:cleanup',
+            root_invocation_id='run-events-1:command:cleanup',
+            parent_cleanup_transaction_id='cleanup-1',
+            owner_scope='service_run', service_run_id='run-events-1'}
+        events.publish(journal, EventType.COMMAND_STAGE, payload, 102)
+        assert.has_no.errors(function() events.validate_journal(journal) end)
+        journal.events[2].payload.command.owner_scope = 'suite_execution'
+        journal.events[2].payload.command.suite_execution_id = 'suite-foreign'
+        journal.events[2].payload.command.repeat_index = 1
+        journal.events[2].payload.command.spec_file_identity =
+            'foreign/example.ds.lua'
+        assert.has_error(function() events.validate_journal(journal) end,
+            'command event journal has inconsistent cleanup ancestry')
     end)
 
     it('supports every terminal run state', function()

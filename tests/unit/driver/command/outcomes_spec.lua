@@ -84,5 +84,10 @@ describe('command outcomes', function()
                 execution_retry_policy='explicit_retry_safe',
                 intrinsic_verification='callback', cleanup={}})
         end, 'attempt receipt')
+        assert_error(function()
+            Outcomes.validate_gate(Outcomes.effect_absent('gone', {
+                absent_resources={{resource_kind='item',
+                    resource_identity='item-1'}}}))
+        end, 'command gate returned unsupported kind effect_absent')
     end)
 end)

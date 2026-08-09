@@ -71,6 +71,15 @@ local PAYLOAD_FIELDS = {
         cleanup_confirmed='boolean',
         mount_cleanup_verified='boolean',
     },
+    [EventType.COMMAND_STAGE]={
+        name='string',
+        stage='string',
+        status='string',
+        duration_ms='integer',
+        configured_timeout_ms='integer',
+        attempt='integer',
+        command='table',
+    },
     [EventType.CLEANUP_TRANSACTION_REGISTERED]={cleanup_event='table'},
     [EventType.CLEANUP_TRANSACTION_STARTED]={cleanup_event='table'},
     [EventType.CLEANUP_TRANSACTION_FINISHED]={cleanup_event='table'},
@@ -97,6 +106,35 @@ local TEST_STATUSES = {
     [TestStatus.FAILURE]=true,
     [TestStatus.ERROR]=true,
     [TestStatus.PENDING]=true,
+}
+
+local COMMAND_STAGES = {
+    preflight=true,
+    attempt=true,
+    intrinsic_verification=true,
+    caller_verification=true,
+    command_cleanup=true,
+    completion=true,
+}
+
+local COMMAND_STAGE_STATUSES = {
+    preflight={pending=true, passed=true, fatal=true, failed=true,
+        timed_out=true},
+    attempt={started=true, retry=true, completed=true, failed=true,
+        timed_out=true},
+    intrinsic_verification={pending=true, passed=true, fatal=true, failed=true,
+        timed_out=true},
+    caller_verification={pending=true, passed=true, fatal=true, failed=true,
+        timed_out=true},
+    command_cleanup={attempted=true, verified=true, failed=true,
+        timed_out=true},
+    completion={completed=true, failed=true},
+}
+
+local TERMINAL_EVIDENCE_KINDS = {
+    intrinsic_and_caller=true,
+    intrinsic_only=true,
+    execution_receipt_only=true,
 }
 
 ---Returns whether a value is a nonnegative integer.
@@ -337,6 +375,52 @@ function M.validate_payload(event_type, payload)
                 payload.blocking_generation > 0,
                 'event payload scheduler.blocked requires blocking generation')
         end
+    elseif event_type == EventType.COMMAND_STAGE then
+        assert(COMMAND_STAGES[payload.stage] == true,
+            'event payload command.stage has invalid stage')
+        assert(COMMAND_STAGE_STATUSES[payload.stage][payload.status] == true,
+            'event payload command.stage has invalid status')
+        assert(payload.attempt > 0,
+            'event payload command.stage has invalid attempt')
+        assert(payload.configured_timeout_ms > 0,
+            'event payload command.stage has invalid configured timeout')
+        if payload.operation_key ~= nil then
+            assert(type(payload.operation_key) == 'string' and
+                payload.operation_key ~= '',
+                'event payload command.stage has invalid operation key')
+        end
+        if payload.subject_identity ~= nil then
+            assert(type(payload.subject_identity) == 'string' and
+                payload.subject_identity ~= '',
+                'event payload command.stage has invalid subject identity')
+        end
+        if payload.evidence_kind ~= nil then
+            assert(payload.stage == 'completion' and
+                TERMINAL_EVIDENCE_KINDS[payload.evidence_kind] == true,
+                'event payload command.stage has invalid evidence kind')
+        end
+        require('dwarfspec.protocol.verified_execution_schemas').new()
+            :validate_command_identity(payload.command)
+    elseif event_type == EventType.COMMAND_STARTED or
+            event_type == EventType.COMMAND_FINISHED then
+        if payload.command ~= nil then
+            require('dwarfspec.protocol.verified_execution_schemas').new()
+                :validate_command_identity(payload.command)
+        end
+        if payload.evidence_kind ~= nil then
+            assert(TERMINAL_EVIDENCE_KINDS[payload.evidence_kind] == true,
+                'event payload command.finished has invalid evidence kind')
+        end
+        if event_type == EventType.COMMAND_FINISHED then
+            if payload.attempt_count ~= nil then
+                assert(is_positive_integer(payload.attempt_count),
+                    'event payload command.finished has invalid attempt count')
+            end
+            if payload.configured_timeout_ms ~= nil then
+                assert(is_positive_integer(payload.configured_timeout_ms),
+                    'event payload command.finished has invalid configured timeout')
+            end
+        end
     end
     if event_type == EventType.PROBLEM_RECORDED then
         M.validate_problem(payload, 'event payload problem.recorded')
@@ -462,11 +546,66 @@ function M.validate_journal(journal)
     local kind = container_kind(journal.events, 'automation event journal')
     assert(kind == 'array' or next(journal.events) == nil,
         'automation event journal must be a dense array')
+    local command_identities = {}
+    local cleanup_transactions = {}
     for index, event in ipairs(journal.events) do
         M.validate(event, journal)
         assert(event.sequence == index,
             ('automation event sequence discontinuity: expected %d, found %s')
                 :format(index, tostring(event.sequence)))
+        local payload = event.payload
+        if event.type == EventType.CLEANUP_TRANSACTION_REGISTERED then
+            cleanup_transactions[payload.cleanup_event.transaction_id] =
+                payload.cleanup_event
+        end
+        local command = payload.command
+        if command ~= nil then
+            assert(command.service_run_id == journal.run_id,
+                'command event journal has a foreign service run owner')
+            local known = command_identities[command.invocation_id]
+            if known ~= nil then
+                for _, field in ipairs({'root_invocation_id', 'owner_scope',
+                        'service_run_id', 'suite_execution_id',
+                        'test_attempt_id', 'repeat_index',
+                        'spec_file_identity', 'test_identity',
+                        'parent_invocation_id',
+                        'parent_cleanup_transaction_id'}) do
+                    assert(known[field] == command[field],
+                        'command event journal identity mismatch: ' .. field)
+                end
+            else
+                if command.parent_invocation_id ~= nil then
+                    local parent = command_identities[command.parent_invocation_id]
+                    assert(parent ~= nil,
+                        'command event journal has an unknown parent invocation')
+                    assert(parent.root_invocation_id == command.root_invocation_id and
+                        parent.owner_scope == command.owner_scope and
+                        parent.service_run_id == command.service_run_id and
+                        parent.suite_execution_id == command.suite_execution_id and
+                        parent.test_attempt_id == command.test_attempt_id and
+                        parent.repeat_index == command.repeat_index and
+                        parent.spec_file_identity == command.spec_file_identity and
+                        parent.test_identity == command.test_identity,
+                        'command event journal has inconsistent parent ancestry')
+                elseif command.parent_cleanup_transaction_id ~= nil then
+                    local transaction = cleanup_transactions[
+                        command.parent_cleanup_transaction_id]
+                    assert(transaction ~= nil,
+                        'command event journal has an unknown cleanup parent')
+                    assert(transaction.owner_scope == command.owner_scope and
+                        transaction.service_run_id == command.service_run_id and
+                        transaction.suite_execution_id ==
+                            command.suite_execution_id and
+                        transaction.test_attempt_id == command.test_attempt_id and
+                        transaction.repeat_index == command.repeat_index and
+                        transaction.spec_file_identity ==
+                            command.spec_file_identity and
+                        transaction.test_identity == command.test_identity,
+                        'command event journal has inconsistent cleanup ancestry')
+                end
+                command_identities[command.invocation_id] = command
+            end
+        end
     end
     return journal
 end

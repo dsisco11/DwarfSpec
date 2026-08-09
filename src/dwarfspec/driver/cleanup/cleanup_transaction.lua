@@ -295,6 +295,12 @@ function CleanupTransaction:execute(reason)
         local succeeded, observation = xpcall(function()
             return self._verify(verification_context, self._receipt)
         end, debug.traceback)
+        if succeeded and type(observation) == 'table' and
+                observation.kind == 'effect_absent' then
+            failures[#failures + 1] =
+                'verification: effect_absent is forbidden during cleanup'
+            break
+        end
         if succeeded and observation ~= false and
                 (type(observation) ~= 'table' or observation.kind ~= 'pending') then
             if type(observation) == 'table' and observation.kind == 'fatal' then

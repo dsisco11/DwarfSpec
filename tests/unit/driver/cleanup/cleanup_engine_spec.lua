@@ -234,6 +234,21 @@ describe('CleanupTransaction', function()
         assert_error(function() transaction:execute() end, 'only read-only')
     end)
 
+    it('rejects effect-absence outcomes from cleanup verification', function()
+        local transaction = CleanupTransaction.new({transaction_id='cleanup-1',
+            registration_ordinal=1, label='restricted verification', receipt={},
+            now_ms=function() return 0 end, remove_pending=function() end,
+            release_verified=function() end, restore=function() end,
+            verify=function()
+                return require('dwarfspec.driver.command.outcomes')
+                    .effect_absent('gone', {absent_resources={{
+                        resource_kind='item', resource_identity='item-1'}}})
+            end})
+        assert_error(function() transaction:execute() end,
+            'effect_absent is forbidden during cleanup')
+        assert.are.equal('failed', transaction:state())
+    end)
+
     it('supports internal abandoned and unconfirmed terminal dispositions', function()
         local removed, retained, released = false, false, false
         local transaction = CleanupTransaction.new({transaction_id='cleanup-1',

@@ -375,6 +375,16 @@ local function format_event(event, options)
         end
         return ('%s %s: %s'):format(payload.kind:upper(),
             payload.name, payload.message)
+    elseif event.type == EventType.COMMAND_STARTED then
+        return ('COMMAND %s started'):format(payload.name)
+    elseif event.type == EventType.COMMAND_STAGE then
+        return ('COMMAND %s %s %s attempt=%d (%d ms)'):format(
+            payload.name, payload.stage, payload.status, payload.attempt,
+            payload.duration_ms)
+    elseif event.type == EventType.COMMAND_FINISHED then
+        return ('COMMAND %s %s stage=%s attempts=%s (%d ms)'):format(
+            payload.name, payload.status, tostring(payload.stage),
+            tostring(payload.attempt_count or 1), payload.duration_ms)
     elseif event.type == EventType.DIAGNOSTIC_RECORDED and
             payload.kind == focus.CHANGE_KIND then
         return focus_warning.format_warning(payload)

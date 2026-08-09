@@ -78,6 +78,22 @@ function Schemas:validate_command_identity(value)
             'command identity')
     end
     self:_owner(value, ExecutionOwnerScope, 'command identity')
+    if value.owner_scope ~= ExecutionOwnerScope.SERVICE_RUN then
+        assert(type(value.repeat_index) == 'number' and
+            value.repeat_index >= 1 and value.repeat_index % 1 == 0,
+            'command identity requires a positive repeat_index')
+        self:_string(value, 'spec_file_identity', 'command identity')
+    else
+        assert(value.repeat_index == nil and
+            value.spec_file_identity == nil and value.test_identity == nil,
+            'service command identity cannot identify suite or test metadata')
+    end
+    if value.owner_scope == ExecutionOwnerScope.TEST_ATTEMPT then
+        self:_string(value, 'test_identity', 'command identity')
+    elseif value.owner_scope == ExecutionOwnerScope.SUITE_EXECUTION then
+        assert(value.test_identity == nil,
+            'suite command identity cannot identify a test')
+    end
     if value.parent_invocation_id == nil and
             value.parent_cleanup_transaction_id == nil then
         assert(value.root_invocation_id == value.invocation_id,
@@ -106,7 +122,8 @@ function Schemas:validate_nested_command_identity(value, parent)
     assert(value.root_invocation_id == parent.root_invocation_id,
         'nested command identity must preserve its parent root')
     for _, field in ipairs({'owner_scope', 'service_run_id',
-            'suite_execution_id', 'test_attempt_id'}) do
+            'suite_execution_id', 'test_attempt_id', 'repeat_index',
+            'spec_file_identity', 'test_identity'}) do
         assert(value[field] == parent[field],
             'nested command identity must preserve parent owner identity')
     end
@@ -126,7 +143,8 @@ function Schemas:validate_cleanup_command_identity(value, transaction_id, owner)
         value.parent_invocation_id == nil,
         'cleanup-rooted command identity has a missing or foreign cleanup parent')
     for _, field in ipairs({'owner_scope', 'service_run_id',
-            'suite_execution_id', 'test_attempt_id'}) do
+            'suite_execution_id', 'test_attempt_id', 'repeat_index',
+            'spec_file_identity', 'test_identity'}) do
         assert(value[field] == owner[field],
             'cleanup-rooted command identity must preserve cleanup owner identity')
     end

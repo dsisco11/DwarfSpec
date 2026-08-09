@@ -25,7 +25,10 @@ function Internals.owner(identity)
     return Immutable.freeze({owner_scope=identity.owner_scope,
         service_run_id=identity.service_run_id,
         suite_execution_id=identity.suite_execution_id,
-        test_attempt_id=identity.test_attempt_id}, 'cleanup owner')
+        test_attempt_id=identity.test_attempt_id,
+        repeat_index=identity.repeat_index,
+        spec_file_identity=identity.spec_file_identity,
+        test_identity=identity.test_identity}, 'cleanup owner')
 end
 
 ---Validates and snapshots one public cleanup registration.

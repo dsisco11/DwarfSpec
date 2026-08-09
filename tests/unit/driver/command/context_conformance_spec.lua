@@ -29,6 +29,8 @@ local function context()
             owner_scope='suite_execution',
             service_run_id='run-1',
             suite_execution_id='suite-1',
+            repeat_index=1,
+            spec_file_identity='synthetic_spec.lua',
             cleanup_checkpoint=0,
         },
         dependencies=dependencies(),

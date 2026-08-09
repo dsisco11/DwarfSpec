@@ -19,7 +19,9 @@ local Outcomes = require('dwarfspec.driver.command.outcomes')
 ---@return table
 local function identity()
     return {owner_scope='test_attempt', service_run_id='run',
-        suite_execution_id='suite', test_attempt_id='attempt'}
+        suite_execution_id='suite', test_attempt_id='attempt',
+        repeat_index=1, spec_file_identity='synthetic_spec.lua',
+        test_identity='synthetic test'}
 end
 
 ---@param owner table

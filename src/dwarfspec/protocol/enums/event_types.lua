@@ -15,6 +15,7 @@ return immutable_enum.define({
     TEST_FINISHED='test.finished',
     PROBLEM_RECORDED='problem.recorded',
     COMMAND_STARTED='command.started',
+    COMMAND_STAGE='command.stage',
     COMMAND_FINISHED='command.finished',
     DIAGNOSTIC_RECORDED='diagnostic.recorded',
     CLEANUP_STARTED='cleanup.started',

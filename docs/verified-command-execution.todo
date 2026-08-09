@@ -1361,55 +1361,55 @@ Completion criteria:
 Outcome: the engine has exhaustive reusable proof and publishes structured,
 stage-aware command traces suitable for controller and planned UI consumers.
 
-- [ ] Expand command observation from start/finish to stage-aware events for
+- [x] Expand command observation from start/finish to stage-aware events for
       preflight, attempts, intrinsic verification, caller verification,
       command-lifetime cleanup, completion, and failure.
-- [ ] Ensure the event family can distinguish pending, passed, fatal/failed, and
+- [x] Ensure the event family can distinguish pending, passed, fatal/failed, and
       timed-out preflight/verification observations; attempt start, explicit
       retry, completion, failure, and deadline overrun; and attempted/verified
       command-lifetime cleanup.
-- [ ] Include run-unique invocation, optional mutually exclusive parents, root,
+- [x] Include run-unique invocation, optional mutually exclusive parents, root,
       owner scope/ID, repeat, suite/test identity, operation key, attempt,
       duration, configured timeout, stage, last observation, subject identity,
       focus/viewscreen, receipt summary, and cleanup evidence as applicable.
-- [ ] Record one of `intrinsic_and_caller`, `intrinsic_only`, or
+- [x] Record one of `intrinsic_and_caller`, `intrinsic_only`, or
       `execution_receipt_only` in terminal evidence.
-- [ ] Keep owner-lifetime cleanup in transaction/terminal events rather than
+- [x] Keep owner-lifetime cleanup in transaction/terminal events rather than
       claiming it in earlier command-finished events.
-- [ ] Extend controller formatting and result rendering without interpreting
+- [x] Extend controller formatting and result rendering without interpreting
       driver semantics or cleanup precedence.
-- [ ] Add a fake-clock/fake-scheduler command-engine harness.
-- [ ] Add table-driven conformance helpers for every command kind,
+- [x] Add a fake-clock/fake-scheduler command-engine harness.
+- [x] Add table-driven conformance helpers for every command kind,
       intrinsic-verification policy, and execution-retry policy.
-- [ ] Cover the complete command-engine qualification list from the proposal.
-  - [ ] Timeout precedence, shared deadline, and every gate outcome.
-  - [ ] `ONCE`, explicit retry-safe execution, receipts, effects, and attempt
+- [x] Cover the complete command-engine qualification list from the proposal.
+  - [x] Timeout precedence, shared deadline, and every gate outcome.
+  - [x] `ONCE`, explicit retry-safe execution, receipts, effects, and attempt
         cleanup.
-  - [ ] Intrinsic and optional caller verification.
-  - [ ] Workflow steps, immutable outputs, and result projection.
-  - [ ] Context restrictions and nested invocation ancestry.
-  - [ ] Cleanup registration, abandonment, transaction states, claims,
+  - [x] Intrinsic and optional caller verification.
+  - [x] Workflow steps, immutable outputs, and result projection.
+  - [x] Context restrictions and nested invocation ancestry.
+  - [x] Cleanup registration, abandonment, transaction states, claims,
         dependencies, planning, owner scopes, journal retention, projections,
         persistence, and quarantine.
-  - [ ] `effect_absent` acceptance only during intrinsic verification for the
+  - [x] `effect_absent` acceptance only during intrinsic verification for the
         current registered internal effect, with rejection from preflight,
         caller verification, and cleanup verification.
-  - [ ] Diagnostics, stable returns, and rejection of bare callbacks.
-- [ ] Require each command fixture to declare its gate, execution, intrinsic,
+  - [x] Diagnostics, stable returns, and rejection of bare callbacks.
+- [x] Require each command fixture to declare its gate, execution, intrinsic,
       timeout, retry-safety, cleanup, and expected evidence observations.
-- [ ] Keep domain command suites focused on normalization, target resolution,
+- [x] Keep domain command suites focused on normalization, target resolution,
       native action receipt, readback, cleanup receipt, and diagnostic
       projection rather than duplicating runner mechanics.
-- [ ] Run the complete command-engine and directly affected service/protocol
+- [x] Run the complete command-engine and directly affected service/protocol
       suites.
-- [ ] Perform a follow-up qualification review against every bullet in the
+- [x] Perform a follow-up qualification review against every bullet in the
       proposal's command-engine qualification section.
 
 Completion criteria:
 
-- [ ] Reusable suites prove common lifecycle behavior once and can qualify each
+- [x] Reusable suites prove common lifecycle behavior once and can qualify each
       migrated definition with a small fixture.
-- [ ] Structured command and cleanup evidence is complete, bounded, and
+- [x] Structured command and cleanup evidence is complete, bounded, and
       ancestry-valid.
 
 ## Phase 15: Migrate the five representative commands
