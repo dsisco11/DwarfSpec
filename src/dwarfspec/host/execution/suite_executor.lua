@@ -79,12 +79,15 @@ function M.execute(package_root, project_root, run, scheduler_module,
             assert(cleanup_ok, 'suite cleanup finalization was not confirmed')
         end,
         on_test_start=function(identity)
-            run.cleanup_owner_lifecycle:test_start(identity)
             lifecycle.test_start(identity)
         end})
+    lifecycle_adapter.install_attempt_entry(busted, project_root,
+        function(identity)
+            run.cleanup_owner_lifecycle:test_start(identity)
+            run.cleanup_owner_lifecycle:test_entry()
+        end)
     dependencies.install_entry(lifecycle_adapter, busted, {
         example_entry=function()
-            run.cleanup_owner_lifecycle:test_entry()
             lifecycle.example_entry()
         end,
     })

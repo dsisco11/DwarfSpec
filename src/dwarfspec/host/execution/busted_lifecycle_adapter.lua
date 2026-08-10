@@ -225,4 +225,38 @@ function M.install_example_exit(busted, callback)
     busted.api.after_each(callback)
 end
 
+---Installs test-attempt entry before Busted executes example setup hooks.
+---@param busted table
+---@param project_root string
+---@param callback fun(identity: BustedExampleIdentity)
+function M.install_attempt_entry(busted, project_root, callback)
+    assert(type(busted) == 'table' and
+        busted.version == SUPPORTED_BUSTED_VERSION and
+        type(busted.safe) == 'function',
+        'Busted lifecycle adapter requires Busted ' ..
+            SUPPORTED_BUSTED_VERSION)
+    assert(type(project_root) == 'string' and project_root ~= '',
+        'Busted attempt-entry project root must be a nonempty string')
+    assert(type(callback) == 'function',
+        'Busted attempt-entry callback is required')
+
+    local original_safe = busted.safe
+    local active_example
+    busted.safe = function(descriptor, run, element)
+        if descriptor ~= 'it' or type(element) ~= 'table' or
+                element.descriptor ~= 'it' or active_example ~= nil then
+            return original_safe(descriptor, run, element)
+        end
+        local results = {original_safe(descriptor, function()
+            active_example = element
+            callback({example_name=full_example_name(busted, element),
+                source_identity=example_source_identity(
+                    project_root, element)})
+            return run()
+        end, element)}
+        active_example = nil
+        return table.unpack(results)
+    end
+end
+
 return M
