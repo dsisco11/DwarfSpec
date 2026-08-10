@@ -1,6 +1,8 @@
 -- Executes one validated command lifecycle with a single shared deadline.
 
 local CleanupLifetime = require('dwarfspec.protocol.enums.cleanup_lifetimes')
+local CleanupTrigger = require(
+    'dwarfspec.protocol.enums.cleanup_execution_triggers')
 local CommandFailureStage = require(
     'dwarfspec.protocol.enums.command_failure_stages')
 local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
@@ -353,7 +355,7 @@ function Internals.finish_retry_cleanup(runner, invocation_id, checkpoint)
             invocation_id, checkpoint)) do
         assert(transaction:isPending(),
             'retry cleanup discovery returned a nonpending transaction')
-        transaction:execute('execution retry')
+        transaction:execute('execution retry', CleanupTrigger.COMMAND_FINALLY)
         assert(not transaction:isPending() and transaction:state() == 'complete',
             'retry cleanup was not confirmed')
     end
@@ -456,7 +458,8 @@ function Internals.finish_command_cleanup(definition, transaction, failure,
             return
         end
         attempted = true
-        transaction:execute('command lifecycle finalization')
+        transaction:execute('command lifecycle finalization',
+            CleanupTrigger.COMMAND_FINALLY)
     end)
     if succeeded then return failure, attempted end
     return Internals.append_failure(failure, 'command_cleanup', cleanup_failure,

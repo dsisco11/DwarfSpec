@@ -7,26 +7,24 @@ local Outcomes = require('dwarfspec.driver.command.outcomes')
 local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
 local SubjectTokens = require('dwarfspec.driver.command.subject_tokens')
+local TextSearch = require('dwarfspec.driver.commands.text_search')
 
 ---@class dwarfspec.SearchCommandDefinition
----@field private _dependencies table
+---@field private _runtime dwarfspec.SearchRuntime
 ---@field private _subjects dwarfspec.CommandSubjectTokens
 local SearchDefinition = {}
 SearchDefinition.__index = SearchDefinition
 
 ---Creates the rendered-text search definition owner.
----@param dependencies table
+---@param runtime dwarfspec.SearchRuntime
 ---@return dwarfspec.SearchCommandDefinition
-function SearchDefinition.new(dependencies)
-    assert(type(dependencies) == 'table',
-        'search command dependencies are required')
-    for _, name in ipairs({'normalize_query', 'normalize_rectangle', 'search'}) do
-        assert(type(dependencies[name]) == 'function',
-            'search command requires ' .. name)
+function SearchDefinition.new(runtime)
+    assert(type(runtime) == 'table', 'search command runtime is required')
+    for _, name in ipairs({'is_subject', 'preflight', 'search'}) do
+        assert(type(runtime[name]) == 'function',
+            'search command runtime requires ' .. name)
     end
-    assert(type(dependencies.mount_context) == 'table',
-        'search command requires mount_context')
-    return setmetatable({_dependencies=dependencies,
+    return setmetatable({_runtime=runtime,
         _subjects=SubjectTokens.new()}, SearchDefinition)
 end
 
@@ -35,11 +33,11 @@ end
 ---@param subject_token? table
 ---@return table
 function SearchDefinition:_normalize(arguments, subject_token)
-    local request = {query=self._dependencies.normalize_query(arguments.query)}
+    local request = {query=TextSearch.normalize_query(arguments.query)}
     if subject_token ~= nil then
         request.subject_token = subject_token
     elseif arguments.search_area ~= nil then
-        request.area = self._dependencies.normalize_rectangle(
+        request.area = TextSearch.normalize_rectangle(
             arguments.search_area, 'text search area')
     end
     return request
@@ -50,20 +48,12 @@ end
 ---@param subject? table
 ---@return table
 function SearchDefinition:_preflight(request, subject)
-    local mount_context = self._dependencies.mount_context
-    local mount = mount_context:require_current('search')
-    mount.interaction_target:assert_current('search')
-    if subject ~= nil then
-        mount_context:resolve_subject(subject, 'search')
-    end
-    return {target_identity=subject and subject.control_path or
-        '<current-mount>', subject=subject}
+    return self._runtime:preflight(subject)
 end
 
 ---Creates the immutable query definition.
 ---@return table
 function SearchDefinition:definition()
-    local dependencies = self._dependencies
     return {name='search', kind=CommandKind.QUERY,
         normalize=function(arguments)
             local subject_token
@@ -78,9 +68,11 @@ function SearchDefinition:definition()
             return Outcomes.ready(self:_preflight(request, subject))
         end,
         execute=function(context, request, readiness)
+            local subject = request.subject_token and
+                self._subjects:resolve(request.subject_token) or nil
             return Outcomes.ready(
-                dependencies.search(request.query,
-                    readiness.subject or request.area))
+                self._runtime:search(request.query,
+                    subject or request.area, subject ~= nil))
         end,
         execution_retry_policy=RetryPolicy.ONCE,
         intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION}
@@ -89,16 +81,16 @@ end
 ---Registers and binds the public rendered-text search command.
 ---@param ds table
 ---@param command_runner dwarfspec.CommandRunner
----@param dependencies table
+---@param runtime dwarfspec.SearchRuntime
 ---@return dwarfspec.CommandDefinition
-function SearchDefinition.bind(ds, command_runner, dependencies)
+function SearchDefinition.bind(ds, command_runner, runtime)
     assert(type(ds) == 'table', 'search command requires the public namespace')
     assert(type(command_runner) == 'table' and
             type(command_runner.registerBuiltin) == 'function' and
             type(command_runner.invoke) == 'function',
         'search command requires the verified command runner')
     local definition = command_runner:registerBuiltin(
-        SearchDefinition.new(dependencies):definition())
+        SearchDefinition.new(runtime):definition())
 
     ---Searches rendered text through the verified query contract.
     ---@param query any
@@ -108,8 +100,7 @@ function SearchDefinition.bind(ds, command_runner, dependencies)
     function ds.search(query, search_area, command_options)
         return command_runner:invoke('search', {query=query,
             search_area=search_area,
-            search_area_is_subject=dependencies.mount_context
-                :is_subject(search_area)},
+            search_area_is_subject=runtime:is_subject(search_area)},
             command_options)
     end
     return definition

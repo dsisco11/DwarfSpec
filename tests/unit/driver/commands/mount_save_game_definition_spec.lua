@@ -2,6 +2,7 @@ local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
 local Harness = dofile('tests/unit/driver/command/engine_harness.lua')
 local MountSaveGameDefinition = require(
     'dwarfspec.driver.commands.mount_save_game_definition')
+local SaveGameRuntime = require('dwarfspec.driver.game.save_game_runtime')
 local TestRunner = dofile(
     'tests/unit/driver/commands/definition_test_support.lua')
 
@@ -13,14 +14,7 @@ local Dependencies = {}
 function Dependencies.new()
     local calls = {}
     local loaded = false
-    local dependencies = {
-        workflow={
-            validate_directory_name=function(_, value) return value end,
-            preflight=function(_, _, requested)
-                return {requested_directory=requested,
-                    loaded_directory=nil, transition_required=false}
-            end,
-        },
+    local dependencies = SaveGameRuntime.new({
         host={is_world_loaded=function() return loaded end,
             read_world_folder=function() return nil end},
         unloader={unload=function()
@@ -43,8 +37,7 @@ function Dependencies.new()
                 calls[#calls + 1] = 'verify_loaded'
                 return 'save'
             end,
-        },
-    }
+        }})
     return dependencies, calls
 end
 
@@ -86,5 +79,12 @@ describe('verified mount-save-game command definition', function()
             {directory_name='save'}))
         assert.same({'reach_menu', 'select_world', 'select_save',
             'verify_loaded'}, calls)
+    end)
+
+    it('rejects the former loose host and loader bundle', function()
+        assert.has_error(function()
+            MountSaveGameDefinition.new({workflow={}, loader={},
+                unloader={}, host={}})
+        end, 'mount-save-game command runtime requires host')
     end)
 end)

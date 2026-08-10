@@ -29,6 +29,15 @@ local function alternate_view_position(position)
     return {x=position.x, y=position.y, z=(position.z + 1) % map.z_count}
 end
 
+---Returns whether the active test attempt owns registered cleanup work.
+---@return boolean
+local function has_registered_test_cleanup()
+    local run = ds.current_run()
+    local owner = run.cleanup_owner_lifecycle:public_owner()
+    local pending = run.cleanup_registration_service:pending_ids_for(owner)
+    return next(pending) ~= nil
+end
+
 describe('map-view position command', function()
     it('aligns live map tiles to screen origins and owns exact restoration',
             function()
@@ -71,8 +80,7 @@ describe('map-view position command', function()
             y=expected_raw.y + height - 1,
             z=expected_raw.z,
         }, ds.getViewPos(ds.EScreenOrigin.BOTTOM_RIGHT))
-        assert.is_true(ds.current_run().mount_cleanup_probe()
-            .map_view_position_active)
+        assert.is_true(has_registered_test_cleanup())
     end)
 
     it('moves the pointer to a live world tile with optional recentering',
@@ -104,6 +112,6 @@ describe('map-view position command', function()
         assert.same(recentered_target, dfhack.gui.getMousePos(true))
         local cleanup = ds.current_run().mount_cleanup_probe()
         assert.is_true(cleanup.pointer_active)
-        assert.is_true(cleanup.map_view_position_active)
+        assert.is_true(has_registered_test_cleanup())
     end)
 end)

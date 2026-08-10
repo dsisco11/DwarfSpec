@@ -2,6 +2,24 @@
 
 local M = {}
 
+---Detaches one immutable event snapshot into transport-owned plain data.
+---@param value any
+---@param active? table
+---@return any
+function M.detach_payload(value, active)
+    if type(value) ~= 'table' then return value end
+    active = active or {}
+    assert(active[value] == nil,
+        'transport event payload cannot contain cycles')
+    active[value] = true
+    local copy = {}
+    for key, child in pairs(value) do
+        copy[M.detach_payload(key, active)] = M.detach_payload(child, active)
+    end
+    active[value] = nil
+    return copy
+end
+
 ---Creates a generation-bound publisher for one active service run.
 ---@param run table
 ---@param dependencies table
@@ -14,7 +32,7 @@ function M.new_publisher(run, dependencies)
         now_ms=dependencies.now_ms,
         publish=function(event_type, payload)
             return dependencies.publish_active_event(run.run_id,
-                run.generation, event_type, payload)
+                run.generation, event_type, M.detach_payload(payload))
         end,
     }
 end

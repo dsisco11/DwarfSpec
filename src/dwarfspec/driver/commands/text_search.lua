@@ -301,8 +301,9 @@ function M.new_command(dependencies)
     ---Searches final rendered screen cells within the current mount scope.
     ---@param query any
     ---@param search_area any|nil
+    ---@param known_subject? boolean
     ---@return table|nil
-    local function search(query, search_area)
+    local function search(query, search_area, known_subject)
         local mount = mount_context:require_current('search')
         mount.interaction_target:assert_current('search')
         local normalized_query = M.normalize_query(query)
@@ -310,7 +311,13 @@ function M.new_command(dependencies)
         if search_area ~= nil then
             scope, subject_scoped = explicit_search_scope(
                 mount_context, scope, search_area)
-            if M.is_empty_intersection(scope) then return nil end
+            subject_scoped = subject_scoped or known_subject == true
+            if M.is_empty_intersection(scope) then
+                assert(not subject_scoped,
+                    'DwarfSpec search subject has no usable visible body ' ..
+                        'bounds within the current window')
+                return nil
+            end
         end
         local result = matcher(normalized_query, scope)
         if M.is_empty_intersection(result) then

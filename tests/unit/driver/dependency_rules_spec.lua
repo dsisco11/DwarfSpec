@@ -76,4 +76,31 @@ describe('driver dependency rules', function()
 
         assert.same({}, violations)
     end)
+
+    it('composes representative bindings from cohesive runtime instances',
+            function()
+        local source = read_source('src/dwarfspec/ds.lua')
+            :gsub('\r\n', '\n')
+        local expected = {
+            'search_definition_module.bind(ds, command_runner, search_runtime)',
+            'click_definition_module.bind(ds, command_runner, click_runtime)',
+            'view_position_definition_module.bind(ds, command_runner,\n' ..
+                '            map_view_runtime)',
+            'mount_save_game_definition_module.bind(ds, command_runner,\n' ..
+                '            save_game_runtime)',
+            'overlay_registration_definition_module.bind(ds, command_runner,\n' ..
+                '            overlay_transaction)',
+        }
+        for _, binding in ipairs(expected) do
+            assert.is_truthy(source:find(binding, 1, true), binding)
+        end
+        assert.is_nil(source:find(
+            'definition_module.bind(ds, command_runner, {', 1, true))
+        assert.is_truthy(source:find(
+            'map_view_runtime_module.new({', 1, true))
+        assert.is_truthy(source:find(
+            'save_game_runtime_module.new({', 1, true))
+        assert.is_truthy(source:find(
+            'interaction_target_resolver_module.new(', 1, true))
+    end)
 end)

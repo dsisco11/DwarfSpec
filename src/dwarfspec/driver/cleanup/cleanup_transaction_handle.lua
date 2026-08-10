@@ -7,6 +7,8 @@
 ---@field private _assert_stage fun(owner: dwarfspec.ExecutionOwnerIdentity)
 local CleanupTransactionHandle = {}
 CleanupTransactionHandle.__index = CleanupTransactionHandle
+local CleanupTrigger = require(
+    'dwarfspec.protocol.enums.cleanup_execution_triggers')
 
 ---@class dwarfspec.driver.cleanup.CleanupTransactionHandleInternals
 local Internals = {}
@@ -52,7 +54,7 @@ function CleanupTransactionHandle:execute(reason)
     assert(Internals.contains(self._owner, active),
         'cleanup handle execution is forbidden outside its owning lifecycle')
     self._assert_stage(self._owner)
-    return self._transaction:execute(reason)
+    return self._transaction:execute(reason, CleanupTrigger.MANUAL)
 end
 
 ---Returns whether this transaction remains registered for teardown.

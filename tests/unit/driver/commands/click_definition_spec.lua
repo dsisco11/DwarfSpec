@@ -3,6 +3,7 @@ local Harness = dofile('tests/unit/driver/command/engine_harness.lua')
 local Outcomes = require('dwarfspec.driver.command.outcomes')
 local ClickDefinition = require(
     'dwarfspec.driver.commands.click_definition')
+local ClickRuntime = require('dwarfspec.driver.input.click_runtime')
 local TestRunner = dofile(
     'tests/unit/driver/commands/definition_test_support.lua')
 
@@ -12,8 +13,9 @@ local Dependencies = {}
 ---Creates isolated click-definition dependencies.
 ---@return table
 function Dependencies.new()
-    return {resolve_target=function(subject) return {}, subject end,
-        dispatch=function() return 0 end}
+    return ClickRuntime.new({resolver={resolve=function(_, subject)
+        return {}, subject
+    end}, dispatch=function() return 0 end})
 end
 
 describe('verified click command definition', function()
@@ -38,5 +40,12 @@ describe('verified click command definition', function()
             verify=function(observation)
                 return observation.public_result == 0
             end}))
+    end)
+
+    it('rejects the former loose callback bundle', function()
+        assert.has_error(function()
+            ClickDefinition.new({resolve_target=function() end,
+                dispatch=function() end})
+        end, 'click command runtime requires resolve')
     end)
 end)

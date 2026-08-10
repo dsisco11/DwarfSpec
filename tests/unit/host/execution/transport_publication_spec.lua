@@ -1,4 +1,5 @@
 local module = require('dwarfspec.host.execution.transport_publication')
+local Immutable = require('dwarfspec.support.immutable')
 
 describe('host transport publication', function()
     it('binds every event to the run generation', function()
@@ -15,6 +16,31 @@ describe('host transport publication', function()
         assert.equals(10, publisher.now_ms())
         assert.equals(7, publisher.publish('started', {sequence=1}))
         assert.same({'run', 5, 'started', {sequence=1}}, observed)
+    end)
+
+    it('detaches immutable nested event evidence before transport', function()
+        local observed
+        local publisher = module.new_publisher(
+            {run_id='run', generation=5}, {
+                now_ms=function() return 10 end,
+                publish_active_event=function(_, _, _, payload)
+                    observed = payload
+                end,
+            })
+        local receipt = Immutable.read_only({outputs=Immutable.read_only({
+            Immutable.read_only({directory='region1'}, 'workflow output'),
+        }, 'workflow outputs')}, 'workflow receipt')
+
+        publisher.publish('command.stage', Immutable.read_only({
+            receipt_summary=receipt,
+        }, 'command lifecycle event'))
+
+        assert.same({receipt_summary={outputs={{directory='region1'}}}},
+            observed)
+        assert.is_nil(getmetatable(observed))
+        assert.is_nil(getmetatable(observed.receipt_summary))
+        assert.is_nil(getmetatable(observed.receipt_summary.outputs))
+        assert.is_nil(getmetatable(observed.receipt_summary.outputs[1]))
     end)
 
     it('propagates generation rejection from the service boundary', function()

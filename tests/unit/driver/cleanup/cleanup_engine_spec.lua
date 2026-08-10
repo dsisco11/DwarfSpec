@@ -103,6 +103,43 @@ describe('CleanupTransaction', function()
         assert.is_false(transaction:execute('manual'))
     end)
 
+    it('does not strand cleanup when lifecycle observers fail', function()
+        local restored = false
+        local diagnostics = {}
+        local transaction = CleanupTransaction.new({transaction_id='cleanup-observer',
+            registration_ordinal=1, label='observer failure cleanup', receipt={},
+            now_ms=function() return 0 end, remove_pending=function() end,
+            release_verified=function() end,
+            restore=function() restored = true end, verify=function() return true end,
+            record_diagnostic=function(kind, evidence)
+                evidence.kind = kind
+                diagnostics[#diagnostics + 1] = evidence
+            end,
+            on_started=function() error('start publication failed') end,
+            on_finished=function() error('finish publication failed') end})
+
+        assert.is_true(transaction:execute('suite completion', 'owner_teardown'))
+        assert.is_true(restored)
+        assert.are.equal('complete', transaction:state())
+        assert.are.equal(2, #diagnostics)
+        assert.are.equal('cleanup_lifecycle_observer_failed', diagnostics[1].kind)
+        assert.are.equal('started', diagnostics[1].observer)
+        assert.are.equal('finished', diagnostics[2].observer)
+    end)
+
+    it('rejects unsupported execution triggers before leaving pending state', function()
+        local transaction = CleanupTransaction.new({transaction_id='cleanup-trigger',
+            registration_ordinal=1, label='trigger cleanup', receipt={},
+            now_ms=function() return 0 end, remove_pending=function() end,
+            release_verified=function() end, restore=function() end,
+            verify=function() return true end})
+
+        assert_error(function()
+            transaction:execute('suite completion', 'suite completion')
+        end, 'cleanup execution trigger is unsupported')
+        assert.is_true(transaction:isPending())
+    end)
+
     it('keeps dependency-blocked manual work pending without running callbacks',
             function()
         local invoked = false

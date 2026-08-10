@@ -597,15 +597,17 @@ describe('overlay widget component host', function()
             initial_pointer, command_conformance.pointer_snapshot())
     end)
 
-    it('mounts a fullscreen existing instance with throttled updates',
+    it('mounts a fullscreen class with throttled updates',
             function()
-        local instance = OverlayWidgetHarness{
+        local original_frame = {r=0, b=0}
+        local root = ds.mount(OverlayWidgetHarness, {
             fullscreen=true,
             full_interface=false,
             overlay_onupdate_max_freq_seconds=60,
-        }
-        local original_frame = instance.frame
-        ds.mount(instance, {overlay_position={x=-2, y=-3}})
+            frame=original_frame,
+            overlay_position={x=-2, y=-3},
+        })
+        local instance = root:raw()
 
         assert.equals(1, instance.frame.r)
         assert.equals(2, instance.frame.b)

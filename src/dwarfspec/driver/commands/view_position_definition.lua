@@ -10,21 +10,22 @@ local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
 
 ---@class dwarfspec.ViewPositionCommandDefinition
----@field private _dependencies table
+---@field private _runtime dwarfspec.MapViewRuntime
 local ViewPositionDefinition = {}
 ViewPositionDefinition.__index = ViewPositionDefinition
 
 ---Creates the reversible view-position definition owner.
----@param dependencies table
+---@param runtime dwarfspec.MapViewRuntime
 ---@return dwarfspec.ViewPositionCommandDefinition
-function ViewPositionDefinition.new(dependencies)
-    assert(type(dependencies) == 'table',
-        'view-position command dependencies are required')
-    for _, name in ipairs({'get_position', 'set_position', 'origin_offset'}) do
-        assert(type(dependencies[name]) == 'function',
-            'view-position command requires ' .. name)
+function ViewPositionDefinition.new(runtime)
+    assert(type(runtime) == 'table',
+        'view-position command runtime is required')
+    for _, name in ipairs({'get_position', 'set_position', 'origin_offset',
+            'top_left_origin'}) do
+        assert(type(runtime[name]) == 'function',
+            'view-position command runtime requires ' .. name)
     end
-    return setmetatable({_dependencies=dependencies}, ViewPositionDefinition)
+    return setmetatable({_runtime=runtime}, ViewPositionDefinition)
 end
 
 ---Validates and copies one requested map-view position.
@@ -48,9 +49,9 @@ end
 ---@param request table
 ---@return table
 function ViewPositionDefinition:_preflight(request)
-    local baseline = self._dependencies.get_position(
-        self._dependencies.top_left_origin)
-    local offset_x, offset_y = self._dependencies.origin_offset(request.origin)
+    local baseline = self._runtime:get_position(
+        self._runtime:top_left_origin())
+    local offset_x, offset_y = self._runtime:origin_offset(request.origin)
     return {baseline=baseline, requested=request.position,
         raw={x=request.position.x - offset_x,
             y=request.position.y - offset_y, z=request.position.z},
@@ -61,7 +62,7 @@ end
 ---@param readiness table
 ---@return table, table
 function ViewPositionDefinition:_execute(readiness)
-    local ok, accepted = pcall(self._dependencies.set_position,
+    local ok, accepted = pcall(self._runtime.set_position, self._runtime,
         readiness.raw.x, readiness.raw.y, readiness.raw.z)
     assert(ok, 'DwarfSpec could not set the map-view position: ' ..
         tostring(accepted))
@@ -74,7 +75,7 @@ end
 ---@param request table
 ---@return table
 function ViewPositionDefinition:_verify(request)
-    local observed = self._dependencies.get_position(request.origin)
+    local observed = self._runtime:get_position(request.origin)
     local expected = request.position
     if observed.x == expected.x and observed.y == expected.y and
             observed.z == expected.z then
@@ -88,7 +89,7 @@ end
 ---@param receipt table
 function ViewPositionDefinition:_restore(receipt)
     local baseline = receipt.baseline
-    assert(self._dependencies.set_position(
+    assert(self._runtime:set_position(
         baseline.x, baseline.y, baseline.z) ~= false,
         'DFHack rejected the original map-view position')
 end
@@ -97,8 +98,8 @@ end
 ---@param receipt table
 ---@return boolean
 function ViewPositionDefinition:_verify_restored(receipt)
-    local observed = self._dependencies.get_position(
-        self._dependencies.top_left_origin)
+    local observed = self._runtime:get_position(
+        self._runtime:top_left_origin())
     local baseline = receipt.baseline
     return observed.x == baseline.x and observed.y == baseline.y and
         observed.z == baseline.z
@@ -107,7 +108,6 @@ end
 ---Creates the immutable state-setter definition.
 ---@return table
 function ViewPositionDefinition:definition()
-    local dependencies = self._dependencies
     return {name='setViewPos', kind=CommandKind.STATE_SETTER,
         normalize=function(arguments) return self:_normalize(arguments) end,
         preflight=function(context, request)
@@ -130,9 +130,9 @@ end
 ---Registers and binds the public map-view position command.
 ---@param ds table
 ---@param command_runner dwarfspec.CommandRunner
----@param dependencies table
+---@param runtime dwarfspec.MapViewRuntime
 ---@return dwarfspec.CommandDefinition
-function ViewPositionDefinition.bind(ds, command_runner, dependencies)
+function ViewPositionDefinition.bind(ds, command_runner, runtime)
     assert(type(ds) == 'table',
         'view-position command requires the public namespace')
     assert(type(command_runner) == 'table' and
@@ -140,7 +140,7 @@ function ViewPositionDefinition.bind(ds, command_runner, dependencies)
             type(command_runner.invoke) == 'function',
         'view-position command requires the verified command runner')
     local definition = command_runner:registerBuiltin(
-        ViewPositionDefinition.new(dependencies):definition())
+        ViewPositionDefinition.new(runtime):definition())
 
     ---Sets the map-view position through the verified state-setter contract.
     ---@param position table

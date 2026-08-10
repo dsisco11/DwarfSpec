@@ -3,6 +3,8 @@
 local Deadline = require('dwarfspec.driver.command.deadline')
 local Diagnostics = require('dwarfspec.driver.command.diagnostics')
 local CleanupState = require('dwarfspec.protocol.enums.cleanup_states')
+local CleanupTrigger = require(
+    'dwarfspec.protocol.enums.cleanup_execution_triggers')
 local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
 
 ---@class dwarfspec.CleanupTransaction
@@ -18,6 +20,23 @@ CleanupTransaction.__index = CleanupTransaction
 
 ---@class dwarfspec.driver.cleanup.CleanupTransactionInternals
 local Internals = {}
+
+---Invokes a lifecycle observer without allowing telemetry failure to strand cleanup.
+---@param transaction dwarfspec.CleanupTransaction
+---@param label string
+---@param callback fun()
+function Internals.notify(transaction, label, callback)
+    local succeeded, failure = xpcall(callback, debug.traceback)
+    if succeeded then return end
+    xpcall(function()
+        transaction._dependencies.record_diagnostic(
+            'cleanup_lifecycle_observer_failed', {
+            transaction_id=transaction._transaction_id,
+            observer=label,
+            failure=Internals.bounded_error(failure),
+        })
+    end, function() end)
+end
 Internals.diagnostics = Diagnostics.new({max_depth=8, max_entries=64,
     max_string_length=512, max_records=64, pending_sample_limit=3})
 
@@ -28,6 +47,17 @@ Internals.diagnostics = Diagnostics.new({max_depth=8, max_entries=64,
 function Internals.identifier(value, label)
     assert(type(value) == 'string' and value ~= '' and #value <= 128,
         label .. ' must be a bounded nonempty string')
+    return value
+end
+
+---Validates one closed cleanup execution trigger before state transition.
+---@param value any
+---@return dwarfspec.ECleanupExecutionTrigger
+function Internals.trigger(value)
+    assert(value == CleanupTrigger.MANUAL or
+        value == CleanupTrigger.COMMAND_FINALLY or
+        value == CleanupTrigger.OWNER_TEARDOWN,
+        'cleanup execution trigger is unsupported')
     return value
 end
 
@@ -255,10 +285,12 @@ end
 
 ---Executes restore once and polls required verification under a fresh deadline.
 ---@param reason? string
+---@param trigger? dwarfspec.ECleanupExecutionTrigger
 ---@return boolean
-function CleanupTransaction:execute(reason)
+function CleanupTransaction:execute(reason, trigger)
     self._dependencies.assert_executable()
     if not self:isPending() then return false end
+    trigger = Internals.trigger(trigger or CleanupTrigger.MANUAL)
     local blocked = self._dependencies.blocking_dependents(self._transaction_id)
     if #blocked > 0 then
         error(Internals.failure({'dependency_blocked: ' ..
@@ -266,7 +298,9 @@ function CleanupTransaction:execute(reason)
     end
     self._dependencies.remove_pending(self)
     self._state = CleanupState.RUNNING
-    self._dependencies.on_started(self, reason)
+    Internals.notify(self, 'started', function()
+        self._dependencies.on_started(self, trigger)
+    end)
     local deadline = Deadline.new(self._dependencies.now_ms,
         self._dependencies.timeout_ms)
     local cancellation = self._dependencies.new_cancellation()
@@ -345,7 +379,9 @@ function CleanupTransaction:execute(reason)
         end, debug.traceback)
         if released then
             self._state = CleanupState.COMPLETE
-            self._dependencies.on_finished(self, self._state, self._evidence)
+            Internals.notify(self, 'finished', function()
+                self._dependencies.on_finished(self, self._state, self._evidence)
+            end)
             return true
         end
         failures[#failures + 1] = 'claim release: ' ..
@@ -353,7 +389,9 @@ function CleanupTransaction:execute(reason)
     end
     self._state = CleanupState.FAILED
     self._dependencies.retain_unresolved(self._transaction_id)
-    self._dependencies.on_finished(self, self._state, self._evidence)
+    Internals.notify(self, 'finished', function()
+        self._dependencies.on_finished(self, self._state, self._evidence)
+    end)
     error(Internals.failure(failures), 2)
 end
 

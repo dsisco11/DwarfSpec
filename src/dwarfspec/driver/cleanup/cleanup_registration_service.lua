@@ -4,6 +4,8 @@ local CleanupRegistry = require('dwarfspec.driver.cleanup.cleanup_registry')
 local CleanupTransaction = require('dwarfspec.driver.cleanup.cleanup_transaction')
 local Diagnostics = require('dwarfspec.driver.command.diagnostics')
 local CleanupState = require('dwarfspec.protocol.enums.cleanup_states')
+local CleanupTrigger = require(
+    'dwarfspec.protocol.enums.cleanup_execution_triggers')
 local CleanupLifetime = require('dwarfspec.protocol.enums.cleanup_lifetimes')
 local OwnerScope = require('dwarfspec.protocol.enums.execution_owner_scopes')
 local Outcomes = require('dwarfspec.driver.command.outcomes')
@@ -202,7 +204,8 @@ function Internals.publish(service, event, transaction, record, details)
         projection.trigger = details.trigger
         projection.execution_started_at_ms = timestamp_ms
     elseif event == 'cleanup.transaction_finished' then
-        projection.trigger = details.trigger or 'owner_teardown'
+        projection.trigger = details.trigger or record.execution_trigger or
+            CleanupTrigger.OWNER_TEARDOWN
         projection.execution_started_at_ms = record.execution_started_at_ms or
             timestamp_ms
         projection.completed_at_ms = timestamp_ms
@@ -219,6 +222,7 @@ function Internals.publish(service, event, transaction, record, details)
     end
     if event == 'cleanup.transaction_started' then
         record.execution_started_at_ms = projection.execution_started_at_ms
+        record.execution_trigger = projection.trigger
     end
     local safe_projection = events.copy_json(Internals.plain(projection),
         'cleanup lifecycle event')
@@ -414,7 +418,8 @@ function CleanupRegistrationService:executeCommandTransactionsSince(
         local record = self._transaction_records[transaction:transaction_id()]
         Internals.same_owner(first_record.owner, record.owner)
     end
-    return registry:execute_transactions(transactions, reason)
+    return registry:execute_transactions(transactions, reason,
+        CleanupTrigger.COMMAND_FINALLY)
 end
 
 ---Atomically registers one effect-backed cleanup transaction and active claims.
@@ -504,8 +509,7 @@ function CleanupRegistrationService:register(registration)
         on_finished=function(item, disposition, evidence)
             self._executing_owners[owner_key] = nil
             Internals.publish(self, 'cleanup.transaction_finished', item, record,
-                {disposition=disposition, evidence=evidence,
-                    trigger='owner_teardown'})
+                {disposition=disposition, evidence=evidence})
             if disposition == CleanupState.FAILED then
                 self._quarantine(Internals.diagnostics:sanitize({
                     reason=Internals.release_failure(evidence) and
@@ -642,7 +646,8 @@ function CleanupRegistrationService:finalize_owner(owner, reason, interrupted)
     end
     self._closed_owners[key] = true
     local registry = Internals.registry(self, owner)
-    local confirmed, failures = registry:execute_all(reason)
+    local confirmed, failures = registry:execute_all(reason,
+        CleanupTrigger.OWNER_TEARDOWN)
     if interrupted then
         local unresolved = false
         for _, transaction in ipairs(registry:pending_transactions()) do

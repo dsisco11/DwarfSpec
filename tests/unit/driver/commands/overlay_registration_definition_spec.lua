@@ -11,13 +11,13 @@ local Dependencies = {}
 ---Creates isolated overlay-fixture definition dependencies.
 ---@return table
 function Dependencies.new()
-    return {transaction={prepare=function() return {claims={}} end,
+    return {prepare=function() return {claims={}} end,
         stage=function() return {staged=true, path='probe.lua',
             registered_names={}} end,
         bindings=function() return {} end,
         verify=function() return true end,
         restore=function() end,
-        verify_absent=function() return true end}}
+        verify_absent=function() return true end}
 end
 
 describe('verified overlay-registration command definition', function()
@@ -42,5 +42,11 @@ describe('verified overlay-registration command definition', function()
         assert.is_function(definition.cleanup.resources)
         assert.is_function(definition.cleanup.restore)
         assert.is_function(definition.cleanup.verify)
+    end)
+
+    it('rejects the former transaction wrapper bundle', function()
+        assert.has_error(function()
+            OverlayRegistrationDefinition.new({transaction=Dependencies.new()})
+        end, 'overlay-registration transaction requires prepare')
     end)
 end)

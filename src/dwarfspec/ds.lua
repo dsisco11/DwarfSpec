@@ -159,6 +159,16 @@ local subject_module = load_automation_module(package_root,
     'dwarfspec.driver.subjects.subject')
 local interaction_target_module = load_automation_module(package_root,
     'dwarfspec.driver.subjects.interaction_target')
+local interaction_target_resolver_module = load_automation_module(package_root,
+    'dwarfspec.driver.mount.interaction_target_resolver')
+local click_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.input.click_runtime')
+local map_view_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.game.map_view_runtime')
+local save_game_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.game.save_game_runtime')
+local search_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.search_runtime')
 local lua_view_adapter_module = load_automation_module(package_root,
     'dwarfspec.driver.subjects.lua_view_adapter')
 local native_attachment_module = load_automation_module(package_root,
@@ -798,9 +808,10 @@ local command_observer_module = load_automation_module(package_root,
             if mount ~= nil then context.mount_context:refresh_views(mount) end
         end)
     end
-    local search_command = text_search_command.new_command({
+    local search_runtime = search_runtime_module.new({
         mount_context=context.mount_context,
         matcher=rendered_text_search,
+        text_search=text_search_command,
     })
     context.run.mount_cleanup_probe = function()
         local state = context.mount_context:cleanup_state()
@@ -898,22 +909,8 @@ local command_observer_module = load_automation_module(package_root,
     ---@param value any
     ---@param operation string
     ---@return any, dwarfspec.OwnedScreenInteractionTarget|dwarfspec.BorrowedNativeInteractionTarget|nil, table|nil, dwarfspec.SubjectAdapter|nil
-    local function resolve_interaction_target(value, operation)
-        if value == nil then
-            local mount = context.mount_context:require_current(operation)
-            local adapter = mount.subject_source.adapter
-            return adapter:root(), mount.interaction_target, mount, adapter
-        end
-        if context.mount_context.subject_mounts[value] then
-            local view = context.mount_context:resolve_subject(value,
-                operation)
-            local mount = context.mount_context.current
-            return view, mount.interaction_target, mount,
-                value._descriptor.adapter
-        end
-        error(('DwarfSpec %s requires a subject from the current mount; ' ..
-            'use ds.get(control_path) or ds.root()'):format(operation), 2)
-    end
+    local interaction_target_resolver =
+        interaction_target_resolver_module.new(context.mount_context)
 
     ---Dispatches simulated input through the current mount's input ingress.
     ---@param target dwarfspec.OwnedScreenInteractionTarget|dwarfspec.BorrowedNativeInteractionTarget
@@ -1674,7 +1671,8 @@ local command_observer_module = load_automation_module(package_root,
     ---@return table
     function ds.inspect(view)
         local adapter
-        view, _, _, adapter = resolve_interaction_target(view, 'inspect')
+        view, _, _, adapter = interaction_target_resolver:resolve(view,
+            'inspect')
         return diagnostics.inspect_view(view, adapter)
     end
 
@@ -1683,7 +1681,8 @@ local command_observer_module = load_automation_module(package_root,
     ---@param search_area table|nil
     ---@return table|nil
     function ds.search(query, search_area)
-        return search_command(query, search_area)
+        return search_runtime:search(query, search_area,
+            search_runtime:is_subject(search_area))
     end
 
     ---Returns a copied focus-string list for one current mounted subject.
@@ -1691,7 +1690,7 @@ local command_observer_module = load_automation_module(package_root,
     ---@return string[]
     local function get_focus_list(subject)
         local interaction_target
-        _, interaction_target = resolve_interaction_target(subject,
+        _, interaction_target = interaction_target_resolver:resolve(subject,
             'getFocusList')
         local gui = dfhack and dfhack.gui
         assert(type(gui) == 'table' and
@@ -1716,7 +1715,8 @@ local command_observer_module = load_automation_module(package_root,
     ---@return any
     function ds.redraw(view, options)
         local interaction_target
-        _, interaction_target = resolve_interaction_target(view, 'redraw')
+        _, interaction_target = interaction_target_resolver:resolve(
+            view, 'redraw')
         assert(type(options) == 'table' or options == nil,
             'redraw options must be a table')
         options = options or {}
@@ -1861,7 +1861,7 @@ local command_observer_module = load_automation_module(package_root,
     ---@return integer, integer
     local function move_pointer_to_grid(x, y)
         local target
-        _, target = resolve_interaction_target(nil, 'move_pointer')
+        _, target = interaction_target_resolver:resolve(nil, 'move_pointer')
         assert(type(x) == 'number' and x % 1 == 0 and x >= 0,
             'pointer x coordinate must be a nonnegative integer')
         assert(type(y) == 'number' and y % 1 == 0 and y >= 0,
@@ -1884,7 +1884,7 @@ local command_observer_module = load_automation_module(package_root,
     ---@param y any
     ---@return integer, integer
     local function move_pointer_to_pixels(x, y)
-        resolve_interaction_target(nil, 'move_pointer')
+        interaction_target_resolver:resolve(nil, 'move_pointer')
         set_pointer_coordinates(x, y, EPointerSpace.PIXELS)
         return x, y
     end
@@ -1918,7 +1918,7 @@ local command_observer_module = load_automation_module(package_root,
         assert(options.recenter == nil or type(options.recenter) == 'boolean',
             'world-tile pointer recenter option must be a boolean')
         local recenter = options.recenter ~= false
-        resolve_interaction_target(nil, 'move_pointer')
+        interaction_target_resolver:resolve(nil, 'move_pointer')
         mutate_pointer('move_pointer', function()
             if recenter then
                 ds.setViewPos(position, EScreenOrigin.CENTER)
@@ -1989,7 +1989,7 @@ local command_observer_module = load_automation_module(package_root,
         local target
         local mount
         local adapter
-        view, target, mount, adapter = resolve_interaction_target(
+        view, target, mount, adapter = interaction_target_resolver:resolve(
             requested_subject, 'move_pointer')
         local source = requested_subject and
             requested_subject._descriptor.source or mount.subject_source
@@ -2065,7 +2065,8 @@ local command_observer_module = load_automation_module(package_root,
     ---@return integer
     function ds.input(keys, subject)
         local interaction_target
-        _, interaction_target = resolve_interaction_target(subject, 'input')
+        _, interaction_target = interaction_target_resolver:resolve(
+            subject, 'input')
         return context.mount_context:mutate('input', function()
             simulate_input(interaction_target, 'input', keys)
         end)
@@ -2123,7 +2124,8 @@ local command_observer_module = load_automation_module(package_root,
     ---@return integer
     function ds.mouseInput(button, action)
         local interaction_target
-        _, interaction_target = resolve_interaction_target(nil, 'mouseInput')
+        _, interaction_target = interaction_target_resolver:resolve(
+            nil, 'mouseInput')
         local fields = mouse_button_fields[button]
         local key = mouse_wheel_keys[button]
         assert(fields or key,
@@ -2174,7 +2176,8 @@ local command_observer_module = load_automation_module(package_root,
             'mouseWheel anchor requires a subject')
         if subject then ds.hover(subject, anchor) end
         local interaction_target
-        _, interaction_target = resolve_interaction_target(subject, 'mouseWheel')
+        _, interaction_target = interaction_target_resolver:resolve(
+            subject, 'mouseWheel')
         local key = mouse_wheel_keys[direction]
         pointer_adapter_module.position(context.pointer)
         return mutate_pointer('mouseWheel', function()
@@ -2196,7 +2199,8 @@ local command_observer_module = load_automation_module(package_root,
     function ds.click(view, button)
         local requested_view = view
         local interaction_target
-        view, interaction_target = resolve_interaction_target(view, 'click')
+        view, interaction_target = interaction_target_resolver:resolve(
+            view, 'click')
         local key = ({left='_MOUSE_L', right='_MOUSE_R',
             middle='_MOUSE_M'})[button or 'left']
         assert(key, 'unsupported mouse button: ' .. tostring(button))
@@ -2216,7 +2220,8 @@ local command_observer_module = load_automation_module(package_root,
     ---@return integer
     function ds.type(text, subject)
         local interaction_target
-        _, interaction_target = resolve_interaction_target(subject, 'type')
+        _, interaction_target = interaction_target_resolver:resolve(
+            subject, 'type')
         return context.mount_context:mutate('type', function()
             assert(type(text) == 'string', 'text input must be a string')
             for index = 1, #text do
@@ -2304,14 +2309,18 @@ local command_observer_module = load_automation_module(package_root,
         paths=subject_paths_module,
         native_attachment=native_attachment,
         diagnostics=diagnostics,
-        resolve_target=resolve_interaction_target,
+        resolve_target=function(value, operation)
+            return interaction_target_resolver:resolve(value, operation)
+        end,
         select_source=native_subject_sources.select,
         resolve_implicit_path=native_subject_sources.resolve_implicit_path,
     })
     for name, command in pairs(mount_commands) do ds[name] = command end
     local input_commands = input_command.new({
         context=context,
-        resolve_target=resolve_interaction_target,
+        resolve_target=function(value, operation)
+            return interaction_target_resolver:resolve(value, operation)
+        end,
         simulate_input=simulate_input,
     })
     ds.input = input_commands.input
@@ -2368,32 +2377,30 @@ local command_observer_module = load_automation_module(package_root,
         })
 
         local legacy_click = ds.click
-        search_definition_module.bind(ds, command_runner, {
-            mount_context=context.mount_context,
-            normalize_query=text_search_command.normalize_query,
-            normalize_rectangle=text_search_command.normalize_rectangle,
-            search=search_command,
-        })
-        click_definition_module.bind(ds, command_runner, {
-            resolve_target=resolve_interaction_target,
+        local click_runtime = click_runtime_module.new({
+            resolver=interaction_target_resolver,
             dispatch=legacy_click,
         })
-        view_position_definition_module.bind(ds, command_runner, {
-            get_position=ds.getViewPos,
-            set_position=context.set_map_view_position,
-            origin_offset=screen_origin_offset,
-            top_left_origin=EScreenOrigin.TOP_LEFT,
+        local map_view_runtime = map_view_runtime_module.new({
+            read=context.get_map_view_position,
+            write=context.set_map_view_position,
+            dimensions=context.get_map_view_dimensions,
+            origins=EScreenOrigin,
         })
-        mount_save_game_definition_module.bind(ds, command_runner, {
-            workflow=save_game_mount_module,
+        local save_game_runtime = save_game_runtime_module.new({
             loader=save_game_loader,
             unloader=save_game_unloader,
             host={is_world_loaded=dfhack.isWorldLoaded,
                 read_world_folder=dfhack.world.ReadWorldFolder},
         })
-        overlay_registration_definition_module.bind(ds, command_runner, {
-            transaction=overlay_transaction,
-        })
+        search_definition_module.bind(ds, command_runner, search_runtime)
+        click_definition_module.bind(ds, command_runner, click_runtime)
+        view_position_definition_module.bind(ds, command_runner,
+            map_view_runtime)
+        mount_save_game_definition_module.bind(ds, command_runner,
+            save_game_runtime)
+        overlay_registration_definition_module.bind(ds, command_runner,
+            overlay_transaction)
     end
 
     if next(extensions.commands) ~= nil then

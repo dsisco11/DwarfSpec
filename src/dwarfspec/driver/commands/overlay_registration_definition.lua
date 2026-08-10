@@ -10,19 +10,22 @@ local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
 
 ---@class dwarfspec.OverlayRegistrationCommandDefinition
----@field private _dependencies table
+---@field private _transaction dwarfspec.OverlayRegistrationTransaction
 local OverlayRegistrationDefinition = {}
 OverlayRegistrationDefinition.__index = OverlayRegistrationDefinition
 
 ---Creates the managed overlay-registration definition owner.
----@param dependencies table
+---@param transaction dwarfspec.OverlayRegistrationTransaction
 ---@return dwarfspec.OverlayRegistrationCommandDefinition
-function OverlayRegistrationDefinition.new(dependencies)
-    assert(type(dependencies) == 'table',
-        'overlay-registration command dependencies are required')
-    assert(type(dependencies.transaction) == 'table',
+function OverlayRegistrationDefinition.new(transaction)
+    assert(type(transaction) == 'table',
         'overlay-registration command requires transaction')
-    return setmetatable({_dependencies=dependencies},
+    for _, name in ipairs({'prepare', 'stage', 'bindings', 'verify',
+            'restore', 'verify_absent'}) do
+        assert(type(transaction[name]) == 'function',
+            'overlay-registration transaction requires ' .. name)
+    end
+    return setmetatable({_transaction=transaction},
         OverlayRegistrationDefinition)
 end
 
@@ -38,7 +41,7 @@ end
 ---@param request table
 ---@return table
 function OverlayRegistrationDefinition:_plan(request)
-    return self._dependencies.transaction:prepare(
+    return self._transaction:prepare(
         request.source_path, request.logical_name)
 end
 
@@ -46,7 +49,7 @@ end
 ---@param plan table
 ---@return table, table
 function OverlayRegistrationDefinition:_stage(plan)
-    local staged = self._dependencies.transaction:stage(plan)
+    local staged = self._transaction:stage(plan)
     return staged, staged
 end
 
@@ -54,14 +57,14 @@ end
 ---@param receipt table
 ---@return table
 function OverlayRegistrationDefinition:_bind_claims(receipt)
-    return self._dependencies.transaction:bindings(receipt)
+    return self._transaction:bindings(receipt)
 end
 
 ---Verifies that the staged registration is observable.
 ---@param receipt table
 ---@return table
 function OverlayRegistrationDefinition:_verify(receipt)
-    if self._dependencies.transaction:verify(receipt) then
+    if self._transaction:verify(receipt) then
         return Outcomes.ready(true, {path=receipt.path,
             registration_count=#receipt.registered_names})
     end
@@ -72,20 +75,19 @@ end
 ---Restores the overlay registry from the effect receipt.
 ---@param receipt table
 function OverlayRegistrationDefinition:_restore(receipt)
-    self._dependencies.transaction:restore(receipt)
+    self._transaction:restore(receipt)
 end
 
 ---Verifies that the staged overlay registration is absent.
 ---@param receipt table
 ---@return boolean
 function OverlayRegistrationDefinition:_verify_absent(receipt)
-    return self._dependencies.transaction:verify_absent(receipt)
+    return self._transaction:verify_absent(receipt)
 end
 
 ---Creates the immutable fixture definition.
 ---@return table
 function OverlayRegistrationDefinition:definition()
-    local dependencies = self._dependencies
     return {name='stage_overlay_registration', kind=CommandKind.FIXTURE,
         normalize=function(arguments) return self:_normalize(arguments) end,
         preflight=function(context, request)
@@ -110,9 +112,9 @@ end
 ---Registers and binds the public managed overlay fixture command.
 ---@param ds table
 ---@param command_runner dwarfspec.CommandRunner
----@param dependencies table
+---@param transaction dwarfspec.OverlayRegistrationTransaction
 ---@return dwarfspec.CommandDefinition
-function OverlayRegistrationDefinition.bind(ds, command_runner, dependencies)
+function OverlayRegistrationDefinition.bind(ds, command_runner, transaction)
     assert(type(ds) == 'table',
         'overlay-registration command requires the public namespace')
     assert(type(command_runner) == 'table' and
@@ -120,7 +122,7 @@ function OverlayRegistrationDefinition.bind(ds, command_runner, dependencies)
             type(command_runner.invoke) == 'function',
         'overlay-registration command requires the verified command runner')
     local definition = command_runner:registerBuiltin(
-        OverlayRegistrationDefinition.new(dependencies):definition())
+        OverlayRegistrationDefinition.new(transaction):definition())
 
     ---Stages an overlay through the verified fixture contract.
     ---@param source_path string

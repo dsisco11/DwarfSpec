@@ -43,7 +43,7 @@ function Harness.new(options)
             return {stable_identity=identity}
         end,
         lookup_claim=function() end,
-        capture_render=function() end,
+        capture_render=options.capture_render or function() return 0 end,
         observe_render=options.observe_render or function() end,
         wait_frames=function() end,
         wait_ticks=function() end,

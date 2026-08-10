@@ -1418,31 +1418,31 @@ Outcome: query, action, state-setter, workflow, and fixture shapes fit the
 architecture without command-specific runner exceptions before broad
 conversion.
 
-- [ ] Migrate `search` as a read-only query.
-  - [ ] Preserve successful nil/miss semantics distinctly from pending.
-  - [ ] Validate stable plain observations and nested verification use.
-- [ ] Migrate `click` as a generic action.
-  - [ ] Re-resolve target/actionability in preflight.
-  - [ ] Keep primary input dispatch `ONCE`.
-  - [ ] Verify only reliable ingress, pointer, transient-state restoration, and
+- [x] Migrate `search` as a read-only query.
+  - [x] Preserve successful nil/miss semantics distinctly from pending.
+  - [x] Validate stable plain observations and nested verification use.
+- [x] Migrate `click` as a generic action.
+  - [x] Re-resolve target/actionability in preflight.
+  - [x] Keep primary input dispatch `ONCE`.
+  - [x] Verify only reliable ingress, pointer, transient-state restoration, and
         settling/render guarantees.
-  - [ ] Prove optional caller verification for product behavior.
-- [ ] Migrate `setViewPos` as a reversible state setter.
-  - [ ] Capture the exact baseline before mutation.
-  - [ ] Register cleanup immediately from confirmed effect receipt.
-  - [ ] Verify exact requested position through `getViewPos(origin)`.
-  - [ ] Verify cleanup restores the baseline independently.
-- [ ] Migrate `mountSaveGame` as a workflow.
-  - [ ] Preserve exact menu/world/save/map sequence as named steps.
-  - [ ] Verify every intermediate and terminal state under one deadline.
-  - [ ] Preserve stable nil-capable step output representation.
-- [ ] Migrate `stage_overlay_registration` or the first implemented managed
+  - [x] Prove optional caller verification for product behavior.
+- [x] Migrate `setViewPos` as a reversible state setter.
+  - [x] Capture the exact baseline before mutation.
+  - [x] Register cleanup immediately from confirmed effect receipt.
+  - [x] Verify exact requested position through `getViewPos(origin)`.
+  - [x] Verify cleanup restores the baseline independently.
+- [x] Migrate `mountSaveGame` as a workflow.
+  - [x] Preserve exact menu/world/save/map sequence as named steps.
+  - [x] Verify every intermediate and terminal state under one deadline.
+  - [x] Preserve stable nil-capable step output representation.
+- [x] Migrate `stage_overlay_registration` or the first implemented managed
       fixture as the representative resource transaction.
-  - [ ] Validate inert claims before creation.
-  - [ ] Register transaction and active claims from the created stable identity
+  - [x] Validate inert claims before creation.
+  - [x] Register transaction and active claims from the created stable identity
         before verification/publication.
-  - [ ] Verify creation and later absence/restoration.
-- [ ] Add trailing command option declarations for all five representatives.
+  - [x] Verify creation and later absence/restoration.
+- [x] Add trailing command option declarations for all five representatives.
 - [x] Complete representative-command logical ownership instead of leaving
       lifecycle implementations in `src/dwarfspec/ds.lua` dependency tables.
   - [x] Make each representative command module own its normalization,
@@ -1473,9 +1473,9 @@ conversion.
   - [x] Add a source-organization assertion or focused composition test proving
         `ds.lua` contains no representative command lifecycle implementation
         and each representative is registered exactly once by its owner module.
-- [ ] Add their conformance fixtures and focused domain suites.
-- [ ] Run the complete command-engine suite after representative integration.
-- [ ] Correct the pinned Busted test-attempt lifecycle boundaries exposed by
+- [x] Add their conformance fixtures and focused domain suites.
+- [x] Run the complete command-engine suite after representative integration.
+- [x] Correct the pinned Busted test-attempt lifecycle boundaries exposed by
       representative native qualification before accepting any Phase 15 live
       result.
   - [x] Replace the split executor-entry, `test.end`, and root-`after_each`
@@ -1514,28 +1514,28 @@ conversion.
   - [x] Run focused Busted adapter, suite executor, cleanup-owner lifecycle,
         output-handler/event, result projection, host assembly, and service
         retention suites, followed by the full unit/static gates.
-  - [ ] Rebuild and reinstall the corrected package, restart only with explicit
+  - [x] Rebuild and reinstall the corrected package, restart only with explicit
         user control, and rerun every Phase 15 native case with terminal status
         plus cleanup confirmation.
-- [ ] Run the smallest relevant native live cases for behavior/scheduler/
+- [x] Run the smallest relevant native live cases for behavior/scheduler/
       cleanup boundaries changed by the representatives.
-- [ ] Review receipt boundaries, command categories, nested workflow behavior,
+- [x] Review receipt boundaries, command categories, nested workflow behavior,
       diagnostics, return compatibility, and absence of runner exceptions.
-- [ ] Resolve any architectural defect in shared components before broad
+- [x] Resolve any architectural defect in shared components before broad
       migration; do not encode representative-only escape hatches.
 
 Completion criteria:
 
-- [ ] All five representative shapes pass their focused/conformance evidence
+- [x] All five representative shapes pass their focused/conformance evidence
       and applicable live proof without shared-runner exceptions.
-- [ ] Every pinned-Busted setup/body/teardown/pending boundary produces one
+- [x] Every pinned-Busted setup/body/teardown/pending boundary produces one
       owner-correct terminal attempt, finalizes cleanup before terminal event
       publication, and leaves no active owner for suite/run fallback under
       ordinary execution.
 - [x] Each representative module owns its complete command-specific lifecycle;
       `ds.lua` is only the composition root, and domain adapters contain only
       runtime interaction capabilities rather than definition policy.
-- [ ] Broad conversion is explicitly unblocked only after the follow-up design
+- [x] Broad conversion is explicitly unblocked only after the follow-up design
       review and Phase 15A capability encapsulation are complete.
 
 ## Phase 15A: Encapsulate representative runtime capabilities
@@ -1544,64 +1544,64 @@ Outcome: representative commands consume explicit module-owned framework
 capabilities instead of ad hoc bundles of loose functions, while `ds.lua`
 remains a composition root and command modules retain lifecycle policy.
 
-- [ ] Classify every representative dependency as either a stateless framework
+- [x] Classify every representative dependency as either a stateless framework
       helper or a stateful run-scoped capability.
-  - [ ] Let command modules import stateless, dependency-free helpers directly
+  - [x] Let command modules import stateless, dependency-free helpers directly
         only when they have no run identity, mutable state, host ownership, or
         lifecycle responsibility.
-  - [ ] Record the classification for interaction-target resolution, input
+  - [x] Record the classification for interaction-target resolution, input
         dispatch, render observation, map-view access, save-game host access,
         text search, and overlay transactions before changing construction.
-- [ ] Encapsulate each stateful representative capability in a documented
+- [x] Encapsulate each stateful representative capability in a documented
       class-like service module with a narrow public method contract.
-  - [ ] Move interaction-target resolution out of `ds.lua` into a mount-owned
+  - [x] Move interaction-target resolution out of `ds.lua` into a mount-owned
         resolver service instantiated with the current run's mount context.
-  - [ ] Represent input dispatch and render observation as cohesive runtime
+  - [x] Represent input dispatch and render observation as cohesive runtime
         services rather than unrelated injected functions.
-  - [ ] Represent map-view reads, writes, and origin conversion as one
+  - [x] Represent map-view reads, writes, and origin conversion as one
         map-view service used by the reversible state-setter definition.
-  - [ ] Represent save-game host inspection and loader/unloader operations as
+  - [x] Represent save-game host inspection and loader/unloader operations as
         a cohesive save-game runtime service without moving workflow policy out
         of the command owner.
-  - [ ] Keep overlay transaction behavior behind its existing class-like
+  - [x] Keep overlay transaction behavior behind its existing class-like
         transaction boundary and remove any redundant loose wrappers.
-- [ ] Instantiate stateful services at the composition root with their
+- [x] Instantiate stateful services at the composition root with their
       run-specific dependencies and inject cohesive instances into command
       owners.
-  - [ ] Do not inject loose `normalize`, `preflight`, `execute`, `verify`,
+  - [x] Do not inject loose `normalize`, `preflight`, `execute`, `verify`,
         `restore`, resolver, dispatcher, observer, or accessor functions in ad
         hoc dependency tables.
-  - [ ] Do not introduce globals, service locators, hidden singleton state, or
+  - [x] Do not introduce globals, service locators, hidden singleton state, or
         imports of the assembled `ds` facade or host internals from command or
         driver service modules.
-- [ ] Preserve command ownership boundaries.
-  - [ ] Command modules continue to own normalization, lifecycle orchestration,
+- [x] Preserve command ownership boundaries.
+  - [x] Command modules continue to own normalization, lifecycle orchestration,
         verification policy, receipts, claims, cleanup policy, workflow steps,
         public binding, and registration.
-  - [ ] Capability services own reusable runtime interaction only and do not
+  - [x] Capability services own reusable runtime interaction only and do not
         construct definitions, register commands, select intrinsic proof, or
         decide cleanup/retry policy.
-- [ ] Add focused service-contract tests for every new class-like capability.
-- [ ] Update each representative command suite to prove it consumes cohesive
+- [x] Add focused service-contract tests for every new class-like capability.
+- [x] Update each representative command suite to prove it consumes cohesive
       capability instances, preserves its existing behavior, and rejects the
       former loose callback-bundle construction shape.
-- [ ] Add a source-organization check proving representative bindings in
+- [x] Add a source-organization check proving representative bindings in
       `ds.lua` pass only class-like stateful services and explicit stateless
       values/modules, with no anonymous or named loose framework callbacks.
-- [ ] Run all representative command, affected domain, engine-conformance,
+- [x] Run all representative command, affected domain, engine-conformance,
       runner, public-binding, host-assembly, full-unit, Lua formatting, and
       source-declaration checks.
-- [ ] Perform a follow-up ownership and dependency-direction review before
+- [x] Perform a follow-up ownership and dependency-direction review before
       Phase 16 begins broad command-family conversion.
 
 Completion criteria:
 
-- [ ] Every stateful representative framework capability is owned by one
+- [x] Every stateful representative framework capability is owned by one
       documented class-like service instance with explicit run-scoped
       construction and no hidden global state.
-- [ ] Representative command modules import only truly stateless helpers and
+- [x] Representative command modules import only truly stateless helpers and
       receive stateful capabilities only as cohesive service instances.
-- [ ] `ds.lua` contains composition only, no loose representative framework
+- [x] `ds.lua` contains composition only, no loose representative framework
       callback bundle remains, and all focused/full/static evidence passes.
 
 ## Phase 16: Convert read-only queries, assertions, and waits

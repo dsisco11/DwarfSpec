@@ -4,6 +4,8 @@ local CleanupPlanner = require('dwarfspec.driver.cleanup.cleanup_planner')
 local CleanupTransaction = require(
     'dwarfspec.driver.cleanup.cleanup_transaction')
 local CleanupState = require('dwarfspec.protocol.enums.cleanup_states')
+local CleanupTrigger = require(
+    'dwarfspec.protocol.enums.cleanup_execution_triggers')
 
 ---@class dwarfspec.CleanupRegistry
 ---@field private _transactions table<string, dwarfspec.CleanupTransaction>
@@ -92,12 +94,14 @@ end
 ---Executes selected pending transactions in dependency-safe deterministic order.
 ---@param transactions dwarfspec.CleanupTransaction[]
 ---@param reason string
+---@param trigger? dwarfspec.ECleanupExecutionTrigger
 ---@return boolean, table[]
-function CleanupRegistry:execute_transactions(transactions, reason)
+function CleanupRegistry:execute_transactions(transactions, reason, trigger)
     assert(type(transactions) == 'table',
         'cleanup execution transactions must be a table')
     assert(type(reason) == 'string' and reason ~= '',
         'cleanup execution reason must be a nonempty string')
+    trigger = trigger or CleanupTrigger.MANUAL
     for _, transaction in ipairs(transactions) do
         assert(self._transactions[transaction:transaction_id()] == transaction,
             'cleanup transaction is not registered in this registry')
@@ -110,7 +114,9 @@ function CleanupRegistry:execute_transactions(transactions, reason)
             failures[#failures + 1] = 'cleanup transaction failed: dependency_blocked: ' ..
                 table.concat(blocked, ',')
         else
-            local succeeded, failure = xpcall(function() transaction:execute(reason) end,
+            local succeeded, failure = xpcall(function()
+                transaction:execute(reason, trigger)
+            end,
                 debug.traceback)
             if not succeeded then failures[#failures + 1] = failure end
         end
@@ -120,13 +126,14 @@ end
 
 ---Executes all pending transactions in dependency-safe deterministic order.
 ---@param reason string
+---@param trigger? dwarfspec.ECleanupExecutionTrigger
 ---@return boolean, table[]
-function CleanupRegistry:execute_all(reason)
+function CleanupRegistry:execute_all(reason, trigger)
     local transactions = {}
     for transaction_id in pairs(self._pending) do
         transactions[#transactions + 1] = self._transactions[transaction_id]
     end
-    return self:execute_transactions(transactions, reason)
+    return self:execute_transactions(transactions, reason, trigger)
 end
 
 return CleanupRegistry

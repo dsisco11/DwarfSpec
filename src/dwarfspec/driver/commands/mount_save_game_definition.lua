@@ -6,30 +6,33 @@ local IntrinsicKind = require(
 local Outcomes = require('dwarfspec.driver.command.outcomes')
 local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
+local Workflow = require('dwarfspec.driver.game.save_game_mount')
 
 ---@class dwarfspec.MountSaveGameCommandDefinition
----@field private _dependencies table
+---@field private _runtime dwarfspec.SaveGameRuntime
 local MountSaveGameDefinition = {}
 MountSaveGameDefinition.__index = MountSaveGameDefinition
 
 ---Creates the save-game workflow definition owner.
----@param dependencies table
+---@param runtime dwarfspec.SaveGameRuntime
 ---@return dwarfspec.MountSaveGameCommandDefinition
-function MountSaveGameDefinition.new(dependencies)
-    assert(type(dependencies) == 'table',
-        'mount-save-game command dependencies are required')
-    for _, name in ipairs({'workflow', 'loader', 'unloader', 'host'}) do
-        assert(type(dependencies[name]) == 'table',
-            'mount-save-game command requires ' .. name)
+function MountSaveGameDefinition.new(runtime)
+    assert(type(runtime) == 'table',
+        'mount-save-game command runtime is required')
+    for _, name in ipairs({'host', 'is_world_loaded', 'unload',
+            'reach_save_menu', 'select_save_world',
+            'select_save_and_await_map', 'verify_loaded'}) do
+        assert(type(runtime[name]) == 'function',
+            'mount-save-game command runtime requires ' .. name)
     end
-    return setmetatable({_dependencies=dependencies}, MountSaveGameDefinition)
+    return setmetatable({_runtime=runtime}, MountSaveGameDefinition)
 end
 
 ---Normalizes the requested save directory.
 ---@param arguments table
 ---@return table
 function MountSaveGameDefinition:_normalize(arguments)
-    return {directory_name=self._dependencies.workflow.validate_directory_name(
+    return {directory_name=Workflow.validate_directory_name(
         1, arguments.directory_name)}
 end
 
@@ -37,7 +40,7 @@ end
 ---@param request table
 ---@return table
 function MountSaveGameDefinition:_inspect(request)
-    return self._dependencies.workflow.preflight(self._dependencies.host, 1,
+    return Workflow.preflight(self._runtime:host(), 1,
         request.directory_name)
 end
 
@@ -47,7 +50,7 @@ end
 function MountSaveGameDefinition:_unload_current(state)
     local current = self:_inspect(state.request)
     if current.loaded_directory and current.transition_required then
-        self._dependencies.unloader:unload(current.loaded_directory,
+        self._runtime:unload(current.loaded_directory,
             current.requested_directory)
     end
     return current.loaded_directory
@@ -57,10 +60,10 @@ end
 ---@param state table
 ---@return table
 function MountSaveGameDefinition:_reach_menu(state)
-    if self._dependencies.host.is_world_loaded() then
+    if self._runtime:is_world_loaded() then
         return {already_loaded=true}
     end
-    return self._dependencies.loader:reach_save_menu(
+    return self._runtime:reach_save_menu(
         state.request.directory_name)
 end
 
@@ -70,7 +73,7 @@ end
 function MountSaveGameDefinition:_select_world(state)
     local menu = state.outputs.reach_save_menu.value
     if menu.already_loaded then return menu end
-    return self._dependencies.loader:select_save_world(
+    return self._runtime:select_save_world(
         state.request.directory_name, menu.world_id)
 end
 
@@ -78,9 +81,9 @@ end
 ---@param state table
 ---@return string
 function MountSaveGameDefinition:_select_save(state)
-    if not self._dependencies.host.is_world_loaded() then
+    if not self._runtime:is_world_loaded() then
         local selection = state.outputs.select_save_world.value
-        self._dependencies.loader:select_save_and_await_map(
+        self._runtime:select_save_and_await_map(
             state.request.directory_name, selection.save_index)
     end
     return state.request.directory_name
@@ -90,7 +93,7 @@ end
 ---@param state table
 ---@return string
 function MountSaveGameDefinition:_await_map(state)
-    assert(self._dependencies.host.is_world_loaded(),
+    assert(self._runtime:is_world_loaded(),
         'DwarfSpec mountSaveGame did not observe a loaded map')
     return state.request.directory_name
 end
@@ -99,7 +102,7 @@ end
 ---@param state table
 ---@return string
 function MountSaveGameDefinition:_verify_loaded(state)
-    return self._dependencies.loader:verify_loaded(state.request.directory_name)
+    return self._runtime:verify_loaded(state.request.directory_name)
 end
 
 ---Creates one named, exactly-once workflow action.
@@ -156,9 +159,9 @@ end
 ---Registers and binds the public save-game workflow command.
 ---@param ds table
 ---@param command_runner dwarfspec.CommandRunner
----@param dependencies table
+---@param runtime dwarfspec.SaveGameRuntime
 ---@return dwarfspec.CommandDefinition
-function MountSaveGameDefinition.bind(ds, command_runner, dependencies)
+function MountSaveGameDefinition.bind(ds, command_runner, runtime)
     assert(type(ds) == 'table',
         'mount-save-game command requires the public namespace')
     assert(type(command_runner) == 'table' and
@@ -166,7 +169,7 @@ function MountSaveGameDefinition.bind(ds, command_runner, dependencies)
             type(command_runner.invoke) == 'function',
         'mount-save-game command requires the verified command runner')
     local definition = command_runner:registerBuiltin(
-        MountSaveGameDefinition.new(dependencies):definition())
+        MountSaveGameDefinition.new(runtime):definition())
 
     ---Loads one exact save through the verified workflow contract.
     ---@param directory_name string
