@@ -15,6 +15,7 @@ local materializer = require(
 ---@field private _suite_executions dwarfspec.SuiteExecutionResult[]
 ---@field private _test_attempts dwarfspec.TestAttemptResult[]
 ---@field private _next_test_identity? BustedExampleIdentity
+---@field private _awaiting_test_status boolean
 local CleanupOwnerLifecycle = {}
 CleanupOwnerLifecycle.__index = CleanupOwnerLifecycle
 
@@ -45,7 +46,8 @@ function CleanupOwnerLifecycle.new(service_run_id, cleanup_service, event_journa
     return setmetatable({_service_run_id=service_run_id,
         _cleanup_service=cleanup_service, _active_suite=nil,
         _active_test=nil, _next_test_attempt=0, _event_journal=event_journal,
-        _suite_executions={}, _test_attempts={}, _next_test_identity=nil},
+        _suite_executions={}, _test_attempts={}, _next_test_identity=nil,
+        _awaiting_test_status=false},
         CleanupOwnerLifecycle)
 end
 
@@ -76,6 +78,8 @@ end
 function CleanupOwnerLifecycle:test_entry()
     assert(self._active_suite ~= nil and self._active_test == nil,
         'cleanup test owner requires one active suite and no active test')
+    assert(not self._awaiting_test_status,
+        'cleanup test owner requires the preceding behavior status')
     self._next_test_attempt = self._next_test_attempt + 1
     local identity = assert(self._next_test_identity,
         'cleanup test owner requires test-start identity before setup')
@@ -95,6 +99,7 @@ function CleanupOwnerLifecycle:test_entry()
         repeat_index=self._active_suite.repeat_index,
         test_identity=identity.example_name, cleanup_transactions={},
     }
+    self._awaiting_test_status = true
     return Internals.copy(self._active_test)
 end
 
@@ -113,7 +118,8 @@ end
 function CleanupOwnerLifecycle:test_finished(status)
     local attempt = self._test_attempts[#self._test_attempts]
     local suite = self._suite_executions[#self._suite_executions]
-    assert(attempt ~= nil and suite ~= nil,
+    assert(self._awaiting_test_status and attempt ~= nil and suite ~= nil and
+            attempt.behavior_status == nil,
         'cleanup owner lifecycle has no completed test attempt')
     local count_key = ({
         success='successes', failure='failures', error='errors', pending='pending',
@@ -121,6 +127,7 @@ function CleanupOwnerLifecycle:test_finished(status)
     assert(count_key ~= nil,
         'cleanup owner lifecycle received an unsupported test status')
     attempt.behavior_status = status
+    self._awaiting_test_status = false
     suite.behavior_summary[count_key] = suite.behavior_summary[count_key] + 1
 end
 

@@ -179,9 +179,14 @@ describe('Busted file lifecycle adapter', function()
             on_test_start=function(identity)
                 table.insert(journal, 'test start:' .. identity.example_name)
             end})
-        adapter.install_attempt_entry(busted, '.', function(identity)
-            table.insert(journal, 'attempt:' .. identity.example_name)
-        end)
+        adapter.install_attempt_guard(busted, {project_root='.',
+            on_entry=function(identity)
+                table.insert(journal, 'attempt:' .. identity.example_name)
+            end,
+            on_exit=function(identity, status)
+                table.insert(journal,
+                    'attempt end:' .. identity.example_name .. ':' .. status)
+            end})
         register_file(busted, 'tests/attempt_order_spec.lua', [[
             before_each(function()
                 table.insert(journal, 'project setup')
@@ -193,8 +198,65 @@ describe('Busted file lifecycle adapter', function()
 
         execute(busted)
 
-        assert.same({'attempt:runs', 'project setup', 'test start:runs',
-            'body'}, journal)
+        assert.same({'attempt:runs', 'test start:runs', 'project setup',
+            'body', 'attempt end:runs:success'}, journal)
+    end)
+
+    it('terminalizes every setup teardown and pending boundary after exit',
+            function()
+        local cases = {
+            {name='success', source=[[it('example', function()
+                table.insert(journal, 'body')
+            end)]], expected={'entry', 'body', 'exit:success', 'end:success'}},
+            {name='lazy setup failure', source=[[lazy_setup(function()
+                error('lazy setup boom')
+            end)
+            it('example', function() end)]],
+                expected={'entry', 'exit:error', 'end:error'}},
+            {name='before each failure', source=[[before_each(function()
+                error('before each boom')
+            end)
+            it('example', function() end)]],
+                expected={'entry', 'exit:error', 'end:error'}},
+            {name='body failure', source=[[it('example', function()
+                error('body boom')
+            end)]], expected={'entry', 'exit:error', 'end:error'}},
+            {name='finally failure', source=[[it('example', function()
+                finally(function() error('finally boom') end)
+            end)]], expected={'entry', 'exit:error', 'end:error'}},
+            {name='after each failure', source=[[after_each(function()
+                error('after each boom')
+            end)
+            it('example', function()
+                table.insert(journal, 'body')
+            end)]], expected={'entry', 'body', 'exit:error', 'end:error'}},
+            {name='pending', source=[[pending('example')]],
+                expected={'entry', 'exit:pending', 'end:pending'}},
+        }
+        for _, case in ipairs(cases) do
+            local busted = new_busted()
+            local journal = {}
+            busted.export('journal', journal)
+            adapter.install(busted, {project_root='.',
+                on_suite_entry=function() end,
+                on_suite_exit=function() end})
+            adapter.install_attempt_guard(busted, {project_root='.',
+                on_entry=function()
+                    table.insert(journal, 'entry')
+                end,
+                on_exit=function(_, status)
+                    table.insert(journal, 'exit:' .. status)
+                end})
+            busted.subscribe({'test', 'end'}, function(_, _, status)
+                table.insert(journal, 'end:' .. status)
+            end)
+            register_file(busted, 'tests/' .. case.name .. '_spec.lua',
+                case.source)
+
+            execute(busted)
+
+            assert.same(case.expected, journal, case.name)
+        end
     end)
 
     it('does not create suite records for nested contexts', function()

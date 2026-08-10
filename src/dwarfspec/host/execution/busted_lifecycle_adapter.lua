@@ -225,34 +225,104 @@ function M.install_example_exit(busted, callback)
     busted.api.after_each(callback)
 end
 
----Installs test-attempt entry before Busted executes example setup hooks.
+---Returns the stronger of two Busted terminal statuses.
+---@param current string
+---@param candidate string
+---@return string
+local function merge_status(current, candidate)
+    local rank = {success=1, pending=2, failure=3, error=4}
+    if rank[candidate] and rank[candidate] > (rank[current] or 0) then
+        return candidate
+    end
+    return current
+end
+
+---Installs one guard spanning setup, body, teardown, cleanup, and test end.
 ---@param busted table
----@param project_root string
----@param callback fun(identity: BustedExampleIdentity)
-function M.install_attempt_entry(busted, project_root, callback)
+---@param options table
+function M.install_attempt_guard(busted, options)
     assert(type(busted) == 'table' and
         busted.version == SUPPORTED_BUSTED_VERSION and
-        type(busted.safe) == 'function',
+        type(busted.safe) == 'function' and
+        type(busted.safe_publish) == 'function' and
+        type(busted.publish) == 'function',
         'Busted lifecycle adapter requires Busted ' ..
             SUPPORTED_BUSTED_VERSION)
-    assert(type(project_root) == 'string' and project_root ~= '',
+    assert(type(options) == 'table',
+        'Busted attempt-guard options are required')
+    assert(type(options.project_root) == 'string' and
+            options.project_root ~= '',
         'Busted attempt-entry project root must be a nonempty string')
-    assert(type(callback) == 'function',
+    assert(type(options.on_entry) == 'function',
         'Busted attempt-entry callback is required')
+    assert(type(options.on_exit) == 'function',
+        'Busted attempt-exit callback is required')
 
     local original_safe = busted.safe
+    local original_publish = busted.publish
     local active_example
+    busted.publish = function(channel, element, ...)
+        if active_example ~= nil and type(channel) == 'table' then
+            if channel[1] == 'test' then
+                if active_example.publish_terminal then
+                    return original_publish(channel, element, ...)
+                end
+                if channel[2] == 'end' then
+                    local arguments = {...}
+                    active_example.status = merge_status(
+                        active_example.status, arguments[2])
+                end
+                return nil, true
+            end
+            active_example.status = merge_status(
+                active_example.status, channel[1])
+        end
+        return original_publish(channel, element, ...)
+    end
     busted.safe = function(descriptor, run, element)
-        if descriptor ~= 'it' or type(element) ~= 'table' or
-                element.descriptor ~= 'it' or active_example ~= nil then
+        local attempt_descriptor = descriptor == 'it' or
+            descriptor == 'pending'
+        if not attempt_descriptor or type(element) ~= 'table' or
+                element.descriptor ~= descriptor or active_example ~= nil then
             return original_safe(descriptor, run, element)
         end
         local results = {original_safe(descriptor, function()
-            active_example = element
-            callback({example_name=full_example_name(busted, element),
+            local identity = {example_name=full_example_name(busted, element),
                 source_identity=example_source_identity(
-                    project_root, element)})
-            return run()
+                    options.project_root, element)}
+            active_example = {element=element, status='success',
+                publish_terminal=false}
+            local entered, entry_failure = xpcall(function()
+                options.on_entry(identity)
+            end, debug.traceback)
+            if not entered then
+                active_example.status = 'error'
+                original_publish({'error', descriptor}, element,
+                    busted.context.parent(element), entry_failure, entry_failure)
+            else
+                active_example.publish_terminal = true
+                busted.safe_publish(descriptor, {'test', 'start'}, element,
+                    busted.context.parent(element))
+                active_example.publish_terminal = false
+                local ran, run_failure = xpcall(run, debug.traceback)
+                if not ran then
+                    active_example.status = 'error'
+                    original_publish({'error', descriptor}, element,
+                        busted.context.parent(element), run_failure, run_failure)
+                end
+            end
+            local exited, exit_failure = xpcall(function()
+                options.on_exit(identity, active_example.status)
+            end, debug.traceback)
+            if not exited then
+                active_example.status = 'error'
+                original_publish({'error', 'after_each'}, element,
+                    busted.context.parent(element), exit_failure, exit_failure)
+            end
+            active_example.publish_terminal = true
+            busted.safe_publish(descriptor, {'test', 'end'}, element,
+                busted.context.parent(element), active_example.status)
+            active_example.publish_terminal = false
         end, element)}
         active_example = nil
         return table.unpack(results)

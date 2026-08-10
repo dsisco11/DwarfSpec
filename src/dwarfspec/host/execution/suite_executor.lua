@@ -81,23 +81,19 @@ function M.execute(package_root, project_root, run, scheduler_module,
         on_test_start=function(identity)
             lifecycle.test_start(identity)
         end})
-    lifecycle_adapter.install_attempt_entry(busted, project_root,
-        function(identity)
+    lifecycle_adapter.install_attempt_guard(busted, {
+        project_root=project_root,
+        on_entry=function(identity)
             run.cleanup_owner_lifecycle:test_start(identity)
             run.cleanup_owner_lifecycle:test_entry()
-        end)
-    dependencies.install_entry(lifecycle_adapter, busted, {
-        example_entry=function()
             lifecycle.example_entry()
         end,
-    })
-    dependencies.install_exit(lifecycle_adapter, busted, {
-        example_exit=function()
+        on_exit=function(_, status)
             local focus_ok, focus_error = xpcall(function()
                 lifecycle.example_exit()
             end, debug.traceback)
             local cleanup_ok = run.cleanup_owner_lifecycle:test_exit(
-                'test teardown', not focus_ok)
+                'test teardown', not focus_ok or status == 'error')
             if not focus_ok then error(focus_error, 0) end
             assert(cleanup_ok, 'test cleanup finalization was not confirmed')
         end,

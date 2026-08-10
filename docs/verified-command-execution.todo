@@ -1475,6 +1475,48 @@ conversion.
         and each representative is registered exactly once by its owner module.
 - [ ] Add their conformance fixtures and focused domain suites.
 - [ ] Run the complete command-engine suite after representative integration.
+- [ ] Correct the pinned Busted test-attempt lifecycle boundaries exposed by
+      representative native qualification before accepting any Phase 15 live
+      result.
+  - [x] Replace the split executor-entry, `test.end`, and root-`after_each`
+        ownership path with one attempt guard that spans lazy setup,
+        `before_each`, body/finally, `after_each`, owner cleanup, behavior
+        terminalization, and terminal event publication.
+  - [x] Activate the stable test-attempt identity before lazy setup and keep it
+        active through every project teardown hook and attempt cleanup.
+  - [x] Guarantee attempt finalization when lazy setup short-circuits before
+        Busted runs `after_each`; do not defer an active test owner to suite or
+        run fallback cleanup.
+  - [x] Convert `before_each` failure into one terminal error attempt with
+        owner-correct cleanup results, behavior status, suite totals, problem
+        evidence, and exactly one `test.finished` event.
+  - [x] Delay behavior terminalization and `test.finished` until all project
+        `after_each` hooks and test-owner cleanup finish; a teardown failure
+        must not leave the attempt recorded or published as successful.
+  - [x] Route declared pending examples through an explicit attempt boundary,
+        or an equivalent owner-safe terminal path, so they cannot update or
+        reuse the preceding attempt record and produce exactly one pending
+        terminal result.
+  - [x] Preserve suite ownership before file body/setup and through file
+        lazy/strict teardown and suite cleanup; retain the currently correct
+        `file.start`/`file.end` ordering while changing attempt behavior.
+  - [x] Preserve run finalization after test and suite owners close, including
+        emergency cleanup for an unexpected adapter failure without using that
+        fallback as the normal lazy-setup path.
+  - [x] Add pinned-Busted integration regressions for successful execution,
+        body/finally failure, lazy-setup failure, `before_each` failure,
+        `after_each` failure, declared pending examples, zero runnable tests,
+        suite body/setup/teardown failure, repeats, and interruption.
+  - [x] Assert exact event and cleanup ordering in every regression: one stable
+        attempt identity where applicable, no owner leak, teardown before
+        cleanup, cleanup before `test.finished`, one terminal behavior status,
+        and owner-correct suite counts/results.
+  - [x] Run focused Busted adapter, suite executor, cleanup-owner lifecycle,
+        output-handler/event, result projection, host assembly, and service
+        retention suites, followed by the full unit/static gates.
+  - [ ] Rebuild and reinstall the corrected package, restart only with explicit
+        user control, and rerun every Phase 15 native case with terminal status
+        plus cleanup confirmation.
 - [ ] Run the smallest relevant native live cases for behavior/scheduler/
       cleanup boundaries changed by the representatives.
 - [ ] Review receipt boundaries, command categories, nested workflow behavior,
@@ -1486,6 +1528,10 @@ Completion criteria:
 
 - [ ] All five representative shapes pass their focused/conformance evidence
       and applicable live proof without shared-runner exceptions.
+- [ ] Every pinned-Busted setup/body/teardown/pending boundary produces one
+      owner-correct terminal attempt, finalizes cleanup before terminal event
+      publication, and leaves no active owner for suite/run fallback under
+      ordinary execution.
 - [x] Each representative module owns its complete command-specific lifecycle;
       `ds.lua` is only the composition root, and domain adapters contain only
       runtime interaction capabilities rather than definition policy.

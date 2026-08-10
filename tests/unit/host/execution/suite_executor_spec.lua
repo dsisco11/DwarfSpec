@@ -51,8 +51,9 @@ describe('host suite executor', function()
                         assert.is_function(options.on_suite_entry)
                         assert.is_function(options.on_suite_exit)
                         assert.is_function(options.on_test_start)
-                    end, install_attempt_entry=function(_, _, callback)
-                        assert.is_function(callback)
+                    end, install_attempt_guard=function(_, options)
+                        assert.is_function(options.on_entry)
+                        assert.is_function(options.on_exit)
                     end}
                 elseif name:match('base_screen_focus_guard') then
                     return {new=function() return {} end}
@@ -115,7 +116,7 @@ describe('host suite executor', function()
             capability_options.recurring_operations)
         assert.equals(capabilities, forwarded_capabilities)
         assert.same({'dependencies', 'busted', 'project_environment', 'ds',
-            'export:ds', 'entry', 'exit', 'output', 'filter', 'discovery',
+            'export:ds', 'output', 'filter', 'discovery',
             'execute', 'publish:exit'}, calls)
     end)
 
@@ -193,7 +194,7 @@ describe('host suite executor', function()
                         return {load=function() return {settings={}} end}
                     elseif name:match('busted_lifecycle_adapter') then
                         return {install=function() end,
-                            install_attempt_entry=function() end}
+                            install_attempt_guard=function() end}
                     elseif name:match('base_screen_focus_guard') then
                         return {new=function() return {} end}
                     end
