@@ -28,7 +28,8 @@ describe('host suite executor', function()
                     repeat_index=1, spec_file_identity='selected_spec.lua',
                     behavior_summary={successes=0, failures=0, errors=0,
                         pending=0}, cleanup_outcome='complete'} end,
-                test_entry=function() end, test_exit=function() return true end},
+                test_start=function() end, test_entry=function() end,
+                test_exit=function() return true end},
         }
         local project={}
         local capabilities={run_id='run-1'}
@@ -50,6 +51,8 @@ describe('host suite executor', function()
                         assert.is_function(options.on_suite_entry)
                         assert.is_function(options.on_suite_exit)
                         assert.is_function(options.on_test_start)
+                    end, install_attempt_entry=function(_, _, callback)
+                        assert.is_function(callback)
                     end}
                 elseif name:match('base_screen_focus_guard') then
                     return {new=function() return {} end}
@@ -189,7 +192,8 @@ describe('host suite executor', function()
                     elseif name:match('extensions') then
                         return {load=function() return {settings={}} end}
                     elseif name:match('busted_lifecycle_adapter') then
-                        return {install=function() end}
+                        return {install=function() end,
+                            install_attempt_entry=function() end}
                     elseif name:match('base_screen_focus_guard') then
                         return {new=function() return {} end}
                     end

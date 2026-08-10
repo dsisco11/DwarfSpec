@@ -207,6 +207,13 @@ function M.new(options)
         return commands:invoke_subject_command(subject, operation, ...)
     end
 
+    ---Returns whether a value is owned as a subject by this mount context.
+    ---@param value any
+    ---@return boolean
+    function context:is_subject(value)
+        return type(value) == 'table' and self.subject_mounts[value] ~= nil
+    end
+
     ---Activates one classified component.
     ---@param component any
     ---@param mount_options table|nil

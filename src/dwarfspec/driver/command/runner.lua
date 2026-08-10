@@ -29,6 +29,11 @@ Runner.__index = Runner
 
 ---@class dwarfspec.driver.command.RunnerInternals
 local Internals = {}
+Internals.RUNTIME_DEPENDENCIES = {
+    wait=true, resolve_mount=true, resolve_target=true, lookup_claim=true,
+    capture_render=true, observe_render=true, wait_frames=true,
+    wait_ticks=true, wait_event=true, wait_until=true,
+}
 Internals.diagnostics = Diagnostics.new()
 
 ---Validates one injected runner callback.
@@ -562,6 +567,24 @@ function Runner:setRefreshRetainedSubjects(callback)
     assert(type(callback) == 'function',
         'retained-subject refresh callback must be callable')
     self._refresh_retained_subjects = callback
+end
+
+---Installs live command-context callbacks after run namespace composition.
+---@param dependencies table<string, function>
+function Runner:setRuntimeDependencies(dependencies)
+    assert(self._active_invocations == 0,
+        'command runtime dependencies cannot change during execution')
+    assert(type(dependencies) == 'table',
+        'command runtime dependencies must be a table')
+    for name, callback in pairs(dependencies) do
+        assert(type(name) == 'string' and name ~= '',
+            'command runtime dependency names must be nonempty strings')
+        assert(Internals.RUNTIME_DEPENDENCIES[name] == true,
+            'unsupported command runtime dependency: ' .. name)
+        assert(type(callback) == 'function',
+            'command runtime dependency ' .. name .. ' must be callable')
+        self._dependencies[name] = callback
+    end
 end
 
 ---Registers one immutable built-in definition in this run.

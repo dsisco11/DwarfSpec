@@ -1443,6 +1443,36 @@ conversion.
         before verification/publication.
   - [ ] Verify creation and later absence/restoration.
 - [ ] Add trailing command option declarations for all five representatives.
+- [x] Complete representative-command logical ownership instead of leaving
+      lifecycle implementations in `src/dwarfspec/ds.lua` dependency tables.
+  - [x] Make each representative command module own its normalization,
+        preflight, execution, intrinsic verification, cleanup-policy, claims,
+        and workflow-step logic that is specific to that command.
+  - [x] Extract direct DFHack, mount, render, save-game, and overlay operations
+        behind narrow domain adapters where command logic requires runtime
+        services; adapters expose host capabilities but do not construct
+        command definitions or decide command lifecycle policy.
+  - [x] Reduce `ds.lua` to composition: construct or select the required domain
+        adapters and pass them with the public namespace and run-scoped runner
+        to each command module's binding entry point.
+  - [x] Remove representative-specific anonymous lifecycle callbacks from
+        `ds.lua`, including search normalization/preflight/execution, click
+        normalization/preflight/execution/verification, view-position
+        validation/execution/cleanup, save-game workflow steps, and overlay
+        planning/execution/cleanup.
+  - [x] Preserve the existing public signatures, return values, subject-token
+        behavior, receipt shapes, claims, cleanup behavior, workflow ordering,
+        deadline ownership, and verification guarantees through the ownership
+        move.
+  - [x] Keep dependency direction support-ward: command modules may depend on
+        narrow driver/domain adapters but must not import the assembled `ds`
+        facade or host internals.
+  - [x] Give each representative command an independent focused suite covering
+        its owned binding and lifecycle behavior; keep shared test support
+        generic and free of representative-specific definitions or fixtures.
+  - [x] Add a source-organization assertion or focused composition test proving
+        `ds.lua` contains no representative command lifecycle implementation
+        and each representative is registered exactly once by its owner module.
 - [ ] Add their conformance fixtures and focused domain suites.
 - [ ] Run the complete command-engine suite after representative integration.
 - [ ] Run the smallest relevant native live cases for behavior/scheduler/
@@ -1456,7 +1486,77 @@ Completion criteria:
 
 - [ ] All five representative shapes pass their focused/conformance evidence
       and applicable live proof without shared-runner exceptions.
-- [ ] Broad conversion is explicitly unblocked by follow-up design review.
+- [x] Each representative module owns its complete command-specific lifecycle;
+      `ds.lua` is only the composition root, and domain adapters contain only
+      runtime interaction capabilities rather than definition policy.
+- [ ] Broad conversion is explicitly unblocked only after the follow-up design
+      review and Phase 15A capability encapsulation are complete.
+
+## Phase 15A: Encapsulate representative runtime capabilities
+
+Outcome: representative commands consume explicit module-owned framework
+capabilities instead of ad hoc bundles of loose functions, while `ds.lua`
+remains a composition root and command modules retain lifecycle policy.
+
+- [ ] Classify every representative dependency as either a stateless framework
+      helper or a stateful run-scoped capability.
+  - [ ] Let command modules import stateless, dependency-free helpers directly
+        only when they have no run identity, mutable state, host ownership, or
+        lifecycle responsibility.
+  - [ ] Record the classification for interaction-target resolution, input
+        dispatch, render observation, map-view access, save-game host access,
+        text search, and overlay transactions before changing construction.
+- [ ] Encapsulate each stateful representative capability in a documented
+      class-like service module with a narrow public method contract.
+  - [ ] Move interaction-target resolution out of `ds.lua` into a mount-owned
+        resolver service instantiated with the current run's mount context.
+  - [ ] Represent input dispatch and render observation as cohesive runtime
+        services rather than unrelated injected functions.
+  - [ ] Represent map-view reads, writes, and origin conversion as one
+        map-view service used by the reversible state-setter definition.
+  - [ ] Represent save-game host inspection and loader/unloader operations as
+        a cohesive save-game runtime service without moving workflow policy out
+        of the command owner.
+  - [ ] Keep overlay transaction behavior behind its existing class-like
+        transaction boundary and remove any redundant loose wrappers.
+- [ ] Instantiate stateful services at the composition root with their
+      run-specific dependencies and inject cohesive instances into command
+      owners.
+  - [ ] Do not inject loose `normalize`, `preflight`, `execute`, `verify`,
+        `restore`, resolver, dispatcher, observer, or accessor functions in ad
+        hoc dependency tables.
+  - [ ] Do not introduce globals, service locators, hidden singleton state, or
+        imports of the assembled `ds` facade or host internals from command or
+        driver service modules.
+- [ ] Preserve command ownership boundaries.
+  - [ ] Command modules continue to own normalization, lifecycle orchestration,
+        verification policy, receipts, claims, cleanup policy, workflow steps,
+        public binding, and registration.
+  - [ ] Capability services own reusable runtime interaction only and do not
+        construct definitions, register commands, select intrinsic proof, or
+        decide cleanup/retry policy.
+- [ ] Add focused service-contract tests for every new class-like capability.
+- [ ] Update each representative command suite to prove it consumes cohesive
+      capability instances, preserves its existing behavior, and rejects the
+      former loose callback-bundle construction shape.
+- [ ] Add a source-organization check proving representative bindings in
+      `ds.lua` pass only class-like stateful services and explicit stateless
+      values/modules, with no anonymous or named loose framework callbacks.
+- [ ] Run all representative command, affected domain, engine-conformance,
+      runner, public-binding, host-assembly, full-unit, Lua formatting, and
+      source-declaration checks.
+- [ ] Perform a follow-up ownership and dependency-direction review before
+      Phase 16 begins broad command-family conversion.
+
+Completion criteria:
+
+- [ ] Every stateful representative framework capability is owned by one
+      documented class-like service instance with explicit run-scoped
+      construction and no hidden global state.
+- [ ] Representative command modules import only truly stateless helpers and
+      receive stateful capabilities only as cohesive service instances.
+- [ ] `ds.lua` contains composition only, no loose representative framework
+      callback bundle remains, and all focused/full/static evidence passes.
 
 ## Phase 16: Convert read-only queries, assertions, and waits
 

@@ -44,7 +44,7 @@ function Harness.new(options)
         end,
         lookup_claim=function() end,
         capture_render=function() end,
-        observe_render=function() end,
+        observe_render=options.observe_render or function() end,
         wait_frames=function() end,
         wait_ticks=function() end,
         wait_event=function() end,

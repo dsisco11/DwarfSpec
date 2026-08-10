@@ -169,6 +169,34 @@ describe('Busted file lifecycle adapter', function()
         assert.equals('strict teardown', exit_state)
     end)
 
+    it('activates one identified attempt before example setup hooks', function()
+        local busted = new_busted()
+        local journal = {}
+        busted.export('journal', journal)
+        adapter.install(busted, {project_root='.',
+            on_suite_entry=function() end,
+            on_suite_exit=function() end,
+            on_test_start=function(identity)
+                table.insert(journal, 'test start:' .. identity.example_name)
+            end})
+        adapter.install_attempt_entry(busted, '.', function(identity)
+            table.insert(journal, 'attempt:' .. identity.example_name)
+        end)
+        register_file(busted, 'tests/attempt_order_spec.lua', [[
+            before_each(function()
+                table.insert(journal, 'project setup')
+            end)
+            it('runs', function()
+                table.insert(journal, 'body')
+            end)
+        ]])
+
+        execute(busted)
+
+        assert.same({'attempt:runs', 'project setup', 'test start:runs',
+            'body'}, journal)
+    end)
+
     it('does not create suite records for nested contexts', function()
         local busted = new_busted()
         local journal = {}

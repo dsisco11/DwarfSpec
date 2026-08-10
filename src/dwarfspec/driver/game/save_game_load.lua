@@ -123,6 +123,113 @@ function M.new(dependencies)
 
     local loader = {}
 
+    ---Runs one native input stage and restores transient pointer state.
+    ---@param action function
+    ---@return any
+    function loader:_with_input(action)
+        local restore_input_state = dependencies.capture_input_state and
+            dependencies.capture_input_state() or function() end
+        assert(type(restore_input_state) == 'function',
+            'DwarfSpec save-game load input restoration must be a function')
+        local ok, result = xpcall(action, debug.traceback)
+        local restored, restore_error = xpcall(restore_input_state,
+            debug.traceback)
+        if not restored then error(restore_error, 0) end
+        if not ok then error(result, 0) end
+        return result
+    end
+
+    ---Reaches the save menu and returns the requested save's world identity.
+    ---@param requested_directory string
+    ---@return table
+    function loader:reach_save_menu(requested_directory)
+        assert(not dependencies.is_world_loaded(),
+            'DwarfSpec save-game load requires an unloaded world')
+        return self:_with_input(function()
+            dependencies.reach_main_menu()
+            local title = wait_for(dependencies, 'reach title menu',
+                requested_directory, function()
+                    local state = dependencies.get_title_state()
+                    return state and state.mode == 'main' and state or nil
+                end)
+            local requested = find_directory(title.all_saves,
+                requested_directory)
+            assert(requested,
+                ('DwarfSpec save is missing or unavailable: requested=%s')
+                    :format(bounded_field(requested_directory)))
+            assert(requested.world_id ~= nil,
+                'DwarfSpec save header has no stable world identity')
+            return {world_id=requested.world_id}
+        end)
+    end
+
+    ---Selects the requested world and returns the save-list index.
+    ---@param requested_directory string
+    ---@param world_id string
+    ---@return table
+    function loader:select_save_world(requested_directory, world_id)
+        return self:_with_input(function()
+            local title = assert(dependencies.get_title_state(),
+                'DwarfSpec save-game world selection requires title state')
+            dependencies.select_continue(title)
+            title = wait_for(dependencies, 'open active-world list',
+                requested_directory, function()
+                    local state = dependencies.get_title_state()
+                    return state and state.mode == 'world-list' and state or nil
+                end)
+            local _, world_index = find_world(title.world_saves, world_id)
+            assert(world_index,
+                ('DwarfSpec save belongs to an inactive world: requested=%s')
+                    :format(bounded_field(requested_directory)))
+            dependencies.select_world(title, world_index)
+            title = wait_for(dependencies, 'open save list',
+                requested_directory, function()
+                    local state = dependencies.get_title_state()
+                    return state and state.mode == 'save-list' and state or nil
+                end)
+            local _, save_index = find_directory(title.game_saves,
+                requested_directory)
+            assert(save_index,
+                ('DwarfSpec save is unavailable in its active world: ' ..
+                    'requested=%s'):format(
+                        bounded_field(requested_directory)))
+            return {save_index=save_index}
+        end)
+    end
+
+    ---Selects one save while the map-loaded event is armed.
+    ---@param requested_directory string
+    ---@param save_index integer
+    ---@return true
+    function loader:select_save_and_await_map(requested_directory, save_index)
+        return self:_with_input(function()
+            local title = assert(dependencies.get_title_state(),
+                'DwarfSpec save selection requires title state')
+            await_map_loaded(dependencies, requested_directory, function()
+                dependencies.select_save(title, save_index)
+            end)
+            return true
+        end)
+    end
+
+    ---Verifies the loaded save and the dismissed load screen.
+    ---@param requested_directory string
+    ---@return string
+    function loader:verify_loaded(requested_directory)
+        assert(dependencies.is_world_loaded(),
+            'DFHack reported map loaded without a loaded world')
+        local observed_directory = read_loaded_directory(dependencies)
+        assert(observed_directory == requested_directory,
+            ('DwarfSpec loaded the wrong save: requested=%s observed=%s')
+                :format(bounded_field(requested_directory),
+                    bounded_field(observed_directory)))
+        wait_for(dependencies, 'dismiss save-game load screen',
+            requested_directory, function()
+                return not dependencies.is_load_screen_visible()
+            end)
+        return observed_directory
+    end
+
     ---Loads one selectable save directory and confirms the resulting directory.
     ---@param requested_directory string
     ---@return true
@@ -133,76 +240,13 @@ function M.new(dependencies)
         assert(not dependencies.is_world_loaded(),
             'DwarfSpec save-game load requires an unloaded world')
 
-        local restore_input_state = dependencies.capture_input_state and
-            dependencies.capture_input_state() or function() end
-        assert(type(restore_input_state) == 'function',
-            'DwarfSpec save-game load input restoration must be a function')
-
-        local ok, result = xpcall(function()
-            dependencies.reach_main_menu()
-            local title = wait_for(dependencies, 'reach title menu',
-                requested_directory, function()
-                    local state = dependencies.get_title_state()
-                    return state and state.mode == 'main' and state or nil
-                end)
-
-            local requested = find_directory(title.all_saves,
-                requested_directory)
-            assert(requested,
-                ('DwarfSpec save is missing or unavailable: requested=%s')
-                    :format(bounded_field(requested_directory)))
-            assert(requested.world_id ~= nil,
-                'DwarfSpec save header has no stable world identity')
-
-            dependencies.select_continue(title)
-            title = wait_for(dependencies, 'open active-world list',
-                requested_directory, function()
-                    local state = dependencies.get_title_state()
-                    return state and state.mode == 'world-list' and
-                        state or nil
-                end)
-
-            local _, world_index = find_world(title.world_saves,
-                requested.world_id)
-            assert(world_index,
-                ('DwarfSpec save belongs to an inactive world: requested=%s')
-                    :format(bounded_field(requested_directory)))
-            dependencies.select_world(title, world_index)
-
-            title = wait_for(dependencies, 'open save list',
-                requested_directory, function()
-                    local state = dependencies.get_title_state()
-                    return state and state.mode == 'save-list' and
-                        state or nil
-                end)
-            local _, save_index = find_directory(title.game_saves,
-                requested_directory)
-            assert(save_index,
-                ('DwarfSpec save is unavailable in its active world: ' ..
-                    'requested=%s'):format(
-                        bounded_field(requested_directory)))
-            await_map_loaded(dependencies, requested_directory, function()
-                dependencies.select_save(title, save_index)
-            end)
-            assert(dependencies.is_world_loaded(),
-                'DFHack reported map loaded without a loaded world')
-            local observed_directory = read_loaded_directory(dependencies)
-            assert(observed_directory == requested_directory,
-                ('DwarfSpec loaded the wrong save: requested=%s observed=%s')
-                    :format(bounded_field(requested_directory),
-                        bounded_field(observed_directory)))
-            wait_for(dependencies, 'dismiss save-game load screen',
-                requested_directory, function()
-                    return not dependencies.is_load_screen_visible()
-                end)
-            return true
-        end, debug.traceback)
-
-        local restored, restore_error = xpcall(restore_input_state,
-            debug.traceback)
-        if not restored then error(restore_error, 0) end
-        if not ok then error(result, 0) end
-        return result
+        local menu = self:reach_save_menu(requested_directory)
+        local selection = self:select_save_world(requested_directory,
+            menu.world_id)
+        self:select_save_and_await_map(requested_directory,
+            selection.save_index)
+        self:verify_loaded(requested_directory)
+        return true
     end
 
     return loader

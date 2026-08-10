@@ -15,6 +15,7 @@ describe('DwarfSpec overlay registration integration support', function()
     local registered
     local fail_next_rescan
     local config_path
+    local project
 
     ---Normalizes an injected filesystem path for the in-memory service.
     ---@param path string
@@ -77,24 +78,23 @@ describe('DwarfSpec overlay registration integration support', function()
             end,
         }
         registry = cleanup.new({})
+        project = {
+            resolve_lua_source=function(source_path, purpose)
+                local relative_path = normalize(source_path)
+                local label = purpose or 'project Lua'
+                assert(relative_path:match('%.lua$'),
+                    label .. ' source must name one Lua module: ' ..
+                        relative_path)
+                local absolute_path = 'project/' .. relative_path
+                assert(files[absolute_path] ~= nil,
+                    label .. ' source was not found: ' .. relative_path)
+                return {relative_path=relative_path,
+                    absolute_path=absolute_path}
+            end,
+        }
         overlay_registration = overlay_registration_module.new({
             run_id='run-1',
-            project={
-                resolve_lua_source=function(source_path, purpose)
-                    local relative_path = normalize(source_path)
-                    local label = purpose or 'project Lua'
-                    assert(relative_path:match('%.lua$'),
-                        label .. ' source must name one Lua module: ' ..
-                            relative_path)
-                    local absolute_path = 'project/' .. relative_path
-                    assert(files[absolute_path] ~= nil,
-                        label .. ' source was not found: ' .. relative_path)
-                    return {
-                        relative_path=relative_path,
-                        absolute_path=absolute_path,
-                    }
-                end,
-            },
+            project=project,
             cleanup={
                 mark=function() return cleanup.mark(registry) end,
                 register=function(name, action)
@@ -106,6 +106,26 @@ describe('DwarfSpec overlay registration integration support', function()
             },
             overlay=services,
         })
+    end)
+
+    it('stages and restores through an inert resource transaction', function()
+        local transaction = overlay_registration_module.new_transaction({
+            run_id='run-1', project=project, overlay=services})
+        local prepared = transaction:prepare(
+            'custom/probe_overlay.lua', 'probe')
+        assert.same({'overlay_script', 'overlay_config'},
+            {prepared.claims[1].claim_key, prepared.claims[2].claim_key})
+        assert.is_nil(files[
+            'game/hack/scripts/gui/dwarfspec_run-1_probe.lua'])
+
+        local staged = transaction:stage(prepared)
+        assert.is_true(transaction:verify(staged))
+        assert.same({{claim_key='overlay_script',
+            resource_identity=staged.path}, {claim_key='overlay_config',
+            resource_identity=config_path}}, transaction:bindings(staged))
+
+        transaction:restore(staged)
+        assert.is_true(transaction:verify_absent(staged))
     end)
 
     it('restores script, registration, enablement, and exact configuration',

@@ -98,6 +98,7 @@ function M.new(package_root, project, scheduler_module, scheduler,
         type(command_runner.invoke) == 'function' and
         type(command_runner.registerBuiltin) == 'function' and
         type(command_runner.registerProject) == 'function' and
+        type(command_runner.setRuntimeDependencies) == 'function' and
         type(command_runner.assertHandleExecution) == 'function',
         'DwarfSpec command runner has an invalid verified interface')
     local register_cleanup_command = load_automation_module(package_root,
@@ -208,6 +209,17 @@ local await_event_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.await_event')
 local text_search_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.text_search')
+local search_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.search_definition')
+local click_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.click_definition')
+local view_position_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.view_position_definition')
+local mount_save_game_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.mount_save_game_definition')
+local overlay_registration_definition_module = load_automation_module(
+    package_root,
+    'dwarfspec.driver.commands.overlay_registration_definition')
 local wait_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.wait')
 local game_state_command = load_automation_module(package_root,
@@ -811,6 +823,8 @@ local command_observer_module = load_automation_module(package_root,
     end
     local overlay_registration =
         overlay_registration_module.new(run_capabilities)
+    local overlay_transaction = command_runner and
+        overlay_registration_module.new_transaction(run_capabilities) or nil
 
     ---Stages one real overlay-registration source through run-owned cleanup.
     ---@param source_path string
@@ -2310,6 +2324,77 @@ local command_observer_module = load_automation_module(package_root,
         mouseWheel=ds.mouseWheel,
     })
     for name, command in pairs(pointer_commands) do ds[name] = command end
+
+    if command_runner ~= nil then
+        assert(type(command_runner.setRuntimeDependencies) == 'function',
+            'DwarfSpec command runner requires runtime dependency composition')
+        command_runner:setRuntimeDependencies({
+            wait=function(remaining_ms)
+                return run_capabilities.scheduling.wait_frames(1, {
+                    timeout_ms=remaining_ms,
+                    description='verified command scheduler step',
+                })
+            end,
+            resolve_mount=function()
+                return context.mount_context:require_current('command')
+            end,
+            resolve_target=function(target)
+                return context.mount_context:resolve_subject(target, 'command')
+            end,
+            lookup_claim=function(reference)
+                return context.run.resource_dependency_index:lookup(reference)
+            end,
+            capture_render=function()
+                local mount = context.mount_context:require_current('command')
+                return mount.render_tracker:capture()
+            end,
+            observe_render=function(generation)
+                local mount = context.mount_context:require_current('command')
+                return mount.render_tracker:generation() > generation
+            end,
+            wait_frames=function(count)
+                return run_capabilities.scheduling.wait_frames(count)
+            end,
+            wait_ticks=function(count)
+                return run_capabilities.scheduling.wait_ticks(count)
+            end,
+            wait_event=function(event, options)
+                return await_event(event, options)
+            end,
+            wait_until=function(description, predicate, remaining_ms)
+                return run_capabilities.scheduling.wait_until(description,
+                    predicate, {timeout_ms=remaining_ms})
+            end,
+        })
+
+        local legacy_click = ds.click
+        search_definition_module.bind(ds, command_runner, {
+            mount_context=context.mount_context,
+            normalize_query=text_search_command.normalize_query,
+            normalize_rectangle=text_search_command.normalize_rectangle,
+            search=search_command,
+        })
+        click_definition_module.bind(ds, command_runner, {
+            resolve_target=resolve_interaction_target,
+            dispatch=legacy_click,
+        })
+        view_position_definition_module.bind(ds, command_runner, {
+            get_position=ds.getViewPos,
+            set_position=context.set_map_view_position,
+            origin_offset=screen_origin_offset,
+            top_left_origin=EScreenOrigin.TOP_LEFT,
+        })
+        mount_save_game_definition_module.bind(ds, command_runner, {
+            workflow=save_game_mount_module,
+            loader=save_game_loader,
+            unloader=save_game_unloader,
+            host={is_world_loaded=dfhack.isWorldLoaded,
+                read_world_folder=dfhack.world.ReadWorldFolder},
+        })
+        overlay_registration_definition_module.bind(ds, command_runner, {
+            transaction=overlay_transaction,
+        })
+    end
 
     if next(extensions.commands) ~= nil then
         assert(command_runner ~= nil,

@@ -1890,4 +1890,27 @@ describe('common command runner', function()
         end
         assert.equals(2, cleanup_child_events)
     end)
+
+    it('composes runtime context dependencies before invocation', function()
+        local registry = Registry.new()
+        registry:register_builtin({name='runtime-context',
+            kind=CommandKind.QUERY, normalize=function() return {} end,
+            preflight=function(context)
+                return Outcomes.ready(context:resolve_target('target'))
+            end,
+            execute=function(_, _, target)
+                return Outcomes.ready(target.stable_identity)
+            end,
+            execution_retry_policy='once',
+            intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
+        local injected = dependencies()
+        local command_runner = runner(registry, injected)
+        command_runner:setRuntimeDependencies({
+            resolve_target=function(identity)
+                return {stable_identity='resolved-' .. identity}
+            end,
+        })
+        assert.equals('resolved-target',
+            command_runner:invoke('runtime-context', {}))
+    end)
 end)
