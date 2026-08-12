@@ -6,6 +6,7 @@ local IntrinsicKind = require(
 local Outcomes = require('dwarfspec.driver.command.outcomes')
 local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
+local Definition = require('dwarfspec.driver.command.definition')
 
 ---@class dwarfspec.ReadOnlyCommandDefinition
 ---@field private _name string
@@ -42,7 +43,7 @@ end
 ---Creates the immutable runner definition.
 ---@return table
 function ReadOnlyDefinition:definition()
-    return {name=self._name, kind=self._kind,
+    return Definition.validate({name=self._name, kind=self._kind,
         normalize=self._normalize,
         preflight=function(context, request)
             local readiness = self._preflight(context, request)
@@ -56,7 +57,7 @@ function ReadOnlyDefinition:definition()
             return Outcomes.ready(result)
         end,
         execution_retry_policy=RetryPolicy.ONCE,
-        intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION}
+        intrinsic_verification=IntrinsicKind.PRIMARY_OBSERVATION})
 end
 
 return ReadOnlyDefinition

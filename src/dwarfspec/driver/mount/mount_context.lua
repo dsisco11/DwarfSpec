@@ -137,10 +137,6 @@ function M.new(options)
         invoke_subject_query=function(_, subject, operation, ...)
             local query = context.subject_queries[operation]
             if query == nil then
-                if operation == 'raw' then
-                    return subjects:resolve_subject(
-                        subject, 'subject raw access')
-                end
                 return commands:invoke_subject_command(
                     subject, operation, ...)
             end

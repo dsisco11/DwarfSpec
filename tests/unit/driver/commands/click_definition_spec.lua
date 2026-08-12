@@ -1,11 +1,12 @@
 local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
 local Harness = dofile('tests/unit/driver/command/engine_harness.lua')
 local Outcomes = require('dwarfspec.driver.command.outcomes')
-local ClickDefinition = require(
-    'dwarfspec.driver.commands.click_definition')
+local ClickDefinition = require('dwarfspec.driver.builtins.click')
 local ClickRuntime = require('dwarfspec.driver.input.click_runtime')
 local TestRunner = dofile(
     'tests/unit/driver/commands/definition_test_support.lua')
+local BuiltinSupport = dofile(
+    'tests/unit/driver/commands/builtin_test_support.lua')
 
 ---@class dwarfspec.tests.ClickDefinitionDependencies
 local Dependencies = {}
@@ -20,8 +21,8 @@ end
 
 describe('verified click command definition', function()
     it('owns registration and public action binding', function()
-        local runner, ds = TestRunner.new(), {}
-        ClickDefinition.bind(ds, runner, Dependencies.new())
+        local runner, ds = BuiltinSupport.register({
+            ClickDefinition.new(Dependencies.new())})
         local subject, options = {}, {timeout_ms=10}
         assert.equals('click', ds.click(subject, 'right', options))
         assert.same({'click'}, runner:names())

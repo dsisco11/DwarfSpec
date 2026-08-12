@@ -1,6 +1,6 @@
 -- Unit contracts for the privileged receipt-backed cleanup command.
 
-local RegisterCleanup = require('dwarfspec.driver.commands.register_cleanup')
+local RegisterCleanup = require('dwarfspec.driver.builtins.register_cleanup')
 local CleanupRegistrationService = require(
     'dwarfspec.driver.cleanup.cleanup_registration_service')
 local CleanupTransactionHandle = require(
@@ -76,7 +76,7 @@ describe('registerCleanup command definition', function()
             assert_registration_open=function() end,
             verify_registration=function() end,
             wrap_handle=function() end,
-        })
+        }):definition()
 
         local request = definition.normalize({registration={label='restore unit',
             receipt={unit_id=7}, resource_claims=registrations,
@@ -112,7 +112,7 @@ describe('registerCleanup command definition', function()
                 assert.same(expected_owner, owner)
                 return handle
             end,
-        })
+        }):definition()
         local request = definition.normalize({registration={label='restore',
             receipt={value=1}, restore=function() end,
             verify=function() return true end}})
@@ -141,7 +141,7 @@ describe('registerCleanup command definition', function()
             assert_registration_open=function() end,
             verify_registration=function() end,
             wrap_handle=function() end,
-        })
+        }):definition()
 
         assert.has_error(function()
             definition.normalize({registration={label='missing callbacks',
@@ -162,7 +162,7 @@ describe('registerCleanup command definition', function()
             end,
             verify_registration=function() end,
             wrap_handle=function() end,
-        })
+        }):definition()
         local service_owner = {owner_scope='service_run',
             service_run_id='run'}
 
@@ -205,7 +205,7 @@ describe('registerCleanup command definition', function()
                         return command_runner:assertHandleExecution(expected)
                     end)
             end,
-        }))
+        }):definition())
 
         local handle = command_runner:invoke('registerCleanup', {
             registration={label='restore unit', receipt=7,

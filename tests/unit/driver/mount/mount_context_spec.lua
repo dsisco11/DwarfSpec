@@ -214,6 +214,12 @@ describe('DwarfSpec mount context', function()
                 }
             end,
         })
+        context:bind_subject_queries({
+            raw=function(value)
+                return context:resolve_subject(value,
+                    'subject raw access')
+            end,
+        })
     end)
 
     it('mounts a module descriptor through one fresh TestBed and closes it after the component', function()

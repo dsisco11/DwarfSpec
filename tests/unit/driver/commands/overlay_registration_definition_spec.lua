@@ -1,9 +1,11 @@
 local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
 local Outcomes = require('dwarfspec.driver.command.outcomes')
 local OverlayRegistrationDefinition = require(
-    'dwarfspec.driver.commands.overlay_registration_definition')
+    'dwarfspec.driver.builtins.stage_overlay_registration')
 local TestRunner = dofile(
     'tests/unit/driver/commands/definition_test_support.lua')
+local BuiltinSupport = dofile(
+    'tests/unit/driver/commands/builtin_test_support.lua')
 
 ---@class dwarfspec.tests.OverlayRegistrationDefinitionDependencies
 local Dependencies = {}
@@ -22,8 +24,8 @@ end
 
 describe('verified overlay-registration command definition', function()
     it('owns registration, binding, claims, and cleanup receipts', function()
-        local runner, ds = TestRunner.new(), {}
-        OverlayRegistrationDefinition.bind(ds, runner, Dependencies.new())
+        local runner, ds = BuiltinSupport.register({
+            OverlayRegistrationDefinition.new(Dependencies.new())})
         local options = {timeout_ms=10}
         assert.equals('stage_overlay_registration',
             ds.stage_overlay_registration('probe.lua', 'probe', options))

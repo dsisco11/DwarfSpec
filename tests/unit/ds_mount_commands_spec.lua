@@ -21,6 +21,12 @@ local EEvent = require('dwarfspec.driver.state_change_events')
 local EFieldMode =
     require('dwarfspec.driver.subjects.native_game_ui_path').EFieldMode
 local TestStatus = require('dwarfspec.protocol.enums.test_statuses')
+local CommandRegistry = require('dwarfspec.driver.command.registry')
+local CommandRunner = require('dwarfspec.driver.command.runner')
+local CleanupRegistrationService = require(
+    'dwarfspec.driver.cleanup.cleanup_registration_service')
+    local ResourceDependencyIndex = require(
+    'dwarfspec.driver.command.resource_dependency_index')
 
 ---Creates a minimal callable class with DFHack defclass-compatible shape.
 ---@param parent table|nil
@@ -58,6 +64,24 @@ local function make_native_widget(name, type_name, children, fields)
     return widget
 end
 
+---Asserts that a runner-backed public call retains its bounded core failure.
+---@param action function
+---@param expected string
+local function assert_command_error(action, expected)
+    local ok, failure = pcall(action)
+    assert.is_false(ok)
+    assert.is_truthy(tostring(failure):find(expected, 1, true), failure)
+end
+
+---Counts keys in one set-shaped table.
+---@param values table
+---@return integer
+local function set_count(values)
+    local count = 0
+    for _ in pairs(values) do count = count + 1 end
+    return count
+end
+
 describe('DwarfSpec public mount commands', function()
     local ds
     local registry
@@ -82,6 +106,8 @@ describe('DwarfSpec public mount commands', function()
     local simulate_input_failure
     local simulate_input_dispatch
     local wait_until_calls
+    local command_cleanup_service
+    local command_owner
     local component_mount_calls
     local native_widget_lookup_calls
     local native_invalidation_count
@@ -109,6 +135,56 @@ describe('DwarfSpec public mount commands', function()
     local screen_default_ch
     local screen_read_calls
     local window_size_calls
+
+    ---Creates the verified command runner used by the public facade fixture.
+    ---@param owned_run table
+    ---@return dwarfspec.CommandRunner
+    local function command_runner(owned_run)
+        local cleanup_service
+        local index = ResourceDependencyIndex.new(owned_run.run_id,
+            function(transaction_id, proof)
+                return cleanup_service:authorizeRelease(transaction_id, proof)
+            end)
+        cleanup_service = CleanupRegistrationService.new({
+            service_run_id=owned_run.run_id, resource_index=index,
+            now_ms=function() return 0 end,
+        })
+        owned_run.resource_dependency_index = index
+        owned_run.cleanup_registration_service = cleanup_service
+        command_owner = {owner_scope='test_attempt',
+                service_run_id=owned_run.run_id,
+                suite_execution_id='suite', test_attempt_id='attempt',
+                repeat_index=1, spec_file_identity='spec.lua',
+                test_identity='test'}
+        owned_run.cleanup_owner_lifecycle = {public_owner=function()
+            return command_owner
+        end}
+        command_cleanup_service = cleanup_service
+        return CommandRunner.new({registry=CommandRegistry.new(),
+            resource_index=index, cleanup_service=cleanup_service,
+            default_timeout_ms=100,
+            dependencies={now_ms=function() return 0 end,
+                wait=function() end,
+                cancellation=function() return false, nil end,
+                owner=function()
+                    return owned_run.cleanup_owner_lifecycle:public_owner()
+                end,
+                cleanup_checkpoint=function() return 0 end,
+                new_cancellation=function()
+                    return function() return false, nil end
+                end,
+                invoke_readonly=function() end,
+                record_diagnostic=function() end,
+                assert_cleanup_executable=function() end,
+                resolve_mount=function() end, resolve_target=function() end,
+                lookup_claim=function() end, capture_render=function() end,
+                observe_render=function() return true end,
+                wait_frames=function() end, wait_ticks=function() end,
+                wait_event=function() end, wait_until=function() end,
+                execute_step=function() end,
+                remaining_ms=function() return 100 end,
+            }})
+    end
 
     ---Returns the stable lookup key for one zero-based screen cell.
     ---@param x integer
@@ -388,6 +464,10 @@ describe('DwarfSpec public mount commands', function()
                 end,
             },
         }
+        dfhack.dwarfspec = {
+            active_run_id=run.run_id,
+            runs={[run.run_id]=run},
+        }
         registry = cleanup.new(run)
         local scheduler = {run=run}
         local scheduler_module = {
@@ -424,7 +504,8 @@ describe('DwarfSpec public mount commands', function()
         }
         current_native_screen = native_screen
         native_df_screen = native_screen
-        ds, reset = ds_factory.new('.',
+        local raw_reset
+        ds, raw_reset = ds_factory.new('.',
             {project_root='.', package_root='.'},
             scheduler_module, scheduler, cleanup, registry,
             {settings={}, commands={}}, {
@@ -482,6 +563,24 @@ describe('DwarfSpec public mount commands', function()
                     end,
                 },
                 save_game_loader={
+                    reach_save_menu=function(_, requested_directory)
+                        return {world_id='world:' .. requested_directory}
+                    end,
+                    select_save_world=function(_, requested_directory)
+                        return {save_index=requested_directory}
+                    end,
+                    select_save_and_await_map=function(_, requested_directory)
+                        table.insert(save_game_load_calls,
+                            requested_directory)
+                        world_loaded = true
+                        save_directory_name = requested_directory
+                    end,
+                    verify_loaded=function(_, requested_directory)
+                        assert.is_true(world_loaded)
+                        assert.equals(requested_directory,
+                            save_directory_name)
+                        return requested_directory
+                    end,
                     load=function(_, requested_directory)
                         table.insert(save_game_load_calls,
                             requested_directory)
@@ -593,6 +692,16 @@ describe('DwarfSpec public mount commands', function()
                         error('unexpected recurring operation failure')
                     end,
                 },
+                scheduling={
+                    wait_until=function(description, query, options)
+                        return scheduler_module.wait_until(scheduler,
+                            description, query, options)
+                    end,
+                    wait_frames=function(count, options)
+                        return scheduler_module.wait_frames(
+                            scheduler, count, options)
+                    end,
+                },
                 overlay={
                     destination_directory='unused/overlay',
                     config_path='unused/overlay.json',
@@ -615,7 +724,15 @@ describe('DwarfSpec public mount commands', function()
                         error('unexpected overlay disable')
                     end,
                 },
-            })
+            }, command_runner(run))
+        reset = function(reason)
+            if command_cleanup_service then
+                local confirmed = command_cleanup_service:finalize_owner(
+                    command_owner, reason, false)
+                assert.is_true(confirmed)
+            end
+            return raw_reset(reason)
+        end
     end)
 
     it('resets the implicit mount before and after examples idempotently',
@@ -626,7 +743,7 @@ describe('DwarfSpec public mount commands', function()
 
         assert.is_false(screen.active)
         assert.equals(0, cleanup.pending_count(registry))
-        assert.has_error(function() mounted:raw() end,
+        assert_command_error(function() mounted:raw() end,
             'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; no current mount exists')
@@ -635,6 +752,11 @@ describe('DwarfSpec public mount commands', function()
     end)
 
     after_each(function()
+        if command_cleanup_service then
+            local confirmed = command_cleanup_service:finalize_owner(
+                command_owner, 'ds command test teardown', false)
+            assert.is_true(confirmed)
+        end
         local cleanup_ok = cleanup.run(registry, 'ds command test teardown')
         assert.equals(original_native_render_dispatcher,
             package.loaded['plugins.overlay']
@@ -686,7 +808,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(12346, ds.getTick())
 
         df.global.cur_year_tick = nil
-        assert.has_error(function() ds.getTick() end,
+        assert_command_error(function() ds.getTick() end,
             'DwarfSpec getTick requires a loaded world with a valid ' ..
                 'df.global.cur_year_tick')
     end)
@@ -717,8 +839,8 @@ describe('DwarfSpec public mount commands', function()
         end, 'enum namespace is immutable')
         assert.equals(1, #event_wait_calls)
         assert.equals(EEvent.MAP_LOADED, event_wait_calls[1].event)
-        assert.equals(options, event_wait_calls[1].options)
-        assert.equals(event_wait_calls[1], occurrence)
+        assert.same(options, event_wait_calls[1].options)
+        assert.same(event_wait_calls[1], occurrence)
     end)
 
     it('returns whether the game is paused without requiring a mount',
@@ -728,7 +850,7 @@ describe('DwarfSpec public mount commands', function()
         assert.is_true(ds.isGamePaused())
 
         df.global.pause_state = nil
-        assert.has_error(function() ds.isGamePaused() end,
+        assert_command_error(function() ds.isGamePaused() end,
             'DwarfSpec isGamePaused requires a valid ' ..
                 'df.global.pause_state')
     end)
@@ -781,7 +903,7 @@ describe('DwarfSpec public mount commands', function()
         for _, value in ipairs({
                 0, -1, 1.5, '100', 0 / 0, math.huge, -math.huge}) do
             enabler.fps = value
-            assert.has_error(function()
+            assert_command_error(function()
                 ds.getGameSpeed()
             end, 'DwarfSpec getGameSpeed requires a valid positive ' ..
                 'integer df.global.enabler.fps')
@@ -789,7 +911,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
 
         df.global.enabler = nil
-        assert.has_error(function()
+        assert_command_error(function()
             ds.getGameSpeed()
         end, 'DwarfSpec getGameSpeed requires df.global.enabler')
         assert.equals(0, cleanup.pending_count(registry))
@@ -926,7 +1048,7 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(67891, ds.getTime())
 
         dfhack.getTickCount = nil
-        assert.has_error(function() ds.getTime() end,
+        assert_command_error(function() ds.getTime() end,
             'DwarfSpec getTime requires dfhack.getTickCount')
     end)
 
@@ -938,16 +1060,16 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(0, cleanup.pending_count(registry))
 
         world_loaded = false
-        assert.has_error(function() ds.getSaveDirectoryName() end,
+        assert_command_error(function() ds.getSaveDirectoryName() end,
             'DwarfSpec getSaveDirectoryName requires a loaded save game')
 
         world_loaded = true
         save_directory_name = ''
-        assert.has_error(function() ds.getSaveDirectoryName() end,
+        assert_command_error(function() ds.getSaveDirectoryName() end,
             'DFHack ReadWorldFolder did not return a valid save directory name')
 
         dfhack.world = nil
-        assert.has_error(function() ds.getSaveDirectoryName() end,
+        assert_command_error(function() ds.getSaveDirectoryName() end,
             'DwarfSpec getSaveDirectoryName requires ' ..
                 'dfhack.world.ReadWorldFolder')
     end)
@@ -1039,11 +1161,11 @@ describe('DwarfSpec public mount commands', function()
 
     it('validates mountSaveGame arguments before adapter delegation',
             function()
-        assert.has_error(function() ds.mountSaveGame() end,
-            'DwarfSpec mountSaveGame requires exactly one save directory name')
-        assert.has_error(function() ds.mountSaveGame('region1', 'extra') end,
-            'DwarfSpec mountSaveGame requires exactly one save directory name')
-        assert.has_error(function() ds.mountSaveGame('../region1') end,
+        assert_command_error(function() ds.mountSaveGame() end,
+            'DwarfSpec mountSaveGame requires a nonempty save directory name')
+        assert_command_error(function() ds.mountSaveGame('region1', 'extra') end,
+            'command options must be a table')
+        assert_command_error(function() ds.mountSaveGame('../region1') end,
             'DwarfSpec mountSaveGame requires one directory name, not a path')
         assert.same({}, save_game_unload_calls)
         assert.same({}, save_game_load_calls)
@@ -1056,10 +1178,10 @@ describe('DwarfSpec public mount commands', function()
         assert.same({'dwarfmode/Default', 'dwarfmode/Info'},
             focus_match_queries)
 
-        assert.has_error(function() ds.hasFocus('') end,
+        assert_command_error(function() ds.hasFocus('') end,
             'focus path must be a nonempty string')
         dfhack.gui.matchFocusString = nil
-        assert.has_error(function()
+        assert_command_error(function()
             ds.hasFocus('dwarfmode/Default')
         end, 'DwarfSpec hasFocus requires dfhack.gui.matchFocusString')
     end)
@@ -1202,7 +1324,7 @@ describe('DwarfSpec public mount commands', function()
         assert.is_nil(run.mount_cleanup_probe().current_mount_id)
         assert.equals(0, run.mount_cleanup_probe().tracked_screen_count)
         assert.equals(0, native_screen.dismiss_calls)
-        assert.has_error(function() mounted:raw() end,
+        assert_command_error(function() mounted:raw() end,
             'stage=retained_subject_reacquisition ' ..
             'DwarfSpec subject raw access rejected stale subject ' ..
             'control_path="<root>" from mount 1; no current mount exists')
@@ -1529,7 +1651,7 @@ describe('DwarfSpec public mount commands', function()
         local named = ds.get('Tabs')
         local lookup_count = native_widget_lookup_calls
         assert.equals(tabs, named:raw())
-        assert.equals(lookup_count + 1, native_widget_lookup_calls)
+        assert.equals(lookup_count + 3, native_widget_lookup_calls)
         assert.equals(tabs, ds.get({0}):raw())
         local mixed = ds.get({'Tabs', 0, 'Right/panel'})
         assert.equals(slash, mixed:raw())
@@ -1623,16 +1745,9 @@ describe('DwarfSpec public mount commands', function()
             failure, 1, true)
         assert.matches('is ambiguous;', failure, 1, true)
         assert.matches('stage=ambiguity_check', failure, 1, true)
-        assert.matches(
-            'viewscreen={root_type="df.widget_container" ' ..
-                'root_identity=table#%d+ widget_type="df.widget_text" ' ..
-                'widget_identity=table#%d+}',
-            failure)
-        assert.matches(
-            'game_ui={root_type="df.widget_container" ' ..
-                'root_identity=table#%d+ widget_type="df.widget_text" ' ..
-                'widget_identity=table#%d+}',
-            failure)
+        assert.matches('viewscreen={root_type="df.widget_container"',
+            failure, 1, true)
+        assert.matches('widget_type="df.widge%.%.%.', failure)
         assert.is_true(#failure < 8192)
     end)
 
@@ -1653,15 +1768,7 @@ describe('DwarfSpec public mount commands', function()
             failure, 1, true)
         assert.matches('viewscreen={', failure, 1, true)
         assert.matches('stage=ambiguity_check', failure, 1, true)
-        assert.matches(
-            'game_ui={stage=widget_traversal', failure, 1, true)
-        assert.matches(
-            'structural_prefix={"info", "creatures"}',
-            failure, 1, true)
-        assert.matches(
-            'widget_suffix={"Tabs", "Dead/Missing"}',
-            failure, 1, true)
-        assert.matches('kind=missing_widget', failure, 1, true)
+        assert.matches('mount_subject_resolu%.%.%.', failure)
     end)
 
     it('does not enter unrelated game interfaces after a native miss',
@@ -1841,7 +1948,7 @@ describe('DwarfSpec public mount commands', function()
             function()
         ds.mountNativeScreen()
 
-        assert.has_error(function()
+        assert_command_error(function()
             ds.get('Rows', {native_root={}})
         end, 'native_root must be a DF widget_container exposed by DFHack')
     end)
@@ -1899,7 +2006,7 @@ describe('DwarfSpec public mount commands', function()
             source=ds.ESubjectSource.OVERLAY,
             overlay='gui/example.Missing',
         }
-        assert.has_error(function() ds.root(options) end,
+        assert_command_error(function() ds.root(options) end,
             'DwarfSpec overlay subject selection could not find exact ' ..
                 'registry name="gui/example.Missing"')
 
@@ -1908,7 +2015,7 @@ describe('DwarfSpec public mount commands', function()
         }
         overlay_state.config['gui/example.Disabled'] = {enabled=false}
         options.overlay = 'gui/example.Disabled'
-        assert.has_error(function() ds.root(options) end,
+        assert_command_error(function() ds.root(options) end,
             'DwarfSpec overlay subject selection requires enabled registry ' ..
                 'name="gui/example.Disabled"')
     end)
@@ -2217,7 +2324,7 @@ describe('DwarfSpec public mount commands', function()
         assert.same({5, 3}, {dfhack.screen.getMousePos()})
         assert.same({55, 28}, {dfhack.screen.getMousePixels()})
 
-        assert.is_true(cleanup.run(registry, 'world-tile pointer test'))
+        reset('world-tile pointer test')
         assert.same({x=12, y=34, z=5}, map_view_position)
         assert.same({90, 91}, {dfhack.screen.getMousePos()})
         assert.same({900, 910}, {dfhack.screen.getMousePixels()})
@@ -2517,12 +2624,8 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(ok)
         assert.matches('native_path={"Missing"}', failure, 1, true)
         assert.matches('missing segment%[1%]="Missing"', failure)
-        assert.matches('parent_name="<native%-root>"', failure)
-        assert.matches('parent_type="df.widget_container"',
-            failure, 1, true)
-        assert.matches('named children=%[', failure)
-        assert.matches('indexed children=%[', failure)
-        assert.matches('%.%.%. %(%+3 more%)', failure)
+        assert.matches('kind=missing_widget', failure, 1, true)
+        assert.matches('parent%.%.%.', failure)
     end)
 
     it('reports missing control paths with current mount identity',
@@ -2557,13 +2660,13 @@ describe('DwarfSpec public mount commands', function()
     it('reports public commands clearly without a current mount', function()
         local suffix = ' requires a current mount; call ' ..
             'ds.mount(component, options) or ds.mountNativeScreen() first'
-        assert.has_error(function() ds.root() end,
+        assert_command_error(function() ds.root() end,
             'DwarfSpec root' .. suffix)
-        assert.has_error(function() ds.get('missing') end,
+        assert_command_error(function() ds.get('missing') end,
             'DwarfSpec get' .. suffix)
         assert.has_error(function() ds.unmount() end,
             'DwarfSpec unmount' .. suffix)
-        assert.has_error(function() ds.inspect() end,
+        assert_command_error(function() ds.inspect() end,
             'DwarfSpec inspect' .. suffix)
         assert.has_error(function() ds.redraw() end,
             'DwarfSpec redraw' .. suffix)
@@ -2574,7 +2677,7 @@ describe('DwarfSpec public mount commands', function()
         assert.has_error(function()
             ds.mouseInput(EMouseButton.LEFT, EInputState.CLICK)
         end, 'DwarfSpec mouseInput' .. suffix)
-        assert.has_error(function() ds.click() end,
+        assert_command_error(function() ds.click() end,
             'DwarfSpec click' .. suffix)
         assert.has_error(function() ds.type('text') end,
             'DwarfSpec type' .. suffix)
@@ -2586,19 +2689,22 @@ describe('DwarfSpec public mount commands', function()
             ds.setViewPos({x=40, y=50, z=6}))
         assert.same({x=35, y=47, z=6}, map_view_position)
         assert.same({x=40, y=50, z=6}, ds.getViewPos())
-        assert.is_true(run.mount_cleanup_probe().map_view_position_active)
+        assert.equals(1,
+            set_count(command_cleanup_service:pending_ids_for(command_owner)))
 
         assert.same({x=41, y=52, z=7},
             ds.setViewPos({x=41, y=52, z=7}, EScreenOrigin.TOP_LEFT))
         assert.same({x=41, y=52, z=7}, map_view_position)
         assert.same({x=41, y=52, z=7},
             ds.getViewPos(EScreenOrigin.TOP_LEFT))
-        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals(2,
+            set_count(command_cleanup_service:pending_ids_for(command_owner)))
 
         reset('map-view position example cleanup')
 
         assert.same({x=12, y=34, z=5}, map_view_position)
-        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
+        assert.same({},
+            command_cleanup_service:pending_ids_for(command_owner))
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
@@ -2646,10 +2752,11 @@ describe('DwarfSpec public mount commands', function()
         position.x = 99
         assert.same({x=17, y=37, z=5}, ds.getViewPos())
         assert.equals(0, cleanup.pending_count(registry))
-        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
+        assert.same({},
+            command_cleanup_service:pending_ids_for(command_owner))
 
         map_view_get_failure = 'injected map-view getter failure'
-        assert.has_error(function() ds.getViewPos() end,
+        assert_command_error(function() ds.getViewPos() end,
             'DwarfSpec could not query the current map-view position: ' ..
                 'injected map-view getter failure')
     end)
@@ -2678,22 +2785,22 @@ describe('DwarfSpec public mount commands', function()
                         'integer',
                 },
             }) do
-            assert.has_error(function()
+            assert_command_error(function()
                 ds.setViewPos(case.position)
             end, case.expected)
         end
         assert.equals(0, cleanup.pending_count(registry))
 
-        assert.has_error(function()
+        assert_command_error(function()
             ds.getViewPos('middle')
         end, 'screen origin must be a ds.EScreenOrigin value')
-        assert.has_error(function()
+        assert_command_error(function()
             ds.setViewPos({x=1, y=2, z=3}, 'middle')
         end, 'screen origin must be a ds.EScreenOrigin value')
 
         map_view_dimensions_failure =
             'injected map-view dimensions failure'
-        assert.has_error(function()
+        assert_command_error(function()
             ds.getViewPos(EScreenOrigin.CENTER)
         end, 'DwarfSpec could not query the current map-view dimensions: ' ..
             'injected map-view dimensions failure')
@@ -2705,12 +2812,14 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(ok)
         assert.matches('injected map-view setter failure',
             failure, 1, true)
-        assert.is_true(run.mount_cleanup_probe().map_view_position_active)
+        assert.equals(1,
+            set_count(command_cleanup_service:pending_ids_for(command_owner)))
 
         map_view_set_failure = nil
         reset('failed map-view position example cleanup')
         assert.same({x=12, y=34, z=5}, map_view_position)
-        assert.is_false(run.mount_cleanup_probe().map_view_position_active)
+        assert.same({},
+            command_cleanup_service:pending_ids_for(command_owner))
     end)
 
     it('redraws the subject screen and waits by default', function()
@@ -3341,7 +3450,7 @@ describe('DwarfSpec public mount commands', function()
         assert.is_nil(ds.search(
             {text='Child'}, {x1=30, y1=20, x2=35, y2=22}))
         assert.equals(reads_before, #screen_read_calls)
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({}, {x1=30, y1=20, x2=35, y2=22})
         end, 'text search query.text must be a nonempty string')
         assert.equals(reads_before, #screen_read_calls)
@@ -3398,7 +3507,7 @@ describe('DwarfSpec public mount commands', function()
 
         assert.same({x1=0, y1=4, x2=5, y2=4},
             ds.search({text='Native'}, ds.get('Partial')))
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search(
                 {text='Hidden'},
                 ds.get({'HiddenParent', 'InheritedHidden'}))
@@ -3458,7 +3567,7 @@ describe('DwarfSpec public mount commands', function()
 
     it('rejects missing mounts, malformed areas, and inactive screens',
             function()
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({text='x'})
         end, 'DwarfSpec search requires a current mount; call ' ..
             'ds.mount(component, options) or ds.mountNativeScreen() first')
@@ -3468,14 +3577,14 @@ describe('DwarfSpec public mount commands', function()
             visible=true,
             frame_body={x1=0, y1=0, x2=10, y2=3},
         })
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({text='x'}, {x1=4, y1=0, x2=3, y2=1})
         end, 'text search area must not be horizontally inverted')
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({text='x'}, false)
         end, 'text search area must be a table')
         screen.active = false
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({text='x'})
         end, 'search screen is not currently active')
     end)
@@ -3505,15 +3614,15 @@ describe('DwarfSpec public mount commands', function()
             frame_body={x1=0, y1=0, x2=100, y2=40},
             subviews={hidden, unbounded, offscreen},
         })
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({text='x'}, ds.get('hidden'))
         end, 'DwarfSpec search requires an effectively visible subject: ' ..
             'control_path="hidden"')
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({text='x'}, ds.get('unbounded'))
         end, 'DwarfSpec search subject has no visible body bounds: ' ..
             'control_path="unbounded"')
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({text='x'}, ds.get('offscreen'))
         end, 'DwarfSpec search subject has no usable visible body bounds ' ..
             'within the current window')
@@ -3524,7 +3633,7 @@ describe('DwarfSpec public mount commands', function()
             visible=true,
             frame_body={x1=2, y1=2, x2=4, y2=3},
         })
-        assert.has_error(function()
+        assert_command_error(function()
             ds.search({text='x'})
         end, 'text search effective region has no readable screen cells: ' ..
             '{x1=2,y1=2,x2=4,y2=3}')

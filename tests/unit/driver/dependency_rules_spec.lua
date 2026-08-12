@@ -82,23 +82,18 @@ describe('driver dependency rules', function()
         local source = read_source('src/dwarfspec/ds.lua')
             :gsub('\r\n', '\n')
         local expected = {
-            'search_definition_module.bind(ds, command_runner, search_runtime)',
-            'click_definition_module.bind(ds, command_runner, click_runtime)',
-            'view_position_definition_module.bind(ds, command_runner,\n' ..
-                '            map_view_runtime)',
-            'mount_save_game_definition_module.bind(ds, command_runner,\n' ..
-                '            save_game_runtime)',
-            'overlay_registration_definition_module.bind(ds, command_runner,\n' ..
-                '            overlay_transaction)',
+            'builtin_modules.search.new(search_runtime)',
+            'builtin_modules.click.new(click_runtime)',
+            'builtin_modules.get_view_pos.new(map_view_runtime)',
+            'builtin_modules.set_view_pos.new(map_view_runtime)',
+            'builtin_modules.mount_save_game.new(save_game_runtime)',
+            'builtin_modules.stage_overlay_registration.new(\n' ..
+                '                overlay_transaction)',
         }
         for _, binding in ipairs(expected) do
             assert.is_truthy(source:find(binding, 1, true), binding)
         end
-        for _, name in ipairs({'search', 'click', 'view_position',
-                'mount_save_game', 'overlay_registration'}) do
-            assert.is_nil(source:find(name ..
-                '_definition_module.bind(ds, command_runner, {', 1, true))
-        end
+        assert.is_nil(source:find('_definition_module.bind(', 1, true))
         assert.is_truthy(source:find(
             'map_view_runtime_module.new({', 1, true))
         assert.is_truthy(source:find(

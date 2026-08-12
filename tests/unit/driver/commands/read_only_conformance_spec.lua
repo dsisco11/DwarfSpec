@@ -1,23 +1,15 @@
 local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
 local Harness = dofile('tests/unit/driver/command/engine_harness.lua')
-local CaptureDefinition = require(
-    'dwarfspec.driver.commands.capture_definition')
-local GameQueries = require(
-    'dwarfspec.driver.commands.game_query_definition')
 local MapViewRuntime = require('dwarfspec.driver.game.map_view_runtime')
-local MountQueries = require(
-    'dwarfspec.driver.commands.mount_query_definition')
-local CurrentRunQuery = require(
-    'dwarfspec.driver.commands.run_query_definition')
-local SearchDefinition = require(
-    'dwarfspec.driver.commands.search_definition')
+local Builtins = {}
+for _, name in ipairs({'wait_frames', 'wait_ticks', 'await', 'await_event',
+        'is_game_paused', 'get_game_speed', 'get_tick', 'get_time',
+        'get_save_directory_name', 'has_focus', 'current_run', 'root', 'get',
+        'inspect', 'capture_view_tree', 'capture_screen', 'search',
+        'get_view_pos', 'subject_get_focus_list', 'subject_raw'}) do
+    Builtins[name] = require('dwarfspec.driver.builtins.' .. name)
+end
 local SearchRuntime = require('dwarfspec.driver.commands.search_runtime')
-local SubjectQueries = require(
-    'dwarfspec.driver.commands.subject_query_definition')
-local ViewPositionDefinition = require(
-    'dwarfspec.driver.commands.view_position_definition')
-local WaitDefinitions = require(
-    'dwarfspec.driver.commands.wait_definition')
 local TestRunner = dofile(
     'tests/unit/driver/commands/definition_test_support.lua')
 
@@ -27,31 +19,37 @@ local Matrix = {}
 ---Collects every concrete read-only built-in definition.
 ---@return table[]
 function Matrix.definitions()
-    local definitions = WaitDefinitions.new({
-        wait_frames=function(count) return count end,
-        wait_ticks=function(count) return count end,
-        wait_event=function(event) return {event=event} end,
-        wait_until=function(_, query) return query() end,
-    }):definitions()
-    local game = GameQueries.new({isGamePaused=function() return false end,
-        getGameSpeed=function() return 100 end,
-        getTick=function() return 1 end, getTime=function() return 2 end,
-        getSaveDirectoryName=function() return 'region1' end,
-        hasFocus=function() return true end})
-    for _, definition in ipairs(game:definitions()) do
-        definitions[#definitions + 1] = definition
-    end
-    definitions[#definitions + 1] = CurrentRunQuery.new():definition(
-        function() return {run_id='run'} end)
-    local mount = MountQueries.new({preflight=function() return true end,
+    local wait = {wait_frames=function(_, count) return count end,
+        wait_ticks=function(_, count) return count end,
+        wait_event=function(_, event) return {event=event} end,
+        wait_until=function(_, _, query) return query() end}
+    local game = {is_game_paused=function() return false end,
+        get_game_speed=function() return 100 end,
+        get_tick=function() return 1 end, get_time=function() return 2 end,
+        get_save_directory_name=function() return 'region1' end,
+        has_focus=function() return true end}
+    local mount = {preflight=function() return true end,
         root=function() return {} end, get=function() return {} end,
         inspect=function() return {} end,
-        capture_view_tree=function() return {} end})
-    for _, definition in ipairs(mount:definitions()) do
-        definitions[#definitions + 1] = definition
+        capture_view_tree=function() return {} end}
+    local definitions = {}
+    for _, owner in ipairs({
+            Builtins.wait_frames.new(wait), Builtins.wait_ticks.new(wait),
+            Builtins.await.new(wait), Builtins.await_event.new(wait),
+            Builtins.is_game_paused.new(game),
+            Builtins.get_game_speed.new(game), Builtins.get_tick.new(game),
+            Builtins.get_time.new(game),
+            Builtins.get_save_directory_name.new(game),
+            Builtins.has_focus.new(game),
+            Builtins.current_run.new({current_run=function()
+                return {run_id='run'}
+            end}), Builtins.root.new(mount), Builtins.get.new(mount),
+            Builtins.inspect.new(mount), Builtins.capture_view_tree.new(mount),
+            Builtins.capture_screen.new({capture_screen=function()
+                return {}
+            end})}) do
+        definitions[#definitions + 1] = owner:definition()
     end
-    definitions[#definitions + 1] = CaptureDefinition.new(
-        function() return {} end):definition()
     local search_mount = {category='native',
         interaction_target={assert_current=function() end}}
     local search_runtime = SearchRuntime.new({mount_context={subject_mounts={},
@@ -59,19 +57,20 @@ function Matrix.definitions()
         resolve_subject=function(_, subject) return subject end},
         matcher=function() return nil end})
     definitions[#definitions + 1] =
-        SearchDefinition.new(search_runtime):definition()
+        Builtins.search.new(search_runtime):definition()
     local map_runtime = MapViewRuntime.new({origins={TOP_LEFT='top-left',
         CENTER='center'}, dimensions=function()
             return {map_x1=0, map_x2=9, map_y1=0, map_y2=9}
         end, read=function() return 1, 2, 3 end,
         write=function() return true end})
     definitions[#definitions + 1] =
-        ViewPositionDefinition.new(map_runtime):queryDefinition()
-    local subject = SubjectQueries.new({getFocusList=function() return {} end,
-        raw=function(value) return value end})
-    for _, definition in ipairs(subject:definitions()) do
-        definitions[#definitions + 1] = definition
-    end
+        Builtins.get_view_pos.new(map_runtime):definition()
+    local subject = {get_focus_list=function() return {} end,
+        raw=function(_, value) return value end}
+    definitions[#definitions + 1] =
+        Builtins.subject_get_focus_list.new(subject):definition()
+    definitions[#definitions + 1] =
+        Builtins.subject_raw.new(subject):definition()
     return definitions
 end
 
@@ -121,7 +120,7 @@ describe('read-only command family conformance', function()
             function()
         local Outcomes = require('dwarfspec.driver.command.outcomes')
         local wait_calls = 0
-        local wait_definitions = WaitDefinitions.new({
+        local wait_definition = Builtins.wait_frames.new({
             wait_frames=function()
                 wait_calls = wait_calls + 1
                 if wait_calls == 1 then
@@ -129,16 +128,8 @@ describe('read-only command family conformance', function()
                 end
                 return Outcomes.fatal('wait failed', {armed=true})
             end,
-            wait_ticks=function(count) return count end,
-            wait_event=function(event) return {event=event} end,
-            wait_until=function(_, query) return query() end,
-        }):definitions()
-        local wait_frames
-        for _, definition in ipairs(wait_definitions) do
-            if definition.name == 'wait_frames' then
-                wait_frames = definition
-            end
-        end
+        }):definition()
+        local wait_frames = wait_definition
         local request = wait_frames.normalize({count=1})
         local context = {remaining_ms=function() return 10 end}
         assert.equals('pending', wait_frames.execute(context, request).kind)
@@ -146,11 +137,12 @@ describe('read-only command family conformance', function()
         assert.equals(2, wait_calls)
 
         local captures, generation = {}, 0
-        local capture = CaptureDefinition.new(function(name)
+        local capture = Builtins.capture_screen.new({
+            capture_screen=function(_, name)
             generation = generation + 1
             captures[name] = {generation=generation}
             return captures[name]
-        end):definition()
+        end}):definition()
         local harness = Harness.new()
         harness:register(TestRunner.fixture(capture))
         assert.equals(1,

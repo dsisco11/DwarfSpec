@@ -1677,143 +1677,150 @@ adaptation, or verified public command functions.
 
 Command-module contract:
 
-- [ ] Add one documented class-like command-module contract for built-ins.
-  - [ ] Require exactly one public command definition per module and exactly one
+- [x] Add one documented class-like command-module contract for built-ins.
+  - [x] Require exactly one public command definition per module and exactly one
         class-like command owner instance per registered command.
-  - [ ] Require `definition()` to return that command's immutable definition and
+  - [x] Require `definition()` to return that command's immutable definition and
         `arguments(...)` to translate its public signature into the normalized
         runner request plus trailing command options.
-  - [ ] Derive the runner command name from the definition rather than repeating
+  - [x] Derive the runner command name from the definition rather than repeating
         a string in the registrar or public closure.
-  - [ ] Permit an explicit public binding name only for a non-`ds` surface such
+  - [x] Permit an explicit public binding name only for a non-`ds` surface such
         as a subject method; require the qualified definition name and public
         method name to be declared together by that command module.
-  - [ ] Keep normalization, preflight, claims, execution, verification, retry,
+  - [x] Keep normalization, preflight, claims, execution, verification, retry,
         cleanup, workflow, compatibility arguments, and public return mapping in
         the owning command module.
-  - [ ] Keep reusable definition builders, immutable/opaque helpers, and runtime
+  - [x] Keep reusable definition builders, immutable/opaque helpers, and runtime
         capability services shared; one command per file must not duplicate
         runner mechanics or domain interaction logic.
 
 Canonical registrar:
 
-- [ ] Add one dependency-injected, class-like `BuiltinCommandRegistrar` that is
+- [x] Add one dependency-injected, class-like `BuiltinCommandRegistrar` that is
       the sole production authority for registering built-in definitions and
       installing their public invocation closures.
-  - [ ] Construct it with the verified command runner and the explicit public
+  - [x] Construct it with the verified command runner and the explicit public
         binding surfaces; do not let it locate services, import `ds.lua`, or act
         as a service locator.
-  - [ ] Have it validate the command-module interface, obtain and register the
+  - [x] Have it validate the command-module interface, obtain and register the
         definition, install a closure that calls the same runner's `invoke()`,
         and return the registered immutable definition.
-  - [ ] Reject duplicate definition names, duplicate public names on one
+  - [x] Reject duplicate definition names, duplicate public names on one
         surface, definition/binding-name mismatches, missing module methods,
         invalid definitions, and replacement of an existing namespace member.
-  - [ ] Support explicit `ds` and subject-method binding surfaces without
+  - [x] Support explicit `ds` and subject-method binding surfaces without
         inferring targets from dotted strings or silently mutating arbitrary
         tables.
-  - [ ] Provide one `register_all()` operation over an explicit ordered array of
+  - [x] Provide one `register_all()` operation over an explicit ordered array of
         command instances. Do not use filesystem discovery, global registration,
         module-load side effects, or unordered table iteration.
-  - [ ] Ensure no built-in command module calls `registerBuiltin()` or assigns a
+  - [x] Ensure no built-in command module calls `registerBuiltin()` or assigns a
         verified command directly to `ds`; only the registrar performs those
         mechanics.
 
 One-command module migration:
 
-- [ ] Place registered built-ins under one unambiguous command-module location
+- [x] Place registered built-ins under one unambiguous command-module location
       and use one file per public command; do not retain `_definition` aggregates
       as a second ownership layer.
-- [ ] Convert the already separated representative commands (`search`, `click`,
+- [x] Convert the already separated representative commands (`search`, `click`,
       `mountSaveGame`, `stage_overlay_registration`, and `registerCleanup`) to
       the command-module contract and registrar without changing their runtime
       capability boundaries or lifecycle policy.
-- [ ] Split `view_position_definition.lua` so `getViewPos` and `setViewPos` have
+- [x] Split `view_position_definition.lua` so `getViewPos` and `setViewPos` have
       independent command owners while continuing to share `MapViewRuntime`.
-- [ ] Split `wait_definition.lua` into independent `wait_frames`, `wait_ticks`,
+- [x] Split `wait_definition.lua` into independent `wait_frames`, `wait_ticks`,
       `await`, and `awaitEvent` command modules while sharing only stateless wait
       option validation and the scheduling capability.
-- [ ] Split `game_query_definition.lua` into independent `isGamePaused`,
+- [x] Split `game_query_definition.lua` into independent `isGamePaused`,
       `getGameSpeed`, `getTick`, `getTime`, `getSaveDirectoryName`, and `hasFocus`
       command modules.
-- [ ] Split `mount_query_definition.lua` into independent `root`, `get`,
+- [x] Split `mount_query_definition.lua` into independent `root`, `get`,
       `inspect`, and `capture_view_tree` command modules without duplicating
       mount/source identity logic.
-- [ ] Keep `capture_screen` separate from `capture_view_tree`; both may share a
+- [x] Keep `capture_screen` separate from `capture_view_tree`; both may share a
       capture-artifact capability but may not share a command owner.
-- [ ] Split `subject_query_definition.lua` into one module per qualified subject
+- [x] Split `subject_query_definition.lua` into one module per qualified subject
       command and install their method adapters through the registrar's explicit
       subject surface.
-- [ ] Move the `registerCleanup` public argument adapter and namespace binding
+- [x] Move the `registerCleanup` public argument adapter and namespace binding
       out of `ds.lua` and into its owning command module; preserve the privileged
       cleanup capability boundary.
-- [ ] Remove every migrated `bind(ds, command_runner, ...)` implementation,
+- [x] Remove every migrated `bind(ds, command_runner, ...)` implementation,
       dynamic `ds[name]` assignment, returned loose command-closure table, and
       direct registration call from command modules.
-- [ ] Remove the install-capture-overwrite path for every already verified
+- [x] Remove the install-capture-overwrite path for every already verified
       command. `ds.lua` must not first install a legacy implementation merely so
       a verified command can capture it; inject the underlying cohesive runtime
       capability directly instead.
-- [ ] Remove the `command_waits`, `scalar_queries`, anonymous mount-query
+- [x] Remove the `command_waits`, `scalar_queries`, anonymous mount-query
       operations, and equivalent loose callback bundles rather than moving them
       unchanged into per-command constructors.
-  - [ ] Reuse or introduce narrow class-like scheduling, game-query, run-query,
+  - [x] Reuse or introduce narrow class-like scheduling, game-query, run-query,
         capture, and mount-query capabilities where mutable run state or host
         ownership is involved.
-  - [ ] Pass an imported function/module directly only when it is demonstrably
+  - [x] Pass an imported function/module directly only when it is demonstrably
         stateless and dependency-free under the Phase 15A classification rule.
 
 Composition and dependency direction:
 
-- [ ] Make `ds.lua` explicitly construct cohesive runtime capabilities and the
+- [x] Make `ds.lua` explicitly construct cohesive runtime capabilities and the
       ordered array of command owner instances, then call the registrar once.
-- [ ] Keep command ordering explicit and deterministic while avoiding a second
+- [x] Keep command ordering explicit and deterministic while avoiding a second
       command catalog that duplicates names, definitions, or binding metadata.
-- [ ] Preserve the dependency direction `ds.lua -> command modules -> runtime
+- [x] Preserve the dependency direction `ds.lua -> command modules -> runtime
       capabilities/shared command helpers`; command modules and the registrar
       must not import host/controller layers or the assembled `ds` facade.
-- [ ] Distinguish still-unconverted legacy public functions from registrar-owned
+- [x] Distinguish still-unconverted legacy public functions from registrar-owned
       verified commands in the migration inventory so later work cannot treat a
       temporary direct binding as the canonical pattern.
 
 Verification and review:
 
-- [ ] Add focused registrar tests for successful ordered registration, exact
+- [x] Add focused registrar tests for successful ordered registration, exact
       public argument forwarding, return preservation, duplicate rejection,
       surface mismatch, namespace replacement, invalid module contracts, and
       use of the exact injected runner.
-- [ ] Give every split command module its own focused suite; retain shared
+- [x] Give every split command module its own focused suite; retain shared
       conformance tests for cross-command lifecycle behavior rather than an
       aggregate module-specific suite.
-- [ ] Add an inventory/source-organization test proving every already verified
+- [x] Add an inventory/source-organization test proving every already verified
       built-in has exactly one command module, one registered definition, and
       one public binding, and that no migrated module bypasses the registrar.
-- [ ] Update package/source declarations for all split modules and remove the
+- [x] Update package/source declarations for all split modules and remove the
       obsolete aggregate module paths in the same change.
-- [ ] Rerun all affected representative and read-only command suites, registrar
+- [x] Rerun all affected representative and read-only command suites, registrar
       and shared conformance suites, runner/public-binding/host-assembly suites,
       the full unit suite, Lua formatting, source declarations, and dependency
       checks.
-- [ ] Run the smallest current-worktree native qualification covering a query,
+- [x] Run the smallest current-worktree native qualification covering a query,
       wait/assertion, capture, subject method, representative mutator/workflow,
       and terminal cleanup confirmation after registration changes.
-- [ ] Perform the required follow-up implementation review and an independent
+- [x] Perform the required follow-up implementation review and an independent
       completion audit before treating the registrar contract as the basis for
       Phases 17-21.
 
 Completion criteria:
 
-- [ ] Every already verified built-in command has one class-like command owner
+- [x] Every already verified built-in command has one class-like command owner
       in one command-specific file; no aggregate owns multiple public commands.
-- [ ] One registrar exclusively registers built-in definitions and installs
+- [x] One registrar exclusively registers built-in definitions and installs
       verified `ds` and subject-method bindings, with deterministic explicit
       composition and no discovery or service locator.
-- [ ] `ds.lua` contains capability and command construction plus one registrar
+- [x] `ds.lua` contains capability and command construction plus one registrar
       handoff, with no verified-command definition, argument adapter, direct
       registration, or public invocation closure.
-- [ ] Phase 15 representative and Phase 16 read-only observable behavior remains
+- [x] Phase 15 representative and Phase 16 read-only observable behavior remains
       unchanged under refreshed focused, full, static, declaration, dependency,
       and cleanup-confirmed live evidence.
+
+Evidence (2026-08-12): registrar 5, inventory 4, mount-query runtime 1,
+command-specific and public-mount suites green, mount context 51, full units
+1254, Lua syntax/formatting 504 files, source declarations and diff checks
+green. The final-worktree interaction qualification passed 2/0/0/0 and
+finished with cleanup confirmed. Follow-up review and independent completion
+audit found no remaining issue or evidence gap.
 
 Conversion invariant for Phases 17-21:
 

@@ -1,10 +1,12 @@
 local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
 local Harness = dofile('tests/unit/driver/command/engine_harness.lua')
 local MountSaveGameDefinition = require(
-    'dwarfspec.driver.commands.mount_save_game_definition')
+    'dwarfspec.driver.builtins.mount_save_game')
 local SaveGameRuntime = require('dwarfspec.driver.game.save_game_runtime')
 local TestRunner = dofile(
     'tests/unit/driver/commands/definition_test_support.lua')
+local BuiltinSupport = dofile(
+    'tests/unit/driver/commands/builtin_test_support.lua')
 
 ---@class dwarfspec.tests.MountSaveGameDefinitionDependencies
 local Dependencies = {}
@@ -55,8 +57,8 @@ end
 describe('verified mount-save-game command definition', function()
     it('owns registration and public workflow binding', function()
         local dependencies = Dependencies.new()
-        local runner, ds = TestRunner.new(), {}
-        MountSaveGameDefinition.bind(ds, runner, dependencies)
+        local runner, ds = BuiltinSupport.register({
+            MountSaveGameDefinition.new(dependencies)})
         local options = {timeout_ms=10}
         assert.equals('mountSaveGame', ds.mountSaveGame('save', options))
         assert.same({'mountSaveGame'}, runner:names())

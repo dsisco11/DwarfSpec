@@ -101,8 +101,6 @@ function M.new(package_root, project, scheduler_module, scheduler,
         type(command_runner.setRuntimeDependencies) == 'function' and
         type(command_runner.assertHandleExecution) == 'function',
         'DwarfSpec command runner has an invalid verified interface')
-    local register_cleanup_command = load_automation_module(package_root,
-        'dwarfspec.driver.commands.register_cleanup')
     local cleanup_handle = load_automation_module(package_root,
         'dwarfspec.driver.cleanup.cleanup_transaction_handle')
     local example_cleanup_marker = cleanup_module.mark(cleanup_registry)
@@ -205,8 +203,6 @@ local EventType = load_automation_module(package_root,
     'dwarfspec.protocol.enums.event_types')
 local TestStatus = load_automation_module(package_root,
     'dwarfspec.protocol.enums.test_statuses')
-local save_game_mount_module = load_automation_module(package_root,
-    'dwarfspec.driver.game.save_game_mount')
 local save_game_unload_module = load_automation_module(package_root,
     'dwarfspec.driver.game.save_game_unload')
 local save_game_load_module = load_automation_module(package_root,
@@ -219,43 +215,78 @@ local await_event_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.await_event')
 local text_search_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.text_search')
-local search_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.search_definition')
-local click_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.click_definition')
-local view_position_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.view_position_definition')
-local mount_save_game_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.mount_save_game_definition')
-local overlay_registration_definition_module = load_automation_module(
-    package_root,
-    'dwarfspec.driver.commands.overlay_registration_definition')
-local wait_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.wait_definition')
-local game_query_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.game_query_definition')
-local run_query_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.run_query_definition')
-local mount_query_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.mount_query_definition')
-local capture_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.capture_definition')
-local subject_query_definition_module = load_automation_module(package_root,
-    'dwarfspec.driver.commands.subject_query_definition')
-local wait_command = load_automation_module(package_root,
-    'dwarfspec.driver.commands.wait')
+local builtin_registrar_module = load_automation_module(package_root,
+    'dwarfspec.driver.command.builtin_command_registrar')
+local wait_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.wait_runtime')
+local game_query_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.game_query_runtime')
+local run_query_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.run_query_runtime')
+local capture_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.capture_runtime')
+local mount_query_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.mount_query_runtime')
+local subject_query_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.subject_query_runtime')
+local builtin_modules = {
+    wait_frames=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.wait_frames'),
+    wait_ticks=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.wait_ticks'),
+    await=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.await'),
+    await_event=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.await_event'),
+    is_game_paused=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.is_game_paused'),
+    get_game_speed=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.get_game_speed'),
+    get_tick=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.get_tick'),
+    get_time=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.get_time'),
+    get_save_directory_name=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.get_save_directory_name'),
+    has_focus=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.has_focus'),
+    current_run=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.current_run'),
+    root=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.root'),
+    get=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.get'),
+    inspect=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.inspect'),
+    capture_view_tree=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.capture_view_tree'),
+    capture_screen=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.capture_screen'),
+    subject_raw=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.subject_raw'),
+    subject_get_focus_list=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.subject_get_focus_list'),
+    search=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.search'),
+    click=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.click'),
+    get_view_pos=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.get_view_pos'),
+    set_view_pos=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.set_view_pos'),
+    mount_save_game=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.mount_save_game'),
+    stage_overlay_registration=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.stage_overlay_registration'),
+    register_cleanup=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.register_cleanup'),
+}
 local game_state_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.game_state')
-local view_position_command = load_automation_module(package_root,
-    'dwarfspec.driver.commands.view_position')
-local capture_command = load_automation_module(package_root,
-    'dwarfspec.driver.commands.capture')
 local mount_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.mount')
 local input_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.input')
-local pointer_command = load_automation_module(package_root,
-    'dwarfspec.driver.commands.pointer')
 local native_subject_source_module = load_automation_module(package_root,
     'dwarfspec.driver.subjects.native_subject_source')
 local command_observer_module = load_automation_module(package_root,
@@ -871,12 +902,13 @@ local command_observer_module = load_automation_module(package_root,
         EEvent=EEvent,
     }
 
+    local register_cleanup_options
     if command_runner ~= nil then
         local cleanup_service = assert(context.run.cleanup_registration_service,
             'DwarfSpec requires the run cleanup registration service')
         local resource_index = assert(context.run.resource_dependency_index,
             'DwarfSpec requires the run resource dependency index')
-        command_runner:registerBuiltin(register_cleanup_command.new({
+        register_cleanup_options = {
             freeze_registrations=function(registrations)
                 return resource_index:freeze_registrations(registrations)
             end,
@@ -893,29 +925,7 @@ local command_observer_module = load_automation_module(package_root,
                     command_runner:assertHandleExecution(expected)
                 end)
             end,
-        }))
-    end
-
-    ---Registers one receipt-backed cleanup transaction for the active owner.
-    ---@param registration dwarfspec.CleanupRegistration
-    ---@param command_options? dwarfspec.CommandOptions
-    ---@return dwarfspec.CleanupTransaction
-    function ds.registerCleanup(registration, command_options)
-        assert(command_runner ~= nil,
-            'verified command execution is unavailable')
-        return command_runner:invoke('registerCleanup',
-            {registration=registration}, command_options)
-    end
-
-    ---Returns the exact service-owned run that currently owns the executor.
-    ---@return table
-    function ds.current_run()
-        local registry = assert(dfhack.dwarfspec,
-            'DwarfSpec automation service is not running')
-        local run_id = assert(registry.active_run_id,
-            'DwarfSpec automation executor is idle')
-        return assert(registry.runs[run_id],
-            'DwarfSpec active run record is missing')
+        }
     end
 
     ---Resolves a subject or omitted target against the implicit mount.
@@ -1149,22 +1159,6 @@ local command_observer_module = load_automation_module(package_root,
         resolve_implicit_path=resolve_implicit_native_path,
     })
 
-    ---Copies caller wait options and applies project-wide defaults.
-    ---@param options table|nil
-    ---@param include_frame_budget boolean
-    ---@return table
-    local function wait_options(options, include_frame_budget)
-        local result = {}
-        for key, value in pairs(options or {}) do result[key] = value end
-        if result.timeout_ms == nil then
-            result.timeout_ms = wait_settings.timeout_ms
-        end
-        if include_frame_budget and result.frame_budget == nil then
-            result.frame_budget = wait_settings.frame_budget
-        end
-        return result
-    end
-
     ---Restores all currently registered test-owned resources.
     local function reset(reason)
         reason = reason or 'automation lifecycle'
@@ -1188,52 +1182,6 @@ local command_observer_module = load_automation_module(package_root,
             error('automation cleanup failed during ' .. reason .. ': ' ..
                 table.concat(messages, '; '), 2)
         end
-    end
-
-    ---Waits for actual DFHack raw-frame callbacks without blocking the game.
-    ---@param count integer
-    ---@param options table|nil
-    ---@return integer
-    function ds.wait_frames(count, options)
-        return scheduler_module.wait_frames(scheduler, count,
-            wait_options(options, false))
-    end
-
-    ---Waits for unpaused Dwarf Fortress simulation ticks without blocking.
-    ---@param count integer
-    ---@param options table|nil Supports `timeout_ms` and `description`.
-    ---@return integer
-    function ds.wait_ticks(count, options)
-        return scheduler_module.wait_ticks(scheduler, count,
-            wait_options(options, false))
-    end
-
-    ---Polls a read-only condition once per frame until it becomes ready.
-    ---@param description string
-    ---@param query function
-    ---@param options table|nil
-    ---@return any
-    function ds.await(description, query, options)
-        return scheduler_module.wait_until(
-            scheduler, description, query, wait_options(options, true))
-    end
-
-    ---Waits for and returns the next occurrence of one native event.
-    ---@param event DwarfSpecEEvent
-    ---@param options DwarfSpecAwaitEventOptions|nil
-    ---@return DwarfSpecEventOccurrence
-    function ds.awaitEvent(event, options)
-        return await_event(event, options)
-    end
-
-    ---Returns whether the Dwarf Fortress simulation is currently paused.
-    ---@return boolean
-    function ds.isGamePaused()
-        local global = df and df.global
-        local pause_state = global and global.pause_state
-        assert(type(pause_state) == 'boolean',
-            'DwarfSpec isGamePaused requires a valid df.global.pause_state')
-        return pause_state
     end
 
     ---Sets the game pause state for the current example.
@@ -1267,144 +1215,6 @@ local command_observer_module = load_automation_module(package_root,
         return paused
     end
 
-    ---Returns whether a value is a finite Lua number.
-    ---@param value any
-    ---@return boolean
-    local function is_finite_number(value)
-        return type(value) == 'number' and value == value and
-            value ~= math.huge and value ~= -math.huge
-    end
-
-    ---Returns whether two finite numbers match within float precision.
-    ---@param actual number
-    ---@param expected number
-    ---@return boolean
-    local function game_speed_ratio_matches(actual, expected)
-        if not is_finite_number(actual) or
-                not is_finite_number(expected) then
-            return false
-        end
-        local scale = math.max(1, math.abs(expected))
-        return math.abs(actual - expected) <= 1e-6 * scale
-    end
-
-    ---Reads and validates the native fields that define the game TPS target.
-    ---@return table, number, number, number
-    local function game_speed_state()
-        local enabler = context.get_game_enabler()
-        assert(enabler ~= nil,
-            'DwarfSpec setGameSpeed requires df.global.enabler')
-        local native_tps = enabler.fps
-        assert(is_finite_number(native_tps) and native_tps >= 1 and
-                native_tps % 1 == 0,
-            'DwarfSpec setGameSpeed requires a valid positive integer ' ..
-                'df.global.enabler.fps')
-        local graphical_rate = enabler.gfps
-        assert(is_finite_number(graphical_rate) and graphical_rate > 0,
-            'DwarfSpec setGameSpeed requires a valid positive ' ..
-                'df.global.enabler.gfps')
-        local speed_ratio = enabler.fps_per_gfps
-        assert(is_finite_number(speed_ratio),
-            'DwarfSpec setGameSpeed requires a valid ' ..
-                'df.global.enabler.fps_per_gfps')
-        return enabler, native_tps, graphical_rate, speed_ratio
-    end
-
-    ---Returns the current game ticks-per-second target.
-    ---@return integer
-    function ds.getGameSpeed()
-        local enabler = context.get_game_enabler()
-        assert(enabler ~= nil,
-            'DwarfSpec getGameSpeed requires df.global.enabler')
-        local tps = enabler.fps
-        assert(is_finite_number(tps) and tps >= 1 and tps % 1 == 0,
-            'DwarfSpec getGameSpeed requires a valid positive integer ' ..
-                'df.global.enabler.fps')
-        return tps
-    end
-
-    ---Sets the game ticks-per-second target for the current example.
-    ---DwarfSpec automatically restores the inherited state during cleanup.
-    ---@param tps integer
-    ---@return integer
-    function ds.setGameSpeed(tps)
-        assert(is_finite_number(tps) and tps >= 1 and tps % 1 == 0,
-            'game speed must be a positive integer TPS target')
-        local enabler, original_tps, graphical_rate, original_ratio =
-            game_speed_state()
-        if context.game_speed_cleanup_entry == nil then
-            context.game_speed_cleanup_entry = cleanup_module.push(
-                cleanup_registry, 'restore game speed', function()
-                    local current = context.get_game_enabler()
-                    assert(current ~= nil,
-                        'DwarfSpec could not restore game speed: ' ..
-                            'df.global.enabler is unavailable')
-                    local restored = context.set_game_speed(
-                        current, original_tps, original_ratio)
-                    assert(restored ~= false,
-                        'DFHack rejected the original game speed')
-                    assert(current.fps == original_tps and
-                        current.fps_per_gfps == original_ratio,
-                        'DFHack did not restore the original game speed')
-                    context.game_speed_cleanup_entry = nil
-                end)
-        end
-
-        local expected_ratio = tps / graphical_rate
-        local ok, accepted = pcall(
-            context.set_game_speed, enabler, tps, expected_ratio)
-        assert(ok, 'DwarfSpec could not set game speed: ' ..
-            tostring(accepted))
-        assert(accepted ~= false,
-            'DFHack rejected the requested game speed')
-        assert(enabler.fps == tps,
-            'DFHack did not apply the requested game TPS target')
-        assert(game_speed_ratio_matches(
-            enabler.fps_per_gfps, expected_ratio),
-            'DFHack did not apply the requested game speed ratio')
-        return tps
-    end
-
-    ---Returns the current in-year simulation tick for the loaded DF world.
-    ---@return integer
-    function ds.getTick()
-        local global = df and df.global
-        local tick = global and global.cur_year_tick
-        assert(type(tick) == 'number' and tick % 1 == 0 and tick >= 0,
-            'DwarfSpec getTick requires a loaded world with a valid ' ..
-                'df.global.cur_year_tick')
-        return tick
-    end
-
-    ---Returns DFHack's current millisecond clock value.
-    ---@return integer
-    function ds.getTime()
-        local get_tick_count = dfhack and dfhack.getTickCount
-        assert(type(get_tick_count) == 'function',
-            'DwarfSpec getTime requires dfhack.getTickCount')
-        local time = get_tick_count()
-        assert(type(time) == 'number' and time % 1 == 0 and time >= 0,
-            'DFHack getTickCount did not return a valid millisecond clock')
-        return time
-    end
-
-    ---Returns the directory name of the currently loaded save game.
-    ---@return string
-    function ds.getSaveDirectoryName()
-        local is_world_loaded = dfhack and dfhack.isWorldLoaded
-        assert(type(is_world_loaded) == 'function' and is_world_loaded(),
-            'DwarfSpec getSaveDirectoryName requires a loaded save game')
-        local world = dfhack.world
-        assert(type(world) == 'table' and
-                type(world.ReadWorldFolder) == 'function',
-            'DwarfSpec getSaveDirectoryName requires ' ..
-                'dfhack.world.ReadWorldFolder')
-        local name = world.ReadWorldFolder()
-        assert(type(name) == 'string' and name ~= '',
-            'DFHack ReadWorldFolder did not return a valid save directory name')
-        return name
-    end
-
     ---Discards the loaded save and waits for the native title main menu.
     ---An already-visible title main menu is an idempotent no-op. The resulting
     ---state is not cleanup-owned and remains in effect for later examples.
@@ -1414,67 +1224,6 @@ local command_observer_module = load_automation_module(package_root,
         assert(select('#', ...) == 0,
             'DwarfSpec exitToMainMenu does not accept arguments')
         return save_game_unloader:exit_to_main_menu()
-    end
-
-    ---Ensures that one exact save directory is loaded.
-    ---A different loaded world is discarded without saving. The requested
-    ---world remains loaded for subsequent examples and is not cleanup-owned.
-    ---@param ... any
-    ---@return string
-    function ds.mountSaveGame(...)
-        local arguments = table.pack(...)
-        local world = dfhack and dfhack.world
-        local preflight = save_game_mount_module.preflight({
-            is_world_loaded=dfhack and dfhack.isWorldLoaded,
-            read_world_folder=world and world.ReadWorldFolder,
-        }, arguments.n, arguments[1])
-        if not preflight.transition_required then
-            return preflight.requested_directory
-        end
-        if preflight.loaded_directory then
-            save_game_unloader:unload(preflight.loaded_directory,
-                preflight.requested_directory)
-        end
-        save_game_loader:load(preflight.requested_directory)
-        return preflight.requested_directory
-    end
-
-    ---Returns whether the current DFHack focus matches one focus path.
-    ---@param path string
-    ---@return boolean
-    function ds.hasFocus(path)
-        assert(type(path) == 'string' and path ~= '',
-            'focus path must be a nonempty string')
-        local gui = dfhack and dfhack.gui
-        assert(type(gui) == 'table' and
-                type(gui.matchFocusString) == 'function',
-            'DwarfSpec hasFocus requires dfhack.gui.matchFocusString')
-        local focused = gui.matchFocusString(path)
-        assert(type(focused) == 'boolean',
-            'DFHack matchFocusString did not return a boolean')
-        return focused
-    end
-
-    local screen_origin_axes = {
-        [EScreenOrigin.TOP_LEFT]={'start', 'start'},
-        [EScreenOrigin.TOP]={'center', 'start'},
-        [EScreenOrigin.TOP_RIGHT]={'finish', 'start'},
-        [EScreenOrigin.LEFT]={'start', 'center'},
-        [EScreenOrigin.CENTER]={'center', 'center'},
-        [EScreenOrigin.RIGHT]={'finish', 'center'},
-        [EScreenOrigin.BOTTOM_LEFT]={'start', 'finish'},
-        [EScreenOrigin.BOTTOM]={'center', 'finish'},
-        [EScreenOrigin.BOTTOM_RIGHT]={'finish', 'finish'},
-    }
-
-    ---Returns one axis offset for a viewport anchor.
-    ---@param anchor string
-    ---@param size integer
-    ---@return integer
-    local function screen_origin_axis_offset(anchor, size)
-        if anchor == 'start' then return 0 end
-        if anchor == 'center' then return math.floor(size / 2) end
-        return size - 1
     end
 
     ---Returns the validated current map-view dimensions.
@@ -1496,74 +1245,6 @@ local command_observer_module = load_automation_module(package_root,
         assert(width > 0 and height > 0,
             'DFHack returned invalid map-view dimensions')
         return dimensions, width, height
-    end
-
-    ---Returns the map-tile offset for one screen origin.
-    ---@param origin DwarfSpecEScreenOrigin|nil
-    ---@return integer, integer
-    local function screen_origin_offset(origin)
-        origin = origin or EScreenOrigin.CENTER
-        local axes = screen_origin_axes[origin]
-        assert(axes,
-            'screen origin must be a ds.EScreenOrigin value')
-        if origin == EScreenOrigin.TOP_LEFT then return 0, 0 end
-        local _, width, height = current_map_view_dimensions()
-        return screen_origin_axis_offset(axes[1], width),
-            screen_origin_axis_offset(axes[2], height)
-    end
-
-    ---Returns the map tile aligned with one origin in the current view.
-    ---@param origin DwarfSpecEScreenOrigin|nil
-    ---@return dwarfspec.MapViewPosition
-    function ds.getViewPos(origin)
-        local offset_x, offset_y = screen_origin_offset(origin)
-        local ok, x, y, z = pcall(context.get_map_view_position)
-        assert(ok, 'DwarfSpec could not query the current map-view position: ' ..
-            tostring(x))
-        for axis, value in pairs({x=x, y=y}) do
-            assert(type(value) == 'number' and value % 1 == 0,
-                ('DFHack returned an invalid map-view %s coordinate: %s')
-                    :format(axis, tostring(value)))
-        end
-        assert(type(z) == 'number' and z % 1 == 0 and z >= 0,
-            ('DFHack returned an invalid map-view z coordinate: %s')
-                :format(tostring(z)))
-        return {x=x + offset_x, y=y + offset_y, z=z}
-    end
-
-    ---Aligns one map tile with a screen origin for the current example.
-    ---DwarfSpec automatically restores the inherited position during cleanup.
-    ---@param position table
-    ---@param origin DwarfSpecEScreenOrigin|nil
-    ---@return table
-    function ds.setViewPos(position, origin)
-        assert(type(position) == 'table',
-            'map-view position must be a table with x, y, and z coordinates')
-        for _, axis in ipairs({'x', 'y', 'z'}) do
-            local value = position[axis]
-            assert(type(value) == 'number' and value % 1 == 0 and value >= 0,
-                ('map-view %s coordinate must be a nonnegative integer')
-                    :format(axis))
-        end
-        local offset_x, offset_y = screen_origin_offset(origin)
-        if context.map_view_cleanup_entry == nil then
-            local original = ds.getViewPos(EScreenOrigin.TOP_LEFT)
-            context.map_view_cleanup_entry = cleanup_module.push(
-                cleanup_registry, 'restore map-view position', function()
-                    local restored = context.set_map_view_position(
-                        original.x, original.y, original.z)
-                    assert(restored ~= false,
-                        'DFHack rejected the original map-view position')
-                    context.map_view_cleanup_entry = nil
-                end)
-        end
-        local ok, accepted = pcall(context.set_map_view_position,
-            position.x - offset_x, position.y - offset_y, position.z)
-        assert(ok, 'DwarfSpec could not set the map-view position: ' ..
-            tostring(accepted))
-        assert(accepted ~= false,
-            'DFHack rejected the requested map-view position')
-        return {x=position.x, y=position.y, z=position.z}
     end
 
     ---Mounts one owned component or complete screen.
@@ -1590,112 +1271,9 @@ local command_observer_module = load_automation_module(package_root,
         end)
     end
 
-    ---Returns a subject for the selected current-mount root.
-    ---@param options dwarfspec.SubjectSourceOptions|nil
-    ---@return table
-    function ds.root(options)
-        local mount = context.mount_context:require_current('root')
-        if mount.subject_source.kind ~= ESubjectSource.NATIVE then
-            assert(options == nil,
-                'component mounts do not accept subject source options')
-            return context.mount_context:root()
-        end
-        local request = subject_requests_module.root(options)
-        local source = native_subject_sources.select(mount, request)
-        if source == mount.subject_source then
-            return context.mount_context:root()
-        end
-        local root = source.adapter:root()
-        return context.mount_context:new_subject(
-            root, '<root>', {}, source)
-    end
-
     ---Releases the current native attachment or mounted component.
     function ds.unmount()
         return context.mount_context:unmount()
-    end
-
-    ---Selects one strict source-specific path from the implicit mount.
-    ---@param control_path string|dwarfspec.NativePathSegment[]
-    ---@param options dwarfspec.SubjectSourceOptions|nil
-    ---@return table
-    function ds.get(control_path, options)
-        local mount = context.mount_context:require_current('get')
-        local path_segments
-        local diagnostic_path = control_path
-        local source = mount.subject_source
-        local use_implicit_native_roots = false
-        if mount.subject_source.kind == ESubjectSource.NATIVE then
-            local request = subject_requests_module.get(
-                control_path, options)
-            source = native_subject_sources.select(mount, request)
-            path_segments = request.path_segments
-            use_implicit_native_roots =
-                request.source == ESubjectSource.NATIVE and
-                request.native_root == nil
-            if request.source == ESubjectSource.NATIVE then
-                diagnostic_path =
-                    subject_paths_module.format_native(path_segments)
-            end
-        else
-            assert(options == nil,
-                'component mounts do not accept subject source options')
-        end
-        local previous = mount.command_subject
-        mount.command_subject = {
-            mount_id=mount.id,
-            control_path=diagnostic_path,
-        }
-        local selected_path_segments = path_segments
-        local ok, selected = pcall(function()
-            if use_implicit_native_roots then
-                return native_subject_sources.resolve_implicit_path(
-                    mount, path_segments, diagnostic_path)
-            end
-            if path_segments then
-                return {
-                    view=context.mount_context:resolve_path_segments(
-                        path_segments, diagnostic_path, source),
-                    source=source,
-                    path_segments=path_segments,
-                }
-            end
-            return {
-                view=context.mount_context:resolve_control_path(control_path),
-                source=source,
-                path_segments=nil,
-            }
-        end)
-        if not ok then
-            local reported = context.mount_context:report_failure(
-                mount, 'get', selected)
-            mount.command_subject = previous
-            error(reported, 2)
-        end
-        mount.command_subject = previous
-        source = selected.source
-        selected_path_segments = selected.path_segments
-        return context.mount_context:new_subject(
-            selected.view, diagnostic_path, selected_path_segments, source)
-    end
-
-    ---Returns a stable read-only diagnostic table for one live subject.
-    ---@param view table|nil Defaults to the current source root.
-    ---@return table
-    function ds.inspect(view)
-        local adapter
-        view, _, _, adapter = interaction_target_resolver:resolve(view,
-            'inspect')
-        return diagnostics.inspect_view(view, adapter)
-    end
-
-    ---Searches final rendered screen cells within the current mount scope.
-    ---@param query table
-    ---@param search_area table|nil
-    ---@return table|nil
-    function ds.search(query, search_area)
-        return search_runtime:search(query, search_area,
-            search_runtime:is_subject(search_area))
     end
 
     ---Returns a copied focus-string list for one current mounted subject.
@@ -1744,31 +1322,6 @@ local command_observer_module = load_automation_module(package_root,
         end, {
             wait_for_render=options.wait ~= false,
         })
-    end
-
-    ---Captures the current implicit mount tree under one evidence name.
-    ---@param name string
-    ---@param options dwarfspec.SubjectSourceOptions|nil
-    ---@return table
-    function ds.capture_view_tree(name, options)
-        local mount = context.mount_context:require_current(
-            'capture_view_tree')
-        local source = mount.subject_source
-        if mount.subject_source.kind == ESubjectSource.NATIVE then
-            local request = subject_requests_module.tree(options)
-            source = native_subject_sources.select(mount, request)
-        else
-            assert(options == nil,
-                'component mounts do not accept subject source options')
-        end
-        local adapter = source.adapter
-        local root = adapter:root()
-        assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
-            'capture name must be a relative identifier')
-        context.run.captures = context.run.captures or {}
-        local tree = diagnostics.capture_view_tree(root, nil, adapter)
-        context.run.captures[name] = tree
-        return tree
     end
 
     ---Formats one rectangle without inspecting arbitrary adapted fields.
@@ -2203,30 +1756,6 @@ local command_observer_module = load_automation_module(package_root,
         end)
     end
 
-    ---Clicks a view with a supported native mouse button and waits for render.
-    ---DwarfSpec automatically restores inherited pointer state during cleanup.
-    ---It does not reverse game or UI effects caused by the click.
-    ---@param view table
-    ---@param button string|nil
-    ---@return integer
-    function ds.click(view, button)
-        local requested_view = view
-        local interaction_target
-        view, interaction_target = interaction_target_resolver:resolve(
-            view, 'click')
-        local key = ({left='_MOUSE_L', right='_MOUSE_R',
-            middle='_MOUSE_M'})[button or 'left']
-        assert(key, 'unsupported mouse button: ' .. tostring(button))
-        ds.move_pointer(requested_view)
-        return mutate_pointer('click', function()
-            pointer_adapter_module.with_mouse_focus(
-                context.pointer, function()
-                    pointer_adapter_module.sync(context.pointer)
-                    simulate_input(interaction_target, 'click', key)
-                end)
-        end)
-    end
-
     ---Types ASCII text through DFHack's supported string keycodes.
     ---@param text string
     ---@param subject table|nil
@@ -2255,48 +1784,11 @@ local command_observer_module = load_automation_module(package_root,
         return context.mount_context:viewport(width, height)
     end
 
-    ---Captures and retains a bounded plain screen-cell buffer.
-    ---@param name string
-    ---@param options table|nil
-    ---@return table
-    function ds.capture_screen(name, options)
-        assert(type(name) == 'string' and name:match('^[%w_.-]+$'),
-            'capture name must be a relative identifier')
-        context.run.captures = context.run.captures or {}
-        local capture = diagnostics.capture_screen(options)
-        context.run.captures[name] = capture
-        return capture
-    end
-
-    ---Stages a real overlay source for a registration integration test.
-    ---DwarfSpec automatically restores all owned registration artifacts
-    ---during lifecycle cleanup.
-    ---@param source_path string
-    ---@param logical_name string
-    ---@return table
-    function ds.stage_overlay_registration(source_path, logical_name)
-        return stage_overlay_registration_integration(
-            source_path, logical_name)
-    end
-
-    wait_command.bind(ds, {
-        scheduler_module=scheduler_module,
-        scheduler=scheduler,
-        wait_settings=wait_settings,
-        await_event=await_event,
-    })
     game_state_command.bind(ds, {
         context=context,
         cleanup_module=cleanup_module,
         cleanup_registry=cleanup_registry,
     })
-    view_position_command.bind(ds, {
-        context=context,
-        cleanup_module=cleanup_module,
-        cleanup_registry=cleanup_registry,
-        origins=EScreenOrigin,
-    })
-    capture_command.bind(ds, {run=context.run, diagnostics=diagnostics})
     unit_speed_command.bind(ds, {controller={
         ---Activates the shared run-owned unit-speed controller.
         ---@param _ table
@@ -2317,18 +1809,15 @@ local command_observer_module = load_automation_module(package_root,
     }})
     local mount_commands = mount_command.new({
         context=context,
-        subject_source=ESubjectSource,
-        requests=subject_requests_module,
-        paths=subject_paths_module,
         native_attachment=native_attachment,
-        diagnostics=diagnostics,
         resolve_target=function(value, operation)
             return interaction_target_resolver:resolve(value, operation)
         end,
-        select_source=native_subject_sources.select,
-        resolve_implicit_path=native_subject_sources.resolve_implicit_path,
     })
-    for name, command in pairs(mount_commands) do ds[name] = command end
+    for _, name in ipairs({'mount', 'mountNativeScreen', 'unmount', 'redraw',
+            'viewport'}) do
+        ds[name] = mount_commands[name]
+    end
     local input_commands = input_command.new({
         context=context,
         resolve_target=function(value, operation)
@@ -2338,51 +1827,14 @@ local command_observer_module = load_automation_module(package_root,
     })
     ds.input = input_commands.input
     ds.type = input_commands.type
-    local pointer_commands = pointer_command.new({
-        move_pointer=ds.move_pointer,
-        hover=ds.hover,
-        click=ds.click,
-        mouseInput=ds.mouseInput,
-        mouseWheel=ds.mouseWheel,
-    })
-    for name, command in pairs(pointer_commands) do ds[name] = command end
-
     if command_runner ~= nil then
         assert(type(command_runner.setRuntimeDependencies) == 'function',
             'DwarfSpec command runner requires runtime dependency composition')
-        local command_waits = {
-            wait_frames=function(count, options, remaining_ms)
-                options = options or {}
-                local bounded = {}
-                for name, value in pairs(options) do bounded[name] = value end
-                bounded.timeout_ms = remaining_ms
-                return scheduler_module.wait_frames(
-                    scheduler, count, bounded)
-            end,
-            wait_ticks=function(count, options, remaining_ms)
-                options = options or {}
-                local bounded = {}
-                for name, value in pairs(options) do bounded[name] = value end
-                bounded.timeout_ms = remaining_ms
-                return scheduler_module.wait_ticks(
-                    scheduler, count, bounded)
-            end,
-            wait_event=function(event, options, remaining_ms)
-                options = options or {}
-                local bounded = {}
-                for name, value in pairs(options) do bounded[name] = value end
-                bounded.timeout_ms = remaining_ms
-                return await_event(event, bounded)
-            end,
-            wait_until=function(description, predicate, options, remaining_ms)
-                options = options or {}
-                local bounded = {}
-                for name, value in pairs(options) do bounded[name] = value end
-                bounded.timeout_ms = remaining_ms
-                return run_capabilities.scheduling.wait_until(description,
-                    predicate, bounded)
-            end,
-        }
+        local wait_runtime = wait_runtime_module.new({
+            scheduler_module=scheduler_module, scheduler=scheduler,
+            await_event=await_event,
+            wait_until=run_capabilities.scheduling.wait_until,
+        })
         command_runner:setRuntimeDependencies({
             wait=function(remaining_ms)
                 return run_capabilities.scheduling.wait_frames(1, {
@@ -2407,16 +1859,28 @@ local command_observer_module = load_automation_module(package_root,
                 local mount = context.mount_context:require_current('command')
                 return mount.render_tracker:generation() > generation
             end,
-            wait_frames=command_waits.wait_frames,
-            wait_ticks=command_waits.wait_ticks,
-            wait_event=command_waits.wait_event,
-            wait_until=command_waits.wait_until,
+            wait_frames=function(count, options, remaining_ms)
+                return wait_runtime:wait_frames(count, options, remaining_ms)
+            end,
+            wait_ticks=function(count, options, remaining_ms)
+                return wait_runtime:wait_ticks(count, options, remaining_ms)
+            end,
+            wait_event=function(event, options, remaining_ms)
+                return wait_runtime:wait_event(event, options, remaining_ms)
+            end,
+            wait_until=function(description, query, options, remaining_ms)
+                return wait_runtime:wait_until(description, query, options,
+                    remaining_ms)
+            end,
         })
 
-        local legacy_click = ds.click
         local click_runtime = click_runtime_module.new({
             resolver=interaction_target_resolver,
-            dispatch=legacy_click,
+            move_pointer=ds.move_pointer,
+            mutate=mutate_pointer,
+            pointer=context.pointer,
+            pointer_adapter=pointer_adapter_module,
+            simulate_input=simulate_input,
         })
         local map_view_runtime = map_view_runtime_module.new({
             read=context.get_map_view_position,
@@ -2430,54 +1894,63 @@ local command_observer_module = load_automation_module(package_root,
             host={is_world_loaded=dfhack.isWorldLoaded,
                 read_world_folder=dfhack.world.ReadWorldFolder},
         })
-        local scalar_queries = {
-            isGamePaused=ds.isGamePaused,
-            getGameSpeed=ds.getGameSpeed,
-            getTick=ds.getTick,
-            getTime=ds.getTime,
-            getSaveDirectoryName=ds.getSaveDirectoryName,
-            hasFocus=ds.hasFocus,
-        }
-        local current_run_query = ds.current_run
-        local capture_screen_query = ds.capture_screen
-        wait_definition_module.bind(ds, command_runner, command_waits)
-        game_query_definition_module.bind(ds, command_runner, scalar_queries)
-        run_query_definition_module.bind(ds, command_runner,
-            current_run_query)
-        mount_query_definition_module.bind(ds, command_runner, {
-            preflight=function(operation)
-                return context.mount_context:require_current(operation)
-            end,
-            root=mount_commands.root,
-            get=mount_commands.get,
-            inspect=mount_commands.inspect,
-            capture_view_tree=mount_commands.capture_view_tree,
+        local game_query_runtime = game_query_runtime_module.new({
+            context=context, df=df, dfhack=dfhack})
+        local run_query_runtime = run_query_runtime_module.new(
+            assert(dfhack.dwarfspec,
+                'DwarfSpec automation service is not running'))
+        local capture_runtime = capture_runtime_module.new({
+            run=context.run, diagnostics=diagnostics})
+        local mount_query_runtime = mount_query_runtime_module.new({
+            mount_context=context.mount_context,
+            subject_sources=native_subject_sources,
+            subject_source=ESubjectSource,
+            requests=subject_requests_module,
+            paths=subject_paths_module,
+            target_resolver=interaction_target_resolver,
+            diagnostics=diagnostics,
+            run=context.run,
         })
-        capture_definition_module.bind(ds, command_runner,
-            capture_screen_query)
-        search_definition_module.bind(ds, command_runner, search_runtime)
-        click_definition_module.bind(ds, command_runner, click_runtime)
-        view_position_definition_module.bind(ds, command_runner,
-            map_view_runtime)
-        mount_save_game_definition_module.bind(ds, command_runner,
-            save_game_runtime)
-        overlay_registration_definition_module.bind(ds, command_runner,
-            overlay_transaction)
-        verified_subject_queries = subject_query_definition_module.bind(
-            command_runner, {
-                getFocusList=get_focus_list,
-                raw=function(subject)
-                    return context.mount_context:resolve_subject(
-                        subject, 'subject raw access')
-                end,
-            })
+        local subject_query_runtime = subject_query_runtime_module.new({
+            get_focus_list=get_focus_list,
+            resolve_raw=function(subject)
+                return context.mount_context:resolve_subject(
+                    subject, 'subject raw access')
+            end,
+        })
+        local subject_surface = {}
+        local registrar = builtin_registrar_module.new({runner=command_runner,
+            ds=ds, subject=subject_surface})
+        registrar:register_all({
+            builtin_modules.wait_frames.new(wait_runtime),
+            builtin_modules.wait_ticks.new(wait_runtime),
+            builtin_modules.await.new(wait_runtime),
+            builtin_modules.await_event.new(wait_runtime),
+            builtin_modules.is_game_paused.new(game_query_runtime),
+            builtin_modules.get_game_speed.new(game_query_runtime),
+            builtin_modules.get_tick.new(game_query_runtime),
+            builtin_modules.get_time.new(game_query_runtime),
+            builtin_modules.get_save_directory_name.new(game_query_runtime),
+            builtin_modules.has_focus.new(game_query_runtime),
+            builtin_modules.current_run.new(run_query_runtime),
+            builtin_modules.root.new(mount_query_runtime),
+            builtin_modules.get.new(mount_query_runtime),
+            builtin_modules.inspect.new(mount_query_runtime),
+            builtin_modules.capture_view_tree.new(mount_query_runtime),
+            builtin_modules.capture_screen.new(capture_runtime),
+            builtin_modules.subject_get_focus_list.new(subject_query_runtime),
+            builtin_modules.subject_raw.new(subject_query_runtime),
+            builtin_modules.search.new(search_runtime),
+            builtin_modules.click.new(click_runtime),
+            builtin_modules.get_view_pos.new(map_view_runtime),
+            builtin_modules.set_view_pos.new(map_view_runtime),
+            builtin_modules.mount_save_game.new(save_game_runtime),
+            builtin_modules.stage_overlay_registration.new(
+                overlay_transaction),
+            builtin_modules.register_cleanup.new(register_cleanup_options),
+        })
+        verified_subject_queries = registrar:subject_surface()
         context.mount_context:bind_subject_queries({
-            inspect=function(subject, command_options)
-                return ds.inspect(subject, command_options)
-            end,
-            search=function(subject, query, command_options)
-                return ds.search(query, subject, command_options)
-            end,
             getFocusList=verified_subject_queries.getFocusList,
             raw=verified_subject_queries.raw,
         })
@@ -2510,12 +1983,8 @@ local command_observer_module = load_automation_module(package_root,
             return ds.search(query, subject, command_options)
         end,
         getFocusList=verified_subject_queries and
-            verified_subject_queries.getFocusList or get_focus_list,
-        raw=verified_subject_queries and verified_subject_queries.raw or
-            function(subject)
-                return context.mount_context:resolve_subject(
-                    subject, 'subject raw access')
-            end,
+            verified_subject_queries.getFocusList,
+        raw=verified_subject_queries and verified_subject_queries.raw,
     }
 
     return ds, reset

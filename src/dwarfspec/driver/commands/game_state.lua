@@ -38,9 +38,9 @@ function M.bind(ds, dependencies)
         return enabler, enabler.fps, enabler.gfps, enabler.fps_per_gfps
     end
 
-    ---Returns whether the Dwarf Fortress simulation is currently paused.
+    ---Returns the current validated native pause state.
     ---@return boolean
-    function ds.isGamePaused()
+    local function pause_state()
         local pause_state = df and df.global and df.global.pause_state
         assert(type(pause_state) == 'boolean',
             'DwarfSpec isGamePaused requires a valid df.global.pause_state')
@@ -53,7 +53,7 @@ function M.bind(ds, dependencies)
     function ds.setGamePaused(paused)
         assert(type(paused) == 'boolean', 'game pause state must be a boolean')
         if context.game_pause_cleanup_entry == nil then
-            local original = ds.isGamePaused()
+            local original = pause_state()
             context.game_pause_cleanup_entry = cleanup_module.push(
                 cleanup_registry, 'restore game pause state', function()
                     local global = df and df.global
@@ -102,18 +102,6 @@ function M.bind(ds, dependencies)
         return enabled
     end
 
-    ---Returns the current game ticks-per-second target.
-    ---@return integer
-    function ds.getGameSpeed()
-        local enabler = context.get_game_enabler()
-        assert(enabler ~= nil,
-            'DwarfSpec getGameSpeed requires df.global.enabler')
-        assert(is_finite_number(enabler.fps) and enabler.fps >= 1 and
-            enabler.fps % 1 == 0,
-            'DwarfSpec getGameSpeed requires a valid positive integer df.global.enabler.fps')
-        return enabler.fps
-    end
-
     ---Sets game ticks per second and registers restoration once per example.
     ---@param tps integer
     ---@return integer
@@ -143,38 +131,6 @@ function M.bind(ds, dependencies)
         return tps
     end
 
-    ---Returns the current in-year simulation tick for the loaded world.
-    ---@return integer
-    function ds.getTick()
-        local tick = df and df.global and df.global.cur_year_tick
-        assert(type(tick) == 'number' and tick % 1 == 0 and tick >= 0,
-            'DwarfSpec getTick requires a loaded world with a valid df.global.cur_year_tick')
-        return tick
-    end
-
-    ---Returns DFHack's current millisecond clock value.
-    ---@return integer
-    function ds.getTime()
-        local get_tick_count = dfhack and dfhack.getTickCount
-        assert(type(get_tick_count) == 'function', 'DwarfSpec getTime requires dfhack.getTickCount')
-        local time = get_tick_count()
-        assert(type(time) == 'number' and time % 1 == 0 and time >= 0,
-            'DFHack getTickCount did not return a valid millisecond clock')
-        return time
-    end
-
-    ---Returns the directory name of the currently loaded save game.
-    ---@return string
-    function ds.getSaveDirectoryName()
-        assert(dfhack and type(dfhack.isWorldLoaded) == 'function' and dfhack.isWorldLoaded(),
-            'DwarfSpec getSaveDirectoryName requires a loaded save game')
-        assert(type(dfhack.world) == 'table' and type(dfhack.world.ReadWorldFolder) == 'function',
-            'DwarfSpec getSaveDirectoryName requires dfhack.world.ReadWorldFolder')
-        local name = dfhack.world.ReadWorldFolder()
-        assert(type(name) == 'string' and name ~= '',
-            'DFHack ReadWorldFolder did not return a valid save directory name')
-        return name
-    end
 end
 
 return M

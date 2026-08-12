@@ -1,10 +1,11 @@
 local CommandKind = require('dwarfspec.protocol.enums.command_kinds')
 local Harness = dofile('tests/unit/driver/command/engine_harness.lua')
-local SearchDefinition = require(
-    'dwarfspec.driver.commands.search_definition')
+local SearchDefinition = require('dwarfspec.driver.builtins.search')
 local SearchRuntime = require('dwarfspec.driver.commands.search_runtime')
 local TestRunner = dofile(
     'tests/unit/driver/commands/definition_test_support.lua')
+local BuiltinSupport = dofile(
+    'tests/unit/driver/commands/builtin_test_support.lua')
 
 ---@class dwarfspec.tests.SearchDefinitionDependencies
 local Dependencies = {}
@@ -27,8 +28,8 @@ end
 
 describe('verified search command definition', function()
     it('owns registration and public query binding', function()
-        local runner, ds = TestRunner.new(), {}
-        SearchDefinition.bind(ds, runner, Dependencies.new())
+        local runner, ds = BuiltinSupport.register({
+            SearchDefinition.new(Dependencies.new())})
         local options = {timeout_ms=10}
         local query = {text='visible'}
         assert.equals('search', ds.search(query, 'subject', options))
