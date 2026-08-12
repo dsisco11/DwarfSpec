@@ -474,19 +474,19 @@
 ---@alias dwarfspec.CaptureViewTreeSourceOptions dwarfspec.SubjectSourceOptions
 
 ---@class dwarfspec.WaitOptions
----@field timeout_ms? integer
+---@field timeout_ms? integer Deprecated compatibility alias for trailing `CommandOptions.timeout_ms`.
 ---@field frame_budget? integer
 ---@field description? string
 
 ---@class dwarfspec.TickWaitOptions
----@field timeout_ms? integer Maximum wall-clock time in milliseconds before the wait fails; defaults to settings.wait.timeout_ms or 10000.
+---@field timeout_ms? integer Deprecated compatibility alias for trailing `CommandOptions.timeout_ms`.
 ---@field description? string Operation name included in timeout diagnostics; defaults to `wait_ticks(count)`.
 
 ---Options for awaiting the next supported DFHack state-change event.
 ---@class dwarfspec.EventWaitOptions
 ---@field trigger? fun() Invoked after the native listener is armed; a matching synchronous event is captured.
 ---@field description? string Nonempty operation name included in diagnostics.
----@field timeout_ms? integer|false Positive command-local timeout in milliseconds; `false` or omission disables it.
+---@field timeout_ms? integer|false Deprecated compatibility alias; use trailing `CommandOptions.timeout_ms`. `false` is bounded by the enclosing run lease.
 
 ---Normalized immutable payload captured while native event data is valid.
 ---Unavailable fields are omitted.
@@ -712,8 +712,8 @@ function DS.await(description, query, options, command_options) end
 
 ---Waits for the next matching event, even when its associated state is already
 ---true. The native listener is armed before an optional trigger runs, so an
----event raised synchronously by the trigger is captured. No command-local
----timeout is imposed unless `timeout_ms` is explicitly provided.
+---event raised synchronously by the trigger is captured. The trailing command
+---options provide the finite command deadline.
 ---@param event dwarfspec.EEvent
 ---@param options? dwarfspec.EventWaitOptions
 ---@param command_options? dwarfspec.CommandOptions

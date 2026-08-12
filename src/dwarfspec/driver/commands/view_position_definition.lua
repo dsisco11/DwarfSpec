@@ -8,6 +8,8 @@ local IntrinsicKind = require(
 local Outcomes = require('dwarfspec.driver.command.outcomes')
 local RetryPolicy = require(
     'dwarfspec.protocol.enums.execution_retry_policies')
+local ReadOnlyDefinition = require(
+    'dwarfspec.driver.command.read_only_definition')
 
 ---@class dwarfspec.ViewPositionCommandDefinition
 ---@field private _runtime dwarfspec.MapViewRuntime
@@ -127,6 +129,17 @@ function ViewPositionDefinition:definition()
         intrinsic_verification=IntrinsicKind.CALLBACK}
 end
 
+---Creates the immutable map-view position query definition.
+---@return table
+function ViewPositionDefinition:queryDefinition()
+    return ReadOnlyDefinition.new({name='getViewPos',
+        kind=CommandKind.QUERY,
+        normalize=function(arguments) return {origin=arguments.origin} end,
+        execute=function(_, request)
+            return self._runtime:get_position(request.origin)
+        end}):definition()
+end
+
 ---Registers and binds the public map-view position command.
 ---@param ds table
 ---@param command_runner dwarfspec.CommandRunner
@@ -139,8 +152,18 @@ function ViewPositionDefinition.bind(ds, command_runner, runtime)
             type(command_runner.registerBuiltin) == 'function' and
             type(command_runner.invoke) == 'function',
         'view-position command requires the verified command runner')
-    local definition = command_runner:registerBuiltin(
-        ViewPositionDefinition.new(runtime):definition())
+    local owner = ViewPositionDefinition.new(runtime)
+    command_runner:registerBuiltin(owner:queryDefinition())
+    local definition = command_runner:registerBuiltin(owner:definition())
+
+    ---Returns the map tile aligned with one screen origin.
+    ---@param origin? any
+    ---@param command_options? table
+    ---@return table
+    function ds.getViewPos(origin, command_options)
+        return command_runner:invoke('getViewPos', {origin=origin},
+            command_options)
+    end
 
     ---Sets the map-view position through the verified state-setter contract.
     ---@param position table

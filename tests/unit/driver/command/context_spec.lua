@@ -25,11 +25,11 @@ local function dependencies()
             calls.nested = {kind=kind, name=name}
             return 'nested-result'
         end,
-        wait_frames=function(count, remaining)
+        wait_frames=function(count, options, remaining)
             calls.frames = {count, remaining}
             return count
         end,
-        wait_ticks=function(count, remaining)
+        wait_ticks=function(count, options, remaining)
             calls.ticks = {count, remaining}
             return count
         end,
@@ -37,7 +37,7 @@ local function dependencies()
             calls.event = {event, options, remaining}
             return {event=event}
         end,
-        wait_until=function(description, predicate, remaining)
+        wait_until=function(description, predicate, options, remaining)
             calls.predicate = {description, remaining}
             return predicate()
         end,

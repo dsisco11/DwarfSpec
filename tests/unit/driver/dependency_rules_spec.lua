@@ -94,8 +94,11 @@ describe('driver dependency rules', function()
         for _, binding in ipairs(expected) do
             assert.is_truthy(source:find(binding, 1, true), binding)
         end
-        assert.is_nil(source:find(
-            'definition_module.bind(ds, command_runner, {', 1, true))
+        for _, name in ipairs({'search', 'click', 'view_position',
+                'mount_save_game', 'overlay_registration'}) do
+            assert.is_nil(source:find(name ..
+                '_definition_module.bind(ds, command_runner, {', 1, true))
+        end
         assert.is_truthy(source:find(
             'map_view_runtime_module.new({', 1, true))
         assert.is_truthy(source:find(

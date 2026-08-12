@@ -103,6 +103,7 @@ function M.new(options)
         next_mount_id=0,
         subject_mounts=setmetatable({}, {__mode='k'}),
         subject_commands={},
+        subject_queries={},
         view_mounts=setmetatable({}, {__mode='k'}),
         owned_screens=setmetatable({}, {__mode='k'}),
         owned_screen_count=0,
@@ -132,6 +133,21 @@ function M.new(options)
         end,
         resolve_subject=function(_, ...)
             return subjects:resolve_subject(...)
+        end,
+        invoke_subject_query=function(_, subject, operation, ...)
+            local query = context.subject_queries[operation]
+            if query == nil then
+                if operation == 'raw' then
+                    return subjects:resolve_subject(
+                        subject, 'subject raw access')
+                end
+                return commands:invoke_subject_command(
+                    subject, operation, ...)
+            end
+            assert(type(query) == 'function',
+                'DwarfSpec subject query must be callable: ' ..
+                    tostring(operation))
+            return query(subject, ...)
         end,
     }
     subjects = subject_module.new(narrow_scope(context, {
@@ -205,6 +221,14 @@ function M.new(options)
     ---@return any
     function context:invoke_subject_command(subject, operation, ...)
         return commands:invoke_subject_command(subject, operation, ...)
+    end
+
+    ---Installs verified read-only subject query invokers.
+    ---@param queries table<string, function>
+    function context:bind_subject_queries(queries)
+        assert(type(queries) == 'table',
+            'verified subject queries must be a table')
+        self.subject_queries = queries
     end
 
     ---Returns whether a value is owned as a subject by this mount context.

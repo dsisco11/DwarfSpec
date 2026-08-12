@@ -715,7 +715,7 @@ directory name. Calling it when the title main menu is already visible is an
 idempotent no-op that returns `nil`. The resulting title state is not restored
 during example cleanup.
 
-`ds.wait_ticks(count, options)` suspends the test until exactly `count`
+`ds.wait_ticks(count, options, command_options)` suspends the test until exactly `count`
 unpaused Dwarf Fortress simulation ticks have passed:
 
 ```lua
@@ -731,25 +731,26 @@ The optional table accepts:
 
 | Field | Meaning |
 | --- | --- |
-| `timeout_ms` | Maximum wall-clock wait in milliseconds. It defaults to `settings.wait.timeout_ms`, or 10,000 when that setting is absent. |
+| `timeout_ms` | Deprecated compatibility alias for trailing `command_options.timeout_ms`. |
 | `description` | Operation name shown in timeout diagnostics. It defaults to `wait_ticks(count)`. |
 
 For example:
 
 ```lua
 ds.wait_ticks(10, {
-    timeout_ms=20000,
     description='citizen completes scheduled work',
+}, {
+    timeout_ms=20000,
 })
 ```
 
-The raw-frame watchdog uses `timeout_ms` to expire the operation if the game
-remains paused or stops advancing. `frame_budget` is not a `wait_ticks` option:
-raw frames do not determine when the requested simulation-tick wait completes.
+The verified command deadline expires the operation if the game remains paused
+or stops advancing. `frame_budget` is not a `wait_ticks` option: raw frames do
+not determine when the requested simulation-tick wait completes.
 
 ## Condition waits
 
-`ds.await(description, query, options)` polls a read-only query between live
+`ds.await(description, query, options, command_options)` polls a read-only query between live
 DFHack frames until it returns a truthy value. The required description names
 the operation in progress and is included in timeout diagnostics.
 
@@ -760,8 +761,9 @@ local renderer = ds.await('tooltip becomes visible', function()
 end)
 ```
 
-The truthy query result is returned to the test. Optional `frame_budget` and
-`timeout_ms` values override the project-wide wait settings for one operation.
+The truthy query result is returned to the test. Optional `frame_budget` is a
+logical polling limit. Use trailing `command_options.timeout_ms` to override the
+finite verified-command deadline for one operation.
 Use `ds.wait_frames(count)` only when the number of raw DFHack frames is itself
 part of the contract. Use `ds.wait_ticks(count)` when the test requires the
 unpaused simulation itself to advance.

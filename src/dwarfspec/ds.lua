@@ -230,6 +230,18 @@ local mount_save_game_definition_module = load_automation_module(package_root,
 local overlay_registration_definition_module = load_automation_module(
     package_root,
     'dwarfspec.driver.commands.overlay_registration_definition')
+local wait_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.wait_definition')
+local game_query_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.game_query_definition')
+local run_query_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.run_query_definition')
+local mount_query_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.mount_query_definition')
+local capture_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.capture_definition')
+local subject_query_definition_module = load_automation_module(package_root,
+    'dwarfspec.driver.commands.subject_query_definition')
 local wait_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.wait')
 local game_state_command = load_automation_module(package_root,
@@ -800,6 +812,7 @@ local command_observer_module = load_automation_module(package_root,
         testbed_host={require=require, reqscript=dfhack.reqscript,
             base=dfhack.BASE_G, dfhack=dfhack},
     })
+    local verified_subject_queries
     if command_runner ~= nil then
         assert(type(command_runner.setRefreshRetainedSubjects) == 'function',
             'DwarfSpec command runner requires retained-subject refresh')
@@ -2337,6 +2350,39 @@ local command_observer_module = load_automation_module(package_root,
     if command_runner ~= nil then
         assert(type(command_runner.setRuntimeDependencies) == 'function',
             'DwarfSpec command runner requires runtime dependency composition')
+        local command_waits = {
+            wait_frames=function(count, options, remaining_ms)
+                options = options or {}
+                local bounded = {}
+                for name, value in pairs(options) do bounded[name] = value end
+                bounded.timeout_ms = remaining_ms
+                return scheduler_module.wait_frames(
+                    scheduler, count, bounded)
+            end,
+            wait_ticks=function(count, options, remaining_ms)
+                options = options or {}
+                local bounded = {}
+                for name, value in pairs(options) do bounded[name] = value end
+                bounded.timeout_ms = remaining_ms
+                return scheduler_module.wait_ticks(
+                    scheduler, count, bounded)
+            end,
+            wait_event=function(event, options, remaining_ms)
+                options = options or {}
+                local bounded = {}
+                for name, value in pairs(options) do bounded[name] = value end
+                bounded.timeout_ms = remaining_ms
+                return await_event(event, bounded)
+            end,
+            wait_until=function(description, predicate, options, remaining_ms)
+                options = options or {}
+                local bounded = {}
+                for name, value in pairs(options) do bounded[name] = value end
+                bounded.timeout_ms = remaining_ms
+                return run_capabilities.scheduling.wait_until(description,
+                    predicate, bounded)
+            end,
+        }
         command_runner:setRuntimeDependencies({
             wait=function(remaining_ms)
                 return run_capabilities.scheduling.wait_frames(1, {
@@ -2361,19 +2407,10 @@ local command_observer_module = load_automation_module(package_root,
                 local mount = context.mount_context:require_current('command')
                 return mount.render_tracker:generation() > generation
             end,
-            wait_frames=function(count)
-                return run_capabilities.scheduling.wait_frames(count)
-            end,
-            wait_ticks=function(count)
-                return run_capabilities.scheduling.wait_ticks(count)
-            end,
-            wait_event=function(event, options)
-                return await_event(event, options)
-            end,
-            wait_until=function(description, predicate, remaining_ms)
-                return run_capabilities.scheduling.wait_until(description,
-                    predicate, {timeout_ms=remaining_ms})
-            end,
+            wait_frames=command_waits.wait_frames,
+            wait_ticks=command_waits.wait_ticks,
+            wait_event=command_waits.wait_event,
+            wait_until=command_waits.wait_until,
         })
 
         local legacy_click = ds.click
@@ -2393,6 +2430,31 @@ local command_observer_module = load_automation_module(package_root,
             host={is_world_loaded=dfhack.isWorldLoaded,
                 read_world_folder=dfhack.world.ReadWorldFolder},
         })
+        local scalar_queries = {
+            isGamePaused=ds.isGamePaused,
+            getGameSpeed=ds.getGameSpeed,
+            getTick=ds.getTick,
+            getTime=ds.getTime,
+            getSaveDirectoryName=ds.getSaveDirectoryName,
+            hasFocus=ds.hasFocus,
+        }
+        local current_run_query = ds.current_run
+        local capture_screen_query = ds.capture_screen
+        wait_definition_module.bind(ds, command_runner, command_waits)
+        game_query_definition_module.bind(ds, command_runner, scalar_queries)
+        run_query_definition_module.bind(ds, command_runner,
+            current_run_query)
+        mount_query_definition_module.bind(ds, command_runner, {
+            preflight=function(operation)
+                return context.mount_context:require_current(operation)
+            end,
+            root=mount_commands.root,
+            get=mount_commands.get,
+            inspect=mount_commands.inspect,
+            capture_view_tree=mount_commands.capture_view_tree,
+        })
+        capture_definition_module.bind(ds, command_runner,
+            capture_screen_query)
         search_definition_module.bind(ds, command_runner, search_runtime)
         click_definition_module.bind(ds, command_runner, click_runtime)
         view_position_definition_module.bind(ds, command_runner,
@@ -2401,6 +2463,24 @@ local command_observer_module = load_automation_module(package_root,
             save_game_runtime)
         overlay_registration_definition_module.bind(ds, command_runner,
             overlay_transaction)
+        verified_subject_queries = subject_query_definition_module.bind(
+            command_runner, {
+                getFocusList=get_focus_list,
+                raw=function(subject)
+                    return context.mount_context:resolve_subject(
+                        subject, 'subject raw access')
+                end,
+            })
+        context.mount_context:bind_subject_queries({
+            inspect=function(subject, command_options)
+                return ds.inspect(subject, command_options)
+            end,
+            search=function(subject, query, command_options)
+                return ds.search(query, subject, command_options)
+            end,
+            getFocusList=verified_subject_queries.getFocusList,
+            raw=verified_subject_queries.raw,
+        })
     end
 
     if next(extensions.commands) ~= nil then
@@ -2423,9 +2503,19 @@ local command_observer_module = load_automation_module(package_root,
         redraw=function(subject, options)
             return ds.redraw(subject, options)
         end,
-        inspect=function(subject) return ds.inspect(subject) end,
-        search=function(subject, query) return ds.search(query, subject) end,
-        getFocusList=get_focus_list,
+        inspect=function(subject, command_options)
+            return ds.inspect(subject, command_options)
+        end,
+        search=function(subject, query, command_options)
+            return ds.search(query, subject, command_options)
+        end,
+        getFocusList=verified_subject_queries and
+            verified_subject_queries.getFocusList or get_focus_list,
+        raw=verified_subject_queries and verified_subject_queries.raw or
+            function(subject)
+                return context.mount_context:resolve_subject(
+                    subject, 'subject raw access')
+            end,
     }
 
     return ds, reset

@@ -382,20 +382,22 @@ end
 
 ---Cooperatively waits for an exact number of rendered frames.
 ---@param count integer
+---@param options? table
 ---@return any
-function ExecutionContext:wait_frames(count)
+function ExecutionContext:wait_frames(count, options)
     return Internals.callback(Internals.context_state(self)._dependencies,
         'wait_frames')(
-        count, self:remaining_ms())
+        count, options, self:remaining_ms())
 end
 
 ---Cooperatively waits for an exact number of simulation ticks.
 ---@param count integer
+---@param options? table
 ---@return any
-function ExecutionContext:wait_ticks(count)
+function ExecutionContext:wait_ticks(count, options)
     return Internals.callback(Internals.context_state(self)._dependencies,
         'wait_ticks')(
-        count, self:remaining_ms())
+        count, options, self:remaining_ms())
 end
 
 ---Cooperatively waits for one named event occurrence.
@@ -411,11 +413,12 @@ end
 ---Cooperatively polls a predicate within the inherited deadline.
 ---@param description string
 ---@param predicate fun(): any
+---@param options? table
 ---@return any
-function ExecutionContext:wait_until(description, predicate)
+function ExecutionContext:wait_until(description, predicate, options)
     return Internals.callback(Internals.context_state(self)._dependencies,
         'wait_until')(
-        description, predicate, self:remaining_ms())
+        description, predicate, options, self:remaining_ms())
 end
 
 ---Executes one validated internal workflow step under parent ownership.

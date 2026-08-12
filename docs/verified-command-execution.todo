@@ -1609,31 +1609,48 @@ Completion criteria:
 Outcome: all nonmutating public commands use explicit readiness, validated
 observations, and finite shared deadlines.
 
-- [ ] Convert `wait_frames`, `wait_ticks`, `await`, and `awaitEvent` as
+- [x] Convert `wait_frames`, `wait_ticks`, `await`, and `awaitEvent` as
       assertions with explicit pending/ready/fatal observation outcomes.
-- [ ] Convert `isGamePaused`, `getGameSpeed`, `getTick`, `getTime`,
+- [x] Convert `isGamePaused`, `getGameSpeed`, `getTick`, `getTime`,
       `getSaveDirectoryName`, and `hasFocus` as queries with declared type/state
       guarantees.
-- [ ] Convert `root`, `get`, `inspect`, and remaining `search` paths as queries
+- [x] Convert `root`, `get`, `inspect`, and remaining `search` paths as queries
       over current stable mount/source identity.
-- [ ] Convert any other inventoried read-only public command and subject method.
-- [ ] Convert `capture_view_tree` and `capture_screen` as read-only query-kind
+- [x] Convert any other inventoried read-only public command and subject method.
+- [x] Convert `capture_view_tree` and `capture_screen` as read-only query-kind
       commands whose bounded invocation-owned artifacts replace/deduplicate by
       key and never register cleanup.
-- [ ] Preserve query public return values and subject fluency.
-- [ ] Add each definition to the shared conformance matrix and keep focused
+- [x] Preserve query public return values and subject fluency.
+- [x] Add each definition to the shared conformance matrix and keep focused
       suites limited to domain behavior.
-- [ ] Update declarations and examples for trailing command options.
-- [ ] Run focused suites during mechanical conversion.
-- [ ] At family completion, run the full unit suite and representative live
+- [x] Update declarations and examples for trailing command options.
+- [x] Run focused suites during mechanical conversion.
+- [x] At family completion, run the full unit suite and representative live
       qualification for queries, waits, captures, and nested verification.
-- [ ] Perform a follow-up family review against the migration inventory.
+- [x] Perform a follow-up family review against the migration inventory.
 
 Completion criteria:
 
-- [ ] Every inventoried read-only public command routes through the runner.
-- [ ] Successful nil observations, pending state, capture artifacts, and
+- [x] Every inventoried read-only public command routes through the runner.
+- [x] Successful nil observations, pending state, capture artifacts, and
       assertion failures are unambiguous.
+
+Evidence:
+
+- Focused wait-definition, command-outcome, read-only conformance, and common
+  runner suites passed with 5, 5, 3, and 55 successes respectively and no
+  failures, errors, or pending tests.
+- The full unit suite passed with 1,239 successes; Lua syntax and formatting
+  passed for 469 files; valid source-declaration fixtures passed; and
+  `git diff --check` reported no whitespace errors.
+- A current-worktree native interaction qualification passed with 2 successes,
+  runner-backed queries, subject reads, captures, `wait_frames`, and nested
+  verification, followed by terminal cleanup confirmation. The representative
+  overlay qualification also passed all 6 tests with cleanup confirmed.
+- Follow-up review and independent completion audit confirmed truthful immediate
+  wait arming, constructor-identified gate outcomes, preserved arbitrary table
+  observations, integer legacy-timeout validation before trailing overrides,
+  complete inventory routing, and no remaining requirement or evidence gap.
 
 ## Phase 17: Convert game and simulation state setters
 

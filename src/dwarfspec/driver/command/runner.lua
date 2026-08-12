@@ -914,7 +914,8 @@ function Invocation:execute_attempt(ready, context, plan)
         self._latest_evidence = Internals.latest_gate_evidence(result, evidence,
             self._latest_evidence)
         if not observed then error(Internals.gate_failure(result, evidence), 2) end
-        outcome = {kind='executed', public_result=result.value, receipt=result,
+        outcome = {kind='executed', public_result=result.value,
+            receipt=result.evidence,
             intrinsic_evidence=result.evidence}
     else
         self._identity.attempt_cleanup_checkpoint = type(

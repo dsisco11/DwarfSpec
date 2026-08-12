@@ -32,6 +32,20 @@ local function invoke(subject, name, ...)
     return context:invoke_subject_command(subject, name, ...)
 end
 
+---Invokes one verified read-only query without a legacy command wrapper.
+---@param subject dwarfspec.Subject
+---@param name string
+---@param ... any
+---@return any
+local function invoke_query(subject, name, ...)
+    local context = subject._references.context
+    assert(context,
+        'DwarfSpec subject is unavailable because its run has ended')
+    assert(type(context.invoke_subject_query) == 'function',
+        'DwarfSpec subject query context is unavailable')
+    return context:invoke_subject_query(subject, name, ...)
+end
+
 ---Clicks this subject and preserves it for fluent chaining.
 ---DwarfSpec automatically restores inherited pointer state during cleanup.
 ---It does not reverse game or UI effects caused by the click.
@@ -101,39 +115,41 @@ function Subject:redraw(options)
 end
 
 ---Returns a stable diagnostic snapshot of this subject.
+---@param command_options? table
 ---@return table
-function Subject:inspect()
-    return invoke(self, 'inspect')
+function Subject:inspect(command_options)
+    return invoke_query(self, 'inspect', command_options)
 end
 
 ---Searches final rendered screen cells within this subject's visible body.
 ---@param query dwarfspec.TextSearchQuery
+---@param command_options? table
 ---@return dwarfspec.ScreenRect|nil
-function Subject:search(query)
-    return invoke(self, 'search', query)
+function Subject:search(query, command_options)
+    return invoke_query(self, 'search', query, command_options)
 end
 
 ---Returns a copied focus-string list for this subject's current mounted screen.
+---@param command_options? table
 ---@return string[]
-function Subject:getFocusList()
-    return invoke(self, 'getFocusList')
+function Subject:getFocusList(command_options)
+    return invoke_query(self, 'getFocusList', command_options)
 end
 
 ---Returns the stable inspected text value for this subject.
+---@param command_options? table
 ---@return string|nil
-function Subject:text()
-    local state = self:inspect()
+function Subject:text(command_options)
+    local state = self:inspect(command_options)
     return state.text
 end
 
 ---Returns the exact adapted object after validating current mount ownership.
 ---Native widget subjects return typed DF userdata; Lua views return tables.
+---@param command_options? table
 ---@return table|userdata
-function Subject:raw()
-    local context = self._references.context
-    assert(context,
-        'DwarfSpec subject is unavailable because its run has ended')
-    return context:resolve_subject(self, 'subject raw access')
+function Subject:raw(command_options)
+    return invoke_query(self, 'raw', command_options)
 end
 
 ---Releases one retained descriptor after its owning mount is cleaned.

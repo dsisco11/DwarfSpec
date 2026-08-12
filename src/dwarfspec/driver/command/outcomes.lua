@@ -135,6 +135,14 @@ function Outcomes.validate_gate(outcome, allow_effect_absent)
     return Internals.constructed(outcome, kinds, 'command gate')
 end
 
+---Returns whether a value is a constructed ordinary gate outcome.
+---@param value any
+---@return boolean
+function Outcomes.is_gate(value)
+    local kind = OUTCOME_KINDS[value]
+    return kind == 'ready' or kind == 'pending' or kind == 'fatal'
+end
+
 ---Validates a runtime primary-execution outcome against retry and proof policy.
 ---@param outcome any
 ---@param definition dwarfspec.CommandDefinition

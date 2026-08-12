@@ -58,6 +58,9 @@ describe('DwarfSpec subject commands', function()
             invoke_subject_command=function(self, selected, name, ...)
                 return self.subject_commands[name](selected, ...)
             end,
+            invoke_subject_query=function(self, selected, name, ...)
+                return self.subject_commands[name](selected, ...)
+            end,
             resolve_subject=function(_, _, operation)
                 assert.equals('subject raw access', operation)
                 return {view_id='status'}

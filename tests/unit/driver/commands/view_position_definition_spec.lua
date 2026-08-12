@@ -30,7 +30,7 @@ describe('verified view-position command definition', function()
         ViewPositionDefinition.bind(ds, runner, Dependencies.new())
         local position, options = {x=4, y=5, z=6}, {timeout_ms=10}
         assert.equals('setViewPos', ds.setViewPos(position, 'center', options))
-        assert.same({'setViewPos'}, runner:names())
+        assert.same({'getViewPos', 'setViewPos'}, runner:names())
         local invocation = runner:invocations()[1]
         assert.equals(position, invocation.arguments.position)
         assert.equals('center', invocation.arguments.origin)
@@ -43,6 +43,18 @@ describe('verified view-position command definition', function()
         assert.same(result.receipt, result.effect_receipt)
         assert.is_function(definition.cleanup.restore)
         assert.is_function(definition.cleanup.verify)
+    end)
+
+    it('owns the public read-only view-position query', function()
+        local runner, ds = TestRunner.new(), {}
+        ViewPositionDefinition.bind(ds, runner, Dependencies.new())
+        local options = {timeout_ms=10}
+        assert.equals('getViewPos', ds.getViewPos('center', options))
+        local invocation = runner:invocations()[1]
+        assert.equals('center', invocation.arguments.origin)
+        assert.equals(options, invocation.options)
+        assert.equals(CommandKind.QUERY,
+            runner:definition('getViewPos').kind)
     end)
 
     it('rejects the former loose accessor bundle', function()
