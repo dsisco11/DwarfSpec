@@ -1,5 +1,8 @@
 -- Live acceptance for map-view positioning through the public ds command.
 
+local CleanupRegistrationProbe = require(
+    'tests.automation.support.cleanup_registration_probe')
+
 ---Returns the raw zero-based top-left map-view origin from DFHack state.
 ---@return dwarfspec.MapViewPosition
 local function current_view_position()
@@ -27,15 +30,6 @@ local function alternate_view_position(position)
             z=position.z}
     end
     return {x=position.x, y=position.y, z=(position.z + 1) % map.z_count}
-end
-
----Returns whether the active test attempt owns registered cleanup work.
----@return boolean
-local function has_registered_test_cleanup()
-    local run = ds.current_run()
-    local owner = run.cleanup_owner_lifecycle:public_owner()
-    local pending = run.cleanup_registration_service:pending_ids_for(owner)
-    return next(pending) ~= nil
 end
 
 describe('map-view position command', function()
@@ -80,7 +74,8 @@ describe('map-view position command', function()
             y=expected_raw.y + height - 1,
             z=expected_raw.z,
         }, ds.getViewPos(ds.EScreenOrigin.BOTTOM_RIGHT))
-        assert.is_true(has_registered_test_cleanup())
+        assert.is_true(CleanupRegistrationProbe.new(
+            ds.current_run()):has_pending_test_cleanup())
     end)
 
     it('moves the pointer to a live world tile with optional recentering',
@@ -112,6 +107,7 @@ describe('map-view position command', function()
         assert.same(recentered_target, dfhack.gui.getMousePos(true))
         local cleanup = ds.current_run().mount_cleanup_probe()
         assert.is_true(cleanup.pointer_active)
-        assert.is_true(has_registered_test_cleanup())
+        assert.is_true(CleanupRegistrationProbe.new(
+            ds.current_run()):has_pending_test_cleanup())
     end)
 end)

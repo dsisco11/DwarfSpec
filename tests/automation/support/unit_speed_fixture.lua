@@ -11,6 +11,23 @@ local function copy_position(position)
     return {x=position.x, y=position.y, z=position.z}
 end
 
+---Copies one zero-based native integer vector.
+---@param vector any
+---@return integer[]
+local function copy_vector(vector)
+    local copied = {}
+    for index = 0, #vector - 1 do copied[#copied + 1] = vector[index] end
+    return copied
+end
+
+---Replaces one zero-based native integer vector from a Lua sequence.
+---@param vector any
+---@param values integer[]
+local function replace_vector(vector, values)
+    vector:resize(#values)
+    for index, value in ipairs(values) do vector[index - 1] = value end
+end
+
 ---Returns whether two coordinates are equal.
 ---@param left any
 ---@param right any
@@ -261,17 +278,18 @@ end
 function M.set_job_destination(restoration, unit, destination)
     local original = copy_position(unit.path.dest)
     local path = unit.path.path
-    local original_lengths = {#path.x, #path.y, #path.z}
-    assert(original_lengths[1] == 0 and original_lengths[2] == 0 and
-            original_lengths[3] == 0,
-        'unit-speed fixture requires initially empty native path vectors')
+    local original_path = {
+        x=copy_vector(path.x),
+        y=copy_vector(path.y),
+        z=copy_vector(path.z),
+    }
     M.prearm(restoration, function()
         unit.path.dest.x = original.x
         unit.path.dest.y = original.y
         unit.path.dest.z = original.z
-        path.x:resize(0)
-        path.y:resize(0)
-        path.z:resize(0)
+        replace_vector(path.x, original_path.x)
+        replace_vector(path.y, original_path.y)
+        replace_vector(path.z, original_path.z)
         assert(M.positions_equal(original, unit.path.dest),
             'unit-speed fixture failed to restore the job destination')
     end)

@@ -185,6 +185,23 @@ describe('driver unit speed controller', function()
         assert.same({2, 7}, state.retained)
     end)
 
+    it('activates the exact preflighted target snapshot without recapture',
+            function()
+        local state, controller = fixture()
+        local prepared = controller:prepare({fast_actions=true})
+        state.defaults = {11, 12}
+
+        assert.has_error(function() prepared.unit_ids[1] = 11 end,
+            'prepared unit-speed snapshot is immutable')
+        assert.has_error(function() prepared.fast_actions = false end,
+            'prepared unit-speed snapshot is immutable')
+
+        controller:activate_prepared(prepared)
+
+        assert.same({2, 7}, state.retained)
+        assert.same({2, 7}, controller.target_ids)
+    end)
+
     it('uses an explicit subset and skips unavailable targets on each update',
             function()
         local state, controller = fixture()

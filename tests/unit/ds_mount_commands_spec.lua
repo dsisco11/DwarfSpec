@@ -859,27 +859,27 @@ describe('DwarfSpec public mount commands', function()
             function()
         assert.is_true(ds.setGamePaused(true))
         assert.is_true(ds.isGamePaused())
-        assert.is_true(
-            run.mount_cleanup_probe().game_pause_state_active)
-        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals(1, set_count(
+            command_cleanup_service:pending_ids_for(command_owner)))
 
         assert.is_false(ds.setGamePaused(false))
         assert.is_false(ds.isGamePaused())
-        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals(2, set_count(
+            command_cleanup_service:pending_ids_for(command_owner)))
 
         assert.is_true(ds.setGamePaused(true))
         reset('game pause state example cleanup')
 
         assert.is_false(ds.isGamePaused())
-        assert.is_false(
-            run.mount_cleanup_probe().game_pause_state_active)
+        assert.same({},
+            command_cleanup_service:pending_ids_for(command_owner))
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
     it('validates the requested game pause state before scheduling cleanup',
             function()
         for _, value in ipairs({0, 'true', {}}) do
-            assert.has_error(function()
+            assert_command_error(function()
                 ds.setGamePaused(value)
             end, 'game pause state must be a boolean')
         end
@@ -924,21 +924,23 @@ describe('DwarfSpec public mount commands', function()
         assert.equals(120, ds.setGameSpeed(120))
         assert.equals(120, enabler.fps)
         assert.equals(2.4, enabler.fps_per_gfps)
-        assert.is_true(run.mount_cleanup_probe().game_speed_active)
-        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals(1, set_count(
+            command_cleanup_service:pending_ids_for(command_owner)))
 
         enabler.gfps = 60
         assert.equals(180, ds.setGameSpeed(180))
         assert.equals(180, enabler.fps)
         assert.equals(3, enabler.fps_per_gfps)
-        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals(2, set_count(
+            command_cleanup_service:pending_ids_for(command_owner)))
 
         reset('game speed example cleanup')
 
         assert.equals(100, enabler.fps)
         assert.equals(2, enabler.fps_per_gfps)
         assert.equals(60, enabler.gfps)
-        assert.is_false(run.mount_cleanup_probe().game_speed_active)
+        assert.same({},
+            command_cleanup_service:pending_ids_for(command_owner))
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
@@ -947,7 +949,7 @@ describe('DwarfSpec public mount commands', function()
         local nan = 0 / 0
         for _, value in ipairs({
                 0, -1, 1.5, '100', nan, math.huge, -math.huge}) do
-            assert.has_error(function()
+            assert_command_error(function()
                 ds.setGameSpeed(value)
             end, 'game speed must be a positive integer TPS target')
         end
@@ -979,14 +981,14 @@ describe('DwarfSpec public mount commands', function()
             enabler.gfps = 50
             enabler.fps_per_gfps = 2
             enabler[case.field] = case.value
-            assert.has_error(function()
+            assert_command_error(function()
                 ds.setGameSpeed(120)
             end, case.expected)
             assert.equals(0, cleanup.pending_count(registry))
         end
 
         df.global.enabler = nil
-        assert.has_error(function()
+        assert_command_error(function()
             ds.setGameSpeed(120)
         end, 'DwarfSpec setGameSpeed requires df.global.enabler')
         assert.equals(0, cleanup.pending_count(registry))
@@ -1000,26 +1002,28 @@ describe('DwarfSpec public mount commands', function()
 
         assert.is_false(ok)
         assert.matches('injected game-speed setter failure', failure, 1, true)
-        assert.is_true(run.mount_cleanup_probe().game_speed_active)
-        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals(0, set_count(
+            command_cleanup_service:pending_ids_for(command_owner)))
 
         game_speed_set_failure = nil
         reset('failed game speed setter cleanup')
         assert.equals(100, enabler.fps)
         assert.equals(2, enabler.fps_per_gfps)
-        assert.is_false(run.mount_cleanup_probe().game_speed_active)
+        assert.same({},
+            command_cleanup_service:pending_ids_for(command_owner))
     end)
 
     it('restores after game-speed ratio verification fails', function()
         local enabler = df.global.enabler
         game_speed_ratio_override = 999
 
-        assert.has_error(function()
+        assert_command_error(function()
             ds.setGameSpeed(120)
-        end, 'DFHack did not apply the requested game speed ratio')
+        end, 'game speed is not yet applied')
         assert.equals(120, enabler.fps)
         assert.equals(999, enabler.fps_per_gfps)
-        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+        assert.equals(1, set_count(
+            command_cleanup_service:pending_ids_for(command_owner)))
 
         game_speed_ratio_override = nil
         reset('failed game speed verification cleanup')
@@ -1031,14 +1035,18 @@ describe('DwarfSpec public mount commands', function()
         ds.setGameSpeed(120)
         game_speed_set_failure = 'injected game-speed restore failure'
 
-        local ok, failure = pcall(
-            reset, 'failed game speed restoration')
+        local confirmed, result = command_cleanup_service:finalize_owner(
+            command_owner, 'failed game speed restoration', false)
+        local pending_count = set_count(
+            command_cleanup_service:pending_ids_for(command_owner))
+        game_speed_set_failure = nil
+        command_cleanup_service = nil
 
-        assert.is_false(ok)
-        assert.matches('restore game speed', failure, 1, true)
+        assert.is_false(confirmed)
+        assert.is_false(result.confirmed)
         assert.matches('injected game-speed restore failure',
-            failure, 1, true)
-        assert.is_true(run.mount_cleanup_probe().game_speed_active)
+            table.concat(result.failures, '\n'), 1, true)
+        assert.equals(0, pending_count)
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
@@ -1106,31 +1114,33 @@ describe('DwarfSpec public mount commands', function()
             function()
         assert.is_true(ds.setTurboSpeed(true))
         assert.is_true(df.global.debug_turbospeed)
-        assert.is_true(run.mount_cleanup_probe().turbo_speed_active)
-        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals(1, set_count(
+            command_cleanup_service:pending_ids_for(command_owner)))
 
         assert.is_false(ds.setTurboSpeed(false))
         assert.is_false(df.global.debug_turbospeed)
-        assert.equals(1, cleanup.pending_count(registry))
+        assert.equals(2, set_count(
+            command_cleanup_service:pending_ids_for(command_owner)))
 
         assert.is_true(ds.setTurboSpeed(true))
         reset('native turbo-speed example cleanup')
 
         assert.is_false(df.global.debug_turbospeed)
-        assert.is_false(run.mount_cleanup_probe().turbo_speed_active)
+        assert.same({},
+            command_cleanup_service:pending_ids_for(command_owner))
         assert.equals(0, cleanup.pending_count(registry))
     end)
 
     it('validates native turbo speed before scheduling cleanup', function()
         for _, value in ipairs({0, 'true', {}}) do
-            assert.has_error(function()
+            assert_command_error(function()
                 ds.setTurboSpeed(value)
-            end, 'turbo speed state must be a boolean')
+            end, 'native turbo speed state must be a boolean')
         end
         assert.equals(0, cleanup.pending_count(registry))
 
         df.global.debug_turbospeed = nil
-        assert.has_error(function()
+        assert_command_error(function()
             ds.setTurboSpeed(true)
         end, 'DwarfSpec setTurboSpeed requires a valid ' ..
             'df.global.debug_turbospeed')
@@ -2812,7 +2822,7 @@ describe('DwarfSpec public mount commands', function()
         assert.is_false(ok)
         assert.matches('injected map-view setter failure',
             failure, 1, true)
-        assert.equals(1,
+        assert.equals(0,
             set_count(command_cleanup_service:pending_ids_for(command_owner)))
 
         map_view_set_failure = nil

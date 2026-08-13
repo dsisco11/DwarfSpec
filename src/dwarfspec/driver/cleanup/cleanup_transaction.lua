@@ -67,8 +67,8 @@ end
 function Internals.bounded_error(value)
     local succeeded, text = pcall(tostring, value)
     if not succeeded then text = '<unprintable cleanup error>' end
-    if #text <= 480 then return text end
-    return text:sub(1, 477) .. '...'
+    if #text <= 384 then return text end
+    return text:sub(1, 381) .. '...'
 end
 
 ---Rejects metatable-bearing tables before receipt traversal can invoke behavior.

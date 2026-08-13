@@ -5,7 +5,8 @@ describe('driver unit position adapter', function()
     ---@return table, table
     local function fixture()
         local state = {map_loaded=true, valid=true, projectile=false,
-            rider=false, ridden=false, teleport_result=true, teleports=0,
+            rider=false, ridden=false, teleport_result=true,
+            teleport_return=true, teleports=0,
             occupancies={}, invalid_positions={}, corrupt_return=nil}
         local unit = {id=3, pos={x=1, y=2, z=3},
             idle_area={x=1, y=2, z=3}, flags1={on_ground=false}}
@@ -44,7 +45,7 @@ describe('driver unit position adapter', function()
                     local corrupt = state.corrupt_return
                     state.occupancies[corrupt.tile][corrupt.field] = corrupt.value
                 end
-                return true
+                return state.teleport_return
             end,
         })
         return state, adapter
@@ -136,10 +137,64 @@ describe('driver unit position adapter', function()
         assert.is_false(state.occupancies['5,6,3'].unit_grounded)
     end)
 
+    it('rejects grounded occupancy for grounded arrivals', function()
+        local state, adapter = fixture()
+        state.unit.flags1.on_ground = true
+        state.occupancies['1,2,3'] = {unit=false, unit_grounded=true}
+        state.occupancies['5,6,3'].unit_grounded = true
+
+        assert.is_nil(adapter:prepare(3, {x=5, y=6, z=3}))
+        assert.is_false(adapter:teleport(
+            state.unit, {x=5, y=6, z=3}))
+        assert.equals(0, state.teleports)
+    end)
+
     it('leaves position unchanged when native teleport fails', function()
         local state, adapter = fixture()
         state.teleport_result = false
         assert.is_false(adapter:teleport(state.unit, {x=5, y=6, z=3}))
+        assert.same({x=1, y=2, z=3}, state.unit.pos)
+    end)
+
+    it('accepts a nil native return when post-state proves the move', function()
+        local state, adapter = fixture()
+        state.teleport_return = nil
+
+        local moved, receipt = adapter:teleport(
+            state.unit, {x=5, y=6, z=3})
+
+        assert.is_true(moved)
+        assert.same({x=5, y=6, z=3}, state.unit.pos)
+        assert.same({x=5, y=6, z=3}, receipt.position)
+    end)
+
+    it('observes the unit and both transition endpoint occupancies', function()
+        local state, adapter = fixture()
+        local readiness = assert(adapter:prepare(3, {x=5, y=6, z=3}))
+        local moved, receipt = adapter:apply(readiness)
+        assert.is_true(moved)
+
+        local transition = adapter:observe_transition(3, receipt)
+
+        assert.same({unit=false, unit_grounded=false}, transition.source)
+        assert.same({unit=true, unit_grounded=false},
+            transition.destination)
+        assert.same({x=5, y=6, z=3}, transition.unit.position)
+    end)
+
+    it('detaches protected receipt coordinates before native occupancy reads',
+            function()
+        local Immutable = require('dwarfspec.support.immutable')
+        local state, adapter = fixture()
+        local readiness = assert(adapter:prepare(3, {x=5, y=6, z=3}))
+        local moved, receipt = adapter:apply(readiness)
+        assert.is_true(moved)
+        local protected = Immutable.freeze(receipt, 'unit position receipt')
+
+        local transition = adapter:observe_transition(3, protected)
+        adapter:restore_receipt(protected)
+
+        assert.same({unit=false, unit_grounded=false}, transition.source)
         assert.same({x=1, y=2, z=3}, state.unit.pos)
     end)
 

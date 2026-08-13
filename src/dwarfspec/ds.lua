@@ -113,10 +113,6 @@ function M.new(package_root, project, scheduler_module, scheduler,
         report_failure=run_capabilities.recurring.report_failure,
         register_cleanup=run_capabilities.cleanup.register,
     })
-    local unit_speed_command = load_automation_module(package_root,
-        'dwarfspec.driver.commands.unit_speed')
-    local unit_position_command = load_automation_module(package_root,
-        'dwarfspec.driver.commands.unit_position')
     local unit_speed_controller_module = load_automation_module(package_root,
         'dwarfspec.driver.simulation.unit_speed_controller')
     local unit_target_adapter_module = load_automation_module(package_root,
@@ -229,6 +225,12 @@ local mount_query_runtime_module = load_automation_module(package_root,
     'dwarfspec.driver.runtime.mount_query_runtime')
 local subject_query_runtime_module = load_automation_module(package_root,
     'dwarfspec.driver.runtime.subject_query_runtime')
+local game_state_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.game_state_runtime')
+local unit_position_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.unit_position_runtime')
+local unit_speed_runtime_module = load_automation_module(package_root,
+    'dwarfspec.driver.runtime.unit_speed_runtime')
 local builtin_modules = {
     wait_frames=load_automation_module(package_root,
         'dwarfspec.driver.builtins.wait_frames'),
@@ -280,9 +282,17 @@ local builtin_modules = {
         'dwarfspec.driver.builtins.stage_overlay_registration'),
     register_cleanup=load_automation_module(package_root,
         'dwarfspec.driver.builtins.register_cleanup'),
+    set_game_paused=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.set_game_paused'),
+    set_game_speed=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.set_game_speed'),
+    set_turbo_speed=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.set_turbo_speed'),
+    set_unit_pos=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.set_unit_pos'),
+    set_unit_speed=load_automation_module(package_root,
+        'dwarfspec.driver.builtins.set_unit_speed'),
 }
-local game_state_command = load_automation_module(package_root,
-    'dwarfspec.driver.commands.game_state')
 local mount_command = load_automation_module(package_root,
     'dwarfspec.driver.commands.mount')
 local input_command = load_automation_module(package_root,
@@ -310,8 +320,7 @@ local command_observer_module = load_automation_module(package_root,
             return block.occupancy[position.x % 16][position.y % 16]
         end
 
-        local positions = unit_position_controller_module.new({
-            adapter=unit_position_adapter_module.new({
+        local position_adapter = unit_position_adapter_module.new({
                 is_map_loaded=native.is_map_loaded or dfhack.isMapLoaded,
                 is_valid_position=native.is_valid_position or
                     dfhack.maps.isValidTilePos,
@@ -323,7 +332,9 @@ local command_observer_module = load_automation_module(package_root,
                 end,
                 has_rider=native.has_rider or unit_native_module.has_rider,
                 is_rider=native.is_rider or unit_native_module.is_rider,
-            }),
+            })
+        local positions = unit_position_controller_module.new({
+            adapter=position_adapter,
             register_cleanup=run_capabilities.cleanup.register,
         })
         local travel = unit_job_travel_module.new({
@@ -364,6 +375,7 @@ local command_observer_module = load_automation_module(package_root,
         })
         unit_system = {
             positions=positions,
+            position_adapter=position_adapter,
             speed=unit_speed_controller_module.new({
                 recurring=recurring_operation,
                 targets=targets,
@@ -1184,37 +1196,6 @@ local command_observer_module = load_automation_module(package_root,
         end
     end
 
-    ---Sets the game pause state for the current example.
-    ---DwarfSpec automatically restores the inherited state during cleanup.
-    ---@param paused boolean
-    ---@return boolean
-    function ds.setGamePaused(paused)
-        assert(type(paused) == 'boolean',
-            'game pause state must be a boolean')
-        if context.game_pause_cleanup_entry == nil then
-            local original = ds.isGamePaused()
-            context.game_pause_cleanup_entry = cleanup_module.push(
-                cleanup_registry, 'restore game pause state', function()
-                    local global = df and df.global
-                    assert(global ~= nil,
-                        'DwarfSpec could not restore game pause state: ' ..
-                            'df.global is unavailable')
-                    global.pause_state = original
-                    assert(global.pause_state == original,
-                        'DFHack rejected the original game pause state')
-                    context.game_pause_cleanup_entry = nil
-                end)
-        end
-        local global = df and df.global
-        assert(global ~= nil,
-            'DwarfSpec could not set game pause state: ' ..
-                'df.global is unavailable')
-        global.pause_state = paused
-        assert(global.pause_state == paused,
-            'DFHack rejected the requested game pause state')
-        return paused
-    end
-
     ---Discards the loaded save and waits for the native title main menu.
     ---An already-visible title main menu is an idempotent no-op. The resulting
     ---state is not cleanup-owned and remains in effect for later examples.
@@ -1784,29 +1765,6 @@ local command_observer_module = load_automation_module(package_root,
         return context.mount_context:viewport(width, height)
     end
 
-    game_state_command.bind(ds, {
-        context=context,
-        cleanup_module=cleanup_module,
-        cleanup_registry=cleanup_registry,
-    })
-    unit_speed_command.bind(ds, {controller={
-        ---Activates the shared run-owned unit-speed controller.
-        ---@param _ table
-        ---@param options table
-        activate=function(_, options)
-            get_unit_system().speed:activate(options)
-        end,
-    }})
-    unit_position_command.bind(ds, {position_controller={
-        ---Moves a unit through the shared run-owned position controller.
-        ---@param _ table
-        ---@param unit_id integer
-        ---@param position table
-        ---@return boolean
-        move=function(_, unit_id, position)
-            return get_unit_system().positions:move(unit_id, position)
-        end,
-    }})
     local mount_commands = mount_command.new({
         context=context,
         native_attachment=native_attachment,
@@ -1896,6 +1854,12 @@ local command_observer_module = load_automation_module(package_root,
         })
         local game_query_runtime = game_query_runtime_module.new({
             context=context, df=df, dfhack=dfhack})
+        local game_state_runtime = game_state_runtime_module.new({
+            context=context, df=df})
+        local unit_position_runtime = unit_position_runtime_module.new(
+            function() return get_unit_system().position_adapter end)
+        local unit_speed_runtime = unit_speed_runtime_module.new(
+            function() return get_unit_system().speed end)
         local run_query_runtime = run_query_runtime_module.new(
             assert(dfhack.dwarfspec,
                 'DwarfSpec automation service is not running'))
@@ -1948,6 +1912,11 @@ local command_observer_module = load_automation_module(package_root,
             builtin_modules.stage_overlay_registration.new(
                 overlay_transaction),
             builtin_modules.register_cleanup.new(register_cleanup_options),
+            builtin_modules.set_game_paused.new(game_state_runtime),
+            builtin_modules.set_game_speed.new(game_state_runtime),
+            builtin_modules.set_turbo_speed.new(game_state_runtime),
+            builtin_modules.set_unit_pos.new(unit_position_runtime),
+            builtin_modules.set_unit_speed.new(unit_speed_runtime),
         })
         verified_subject_queries = registrar:subject_surface()
         context.mount_context:bind_subject_queries({

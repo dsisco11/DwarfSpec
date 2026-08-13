@@ -33,7 +33,7 @@ end
 ---@return integer
 function GameQueryRuntime:get_game_speed()
     local enabler = self._context.get_game_enabler()
-    assert(type(enabler) == 'table',
+    assert(enabler ~= nil,
         'DwarfSpec getGameSpeed requires df.global.enabler')
     local tps = enabler.fps
     assert(type(tps) == 'number' and tps >= 1 and tps % 1 == 0,

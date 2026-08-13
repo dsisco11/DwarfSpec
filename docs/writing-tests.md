@@ -625,18 +625,18 @@ if ds.isGamePaused() then
 end
 ```
 
-`ds.setGamePaused(paused)` accepts a boolean and immediately returns the
-requested state. The first call in each example captures the inherited pause
-state. After project teardown, DwarfSpec automatically restores that exact
-state during example cleanup, even when the example fails:
+`ds.setGamePaused(paused)` accepts a boolean and returns only after exact
+readback confirms the requested state. Each effective call owns an immutable
+baseline receipt. Owner cleanup unwinds those receipts in reverse order, so the
+inherited state is restored even when the example fails:
 
 ```lua
 ds.setGamePaused(false)
 assert.is_false(ds.isGamePaused())
 ```
 
-Repeated calls within the same example retain the original cleanup baseline;
-they do not replace it with an intermediate state.
+Repeated calls therefore form a reversible chain instead of overwriting an
+earlier cleanup baseline.
 
 `ds.getGameSpeed()` returns the current game-speed target as an integer number
 of ticks per second. It is read-only, does not require a mount, and does not
@@ -655,9 +655,10 @@ per second and returns the applied TPS value. It updates the same native
 assert.equals(100, ds.setGameSpeed(100))
 ```
 
-The first call in an example captures the exact inherited speed state. Repeated
-calls retain that baseline, and DwarfSpec automatically restores it during
-example cleanup. The command does not change the pause state.
+Each effective call captures the exact preceding speed state in its cleanup
+receipt. DwarfSpec unwinds repeated calls in reverse order during example
+cleanup, restoring the inherited state. The command does not change pause
+state.
 
 The value is a target, not a guarantee that the computer can achieve the
 requested tick rate. A low target can cause a `ds.wait_ticks()` wall-clock
@@ -673,8 +674,8 @@ ds.setTurboSpeed(true)
 
 This is whole-simulation acceleration, equivalent to fastdwarf mode 2. It is
 separate from both `ds.setGameSpeed(tps)` and targeted `ds.setUnitSpeed(...)`.
-The first call in an example captures the inherited switch value, and cleanup
-restores it after success, failure, timeout, or abort. Cleanup cannot rewind any
+Each effective call captures the preceding switch value, and owner cleanup
+unwinds those receipts after success, failure, timeout, or abort. Cleanup cannot rewind any
 gameplay that advances while turbo speed is enabled, so use it only with a
 controlled disposable or otherwise managed world fixture.
 
@@ -867,7 +868,8 @@ The first-release surface is intentionally small:
 - real registration integration: `stage_overlay_registration`.
 
 Automatic cleanup applies explicitly to `mount`, `mountNativeScreen`,
-`setGamePaused`, `setGameSpeed`, `setTurboSpeed`, `setViewPos`, `move_pointer`,
+`setGamePaused`, `setGameSpeed`, `setTurboSpeed`, `setViewPos`, `setUnitPos`,
+`setUnitSpeed`, `move_pointer`,
 `hover`,
 `click`, persistent `mouseInput` button state, and
 `stage_overlay_registration`. The fluent subject forms of `move_pointer`,

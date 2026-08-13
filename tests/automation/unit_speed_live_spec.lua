@@ -1,6 +1,8 @@
 -- Focused native qualification for run-owned unit speed and positioning.
 
 local fixture = require('tests.automation.support.unit_speed_fixture')
+local CleanupRegistrationProbe = require(
+    'tests.automation.support.cleanup_registration_probe')
 
 local restored_positions = {}
 
@@ -99,8 +101,8 @@ describe('unit speed controlled live fixture', function()
         assert.same(noncitizen_remaining_path, copy_path(noncitizen))
         local cleanup = ds.current_run().unit_speed_cleanup_probe()
         assert.is_false(cleanup.unit_speed_active)
-        assert.is_true(cleanup.unit_position_active)
-        assert.equals(2, cleanup.owned_position_count)
+        assert.is_true(CleanupRegistrationProbe.new(
+            ds.current_run()):has_pending_test_cleanup())
     end)
 
     it('02 verifies explicit positions were restored by prior cleanup', function()
@@ -108,17 +110,18 @@ describe('unit speed controlled live fixture', function()
             assert.is_true(fixture.positions_equal(
                 expected, fixture.unit(unit_id).pos))
         end
+        assert.is_false(CleanupRegistrationProbe.new(
+            ds.current_run()):has_pending_test_cleanup())
     end)
 
-    it('03 accelerates one supported action without moving its unit', function()
+    it('03 owns supported action acceleration without moving its unit', function()
         local unit = fixture.unit(72)
         local original_position = copy_position(unit.pos)
         local original_destination = copy_position(unit.path.dest)
-        local read_timer, write_timer = fixture.organic_job_action(
-            restoration, unit)
+        local read_timer, write_timer = fixture.add_temporary_job_action(
+            restoration, unit, 10000)
         local tps = ds.getGameSpeed()
 
-        write_timer(10000)
         dfhack.units.setGroupActionTimers(
             unit, 1, df.unit_action_type_group.All)
         assert.equals(1, read_timer())
@@ -130,12 +133,9 @@ describe('unit speed controlled live fixture', function()
         }))
         assert.is_true(ds.isGamePaused())
         assert.equals(10000, read_timer())
-        advance_until('unit action timer acceleration', function()
-            local timer = read_timer()
-            return timer == nil or timer <= 1
-        end)
-        local accelerated_timer = read_timer()
-        assert.is_true(accelerated_timer == nil or accelerated_timer <= 1)
+        local ownership = ds.current_run().unit_speed_cleanup_probe()
+        assert.is_true(ownership.unit_speed_active)
+        assert.is_true(ownership.callback_scheduled)
         assert.is_true(fixture.positions_equal(original_position, unit.pos))
         assert.is_true(fixture.positions_equal(
             original_destination, unit.path.dest))

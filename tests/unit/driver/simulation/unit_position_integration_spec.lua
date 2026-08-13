@@ -1,6 +1,7 @@
-local command_module = require('dwarfspec.driver.commands.unit_position')
 local position_module =
     require('dwarfspec.driver.simulation.unit_position_controller')
+local runtime_module =
+    require('dwarfspec.driver.runtime.unit_position_runtime')
 local travel_module = require('dwarfspec.driver.simulation.unit_job_travel')
 
 describe('shared unit position integration', function()
@@ -53,12 +54,48 @@ describe('shared unit position integration', function()
             target.pos = baseline.position
             target.idle_area = baseline.idle_area
         end
+        ---Preflights one fixture move.
+        ---@param id integer
+        ---@param destination table
+        ---@return table
+        function adapter:prepare(id, destination)
+            return {unit_id=id, destination=destination,
+                baseline=self:capture_baseline(),
+                destination_occupancy={unit=false, unit_grounded=false}}
+        end
+        ---Applies one fixture readiness snapshot.
+        ---@param readiness table
+        ---@return boolean, table
+        function adapter:apply(readiness)
+            local moved, arrival = self:teleport(unit, readiness.destination)
+            return moved, {unit_id=readiness.unit_id,
+                baseline=readiness.baseline,
+                destination=readiness.destination, arrival=arrival}
+        end
+        ---Returns the current fixture observation.
+        ---@return table
+        function adapter:observe()
+            return {position=unit.pos, idle_area=unit.idle_area,
+                on_ground=false,
+                occupancy={unit=true, unit_grounded=false}}
+        end
+        ---Returns both endpoint occupancies for a fixture move.
+        ---@return table
+        function adapter:observe_transition()
+            return {unit=self:observe(),
+                source={unit=false, unit_grounded=false},
+                destination={unit=true, unit_grounded=false}}
+        end
+        ---Restores one fixture receipt.
+        ---@param receipt table
+        function adapter:restore_receipt(receipt)
+            self:restore(unit, receipt.baseline)
+        end
         local positions = position_module.new({adapter=adapter,
             register_cleanup=function(_, callback)
                 cleanups[#cleanups + 1] = callback
             end})
-        local ds = {}
-        command_module.bind(ds, {position_controller=positions})
+        local runtime = runtime_module.new(adapter)
         local travel = travel_module.new({
             resolve_unit=function() return unit end,
             is_valid_position=function() return true end,
@@ -69,11 +106,14 @@ describe('shared unit position integration', function()
             position_controller=positions,
         })
 
-        ds.setUnitPos(6, {x=4, y=4, z=1})
+        local readiness = runtime:prepare(6, {x=4, y=4, z=1})
+        local moved, receipt = runtime:apply(readiness)
+        assert.is_true(moved)
         assert.is_true(travel:attempt(6))
         assert.equals(1, positions:cleanup_state().owned_position_count)
         assert.same({{x=4, y=4, z=1}, {x=9, y=9, z=1}}, teleports)
         cleanups[1]()
+        runtime:restore(receipt)
         assert.same({x=1, y=1, z=1}, unit.pos)
     end)
 end)

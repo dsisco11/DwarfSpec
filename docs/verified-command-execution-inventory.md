@@ -77,19 +77,22 @@ capability, not a separate command invocation.
 | `viewport(width, height)` -> any | Resizes owned mounted host and waits for layout/render. | `STATE_SETTER`, `CALLBACK`, `ONCE`; mount lifetime owns restoration/removal. | Mount/render conformance, ownership units, live resize case. |
 | `stage_overlay_registration(source, name)` -> table | Copies/stages overlay source, changes config/registration, and registers multi-part lifecycle cleanup. | `FIXTURE`, `CALLBACK`, `ONCE`; effect receipt and claims bind only after confirmed staging. | Fixture conformance, partial-effect/claims/cleanup units, integration live case. |
 
-`setTurboSpeed`, `setUnitSpeed`, `setUnitPos`, and command-family bindings under
-`driver/commands` are public even where `ds.lua` receives them through binders
-rather than spelling a second function body. Conversely, enum/constants on
-`ds` are declaration surface but are not command invocations.
+The state setters in the table are independent built-in owners under
+`driver/builtins` and are installed by the canonical registrar. Conversely,
+enum/constants on `ds` are declaration surface but are not command invocations.
 
 The direct dependency map behind the row summaries is:
 
 - waits/events: `driver/commands/wait.lua`, `await_event.lua`, the injected
   coroutine scheduler, event adapter, and wait settings;
-- game/save/view state: `driver/commands/game_state.lua`,
-  `view_position.lua`, `save_game_load.lua`, `save_game_unload.lua`,
-  `title_menu.lua`, native-game adapters, and the current callback cleanup
-  registry;
+- game/save/view state: the command-specific game-state and view-position
+  built-ins, `driver/runtime/game_state_runtime.lua`, the view-position runtime,
+  `save_game_load.lua`, `save_game_unload.lua`, `title_menu.lua`, and native-game
+  adapters;
+- unit position/speed state: the command-specific unit built-ins,
+  `driver/runtime/unit_position_runtime.lua`,
+  `driver/runtime/unit_speed_runtime.lua`, and the simulation adapters and
+  controllers they encapsulate;
 - units: `driver/commands/unit_position.lua`, `unit_speed.lua` and
   `driver/simulation/unit_position_controller.lua`,
   `unit_speed_controller.lua`;

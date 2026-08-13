@@ -16,6 +16,16 @@ CleanupRegistry.__index = CleanupRegistry
 ---@class dwarfspec.driver.cleanup.CleanupRegistryInternals
 local Internals = {}
 
+---Returns one bounded cleanup failure string.
+---@param value any
+---@return string
+function Internals.bounded_failure(value)
+    local ok, text = pcall(tostring, value)
+    if not ok then text = '<unprintable cleanup failure>' end
+    if #text <= 480 then return text end
+    return text:sub(1, 477) .. '...'
+end
+
 ---Creates one owner-local pending cleanup registry.
 ---@param dependent_ids fun(transaction_id: string): string[]
 ---@return dwarfspec.CleanupRegistry
@@ -118,7 +128,10 @@ function CleanupRegistry:execute_transactions(transactions, reason, trigger)
                 transaction:execute(reason, trigger)
             end,
                 debug.traceback)
-            if not succeeded then failures[#failures + 1] = failure end
+            if not succeeded then
+                failures[#failures + 1] =
+                    Internals.bounded_failure(failure)
+            end
         end
     end
     return #failures == 0, failures

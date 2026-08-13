@@ -1,5 +1,8 @@
 -- Live contracts for mount-independent game pause state commands.
 
+local CleanupRegistrationProbe = require(
+    'tests.automation.support.cleanup_registration_probe')
+
 describe('game pause state', function()
     local original_pause_state
 
@@ -12,13 +15,13 @@ describe('game pause state', function()
 
         assert.equals(requested, ds.setGamePaused(requested))
         assert.equals(requested, ds.isGamePaused())
-        assert.is_true(
-            ds.current_run().mount_cleanup_probe().game_pause_state_active)
+        assert.is_true(CleanupRegistrationProbe.new(
+            ds.current_run()):has_pending_test_cleanup())
     end)
 
     it('02 restores the inherited pause state after the example', function()
         assert.equals(original_pause_state, ds.isGamePaused())
-        assert.is_false(
-            ds.current_run().mount_cleanup_probe().game_pause_state_active)
+        assert.is_false(CleanupRegistrationProbe.new(
+            ds.current_run()):has_pending_test_cleanup())
     end)
 end)

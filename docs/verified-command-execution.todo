@@ -1835,36 +1835,46 @@ Conversion invariant for Phases 17-21:
 Outcome: reversible game/simulation mutations execute once, verify exact
 framework-owned state, and retain independently verified restoration.
 
-- [ ] Convert `setGamePaused`, `setGameSpeed`, and `setTurboSpeed` with native
+- [x] Convert `setGamePaused`, `setGameSpeed`, and `setTurboSpeed` with native
       readiness and exact requested readback.
-- [ ] Implement each converted state setter as its own command module and
+- [x] Implement each converted state setter as its own command module and
       install it only through the canonical registrar.
-- [ ] Complete `setViewPos` conversion and all origin/viewport edge cases.
-- [ ] Convert `setUnitPos` with unit/source/destination occupancy preflight and
+- [x] Complete `setViewPos` conversion and all origin/viewport edge cases.
+- [x] Convert `setUnitPos` with unit/source/destination occupancy preflight and
       receipt-based unit/occupancy verification.
-- [ ] Convert `setUnitSpeed` with immutable target/configuration snapshots,
+- [x] Convert `setUnitSpeed` with immutable target/configuration snapshots,
       recurring-operation ownership verification, and optional caller
       verification for product progress.
-- [ ] Convert any other inventoried state-setter command.
-- [ ] Capture inherited baselines before mutation and register owner-lifetime
+- [x] Convert any other inventoried state-setter command.
+- [x] Capture inherited baselines before mutation and register owner-lifetime
       cleanup immediately after each confirmed effect.
-- [ ] Keep all initial mutators `ONCE`.
-- [ ] Add cleanup receipts containing stable identities/scalar baselines and
+- [x] Keep all initial mutators `ONCE`.
+- [x] Add cleanup receipts containing stable identities/scalar baselines and
       independent retryable cleanup verification.
-- [ ] Add conformance fixtures and focused domain tests for no-effect,
+- [x] Add conformance fixtures and focused domain tests for no-effect,
       structured partial effect, verification failure, command expiry, manual
       cleanup, automatic cleanup, and composed failure.
-- [ ] Run the smallest relevant native live case for each changed semantic
+- [x] Run the smallest relevant native live case for each changed semantic
       boundary.
-- [ ] At family completion, run the full unit suite and representative live
+- [x] At family completion, run the full unit suite and representative live
       qualification with terminal cleanup confirmation.
-- [ ] Perform a follow-up family review against the migration inventory.
+- [x] Perform a follow-up family review against the migration inventory.
 
 Completion criteria:
 
-- [ ] Every state setter proves its exact declared state or raises a staged test
+- [x] Every state setter proves its exact declared state or raises a staged test
       error while retaining cleanup ownership.
-- [ ] Cleanup verifies restoration independently of the command deadline.
+- [x] Cleanup verifies restoration independently of the command deadline.
+
+Evidence (2026-08-12): setter-focused suites passed 2/1/1/2/2/3,
+state-setter conformance 3, game/unit runtimes 2/1/1, unit-position adapter 15,
+unit-speed controller 17, inventory 4, engine conformance 10, cleanup suites
+18/18, public mounts 96, common runner 55, host assembly 5, and full units
+1268. Lua syntax/formatting passed for 519 files; source declarations and diff
+checks were green. Native terminal qualifications passed with cleanup confirmed
+for pause 2, game speed 2, turbo speed 3, view position 2, and combined unit
+position/unit speed 7. The follow-up review and independent completion audit
+found no remaining implementation issue or evidence gap.
 
 ## Phase 18: Convert pointer, keyboard, text, mouse, and click actions
 

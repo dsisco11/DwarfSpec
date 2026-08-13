@@ -33,10 +33,53 @@ describe('verified setViewPos command', function()
         local definition = runner:definition('setViewPos')
         assert.equals(CommandKind.STATE_SETTER, definition.kind)
         local result = definition.execute({}, {}, {baseline={x=1, y=2, z=3},
-            requested=position, raw=position})
+            requested=position, raw=position, target_identity='map-view'})
         assert.same(result.receipt, result.effect_receipt)
+        assert.equals('map-view', result.effect_receipt.target_identity)
         assert.is_function(definition.cleanup.restore)
         assert.is_function(definition.cleanup.verify)
+    end)
+
+    it('distinguishes no effect, rejected writes, and partial mutation',
+            function()
+        local current = {x=1, y=2, z=3}
+        local behavior = 'accept'
+        local runtime = {
+            top_left_origin=function() return 'top-left' end,
+            origin_offset=function() return 0, 0 end,
+            get_position=function()
+                return {x=current.x, y=current.y, z=current.z}
+            end,
+            set_position=function(_, x, y, z)
+                if behavior == 'reject' then return false end
+                if behavior == 'partial' then
+                    current = {x=x, y=y, z=z}
+                    error('partial dispatch')
+                end
+                current = {x=x, y=y, z=z}
+                return true
+            end,
+        }
+        local definition = SetViewPos.new(runtime):definition()
+        local request = {position={x=1, y=2, z=3}, origin='top-left'}
+        local readiness = definition.preflight({}, request).value
+        local result = definition.execute({}, request, readiness)
+        assert.equals('executed', result.kind)
+        assert.is_nil(result.effect_receipt)
+
+        behavior = 'reject'
+        request = {position={x=4, y=5, z=6}, origin='top-left'}
+        readiness = definition.preflight({}, request).value
+        result = definition.execute({}, request, readiness)
+        assert.equals('failed', result.kind)
+        assert.is_nil(result.effect_receipt)
+
+        behavior = 'partial'
+        readiness = definition.preflight({}, request).value
+        result = definition.execute({}, request, readiness)
+        assert.equals('failed', result.kind)
+        assert.is_not_nil(result.effect_receipt)
+        assert.equals('map-view', result.effect_receipt.target_identity)
     end)
 
     it('rejects the former loose accessor bundle', function()

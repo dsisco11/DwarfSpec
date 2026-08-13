@@ -778,10 +778,10 @@ function DS.setTurboSpeed(enabled, command_options) end
 function DS.setUnitSpeed(options, command_options) end
 
 ---Moves one resolvable unit to a valid loaded-map coordinate.
----The integer id is re-resolved at use time. The first successful move owns the
----unit's original coordinate for this example; later explicit or job-travel
----moves share that baseline. Cleanup restores owned coordinates but does not
----reverse broader gameplay effects.
+---The integer id is re-resolved at use time. Each successful move owns an exact
+---receipt for its preceding coordinate and occupancy. Cleanup unwinds explicit
+---moves and job-travel ownership in reverse order, but does not reverse broader
+---gameplay effects.
 ---@param unit_id integer
 ---@param position dwarfspec.UnitPosition
 ---@param command_options? dwarfspec.CommandOptions

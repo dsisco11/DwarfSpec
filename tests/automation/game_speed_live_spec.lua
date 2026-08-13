@@ -1,5 +1,8 @@
 -- Live contracts for mount-independent game TPS ownership.
 
+local CleanupRegistrationProbe = require(
+    'tests.automation.support.cleanup_registration_probe')
+
 ---Returns whether two numbers match within native float precision.
 ---@param actual number
 ---@param expected number
@@ -34,8 +37,8 @@ describe('game speed', function()
             enabler.fps_per_gfps, requested / inherited.graphical_rate))
         assert.equals(inherited.graphical_rate, enabler.gfps)
         assert.equals(inherited.paused, ds.isGamePaused())
-        assert.is_true(
-            ds.current_run().mount_cleanup_probe().game_speed_active)
+        assert.is_true(CleanupRegistrationProbe.new(
+            ds.current_run()):has_pending_test_cleanup())
     end)
 
     it('02 restores the inherited speed state after the example', function()
@@ -46,7 +49,7 @@ describe('game speed', function()
         assert.equals(inherited.graphical_rate, enabler.gfps)
         assert.equals(inherited.speed_ratio, enabler.fps_per_gfps)
         assert.equals(inherited.paused, ds.isGamePaused())
-        assert.is_false(
-            ds.current_run().mount_cleanup_probe().game_speed_active)
+        assert.is_false(CleanupRegistrationProbe.new(
+            ds.current_run()):has_pending_test_cleanup())
     end)
 end)

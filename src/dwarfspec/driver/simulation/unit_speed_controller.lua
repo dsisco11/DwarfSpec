@@ -143,9 +143,10 @@ function M.new(dependencies)
         return was_active
     end
 
-    ---Activates immutable behavior and target snapshots for this example.
+    ---Preflights and snapshots one requested configuration.
     ---@param options table
-    function controller:activate(options)
+    ---@return table
+    function controller:prepare(options)
         assert(not self.active and not recurring:is_active(),
             'setUnitSpeed is already active for this example')
         local normalized = normalize_options(options)
@@ -156,6 +157,41 @@ function M.new(dependencies)
         else
             captured = targets:capture_explicit_ids(normalized.unit_ids)
         end
+        local ids = {}
+        for index, id in ipairs(captured) do ids[index] = id end
+        return Immutable.freeze({fast_actions=normalized.fast_actions,
+            teleport_jobs=normalized.teleport_jobs, unit_ids=ids},
+            'prepared unit-speed snapshot')
+    end
+
+    ---Returns authoritative recurring-operation ownership and configuration.
+    ---@return table
+    function controller:state()
+        local recurring_state = recurring:cleanup_state()
+        local ids = {}
+        for index, id in ipairs(self.target_ids or {}) do ids[index] = id end
+        return {active=self.active, recurring=recurring_state,
+            configuration=self.configuration and {
+                fast_actions=self.configuration.fast_actions,
+                teleport_jobs=self.configuration.teleport_jobs,
+                unit_ids=ids} or nil}
+    end
+
+    ---Restores all recurring and derived position ownership.
+    function controller:restore()
+        self:stop()
+        position_controller:restore_all()
+    end
+
+    ---Activates one already preflighted target/configuration snapshot.
+    ---@param normalized table
+    function controller:activate_prepared(normalized)
+        assert(type(normalized) == 'table' and
+                type(normalized.unit_ids) == 'table',
+            'setUnitSpeed requires a prepared configuration')
+        assert(not self.active and not recurring:is_active(),
+            'setUnitSpeed is already active for this example')
+        local captured = normalized.unit_ids
         position_controller:ensure_cleanup()
         local immutable_ids = immutable_sequence(captured)
         local configuration = immutable_options(
@@ -186,6 +222,12 @@ function M.new(dependencies)
             clear_state()
             error(failure, 2)
         end
+    end
+
+    ---Preflights and activates one public configuration.
+    ---@param options table
+    function controller:activate(options)
+        return self:activate_prepared(self:prepare(options))
     end
 
     return controller

@@ -17,6 +17,26 @@ local function positions_equal(left, right)
     return left.x == right.x and left.y == right.y and left.z == right.z
 end
 
+---Returns a plain observation of one unit and its tile occupancy.
+---@param unit any
+---@param get_occupancy function
+---@return table|nil
+local function observe_unit(unit, get_occupancy)
+    if unit == nil or unit.pos == nil or unit.idle_area == nil or
+            unit.flags1 == nil or unit.pos.x == nil or unit.pos.y == nil or
+            unit.pos.z == nil or unit.idle_area.x == nil or
+            unit.idle_area.y == nil or unit.idle_area.z == nil then
+        return nil
+    end
+    local occupancy = get_occupancy(unit.pos)
+    if occupancy == nil then return nil end
+    return {position=copy_position(unit.pos),
+        idle_area=copy_position(unit.idle_area),
+        on_ground=unit.flags1.on_ground == true,
+        occupancy={unit=occupancy.unit == true,
+            unit_grounded=occupancy.unit_grounded == true}}
+end
+
 ---Requires one callable native dependency.
 ---@param dependencies table
 ---@param name string
@@ -66,6 +86,92 @@ function M.new(dependencies)
         return copied
     end
 
+    ---Preflights one unit, its source occupancy, and one destination.
+    ---@param unit_id integer
+    ---@param position table
+    ---@return table|nil
+    function adapter:prepare(unit_id, position)
+        local destination = self:normalize_position(position)
+        local unit = resolve_unit(unit_id)
+        local baseline = destination and self:capture_baseline(unit) or nil
+        if baseline == nil or positions_equal(baseline.position,
+                destination) then
+            return nil
+        end
+        local destination_occupancy = get_occupancy(destination)
+        if destination_occupancy == nil or
+                baseline.on_ground and
+                    destination_occupancy.unit_grounded == true or
+                not baseline.on_ground and
+                    destination_occupancy.unit == true then
+            return nil
+        end
+        return {unit_id=unit_id, destination=destination,
+            baseline=baseline,
+            destination_occupancy={
+                unit=destination_occupancy.unit == true,
+                unit_grounded=destination_occupancy.unit_grounded == true}}
+    end
+
+    ---Returns one current unit/occupancy observation.
+    ---@param unit_id integer
+    ---@return table|nil
+    function adapter:observe(unit_id)
+        return observe_unit(resolve_unit(unit_id), get_occupancy)
+    end
+
+    ---Observes the unit plus both receipt endpoint occupancies.
+    ---@param unit_id integer
+    ---@param receipt table
+    ---@return table|nil
+    function adapter:observe_transition(unit_id, receipt)
+        local unit = observe_unit(resolve_unit(unit_id), get_occupancy)
+        local source = get_occupancy(copy_position(receipt.baseline.position))
+        local destination = get_occupancy(copy_position(receipt.destination))
+        if unit == nil or source == nil or destination == nil then return nil end
+        return {unit=unit,
+            source={unit=source.unit == true,
+                unit_grounded=source.unit_grounded == true},
+            destination={unit=destination.unit == true,
+                unit_grounded=destination.unit_grounded == true}}
+    end
+
+    ---Applies one preflighted position change and returns its receipt.
+    ---@param readiness table
+    ---@return boolean, table|nil
+    function adapter:apply(readiness)
+        local unit = resolve_unit(readiness.unit_id)
+        local observed = observe_unit(unit, get_occupancy)
+        if observed == nil or not positions_equal(observed.position,
+                readiness.baseline.position) or
+                observed.on_ground ~= readiness.baseline.on_ground or
+                observed.occupancy.unit ~= readiness.baseline.occupancy.unit or
+                observed.occupancy.unit_grounded ~=
+                    readiness.baseline.occupancy.unit_grounded then
+            return false, nil
+        end
+        local moved, arrival = self:teleport(unit, readiness.destination)
+        if not moved then return false, nil end
+        return true, {unit_id=readiness.unit_id,
+            baseline=readiness.baseline, destination=readiness.destination,
+            arrival=arrival}
+    end
+
+    ---Restores one command receipt and verifies source/destination occupancy.
+    ---@param receipt table
+    function adapter:restore_receipt(receipt)
+        self:restore(resolve_unit(receipt.unit_id), {
+            position=copy_position(receipt.baseline.position),
+            idle_area=copy_position(receipt.baseline.idle_area),
+            on_ground=receipt.baseline.on_ground,
+            occupancy=receipt.baseline.occupancy,
+            last_arrival={
+                position=copy_position(receipt.arrival.position),
+                occupancy=receipt.arrival.occupancy,
+            },
+        })
+    end
+
     ---Captures rollback state immediately before an attempted first move.
     ---@param unit any
     ---@return table|nil
@@ -105,7 +211,8 @@ function M.new(dependencies)
                 is_projectile(unit) or has_rider(unit) or is_rider(unit) then
             return false, nil
         end
-        local source = get_occupancy(unit.pos)
+        local source_position = copy_position(unit.pos)
+        local source = get_occupancy(source_position)
         local target = get_occupancy(destination)
         if source == nil or target == nil then return false, nil end
         local on_ground = unit.flags1.on_ground == true
@@ -113,7 +220,10 @@ function M.new(dependencies)
                 not on_ground and source.unit ~= true then
             return false, nil
         end
-        if not on_ground and target.unit == true then return false, nil end
+        if on_ground and target.unit_grounded == true or
+                not on_ground and target.unit == true then
+            return false, nil
+        end
         local receipt = {
             position=copy_position(destination),
             occupancy={
@@ -121,7 +231,18 @@ function M.new(dependencies)
                 unit_grounded=target.unit_grounded == true,
             },
         }
-        if teleport(unit, copy_position(destination)) ~= true then
+        local native_result = teleport(unit, copy_position(destination))
+        if native_result == false or
+                not positions_equal(unit.pos, destination) then
+            return false, nil
+        end
+        local arrived = get_occupancy(destination)
+        local departed = get_occupancy(source_position)
+        if arrived == nil or departed == nil or
+                on_ground and arrived.unit_grounded ~= true or
+                not on_ground and arrived.unit ~= true or
+                on_ground and departed.unit_grounded == true or
+                not on_ground and departed.unit == true then
             return false, nil
         end
         return true, receipt

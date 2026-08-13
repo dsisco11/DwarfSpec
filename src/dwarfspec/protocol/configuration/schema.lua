@@ -36,6 +36,7 @@ local RESERVED_COMMANDS = {
     search=true,
     setGamePaused=true,
     setGameSpeed=true,
+    setTurboSpeed=true,
     setUnitPos=true,
     setUnitSpeed=true,
     setViewPos=true,

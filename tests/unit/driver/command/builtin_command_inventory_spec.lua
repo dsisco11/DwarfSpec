@@ -7,13 +7,15 @@ Inventory.names = {'wait_frames', 'wait_ticks', 'await', 'await_event',
     'inspect', 'capture_view_tree', 'capture_screen',
     'subject_get_focus_list', 'subject_raw', 'search', 'click',
     'get_view_pos', 'set_view_pos', 'mount_save_game',
-    'stage_overlay_registration', 'register_cleanup'}
+    'stage_overlay_registration', 'register_cleanup', 'set_game_paused',
+    'set_game_speed', 'set_turbo_speed', 'set_unit_pos', 'set_unit_speed'}
 
 Inventory.obsolete = {'wait_definition', 'game_query_definition',
     'mount_query_definition', 'subject_query_definition',
     'run_query_definition', 'capture_definition', 'search_definition',
     'click_definition', 'view_position_definition',
-    'mount_save_game_definition', 'overlay_registration_definition'}
+    'mount_save_game_definition', 'overlay_registration_definition',
+    'game_state', 'unit_position', 'unit_speed'}
 
 ---Reads one repository source file.
 ---@param path string
@@ -57,7 +59,8 @@ describe('built-in command source organization', function()
                 'root', 'get', 'inspect', 'capture_view_tree',
                 'capture_screen', 'search', 'click', 'getViewPos',
                 'setViewPos', 'mountSaveGame', 'stage_overlay_registration',
-                'registerCleanup'}) do
+                'registerCleanup', 'setGamePaused', 'setGameSpeed',
+                'setTurboSpeed', 'setUnitPos', 'setUnitSpeed'}) do
             assert.is_nil(source:find('function ds.' .. public_name .. '(',
                 1, true), public_name)
         end

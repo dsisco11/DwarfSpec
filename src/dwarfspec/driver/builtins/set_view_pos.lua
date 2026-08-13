@@ -59,30 +59,45 @@ function ViewPositionDefinition:_preflight(request)
         target_identity='map-view'}
 end
 
----Applies the raw position and returns a reversible receipt.
+---Returns whether two raw top-left positions match.
+---@param left table
+---@param right table
+---@return boolean
+function ViewPositionDefinition:_positions_match(left, right)
+    return left.x == right.x and left.y == right.y and left.z == right.z
+end
+
+---Applies the raw position and returns a truthful execution outcome.
 ---@param readiness table
----@return table, table
+---@return table
 function ViewPositionDefinition:_execute(readiness)
     local ok, accepted = pcall(self._runtime.set_position, self._runtime,
         readiness.raw.x, readiness.raw.y, readiness.raw.z)
     local receipt = {baseline=readiness.baseline,
-        requested=readiness.requested, raw=readiness.raw}
+        requested=readiness.requested, raw=readiness.raw,
+        target_identity=readiness.target_identity}
+    local observed = self._runtime:get_position(
+        self._runtime:top_left_origin())
+    local changed = not self:_positions_match(observed, readiness.baseline)
     if not ok then
-        receipt.dispatch_failure =
+        return Outcomes.failed(
             'DwarfSpec could not set the map-view position: ' ..
-                tostring(accepted)
-    elseif accepted == false then
-        receipt.dispatch_failure =
-            'DFHack rejected the requested map-view position'
+                tostring(accepted), changed and receipt or nil,
+            {position=observed})
     end
-    return readiness.requested, receipt
+    if accepted == false then
+        return Outcomes.failed(
+            'DFHack rejected the requested map-view position',
+            changed and receipt or nil, {position=observed})
+    end
+    return Outcomes.executed(readiness.requested, receipt,
+        changed and receipt or nil)
 end
 
 ---Observes whether the requested position is applied.
 ---@param request table
 ---@return table
 function ViewPositionDefinition:_verify(request, receipt)
-    assert(receipt.dispatch_failure == nil, receipt.dispatch_failure)
     local observed = self._runtime:get_position(request.origin)
     local expected = request.position
     if observed.x == expected.x and observed.y == expected.y and
@@ -122,8 +137,7 @@ function ViewPositionDefinition:definition()
             return Outcomes.ready(self:_preflight(request))
         end,
         execute=function(context, request, readiness)
-            local result, receipt = self:_execute(readiness)
-            return Outcomes.executed(result, receipt, receipt)
+            return self:_execute(readiness)
         end,
         verify=function(_, request, receipt)
             return self:_verify(request, receipt)
